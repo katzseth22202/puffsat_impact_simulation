@@ -68,9 +68,12 @@ all      = { level = "deny",  priority = -1 }   # correctness/style: must be cle
 pedantic = { level = "warn",  priority = -1 }   # guidance, not a gate (noisy on numerics)
 ```
 
-- `cargo clippy --all-targets --all-features` must be **warning-free** for the `all` group
-  (it runs `-D warnings` in `make lint` / CI). `pedantic` is `warn` so it advises without
-  blocking — bump individual pedantic lints to `deny` as the code stabilizes if useful.
+- `cargo clippy --all-targets --all-features` must be clean for the `all` group, which
+  `[workspace.lints]` sets to `deny` — so a plain `cargo clippy` (what `make lint` / CI runs)
+  already fails the build on any `all`-group lint. Do **not** add `-D warnings`: it would
+  escalate `pedantic` too. `pedantic` is `warn` so it advises without blocking (it is noisy on
+  numerics — e.g. `cast_precision_loss` on small grid indices is an expected, ignorable
+  warning); bump individual pedantic lints to `deny` as the code stabilizes if useful.
 - `cargo fmt` is mandatory (checked in `make lint`).
 - This is a correctness-critical from-scratch solver: prefer clarity and explicit numeric
   types over cleverness. Document the physics/equation a function implements.

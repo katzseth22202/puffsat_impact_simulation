@@ -11,24 +11,7 @@
 //! velocity `u*` (eq. 4.9), then sample the self-similar solution `W(x/t)` (the `sample`
 //! routine, Toro §4.5).
 
-/// A primitive fluid state `(ρ, u, p)`.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Primitive {
-    /// Mass density `ρ`.
-    pub rho: f64,
-    /// Velocity `u`.
-    pub u: f64,
-    /// Pressure `p`.
-    pub p: f64,
-}
-
-impl Primitive {
-    /// Construct a primitive state.
-    #[must_use]
-    pub fn new(rho: f64, u: f64, p: f64) -> Self {
-        Self { rho, u, p }
-    }
-}
+use crate::Primitive;
 
 /// Ideal-gas sound speed `c = sqrt(γ p / ρ)`.
 fn sound_speed(state: Primitive, gamma: f64) -> f64 {
@@ -203,6 +186,7 @@ pub fn solve(left: Primitive, right: Primitive, gamma: f64) -> RiemannSolution {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Primitive;
     use approx::assert_relative_eq;
 
     const GAMMA: f64 = 1.4;

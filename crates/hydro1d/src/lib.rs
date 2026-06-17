@@ -1,9 +1,29 @@
 //! Rung-A 1D Lagrangian ideal-gas hydrodynamics.
 //!
-//! The kernel itself (staggered artificial-viscosity Lagrangian, ADR-0022) is built
-//! test-first against analytic solutions. This crate currently exposes the [`riemann`]
-//! module — the *exact* Riemann solver for the 1D Euler equations, which serves as the
-//! analytic oracle for the Sod shock-tube acceptance test (it is test-only and does **not**
-//! double as a flux function; ADR-0022).
+//! - [`kernel`] — the solver: a staggered-grid Lagrangian scheme with von Neumann–Richtmyer
+//!   artificial viscosity (ADR-0022), built test-first against analytic solutions.
+//! - [`riemann`] — the *exact* Riemann solver for the 1D Euler equations, used as the analytic
+//!   oracle for the Sod shock-tube acceptance test. It is test-only and does **not** double as
+//!   a flux function (the AV kernel has no Riemann solver; ADR-0022).
 
+pub mod kernel;
 pub mod riemann;
+
+/// A primitive fluid state `(ρ, u, p)` — the shared currency between the kernel and the oracle.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Primitive {
+    /// Mass density `ρ`.
+    pub rho: f64,
+    /// Velocity `u`.
+    pub u: f64,
+    /// Pressure `p`.
+    pub p: f64,
+}
+
+impl Primitive {
+    /// Construct a primitive state.
+    #[must_use]
+    pub fn new(rho: f64, u: f64, p: f64) -> Self {
+        Self { rho, u, p }
+    }
+}

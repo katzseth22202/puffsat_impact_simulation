@@ -28,7 +28,7 @@ lint:
 	uv run ruff check python
 	uv run ruff format --check python
 	uv run mypy
-	cargo clippy --all-targets --all-features -- -D warnings
+	cargo clippy --all-targets --all-features
 	cargo fmt --all -- --check
 
 ## fmt: auto-format Python and Rust
