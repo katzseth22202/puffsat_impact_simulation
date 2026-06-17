@@ -251,7 +251,9 @@ pub fn fld_substep(
 
 #[cfg(test)]
 mod tests {
-    use super::{Medium, RadBc, RadConstants, fld_substep, flux_limiter, thomas_solve};
+    use super::{
+        Medium, RadBc, RadConstants, face_diffusion, fld_substep, flux_limiter, thomas_solve,
+    };
     use approx::assert_relative_eq;
 
     /// Thomas solve against a hand-built system whose answer is known: the 1D Poisson matrix
@@ -502,5 +504,41 @@ mod tests {
             spread < spread0,
             "diffusion did not smooth the field: {spread} vs {spread0}"
         );
+    }
+
+    // --- B3c-1: free-streaming cap (Levermore–Pomraning limiter) ---
+
+    /// The radiative flux a face carries in the substep is `F = D·(E_lo − E_hi)/spacing` with the
+    /// flux-limited `D = c λ(R)/χ_R` ([`face_diffusion`]). Because `λ(R)·R = coth R − 1/R ≤ 1`, this
+    /// gives `|F| = c·λ(R)·R·E_face ≤ c·E_face` for **every** gradient — radiation never streams
+    /// faster than light — and it **saturates** at `c·E_face` as the gradient steepens (the
+    /// optically-thin / `R → ∞` free-streaming limit, ADR-0006). This is the per-face guarantee that
+    /// keeps the assembled scheme from transporting radiation superluminally in thin gas.
+    #[test]
+    fn free_streaming_caps_flux_at_ce() {
+        let c = 3.0; // arbitrary light speed; the cap is |F| ≤ c·E_face for any c
+        let e_lo = 1.0;
+        let e_hi = 0.0;
+        let e_face = 0.5 * (e_lo + e_hi);
+        let cap = c * e_face;
+
+        // Across thin→thick media and a fixed jump, the flux never exceeds the c·E cap.
+        for &chi_r in &[1e-4, 1e-2, 1.0, 10.0, 100.0] {
+            for &spacing in &[1e-2, 0.1, 1.0, 10.0] {
+                let d = face_diffusion(c, chi_r, e_lo, e_hi, spacing);
+                let flux = (d * (e_lo - e_hi) / spacing).abs();
+                assert!(
+                    flux <= cap * (1.0 + 1e-12),
+                    "superluminal flux: |F|={flux} > c·E={cap} (χ_R={chi_r}, spacing={spacing})"
+                );
+            }
+        }
+
+        // Free-streaming saturation: as the gradient steepens (R → ∞), |F| → c·E_face.
+        let chi_r = 1e-6; // very thin
+        let spacing = 1.0;
+        let d = face_diffusion(c, chi_r, e_lo, e_hi, spacing);
+        let flux = (d * (e_lo - e_hi) / spacing).abs();
+        assert_relative_eq!(flux, cap, max_relative = 1e-4);
     }
 }
