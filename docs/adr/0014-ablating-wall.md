@@ -32,6 +32,11 @@ even though the ablating wall injects ablator species the water-only table pipel
 not cover. Full ablator-vapor speciation is gated on whether spot-checks show it moves `e_eff`. `Q*`
 is parameterized (silicone ~2–10 MJ/kg literature), with sensitivity reported.
 
+**RT-coherence caveat.** The vapor-shield and blowing recovery assume the near-wall layer stays
+coherent. Rayleigh–Taylor mixing (ADR-0020) is the mechanism that erodes it — hot gas mixed down
+through the shield reaches the solid early. So this `e_eff` recovery is an *upper estimate* to the
+extent the shield stays RT-coherent; the ablating wall is where RT bites hardest, not the rigid floor.
+
 ## Considered Options
 
 - **Transient / full-pyrolysis ablation** (char layer, decomposition kinetics, gas-phase products)

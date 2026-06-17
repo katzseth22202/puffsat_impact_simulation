@@ -25,6 +25,13 @@ interface (SiC effusivity ~30× the ablator's) and hence *more* condensation/con
 single-layer ablator baseline is the *less* conservative choice and must be checked against the actual
 ablator thickness, not assumed valid.
 
+**Turbulent (RT) enhancement — out of scope, but watched here.** This conductive solve is *laminar*.
+Rayleigh–Taylor mixing at the near-wall boundary layer would enhance wall heat transfer above this
+value, one-sidedly, and could push the true conductive loss above the floor's laminar number. RT is
+not modeled (ADR-0020), but the conductive-to-plate channel (1D output) is its watchdog: if it grows
+to a material slice of `(1−f)` at any anchor, a bounding turbulent-conduction correction is applied
+there before `f` is quoted.
+
 ## Considered Options
 
 - **Isothermal Dirichlet wall.** Rejected: imposes the interface temperature and makes the conductive
