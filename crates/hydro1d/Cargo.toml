@@ -1,13 +1,17 @@
 [package]
 name = "hydro1d"
 version = "0.1.0"
-description = "Rung-A 1D Lagrangian ideal-gas hydro kernel (staggered artificial viscosity); ADR-0022."
+description = "1D Lagrangian rad-hydro kernel (staggered artificial viscosity, ADR-0022); rung A ideal-gas, rung B tabulated equilibrium EOS (ADR-0007)."
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[dependencies]
+tables = { path = "../tables" }
+
 [dev-dependencies]
 approx = { workspace = true }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

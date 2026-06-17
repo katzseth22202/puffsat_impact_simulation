@@ -1,11 +1,15 @@
 //! Rung-A 1D Lagrangian ideal-gas hydrodynamics.
 //!
 //! - [`kernel`] — the solver: a staggered-grid Lagrangian scheme with von Neumann–Richtmyer
-//!   artificial viscosity (ADR-0022), built test-first against analytic solutions.
+//!   artificial viscosity (ADR-0022), built test-first against analytic solutions. Generic over
+//!   the [`eos`] it carries.
+//! - [`eos`] — the equation of state the kernel calls (`p(ρ, e)`; ADR-0022): rung A's analytic
+//!   [`eos::IdealGas`] and rung B's tabulated [`eos::TableEos`] (ADR-0007).
 //! - [`riemann`] — the *exact* Riemann solver for the 1D Euler equations, used as the analytic
 //!   oracle for the Sod shock-tube acceptance test. It is test-only and does **not** double as
 //!   a flux function (the AV kernel has no Riemann solver; ADR-0022).
 
+pub mod eos;
 pub mod kernel;
 pub mod riemann;
 

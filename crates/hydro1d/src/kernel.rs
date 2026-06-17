@@ -1,5 +1,7 @@
 //! Staggered-grid Lagrangian hydrodynamics with von Neumann–Richtmyer artificial viscosity
-//! (ADR-0022), 1D planar, ideal-gas EOS `p = (γ−1) ρ e`.
+//! (ADR-0022), 1D planar. The equation of state is pluggable (ADR-0022): the kernel is generic
+//! over [`Eos`], with rung A's [`IdealGas`] (`p = (γ−1) ρ e`) and rung B's tabulated
+//! [`TableEos`] both satisfying the same bare `p(ρ, e)` interface.
 //!
 //! # Discretization
 //!
@@ -17,7 +19,7 @@
 //! 1. **half-kick** `u ← u + ½dt·a(tⁿ)`;
 //! 2. **drift** `x ← x + dt·u`; recompute `ρ`;
 //! 3. **energy** update from `de = −(p̄ + q) dV` with `p̄` time-centered, solved implicitly for
-//!    the ideal gas (stable, energy-conserving), giving `pⁿ⁺¹`;
+//!    the (possibly tabulated) EOS by Newton iteration, giving `pⁿ⁺¹`;
 //! 4. **half-kick** `u ← u + ½dt·a(tⁿ⁺¹)`.
 //!
 //! Each end carries a [`Boundary`]: a rigid [`Boundary::Wall`] (node held at `u = 0` —
@@ -27,6 +29,7 @@
 //! reflecting wall with a trailing free surface to measure the restitution `e_eff` (ADR-0001).
 
 use crate::Primitive;
+use crate::eos::{Eos, IdealGas};
 
 /// CFL number for the explicit timestep.
 const CFL: f64 = 0.4;
@@ -81,10 +84,10 @@ pub struct BounceResult {
     pub peak_wall_force: f64,
 }
 
-/// A 1D Lagrangian gas column on a staggered mesh.
+/// A 1D Lagrangian gas column on a staggered mesh, carrying its equation of state `E`.
 #[derive(Debug, Clone)]
-pub struct Tube {
-    gamma: f64,
+pub struct Tube<E: Eos> {
+    eos: E,
     viscosity: Viscosity,
     left: Boundary,
     right: Boundary,
@@ -98,9 +101,10 @@ pub struct Tube {
     energy: Vec<f64>,
 }
 
-impl Tube {
-    /// Build a tube from cell-centered primitive initial conditions on the node grid `x`
-    /// (length `cells + 1`). All `cells` slices share that node grid.
+impl Tube<IdealGas> {
+    /// Build an **ideal-gas** tube from cell-centered primitive initial conditions on the node
+    /// grid `x` (length `cells + 1`). Convenience wrapper over [`Tube::with_eos`] for rung A's
+    /// `p = (γ−1) ρ e`; all `cells` slices share that node grid.
     ///
     /// # Panics
     /// Panics if `x.len() != rho.len() + 1` (one more node than cells).
@@ -113,43 +117,7 @@ impl Tube {
         gamma: f64,
         viscosity: Viscosity,
     ) -> Self {
-        let cells = rho.len();
-        assert_eq!(x.len(), cells + 1, "need one more node than cells");
-        let mass: Vec<f64> = (0..cells).map(|j| rho[j] * (x[j + 1] - x[j])).collect();
-        let energy: Vec<f64> = (0..cells)
-            .map(|j| pressure[j] / ((gamma - 1.0) * rho[j]))
-            .collect();
-        // Node velocities: average of adjacent cell velocities; ends take their neighbor.
-        let nodes = cells + 1;
-        let mut u = vec![0.0; nodes];
-        for (i, ui) in u.iter_mut().enumerate() {
-            let v_left = vel[i.saturating_sub(1)];
-            let v_right = vel[i.min(cells - 1)];
-            *ui = 0.5 * (v_left + v_right);
-        }
-        let mut tube = Self {
-            gamma,
-            viscosity,
-            left: Boundary::Wall,
-            right: Boundary::Wall,
-            x,
-            u,
-            mass,
-            energy,
-        };
-        tube.enforce_wall_velocities();
-        tube
-    }
-
-    /// Pin the velocity of any node that sits against a rigid [`Boundary::Wall`] to zero.
-    fn enforce_wall_velocities(&mut self) {
-        if self.left == Boundary::Wall {
-            self.u[0] = 0.0;
-        }
-        if self.right == Boundary::Wall {
-            let last = self.u.len() - 1;
-            self.u[last] = 0.0;
-        }
+        Self::with_eos(x, rho, vel, pressure, IdealGas::new(gamma), viscosity)
     }
 
     /// The standard Sod shock tube on `x ∈ [0, 1]` with `cells` cells: a diaphragm at `x = 0.5`
@@ -207,6 +175,62 @@ impl Tube {
         tube.enforce_wall_velocities();
         tube
     }
+}
+
+impl<E: Eos> Tube<E> {
+    /// Build a tube with an arbitrary [`Eos`] from cell-centered primitive initial conditions on
+    /// the node grid `x` (length `cells + 1`). The initial `e` is seeded from the initial `p` via
+    /// [`Eos::energy_from_pressure`].
+    ///
+    /// # Panics
+    /// Panics if `x.len() != rho.len() + 1` (one more node than cells).
+    #[must_use]
+    pub fn with_eos(
+        x: Vec<f64>,
+        rho: &[f64],
+        vel: &[f64],
+        pressure: &[f64],
+        eos: E,
+        viscosity: Viscosity,
+    ) -> Self {
+        let cells = rho.len();
+        assert_eq!(x.len(), cells + 1, "need one more node than cells");
+        let mass: Vec<f64> = (0..cells).map(|j| rho[j] * (x[j + 1] - x[j])).collect();
+        let energy: Vec<f64> = (0..cells)
+            .map(|j| eos.energy_from_pressure(rho[j], pressure[j]))
+            .collect();
+        // Node velocities: average of adjacent cell velocities; ends take their neighbor.
+        let nodes = cells + 1;
+        let mut u = vec![0.0; nodes];
+        for (i, ui) in u.iter_mut().enumerate() {
+            let v_left = vel[i.saturating_sub(1)];
+            let v_right = vel[i.min(cells - 1)];
+            *ui = 0.5 * (v_left + v_right);
+        }
+        let mut tube = Self {
+            eos,
+            viscosity,
+            left: Boundary::Wall,
+            right: Boundary::Wall,
+            x,
+            u,
+            mass,
+            energy,
+        };
+        tube.enforce_wall_velocities();
+        tube
+    }
+
+    /// Pin the velocity of any node that sits against a rigid [`Boundary::Wall`] to zero.
+    fn enforce_wall_velocities(&mut self) {
+        if self.left == Boundary::Wall {
+            self.u[0] = 0.0;
+        }
+        if self.right == Boundary::Wall {
+            let last = self.u.len() - 1;
+            self.u[last] = 0.0;
+        }
+    }
 
     /// Number of cells.
     #[must_use]
@@ -220,10 +244,16 @@ impl Tube {
         self.mass[j] / (self.x[j + 1] - self.x[j])
     }
 
-    /// Pressure of cell `j` from the ideal-gas EOS, `p = (γ−1) ρ e`.
+    /// Pressure of cell `j` from the EOS, `p(ρ_j, e_j)`. A fully cooled cell (`e ≤ 0`, reachable
+    /// at the free surface) exerts no pressure.
     #[must_use]
     pub fn pressure(&self, j: usize) -> f64 {
-        (self.gamma - 1.0) * self.density(j) * self.energy[j]
+        let e = self.energy[j];
+        if e > 0.0 {
+            self.eos.pressure(self.density(j), e)
+        } else {
+            0.0
+        }
     }
 
     /// Cell-centered velocity (average of the two bounding node velocities).
@@ -250,13 +280,13 @@ impl Tube {
         Primitive::new(self.density(j), self.velocity(j), self.pressure(j))
     }
 
-    /// Ideal-gas sound speed in cell `j`, `c = sqrt(γ p / ρ)`. A vacuum/near-vacuum cell
-    /// (`p ≤ 0` or `ρ ≤ 0`, reachable at the free surface) has no acoustic signal, so `c = 0`.
+    /// EOS sound speed in cell `j`, `c_s(ρ_j, e_j)`. A vacuum/near-vacuum cell (`e ≤ 0` or
+    /// `ρ ≤ 0`, reachable at the free surface) has no acoustic signal, so `c = 0`.
     fn sound_speed(&self, j: usize) -> f64 {
-        let p = self.pressure(j);
         let rho = self.density(j);
-        if p > 0.0 && rho > 0.0 {
-            (self.gamma * p / rho).sqrt()
+        let e = self.energy[j];
+        if e > 0.0 && rho > 0.0 {
+            self.eos.sound_speed(rho, e)
         } else {
             0.0
         }
@@ -314,6 +344,30 @@ impl Tube {
         CFL * dt
     }
 
+    /// Implicit time-centered energy update for one cell: solve
+    /// `e_new = e_old − (½(p_old + p(ρ_new, e_new)) + q)·dV` for `e_new` by Newton iteration on
+    /// `g(e) = e − e_old + (½(p_old + p(ρ_new, e)) + q)·dV`, with `g'(e) = 1 + ½ dV ∂p/∂e`. For an
+    /// ideal gas `g` is linear, so the first step is exact (reproducing rung A); for a tabulated
+    /// EOS a handful of steps converge. The result is floored at 0 — the positivity safety net
+    /// for strong expansion into vacuum (never exercised by the smooth/shock interior tests).
+    fn update_energy(eos: &E, rho_new: f64, e_old: f64, p_old: f64, q: f64, dv: f64) -> f64 {
+        let mut e = e_old;
+        for _ in 0..100 {
+            let p = eos.pressure(rho_new, e);
+            let g = e - e_old + (0.5 * (p_old + p) + q) * dv;
+            let gp = 1.0 + 0.5 * dv * eos.dp_de(rho_new, e);
+            if gp <= 0.0 {
+                break; // CFL keeps the step away from the EOS-dependent singularity; bail safely.
+            }
+            let step = g / gp;
+            e -= step;
+            if step.abs() <= 1e-13 * (e.abs() + 1e-300) {
+                break;
+            }
+        }
+        e.max(0.0)
+    }
+
     /// Advance one step of size `dt` with velocity Verlet (kick–drift–kick).
     fn step(&mut self, dt: f64) {
         // 1. Half-kick to uⁿ⁺¹ᐟ²; endpoints have zero acceleration so stay fixed.
@@ -329,19 +383,15 @@ impl Tube {
             *xi += dt * ui;
         }
 
-        // 3. Implicit ideal-gas energy update, `de = −(p̄ + q) dV`, p̄ = ½(p_old + p_new):
-        //    e_new = [e_old − (½p_old + q)(V_new − V_old)] / [1 + ½(γ−1)(V_new − V_old)/V_new].
-        // The CFL above keeps the per-step compression modest, so the denominator stays well
-        // away from its zero at `dV/V_new = −2/(γ−1)`; the `max(0)` floor is a positivity
-        // safety net for strong expansion into vacuum, where the gas can cool past zero internal
-        // energy numerically. It is never exercised by the smooth/shock interior tests.
+        // 3. Implicit time-centered energy update `de = −(p̄ + q) dV`, p̄ = ½(p_old + p_new),
+        //    solved per cell for the (possibly tabulated) EOS.
         for j in 0..self.cells() {
-            let v_new = 1.0 / self.density(j);
+            let rho_new = self.density(j);
+            let v_new = 1.0 / rho_new;
             let dv = v_new - v_old[j];
             let q = self.artificial_viscosity(j);
-            let numer = self.energy[j] - (0.5 * p_old[j] + q) * dv;
-            let denom = 1.0 + 0.5 * (self.gamma - 1.0) * dv / v_new;
-            self.energy[j] = (numer / denom).max(0.0);
+            self.energy[j] =
+                Self::update_energy(&self.eos, rho_new, self.energy[j], p_old[j], q, dv);
         }
 
         // 4. Half-kick to uⁿ⁺¹ using the updated (time-n+1) pressures.
