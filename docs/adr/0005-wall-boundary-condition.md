@@ -1,7 +1,8 @@
 # Wall BC for the 1D rad-hydro: cold black absorber + semi-infinite conducting solid
 
-The wall boundary condition fixes two of the four loss channels (radiative-to-plate and
-conductive-to-plate), so it is pinned explicitly rather than left to the solver default.
+The wall boundary condition fixes two of the loss channels (radiative-to-plate, channel 1a, and
+conductive-to-plate, channel 2; see ADR-0016 for the five-channel decomposition), so it is pinned
+explicitly rather than left to the solver default.
 
 **Radiation — cold black absorber.** During the ~µs pulse the surface stays cold (~300–600 K,
 per ADR-0004) while the gas radiates at kK temperatures, so the wall's re-emission `σ·T_wall⁴` is
