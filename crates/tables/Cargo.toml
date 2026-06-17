@@ -1,0 +1,17 @@
+[package]
+name = "tables"
+version = "0.1.0"
+description = "Shared loader for the unified EOS/opacity table (ADR-0007): one gridded (ρ,T)→(p,e,c_s,κ_R,κ_P) JSON object, read whole into RAM and interpolated in-memory (ADR-0002/0019)."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+approx = { workspace = true }
+
+[lints]
+workspace = true
