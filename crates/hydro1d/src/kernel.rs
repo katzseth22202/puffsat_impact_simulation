@@ -385,9 +385,11 @@ impl Tube {
     /// of its peak (ADR-0001's tail guard) or a safety step cap is hit, returning the wall
     /// impulse and the restitution it implies.
     ///
-    /// The wall impulse is accumulated with the **trapezoidal** rule, which matches the
-    /// velocity-Verlet momentum update exactly — so the conservation identity
-    /// `J_wall == p_final − p_initial` holds to round-off (the elastic bookkeeping check).
+    /// The wall impulse is accumulated with the **trapezoidal** rule, mirroring the
+    /// velocity-Verlet momentum update — so the conservation identity
+    /// `J_wall == p_final − p_initial` holds to the scheme's `O(Δx)` consistency (≈4e-4 at 400
+    /// cells, not round-off: `J_wall` samples the wall-pressure history independently of the
+    /// momentum bookkeeping). This is the elastic bookkeeping check (ADR-0001).
     pub fn run_bounce(&mut self) -> BounceResult {
         let p_initial = self.total_momentum();
         let incident = p_initial.abs();
@@ -417,6 +419,68 @@ impl Tube {
             wall_impulse,
             incident_momentum: incident,
             residual_momentum: residual,
+            e_eff: wall_impulse / incident - 1.0,
+            peak_wall_force: peak,
+        }
+    }
+
+    /// Fire the slug at an **idealized absorbing wall** — ADR-0001's dead-stick (`f → 0.5`) limit.
+    /// Integrate the wall impulse only up to **stagnation**: the instant the net gas momentum
+    /// first reaches zero, the gas has been brought fully to rest. Suppressing the rebound there
+    /// is the perfect-momentum-sink idealization, so by conservation `J_wall = p_in` and
+    /// `e_eff → 0`. This is the degenerate, fully-absorbing limit of the real wall (ADR-0005): a
+    /// lossless gas cannot physically stick (it would re-expand to the bounce ceiling), so rung A
+    /// *imposes* the stop rather than modeling a loss channel; later rungs replace it with a
+    /// realistic stick/condensation model.
+    ///
+    /// While gas is compressed against the wall the wall force is `≥ 0`, so the total momentum
+    /// rises monotonically from `−p_in` and crosses zero exactly once. That crossing is bracketed
+    /// and the final step linearly interpolated (`dp/dt = F_wall`), so the reported impulse is not
+    /// biased by a full-step overshoot past stagnation. The residual `O(Δx)` error is the same
+    /// impulse-vs-momentum consistency as [`Self::run_bounce`].
+    pub fn run_stick_bounce(&mut self) -> BounceResult {
+        let p_initial = self.total_momentum();
+        let incident = p_initial.abs();
+        let mut wall_impulse = 0.0;
+        let mut peak: f64 = 0.0;
+        let mut p_old = p_initial;
+        let mut force_old = self.wall_force();
+        let max_steps = 400 * self.cells() + 10_000;
+
+        for _ in 0..max_steps {
+            peak = peak.max(force_old);
+            let dt = self.stable_dt();
+            self.step(dt);
+            let force_new = self.wall_force();
+            let p_new = self.total_momentum();
+
+            if p_new >= 0.0 {
+                // Stagnation lies within this step. Momentum rises linearly across the step
+                // (`dp/dt = F_wall`), so it crosses zero at fraction θ = −p_old/(p_new − p_old);
+                // integrate the wall force trapezoidally only over [0, θ·dt].
+                let theta = (-p_old / (p_new - p_old)).clamp(0.0, 1.0);
+                let force_cross = force_old + theta * (force_new - force_old);
+                wall_impulse += 0.5 * theta * dt * (force_old + force_cross);
+                return BounceResult {
+                    wall_impulse,
+                    incident_momentum: incident,
+                    residual_momentum: 0.0, // gas held at rest; rebound suppressed
+                    e_eff: wall_impulse / incident - 1.0,
+                    peak_wall_force: peak,
+                };
+            }
+
+            wall_impulse += 0.5 * dt * (force_old + force_new);
+            p_old = p_new;
+            force_old = force_new;
+        }
+
+        // Never stagnated within the step cap (a bug, or a Mach so low the slug barely slows):
+        // report what we have so the test surfaces it.
+        BounceResult {
+            wall_impulse,
+            incident_momentum: incident,
+            residual_momentum: self.total_momentum(),
             e_eff: wall_impulse / incident - 1.0,
             peak_wall_force: peak,
         }

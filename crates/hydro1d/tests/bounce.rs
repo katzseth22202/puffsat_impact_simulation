@@ -64,3 +64,18 @@ fn bounce_ceiling_is_resolution_converged() {
         "ceiling not resolution-converged: {e200} vs {e400}"
     );
 }
+
+/// Dead-stick limit (`f → 0.5`): the idealized absorbing wall stops at stagnation, bringing the
+/// gas to rest with no rebound, so by momentum conservation `J_wall = p_in` and `e_eff → 0`
+/// (ADR-0001). The residual is the scheme's `O(Δx)` impulse-vs-momentum consistency, independent
+/// of Mach (the stop is imposed, not gas-dynamic).
+#[test]
+fn dead_stick_absorbs_all_momentum() {
+    for &mach in &[3.0, 5.0, 8.0] {
+        let e = Tube::slug(400, mach, GAMMA).run_stick_bounce().e_eff;
+        assert!(
+            e.abs() < 1e-2,
+            "M={mach}: dead-stick e_eff = {e:.2e}, want ≈ 0"
+        );
+    }
+}
