@@ -1,6 +1,6 @@
 # PuffSat Impact Simulation
 
-A physics simulation to compute the per-collision coefficient of restitution of PuffSat gas against a pusher plate — the fudge factor `f` in the paper *Aim Is All You Need: A Speculative White Paper on PuffSat Pulsed Propulsion*.
+A physics simulation to compute the per-collision coefficient of restitution of PuffSat gas against a pusher plate — the fudge factor `f` in the paper [*Aim Is All You Need: A Speculative White Paper on PuffSat Pulsed Propulsion*](https://github.com/katzseth22202/Balloon-Pulse-Propulsion).
 
 ## What This Computes
 
@@ -38,4 +38,5 @@ Python handles EOS/opacity table generation (Cantera/CoolProp/CEA) and all analy
 
 ## Reference
 
-Full physics rationale, gas model, plate construction, design variables, and validation plan: [`puffsat_impact_sim_design.md`](puffsat_impact_sim_design.md)
+- The paper this simulation backs: [*Aim Is All You Need: A Speculative White Paper on PuffSat Pulsed Propulsion*](https://github.com/katzseth22202/Balloon-Pulse-Propulsion)
+- Full physics rationale, gas model, plate construction, design variables, and validation plan: [`puffsat_impact_sim_design.md`](puffsat_impact_sim_design.md)
