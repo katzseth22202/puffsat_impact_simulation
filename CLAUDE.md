@@ -66,14 +66,23 @@ rust_2018_idioms = "warn"
 [workspace.lints.clippy]
 all      = { level = "deny",  priority = -1 }   # correctness/style: must be clean
 pedantic = { level = "warn",  priority = -1 }   # guidance, not a gate (noisy on numerics)
+cast_precision_loss      = "allow"              # index/count → f64 is exact below 2^53; false positive here
+cast_possible_truncation = "deny"               # f64 → int can corrupt an index; gate it
+cast_sign_loss           = "deny"               # ditto (provably-safe sites carry a narrow #[allow])
 ```
 
 - `cargo clippy --all-targets --all-features` must be clean for the `all` group, which
   `[workspace.lints]` sets to `deny` — so a plain `cargo clippy` (what `make lint` / CI runs)
   already fails the build on any `all`-group lint. Do **not** add `-D warnings`: it would
-  escalate `pedantic` too. `pedantic` is `warn` so it advises without blocking (it is noisy on
-  numerics — e.g. `cast_precision_loss` on small grid indices is an expected, ignorable
-  warning); bump individual pedantic lints to `deny` as the code stabilizes if useful.
+  escalate `pedantic` too. `pedantic` is `warn` so it advises without blocking; bump or relax
+  individual pedantic lints (priority `0`, so they override the group) as the code stabilizes.
+- **Cast lints (settled).** `cast_precision_loss` is **allowed**: every site is a grid index or
+  cell count widened to `f64` (`i as f64 * dx`), which is *exact* below 2⁵³ (~9e15) for our ~10³
+  grids and has no float-preserving alternative — it was a false positive burying real warnings.
+  It guards integer representability, **not** the `f64` arithmetic that governs solver accuracy
+  (that is the job of the order-of-accuracy/convergence tests). Conversely the `f64 → int` casts
+  (`cast_possible_truncation`, `cast_sign_loss`) are **denied**, since they can silently corrupt
+  an index; the rare provably-safe site takes a narrow `#[allow(...)]` with a `// SAFE:` comment.
 - `cargo fmt` is mandatory (checked in `make lint`).
 - This is a correctness-critical from-scratch solver: prefer clarity and explicit numeric
   types over cleverness. Document the physics/equation a function implements.
