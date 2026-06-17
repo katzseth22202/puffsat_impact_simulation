@@ -11,6 +11,7 @@
 
 pub mod eos;
 pub mod kernel;
+pub mod radiation;
 pub mod riemann;
 
 /// A primitive fluid state `(ρ, u, p)` — the shared currency between the kernel and the oracle.
