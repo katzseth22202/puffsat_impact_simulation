@@ -432,6 +432,9 @@ mod tests {
         diag[0] = 1.0 + 3.0 * r; // Dirichlet half-cell to the boundary at x=0
         diag[n - 1] = 1.0 + r; // zero-flux far end
 
+        // SAFE: t_final, dt > 0 ⇒ the rounded ratio is a small non-negative integer (well below
+        // usize::MAX), so neither truncation nor sign loss can occur.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let steps = (t_final / dt).round() as usize;
         for _ in 0..steps {
             let mut rhs = e.clone();
@@ -538,8 +541,8 @@ mod tests {
             (0..n).map(|j| dx[j] * (cv_vol[j] * t[j] + e[j])).sum()
         };
         let total0 = energy(&temp, &e_rad);
-        let spread0 = e_rad.iter().cloned().fold(f64::MIN, f64::max)
-            - e_rad.iter().cloned().fold(f64::MAX, f64::min);
+        let spread0 = e_rad.iter().copied().fold(f64::MIN, f64::max)
+            - e_rad.iter().copied().fold(f64::MAX, f64::min);
 
         let dt = 0.05;
         for _ in 0..200 {

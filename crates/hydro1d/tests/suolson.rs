@@ -14,7 +14,7 @@
 //! - B. Su & G. L. Olson, *Benchmark results for the non-equilibrium Marshak diffusion problem*,
 //!   JQSRT **56**, 337 (1996). Tables 1 (`U`) and 2 (`V`) for `ε = 0.1`.
 //! - Reference values below are the published table, cross-checked against Frank Timmes'
-//!   `suo02.f` / LANL ExactPack `suolson` (LA-CC-05-101).
+//!   `suo02.f` / LANL `ExactPack` `suolson` (LA-CC-05-101).
 //!
 //! ## Mapping the benchmark onto the solver
 //!
@@ -56,6 +56,9 @@ fn interp_at_x(values: &[f64], dz: f64, xq: f64) -> f64 {
     if fpos <= 0.0 {
         return values[0];
     }
+    // SAFE: the `fpos <= 0.0` guard above means fpos > 0 here, so floor() is a non-negative integer
+    // bounded by the grid size — no sign loss, no truncation. (Bounds-checked against len next.)
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let j = fpos.floor() as usize;
     if j >= values.len() - 1 {
         return values[values.len() - 1];
@@ -78,7 +81,7 @@ fn fld_reproduces_suolson_marshak_wave() {
     let dz = zmax / n as f64;
     let t_final = 10.0;
     let nsteps = 2400;
-    let dt = t_final / nsteps as f64;
+    let dt = t_final / f64::from(nsteps);
 
     let dx = vec![dz; n];
     let center_spacing = vec![dz; n - 1];

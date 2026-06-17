@@ -150,7 +150,7 @@ fn invert_field(t_grid: &[f64], target: f64, f: impl Fn(f64) -> f64) -> f64 {
     // Binary search for the interval [lo, hi] with f(t_grid[lo]) ≤ target < f(t_grid[hi]).
     let (mut lo, mut hi) = (0usize, n - 1);
     while hi - lo > 1 {
-        let mid = (lo + hi) / 2;
+        let mid = usize::midpoint(lo, hi);
         if f(t_grid[mid]) <= target {
             lo = mid;
         } else {

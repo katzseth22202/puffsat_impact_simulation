@@ -15,6 +15,13 @@ rust_2018_idioms = { level = "warn", priority = -1 }  # a group: lower priority 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }    # correctness/style: must be clean (-D warnings in CI)
 pedantic = { level = "warn", priority = -1 } # guidance, not a gate (noisy on numerics)
+# index/count → f64 is exact below 2^53 (~9e15); our grids are ~10^3 cells, so `i as f64 * dx` never
+# loses precision and has no float-preserving alternative. False positive for this code — silence it.
+cast_precision_loss = "allow"
+# f64 → integer can silently truncate or drop a sign and corrupt an index, so gate it (deny). The few
+# provably-safe sites carry a narrow #[allow] with a justification comment.
+cast_possible_truncation = "deny"
+cast_sign_loss = "deny"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
