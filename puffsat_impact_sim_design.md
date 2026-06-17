@@ -225,7 +225,7 @@ Two worries answered directly:
 
 ## 10. Build order (rungs)
 
-- **A. 1D ideal-gas smoke test.** Lagrangian hydro, effective-gamma EOS. Pass Sod and the `f -> 1` / `f -> 0.5` limits. (NumPy prototype acceptable; this is where the physics gets debugged.)
+- **A. 1D ideal-gas smoke test.** Lagrangian hydro, effective-gamma EOS. Pass Sod and the `f -> 1` / `f -> 0.5` limits. (Built straight to Rust, test-first: the analytic tests — exact-Sod, convergence, the two momentum limits — *are* the physics-debugging harness, so no throwaway NumPy prototype/port. See `CLAUDE.md`.)
 - **B. 1D high-v package.** Add equilibrium EOS + real opacity + flux-limited diffusion + rigid wall. Produce `e_eff(rho)` and wall flux/pressure at 16 km/s.
 - **C. 1D low-v package.** Cool-gas EOS, optically thin, two-channel condensation (bulk two-phase EOS + wall sticking BC), equilibrium baseline at `α = 1`. Produce the worst case: water at 3.2 km/s. Kinetic condensation only if equilibrium fails the useful-`f` gate.
 - **D. 2D Euler geometry.** `eta_capture` for flat and shallow-concave plates vs cloud shape.

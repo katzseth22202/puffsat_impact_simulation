@@ -23,9 +23,18 @@ _Avoid_: momentum delivered (imprecise — say whether you mean `J_wall` or just
 **Effective restitution (`e_eff`)**:
 The rebound fraction of incident axial momentum that survives radiative, conductive, and
 condensation losses: `e_eff = p_rebound / p_in`, measured as `J_wall / p_in − 1`. Ranges
-0 (stick) to 1 (elastic). `(1 − e_eff)` is the per-pulse momentum loss, decomposed by channel.
-The thermophysics output (1D rad-hydro track).
+0 (dead stick) up to the **bounce ceiling** (below) — `1` is only the idealized `M → 0` /
+specular-reflection limit, not a value a finite gas slug reaches. `(1 − e_eff)` is the
+per-pulse momentum loss, decomposed by channel. The thermophysics output (1D rad-hydro track).
 _Avoid_: bounce factor, coefficient of restitution `e`
+
+**Bounce ceiling (lossless gas-dynamic `e_eff`)**:
+The maximum `e_eff` a re-expanding gas slug can return with **zero** radiative/conductive/
+condensation losses — strictly `< 1`, set by `γ` and incident Mach `M`. The rebound is a
+rarefaction fan with a velocity spread, so by Cauchy–Schwarz the coherent rebound momentum is
+below the incident even in the lossless case. This is the true upper bound on `e_eff`, not 1;
+the `f → 1` smoke test is therefore a bookkeeping + `M → 0` limit check, not a target (ADR-0001).
+_Avoid_: "elastic limit" as a numeric target of 1.
 
 **Capture efficiency (`eta_capture`)**:
 The geometric efficiency of the bounce relative to a perfectly-collimated 1D collision — the
