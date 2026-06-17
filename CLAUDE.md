@@ -109,3 +109,10 @@ Run with `make test` (`cargo test`; `pytest` once Python tests exist).
 - Run `make test` after changes; run `make lint` before committing.
 - Follow existing structure and the canonical terms in `CONTEXT.md`.
 - Keep `CONTEXT.md` a glossary only — implementation decisions go in `docs/adr/`.
+
+## Scratch space (`todos/`)
+
+The gitignored `todos/` directory is disposable scratch space for things we're working on
+together — task checklists, working notes, intermediate plans. Claude may freely create files
+there to track or stage a single task. Nothing in it is checked in or load-bearing; clean it up
+when the task is done.

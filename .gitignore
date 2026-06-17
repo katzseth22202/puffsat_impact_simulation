@@ -33,3 +33,7 @@ __pycache__/
 # Data boundary — generated EOS/opacity tables (JSON) and sweep results (JSONL).
 # These are produced by `make tables` / `make sweep`; never checked in.
 /data/
+
+# Scratch space for temporary working files shared with Claude (e.g. checklists
+# for completing a single task). Disposable; never checked in.
+/todos/
