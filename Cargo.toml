@@ -19,3 +19,4 @@ pedantic = { level = "warn", priority = -1 } # guidance, not a gate (noisy on nu
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+approx = "0.5"                              # relative/abs float asserts in analytic tests

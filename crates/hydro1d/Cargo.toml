@@ -1,0 +1,13 @@
+[package]
+name = "hydro1d"
+version = "0.1.0"
+description = "Rung-A 1D Lagrangian ideal-gas hydro kernel (staggered artificial viscosity); ADR-0022."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dev-dependencies]
+approx = { workspace = true }
+
+[lints]
+workspace = true
