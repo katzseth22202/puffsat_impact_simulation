@@ -22,6 +22,11 @@ at 3.2 km/s (ADR-0006). So opacity provenance splits the same way as the EOS:
 
 Each regime's source is cited, so the low-v optical fraction is no longer un-sourced.
 
+**Amendment (ADR-0019): serialization format.** The unified table is serialized as **JSON**,
+not the HDF5 originally implied by §8 — it is small and loaded whole into RAM, so a binary
+container is unjustified. The per-regime provenance this ADR mandates is carried as a nested
+`provenance` object inside the table JSON. See ADR-0019.
+
 ## Considered Options
 
 - **Single-source EOS or opacity across the whole range.** Rejected: none exists — CoolProp lacks

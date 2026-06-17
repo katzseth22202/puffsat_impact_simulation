@@ -1,0 +1,36 @@
+[project]
+name = "puffsat"
+version = "0.1.0"
+description = "PuffSat impact simulation — Python cold path: EOS/opacity table generation and analysis."
+requires-python = ">=3.12"
+dependencies = []
+
+# Heavy scientific deps arrive at rung B (table pipeline); the smoke test is stdlib-only.
+[project.optional-dependencies]
+sci = ["numpy", "pandas", "matplotlib", "coolprop"]
+
+[dependency-groups]
+dev = ["ruff>=0.6", "mypy>=1.11"]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+src = ["python"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+strict = true
+warn_unreachable = true
+warn_redundant_casts = true
+files = ["python"]
+mypy_path = "python"
+explicit_package_bases = true
+
+# Untyped scientific libraries — scoped per module, never a global ignore (CLAUDE.md / ADR-0007).
+[[tool.mypy.overrides]]
+module = ["CoolProp.*", "cantera.*", "rocketcea.*"]
+ignore_missing_imports = true

@@ -22,3 +22,14 @@ target
 
 # Claude Code local configuration (not checked in)
 .claude/
+
+# Python (uv)
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+
+# Data boundary — generated EOS/opacity tables (JSON) and sweep results (JSONL).
+# These are produced by `make tables` / `make sweep`; never checked in.
+/data/

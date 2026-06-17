@@ -1,0 +1,14 @@
+[package]
+name = "smoke"
+version = "0.1.0"
+description = "Rung-0 plumbing smoke test: read a JSON table, interpolate, append a JSONL result."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

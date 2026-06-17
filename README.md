@@ -25,7 +25,40 @@ Two physics tracks feed a combined result:
 | Geometric capture | 2D axisymmetric Euler, radiation-free (Rust) | `eta_capture` vs plate shape |
 | Confirmation | FLASH (deferred) | independent cross-check |
 
-Python handles EOS/opacity table generation (Cantera/CoolProp/CEA) and all analysis/plotting. The boundary between Rust and Python is a file format (HDF5 or Parquet/CSV).
+Python handles EOS/opacity table generation (Cantera/CoolProp/CEA) and all analysis/plotting. The boundary between Rust and Python is a plain-text file format — JSON for the EOS/opacity tables, JSONL for the sweep results (ADR-0019) — exchanged through the gitignored `data/` directory. No FFI.
+
+## Getting Started
+
+The repo is a cargo workspace (Rust hot path) plus a [uv](https://docs.astral.sh/uv/)-managed Python project (cold path), glued by a `Makefile` (ADR-0018).
+
+### Prerequisites
+
+- **Rust** (stable) via [rustup](https://rustup.rs) — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- **A C linker** — Rust links through the system `cc`. On Debian/Ubuntu: `sudo apt-get install -y gcc` (or `build-essential`).
+- **uv** (manages the Python 3.12+ interpreter and the virtualenv) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
+
+### Set up and verify
+
+```bash
+git clone <repo-url> && cd puffsat_impact_simulation
+uv sync          # create .venv and install dev tools (ruff, mypy)
+make smoke       # end-to-end plumbing test; prints "SMOKE OK"
+```
+
+`make smoke` runs the full cross-language round-trip — Python writes a JSON table, the Rust `smoke` crate reads it and appends a JSONL result, Python reads it back and asserts the value — so a green run confirms both toolchains, the workspace build, and the file boundary together.
+
+### Common tasks
+
+| Command | What it does |
+|---|---|
+| `make smoke` | Plumbing round-trip test (Python ↔ Rust via `data/`) |
+| `make build` | Compile the Rust workspace |
+| `make test` | Run all tests (`cargo test`; pytest later) |
+| `make lint` | ruff + mypy + clippy + fmt checks (the CI gate) |
+| `make fmt` | Auto-format Python and Rust |
+| `make tables` / `make sweep` / `make analysis` | Physics pipeline (stubs until build rungs B+) |
+
+All generated tables and results land in the gitignored `data/` directory.
 
 ## Build Order
 
