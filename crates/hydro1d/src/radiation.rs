@@ -87,14 +87,30 @@ pub struct RadConstants {
     pub a: f64,
 }
 
+/// Which flux limiter the diffusion step uses (ADR-0006).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Limiter {
+    /// Levermore–Pomraning `λ(R)` — the production default. Reduces to Fickian `1/3` when optically
+    /// thick and caps the flux at `cE` when thin (see [`flux_limiter`]).
+    LevermorePomraning,
+    /// Forced Fickian `λ ≡ 1/3` — ordinary (un-limited) radiation diffusion. Used to verify the
+    /// solver against pure-diffusion benchmarks (Su–Olson Marshak), where the limiter would
+    /// otherwise pull the solution off the analytic diffusion answer near steep fronts.
+    Fick,
+}
+
 /// Radiation boundary condition at a domain end.
 #[derive(Debug, Clone, Copy)]
 pub enum RadBc {
     /// Zero-flux (symmetry / reflecting) boundary.
     Reflecting,
-    /// Fixed radiation energy density at the boundary face (half a cell beyond the edge center) —
-    /// the Marshak source surface used by the diffusion benchmarks.
+    /// Fixed radiation energy density at the boundary face (half a cell beyond the edge center).
     Dirichlet(f64),
+    /// Incident-flux (**Marshak**) boundary: an external source of radiation energy density `e_inc`
+    /// drives the surface through the net inward flux `F(0) = (c/2)(e_inc − E_surface)` — the
+    /// diffusion-limit incident-current condition `cE/4 + F/2 = c·e_inc/4`. This is the radiation
+    /// source-surface used by the Su–Olson Marshak benchmark (and the wall absorber of B4).
+    Marshak(f64),
 }
 
 /// The per-cell material state the radiation step reads (a frozen 1D Lagrangian mesh). All slices
@@ -119,25 +135,32 @@ pub struct Medium<'a> {
     pub source: Option<&'a [f64]>,
 }
 
-/// Diffusion coefficient `D = c λ(R) / χ_R` at a face, with the Levermore–Pomraning limiter and
-/// `R = |∇E| / (χ_R E)` evaluated from the (lagged) radiation field. A transparent face
-/// (`χ_R ≤ 0`) carries no diffusive coupling.
-fn face_diffusion(c: f64, chi_r: f64, e_lo: f64, e_hi: f64, spacing: f64) -> f64 {
+/// Diffusion coefficient `D = c λ / χ_R` at a face. With [`Limiter::LevermorePomraning`], `λ = λ(R)`
+/// with `R = |∇E| / (χ_R E)` evaluated from the (lagged) radiation field; with [`Limiter::Fick`],
+/// `λ ≡ 1/3` (ordinary diffusion). A transparent face (`χ_R ≤ 0`) carries no diffusive coupling.
+fn face_diffusion(limiter: Limiter, c: f64, chi_r: f64, e_lo: f64, e_hi: f64, spacing: f64) -> f64 {
     if chi_r <= 0.0 {
         return 0.0;
     }
-    let e_face = 0.5 * (e_lo + e_hi);
-    let r = if e_face > 0.0 {
-        (e_hi - e_lo).abs() / (spacing * chi_r * e_face)
-    } else {
-        0.0
+    let lambda = match limiter {
+        Limiter::Fick => 1.0 / 3.0,
+        Limiter::LevermorePomraning => {
+            let e_face = 0.5 * (e_lo + e_hi);
+            let r = if e_face > 0.0 {
+                (e_hi - e_lo).abs() / (spacing * chi_r * e_face)
+            } else {
+                0.0
+            };
+            flux_limiter(r)
+        }
     };
-    c * flux_limiter(r) / chi_r
+    c * lambda / chi_r
 }
 
 /// One **linearized-implicit** gray flux-limited-diffusion substep over `dt` on the frozen mesh
 /// `medium`. Updates the radiation energy density `e_rad` in place and returns the per-cell matter
-/// temperature change `δT` for the caller to apply to the gas.
+/// **internal-energy change** `Δe` (energy / volume) for the caller to deposit in the gas and
+/// re-invert the EOS for the new temperature.
 ///
 /// # Method
 ///
@@ -150,10 +173,15 @@ fn face_diffusion(c: f64, chi_r: f64, e_lo: f64, e_hi: f64, spacing: f64) -> f64
 /// ```
 ///
 /// — tridiagonal in `E^{n+1}` (Rosseland-mean flux-limited `D` at faces, lagged in the limiter),
-/// solved with [`thomas_solve`]. The matter then takes `C_v δT = −dt k (a T⁴ − E^{n+1})`, which is
-/// *exactly* the energy the radiation source gains, so matter + radiation energy is conserved to
-/// round-off (diffusion is conservative by construction; the only sinks are the boundary faces and
-/// `S`).
+/// solved with [`thomas_solve`]. The matter then takes `Δe_j = dt k_j (E^{n+1}_j − a T_j⁴)`, which
+/// is *exactly* the energy the radiation lost to the local coupling, so matter + radiation energy is
+/// conserved to round-off (diffusion is conservative by construction; the only sinks are the
+/// boundary faces and `S`).
+///
+/// Returning **energy** rather than `δT = Δe / C_v` keeps the step robust where the heat capacity is
+/// small or steeply varying (e.g. the `C_v = α T³` Su–Olson cold front, or ionization in the
+/// production water table): the caller advances `e` and inverts the EOS for `T`, instead of dividing
+/// a finite absorbed energy by a vanishing `C_v`.
 ///
 /// # Panics
 /// Panics unless the `medium` slice lengths are consistent (`N` cells, `N−1` interior faces) and
@@ -166,6 +194,7 @@ pub fn fld_substep(
     bc_right: RadBc,
     dt: f64,
     consts: RadConstants,
+    limiter: Limiter,
 ) -> Vec<f64> {
     let n = medium.dx.len();
     assert!(n >= 1, "empty medium");
@@ -207,7 +236,14 @@ pub fn fld_substep(
     // Interior-face flux-limited diffusion (conservative: one face feeds both its cells).
     for i in 0..n - 1 {
         let chi_r = 0.5 * (medium.chi_ross[i] + medium.chi_ross[i + 1]);
-        let d = face_diffusion(c, chi_r, e_rad[i], e_rad[i + 1], medium.center_spacing[i]);
+        let d = face_diffusion(
+            limiter,
+            c,
+            chi_r,
+            e_rad[i],
+            e_rad[i + 1],
+            medium.center_spacing[i],
+        );
         let flux = d / medium.center_spacing[i];
         let w_lo = flux / medium.dx[i];
         let w_hi = flux / medium.dx[i + 1];
@@ -217,42 +253,72 @@ pub fn fld_substep(
         sub[i + 1] -= w_hi;
     }
 
-    // Dirichlet ends contribute a half-cell face flux; Reflecting ends contribute nothing.
-    if let RadBc::Dirichlet(e_b) = bc_left {
-        let dist = 0.5 * medium.dx[0];
-        let d = face_diffusion(c, medium.chi_ross[0], e_b, e_rad[0], dist);
-        let w = d / (dist * medium.dx[0]);
-        diag[0] += w;
-        rhs[0] += w * e_b;
-    }
-    if let RadBc::Dirichlet(e_b) = bc_right {
-        let last = n - 1;
-        let dist = 0.5 * medium.dx[last];
-        let d = face_diffusion(c, medium.chi_ross[last], e_rad[last], e_b, dist);
-        let w = d / (dist * medium.dx[last]);
-        diag[last] += w;
-        rhs[last] += w * e_b;
-    }
+    // Boundary faces: Dirichlet contributes a diffusive half-cell flux; Marshak contributes the
+    // incident-current surface flux F = (c/2)(e_inc − E_edge); Reflecting contributes nothing.
+    let last = n - 1;
+    let bctx = BoundaryCtx { limiter, c, medium };
+    add_boundary(&bctx, bc_left, 0, e_rad[0], &mut diag, &mut rhs);
+    add_boundary(&bctx, bc_right, last, e_rad[last], &mut diag, &mut rhs);
 
     let e_new = thomas_solve(&sub, &diag, &sup, &rhs);
 
-    // Matter response: exactly the energy the radiation source took on (energy-conserving).
-    let mut dtemp = vec![0.0; n];
+    // Matter response: exactly the energy the radiation lost to the local coupling. Returned as an
+    // internal-energy change `Δe` (not `δT`); `k` already carries the implicit factor `f`, so this
+    // is conservative against the radiation update and stays finite as `C_v → 0`.
+    let mut delta_e = vec![0.0; n];
     for j in 0..n {
-        let denom = medium.cv_vol[j] + dt * c * medium.chi_planck[j] * beta[j];
-        if denom > 0.0 {
-            dtemp[j] =
-                -dt * c * medium.chi_planck[j] * (a * medium.temp[j].powi(4) - e_new[j]) / denom;
-        }
+        delta_e[j] = dt * k[j] * (e_new[j] - a * medium.temp[j].powi(4));
     }
     e_rad.copy_from_slice(&e_new);
-    dtemp
+    delta_e
+}
+
+/// Inputs shared by both ends when folding a boundary face into the tridiagonal system: the flux
+/// limiter, the speed of light, and the medium. Bundled so [`add_boundary`] stays a tidy helper.
+struct BoundaryCtx<'a, 'm> {
+    limiter: Limiter,
+    c: f64,
+    medium: &'a Medium<'m>,
+}
+
+/// Fold one end's boundary condition into the tridiagonal `diag`/`rhs` for its `edge` cell, given
+/// the lagged radiation energy density `e_edge` there. Both ends share the same algebra:
+/// - [`RadBc::Reflecting`]: zero flux, no contribution.
+/// - [`RadBc::Dirichlet`]: a diffusive flux across the half-cell to a fixed `e_b` at the face (the
+///   limiter sees `|∇E|`, so the `(e_b, e_edge)` order does not matter).
+/// - [`RadBc::Marshak`]: the incident-current surface flux `F = (c/2)(e_inc − E_edge)`, implicit in
+///   the edge `E` — a surface conductance `(c/2)/dx`, independent of the interior diffusion `D`.
+fn add_boundary(
+    ctx: &BoundaryCtx<'_, '_>,
+    bc: RadBc,
+    edge: usize,
+    e_edge: f64,
+    diag: &mut [f64],
+    rhs: &mut [f64],
+) {
+    let medium = ctx.medium;
+    match bc {
+        RadBc::Reflecting => {}
+        RadBc::Dirichlet(e_b) => {
+            let dist = 0.5 * medium.dx[edge];
+            let d = face_diffusion(ctx.limiter, ctx.c, medium.chi_ross[edge], e_b, e_edge, dist);
+            let w = d / (dist * medium.dx[edge]);
+            diag[edge] += w;
+            rhs[edge] += w * e_b;
+        }
+        RadBc::Marshak(e_inc) => {
+            let w = 0.5 * ctx.c / medium.dx[edge];
+            diag[edge] += w;
+            rhs[edge] += w * e_inc;
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        Medium, RadBc, RadConstants, face_diffusion, fld_substep, flux_limiter, thomas_solve,
+        Limiter, Medium, RadBc, RadConstants, face_diffusion, fld_substep, flux_limiter,
+        thomas_solve,
     };
     use approx::assert_relative_eq;
 
@@ -425,16 +491,18 @@ mod tests {
                 chi_ross: &chi_ross,
                 source: None,
             };
-            let dtemp = fld_substep(
+            let delta_e = fld_substep(
                 &medium,
                 &mut e_rad,
                 RadBc::Reflecting,
                 RadBc::Reflecting,
                 dt,
                 consts,
+                Limiter::LevermorePomraning,
             );
-            for (t, dt_j) in temp.iter_mut().zip(dtemp.iter()) {
-                *t += dt_j;
+            // Constant C_v = 1, so the (linear) EOS inversion is T += Δe / C_v = Δe.
+            for (t, de) in temp.iter_mut().zip(delta_e.iter()) {
+                *t += de;
             }
             assert_relative_eq!(energy(&temp, &e_rad), total0, max_relative = 1e-10);
         }
@@ -484,22 +552,24 @@ mod tests {
                 chi_ross: &chi_ross,
                 source: None,
             };
-            let dtemp = fld_substep(
+            let delta_e = fld_substep(
                 &medium,
                 &mut e_rad,
                 RadBc::Reflecting,
                 RadBc::Reflecting,
                 dt,
                 consts,
+                Limiter::LevermorePomraning,
             );
-            for (t, dt_j) in temp.iter_mut().zip(dtemp.iter()) {
-                *t += dt_j;
+            // Constant C_v = 1, so the (linear) EOS inversion is T += Δe / C_v = Δe.
+            for (t, de) in temp.iter_mut().zip(delta_e.iter()) {
+                *t += de;
             }
             assert_relative_eq!(energy(&temp, &e_rad), total0, max_relative = 1e-10);
         }
 
-        let spread = e_rad.iter().cloned().fold(f64::MIN, f64::max)
-            - e_rad.iter().cloned().fold(f64::MAX, f64::min);
+        let spread = e_rad.iter().copied().fold(f64::MIN, f64::max)
+            - e_rad.iter().copied().fold(f64::MAX, f64::min);
         assert!(
             spread < spread0,
             "diffusion did not smooth the field: {spread} vs {spread0}"
@@ -525,7 +595,7 @@ mod tests {
         // Across thin→thick media and a fixed jump, the flux never exceeds the c·E cap.
         for &chi_r in &[1e-4, 1e-2, 1.0, 10.0, 100.0] {
             for &spacing in &[1e-2, 0.1, 1.0, 10.0] {
-                let d = face_diffusion(c, chi_r, e_lo, e_hi, spacing);
+                let d = face_diffusion(Limiter::LevermorePomraning, c, chi_r, e_lo, e_hi, spacing);
                 let flux = (d * (e_lo - e_hi) / spacing).abs();
                 assert!(
                     flux <= cap * (1.0 + 1e-12),
@@ -537,7 +607,7 @@ mod tests {
         // Free-streaming saturation: as the gradient steepens (R → ∞), |F| → c·E_face.
         let chi_r = 1e-6; // very thin
         let spacing = 1.0;
-        let d = face_diffusion(c, chi_r, e_lo, e_hi, spacing);
+        let d = face_diffusion(Limiter::LevermorePomraning, c, chi_r, e_lo, e_hi, spacing);
         let flux = (d * (e_lo - e_hi) / spacing).abs();
         assert_relative_eq!(flux, cap, max_relative = 1e-4);
     }
