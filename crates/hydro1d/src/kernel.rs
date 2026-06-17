@@ -9,32 +9,56 @@
 //! captured by an artificial-viscosity pressure `q_j`, active only in compression — no Riemann
 //! solver appears anywhere in the kernel (ADR-0022).
 //!
-//! One step (semi-implicit, the classic vN-R update):
-//! 1. **Momentum** — kick each interior node by the gradient of total pressure `P = p + q`:
-//!    `u_i ← u_i − dt · (P_j − P_{j−1}) / m̄_i`, with the node mass `m̄_i = ½(m_{j−1} + m_j)`.
-//! 2. **Move** the mesh: `x_i ← x_i + dt · u_i`; recompute `ρ_j` from the new node spacing.
-//! 3. **Artificial viscosity** `q_j` from the new compression rate (zero in expansion).
-//! 4. **Energy** — update `e_j` from `de = −(p̄ + q) dV` with `p̄` time-centered, solved
-//!    implicitly for the ideal gas so the step is stable and conserves energy well.
+//! # Time integration
 //!
-//! Endpoints are held fixed (`u = 0`) here; that is exact for the Sod tube (the wave fan never
-//! reaches the ends by the final time). Reflecting/vacuum wall boundaries for the momentum-limit
-//! tests (ADR-0001) are a later increment.
+//! One step is **velocity Verlet** (kick–drift–kick), 2nd-order in time, so that together with
+//! the 2nd-order-in-space staggered differencing the scheme converges at rate 2 in smooth flow
+//! (the convergence test). With acceleration `a = −∂(p+q)/∂m` at the nodes:
+//! 1. **half-kick** `u ← u + ½dt·a(tⁿ)`;
+//! 2. **drift** `x ← x + dt·u`; recompute `ρ`;
+//! 3. **energy** update from `de = −(p̄ + q) dV` with `p̄` time-centered, solved implicitly for
+//!    the ideal gas (stable, energy-conserving), giving `pⁿ⁺¹`;
+//! 4. **half-kick** `u ← u + ½dt·a(tⁿ⁺¹)`.
+//!
+//! Endpoints are held fixed (`u = 0`); that is exact for the Sod tube and for a standing
+//! acoustic wave in a rigid-walled tube (the convergence test). Reflecting/vacuum wall
+//! boundaries for the momentum-limit tests (ADR-0001) are a later increment.
 
 use crate::Primitive;
 
-/// Artificial-viscosity coefficients: quadratic (`c_q`) damps strong shocks, linear (`c_l`)
-/// suppresses post-shock oscillations. Standard vN-R values.
-const C_Q: f64 = 2.0;
-const C_L: f64 = 0.5;
-
 /// CFL number for the explicit timestep.
 const CFL: f64 = 0.4;
+
+/// Artificial-viscosity coefficients. The **quadratic** term damps strong shocks and is
+/// `O(Δx²)` in smooth flow (it preserves 2nd-order accuracy); the **linear** term suppresses
+/// post-shock oscillations but is `O(Δx)` (it degrades accuracy to 1st order), so smooth
+/// order-of-accuracy tests use [`Viscosity::QUADRATIC_ONLY`].
+#[derive(Debug, Clone, Copy)]
+pub struct Viscosity {
+    /// Quadratic coefficient `c_q`.
+    pub quadratic: f64,
+    /// Linear coefficient `c_l`.
+    pub linear: f64,
+}
+
+impl Viscosity {
+    /// Standard von Neumann–Richtmyer coefficients (quadratic + linear), for shock problems.
+    pub const VON_NEUMANN_RICHTMYER: Self = Self {
+        quadratic: 2.0,
+        linear: 0.5,
+    };
+    /// Quadratic only — for smooth flow where the linear term would cap the convergence rate.
+    pub const QUADRATIC_ONLY: Self = Self {
+        quadratic: 2.0,
+        linear: 0.0,
+    };
+}
 
 /// A 1D Lagrangian gas column on a staggered mesh.
 #[derive(Debug, Clone)]
 pub struct Tube {
     gamma: f64,
+    viscosity: Viscosity,
     /// Node positions, length `N + 1`.
     x: Vec<f64>,
     /// Node velocities, length `N + 1`.
@@ -52,7 +76,14 @@ impl Tube {
     /// # Panics
     /// Panics if `x.len() != rho.len() + 1` (one more node than cells).
     #[must_use]
-    pub fn new(x: Vec<f64>, rho: &[f64], vel: &[f64], pressure: &[f64], gamma: f64) -> Self {
+    pub fn new(
+        x: Vec<f64>,
+        rho: &[f64],
+        vel: &[f64],
+        pressure: &[f64],
+        gamma: f64,
+        viscosity: Viscosity,
+    ) -> Self {
         let cells = rho.len();
         assert_eq!(x.len(), cells + 1, "need one more node than cells");
         let mass: Vec<f64> = (0..cells).map(|j| rho[j] * (x[j + 1] - x[j])).collect();
@@ -69,6 +100,7 @@ impl Tube {
         }
         Self {
             gamma,
+            viscosity,
             x,
             u,
             mass,
@@ -95,7 +127,14 @@ impl Tube {
             }
         }
         let vel = vec![0.0; cells];
-        Self::new(x, &rho, &vel, &pressure, gamma)
+        Self::new(
+            x,
+            &rho,
+            &vel,
+            &pressure,
+            gamma,
+            Viscosity::VON_NEUMANN_RICHTMYER,
+        )
     }
 
     /// Number of cells.
@@ -128,6 +167,12 @@ impl Tube {
         0.5 * (self.x[j] + self.x[j + 1])
     }
 
+    /// Current width of cell `j`, `x_{j+1} − x_j` (a quadrature weight for cell-centered fields).
+    #[must_use]
+    pub fn width(&self, j: usize) -> f64 {
+        self.x[j + 1] - self.x[j]
+    }
+
     /// The cell-centered primitive state of cell `j`.
     #[must_use]
     pub fn primitive(&self, j: usize) -> Primitive {
@@ -139,16 +184,32 @@ impl Tube {
         (self.gamma * self.pressure(j) / self.density(j)).sqrt()
     }
 
-    /// Artificial-viscosity pressure of cell `j` for a given velocity field: quadratic + linear,
-    /// active only under compression (`Δu = u_{j+1} − u_j < 0`), else zero.
+    /// Artificial-viscosity pressure of cell `j`: quadratic + linear, active only under
+    /// compression (`Δu = u_{j+1} − u_j < 0`), else zero.
     fn artificial_viscosity(&self, j: usize) -> f64 {
         let du = self.u[j + 1] - self.u[j];
         if du < 0.0 {
             let rho = self.density(j);
-            rho * (C_Q * du * du - C_L * self.sound_speed(j) * du)
+            rho * (self.viscosity.quadratic * du * du
+                - self.viscosity.linear * self.sound_speed(j) * du)
         } else {
             0.0
         }
+    }
+
+    /// Nodal accelerations `a_i = −(P_j − P_{j−1}) / m̄_i` from the total pressure `P = p + q`,
+    /// with node mass `m̄_i = ½(m_{j−1} + m_j)`. Endpoints are fixed, so their acceleration is 0.
+    fn node_accelerations(&self) -> Vec<f64> {
+        let cells = self.cells();
+        let total_p: Vec<f64> = (0..cells)
+            .map(|j| self.pressure(j) + self.artificial_viscosity(j))
+            .collect();
+        let mut accel = vec![0.0; self.x.len()];
+        for i in 1..cells {
+            let node_mass = 0.5 * (self.mass[i - 1] + self.mass[i]);
+            accel[i] = -(total_p[i] - total_p[i - 1]) / node_mass;
+        }
+        accel
     }
 
     /// CFL-limited timestep over all cells, `dt = CFL · min_j Δx_j / c_j`.
@@ -159,38 +220,36 @@ impl Tube {
         CFL * dt
     }
 
-    /// Advance one step of size `dt`.
+    /// Advance one step of size `dt` with velocity Verlet (kick–drift–kick).
     fn step(&mut self, dt: f64) {
-        let cells = self.cells();
-
-        // Total pressure P = p + q at the current state, used for the momentum kick.
-        let total_p: Vec<f64> = (0..cells)
-            .map(|j| self.pressure(j) + self.artificial_viscosity(j))
-            .collect();
-
-        // 1. Momentum: kick interior nodes; endpoints stay fixed.
-        for i in 1..cells {
-            let node_mass = 0.5 * (self.mass[i - 1] + self.mass[i]);
-            self.u[i] -= dt * (total_p[i] - total_p[i - 1]) / node_mass;
+        // 1. Half-kick to uⁿ⁺¹ᐟ²; endpoints have zero acceleration so stay fixed.
+        let accel = self.node_accelerations();
+        for (ui, ai) in self.u.iter_mut().zip(accel.iter()) {
+            *ui += 0.5 * dt * ai;
         }
 
-        // 2. Move the mesh, remembering old specific volumes for the energy update.
-        let v_old: Vec<f64> = (0..cells).map(|j| 1.0 / self.density(j)).collect();
-        let p_old: Vec<f64> = (0..cells).map(|j| self.pressure(j)).collect();
-        for i in 0..self.x.len() {
-            self.x[i] += dt * self.u[i];
+        // 2. Drift the mesh, remembering the time-n specific volume and pressure.
+        let v_old: Vec<f64> = (0..self.cells()).map(|j| 1.0 / self.density(j)).collect();
+        let p_old: Vec<f64> = (0..self.cells()).map(|j| self.pressure(j)).collect();
+        for (xi, ui) in self.x.iter_mut().zip(self.u.iter()) {
+            *xi += dt * ui;
         }
 
-        // 3 & 4. New artificial viscosity, then the implicit ideal-gas energy update:
-        //   e_new = [e_old − (½p_old + q)(V_new − V_old)] / [1 + ½(γ−1)(V_new − V_old)/V_new]
-        // which is `de = −(p̄ + q) dV` with p̄ = ½(p_old + p_new) and p_new = (γ−1)e_new/V_new.
-        for j in 0..cells {
+        // 3. Implicit ideal-gas energy update, `de = −(p̄ + q) dV`, p̄ = ½(p_old + p_new):
+        //    e_new = [e_old − (½p_old + q)(V_new − V_old)] / [1 + ½(γ−1)(V_new − V_old)/V_new].
+        for j in 0..self.cells() {
             let v_new = 1.0 / self.density(j);
             let dv = v_new - v_old[j];
             let q = self.artificial_viscosity(j);
             let numer = self.energy[j] - (0.5 * p_old[j] + q) * dv;
             let denom = 1.0 + 0.5 * (self.gamma - 1.0) * dv / v_new;
             self.energy[j] = numer / denom;
+        }
+
+        // 4. Half-kick to uⁿ⁺¹ using the updated (time-n+1) pressures.
+        let accel = self.node_accelerations();
+        for (ui, ai) in self.u.iter_mut().zip(accel.iter()) {
+            *ui += 0.5 * dt * ai;
         }
     }
 
