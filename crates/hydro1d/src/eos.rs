@@ -31,6 +31,10 @@ pub trait Eos: core::fmt::Debug + Clone {
     /// `∂p/∂e` at fixed `ρ`: the slope of the Newton step in the implicit energy update. Only its
     /// accuracy near the root sets convergence *speed*; the root itself is fixed by `pressure`.
     fn dp_de(&self, rho: f64, e: f64) -> f64;
+    /// Temperature `T(ρ, e)` — the radiation coupling (B5) needs it to set the Planck emission
+    /// `aT⁴` and to index the opacity table. For the ideal gas this is `e` in its reduced units
+    /// (`c_v = 1`); for the table it inverts the monotone `e(ρ, T)`.
+    fn temperature(&self, rho: f64, e: f64) -> f64;
 }
 
 /// Ideal gas `p = (γ−1) ρ e` — rung A's EOS, the analytic baseline every table path regresses
@@ -70,6 +74,10 @@ impl Eos for IdealGas {
 
     fn dp_de(&self, rho: f64, _e: f64) -> f64 {
         (self.gamma - 1.0) * rho
+    }
+
+    fn temperature(&self, _rho: f64, e: f64) -> f64 {
+        e // reduced units: e = c_v T with c_v = 1 (matches the rung-A / ideal-gas table convention)
     }
 }
 
@@ -130,6 +138,10 @@ impl Eos for TableEos {
         let dp = self.table.pressure(rho, t + dt) - self.table.pressure(rho, t - dt);
         let de = self.table.energy(rho, t + dt) - self.table.energy(rho, t - dt);
         dp / de
+    }
+
+    fn temperature(&self, rho: f64, e: f64) -> f64 {
+        self.temperature_from_energy(rho, e)
     }
 }
 
@@ -240,6 +252,18 @@ mod tests {
         for &(rho, e) in &[(1.0, 2.5), (0.3, 12.0)] {
             let p = table.pressure(rho, e);
             assert_relative_eq!(table.energy_from_pressure(rho, p), e, max_relative = 1e-8);
+        }
+    }
+
+    /// `Eos::temperature` (B5a): the table inverts `e(ρ, T)` for `T` (here `e = T`, so it returns
+    /// `e`), and the ideal gas returns `e` directly (reduced units `c_v = 1`). Both agree.
+    #[test]
+    fn temperature_inverts_energy() {
+        let table = TableEos::new(ideal_gas_table());
+        let ideal = IdealGas::new(GAMMA);
+        for &(rho, e) in &[(1.0, 2.5), (0.3, 12.0), (5.0, 0.7)] {
+            assert_relative_eq!(table.temperature(rho, e), e, max_relative = 1e-9);
+            assert_relative_eq!(ideal.temperature(rho, e), e, max_relative = 1e-15);
         }
     }
 }

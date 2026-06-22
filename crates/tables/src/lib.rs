@@ -240,6 +240,16 @@ impl Table {
         self.interp(&self.log_kp, rho, t)
     }
 
+    /// Specific heat capacity `c_v = ∂e/∂T` at fixed `ρ`, by centered finite difference on the
+    /// tabulated `e(ρ, T)`. The radiation step (B5) multiplies this by `ρ` to get the volumetric
+    /// heat capacity `ρ c_v` it needs. The step `δ` is a small fraction of `T`, matching the EOS's
+    /// `dp_de` central difference.
+    #[must_use]
+    pub fn cv(&self, rho: f64, t: f64) -> f64 {
+        let dt = 1e-4 * t.max(1.0);
+        (self.energy(rho, t + dt) - self.energy(rho, t - dt)) / (2.0 * dt)
+    }
+
     /// All five properties at `(ρ, T)` in one query.
     #[must_use]
     pub fn material(&self, rho: f64, t: f64) -> Material {
@@ -343,6 +353,51 @@ mod tests {
                 11.0 * rho.powf(1.5) * t.powf(-2.0),
                 max_relative = 1e-12
             );
+        }
+    }
+
+    /// A JSON table with a **curved** energy field `e = ke·T²` (other fields power-law). The log-log
+    /// interpolation is still exact (e is a power law of T), so `∂e/∂T = 2·ke·T` is known — and is
+    /// distinguishable from `e/T = ke·T`, so a `cv` that confused the two would be caught.
+    fn quadratic_energy_json(n_rho: usize, n_t: usize, ke: f64) -> String {
+        let rho_grid: Vec<f64> = (0..n_rho)
+            .map(|i| 0.1 * 10f64.powf(i as f64 / (n_rho - 1) as f64 * 3.0))
+            .collect();
+        let t_grid: Vec<f64> = (0..n_t)
+            .map(|j| 300.0 * 10f64.powf(j as f64 / (n_t - 1) as f64 * 2.0))
+            .collect();
+        let field = |k: f64, a: f64, b: f64| -> Vec<f64> {
+            let mut v = Vec::with_capacity(n_rho * n_t);
+            for &r in &rho_grid {
+                for &t in &t_grid {
+                    v.push(k * r.powf(a) * t.powf(b));
+                }
+            }
+            v
+        };
+        serde_json::json!({
+            "rho_grid": rho_grid,
+            "T_grid": t_grid,
+            "shape": [n_rho, n_t],
+            "fields": {
+                "p": field(2.0, 1.0, 1.0),
+                "e": field(ke, 0.0, 2.0),       // e = ke·T²  ⇒  ∂e/∂T = 2·ke·T
+                "c_s": field(5.0, 0.0, 0.5),
+                "kappa_rosseland": field(7.0, 2.0, -3.5),
+                "kappa_planck": field(11.0, 1.5, -2.0),
+            },
+            "provenance": {"source": "quadratic-energy unit-test table"},
+        })
+        .to_string()
+    }
+
+    /// `Table::cv` returns `∂e/∂T` (not `e/T`): the centered FD recovers `2·ke·T` for `e = ke·T²`.
+    #[test]
+    fn cv_matches_de_dt() {
+        let ke = 0.5;
+        let table = Table::from_json(&quadratic_energy_json(6, 5, ke)).unwrap();
+        for &(rho, t) in &[(0.37, 1234.0), (3.3, 555.0), (42.0, 9001.0)] {
+            assert_relative_eq!(table.cv(rho, t), 2.0 * ke * t, max_relative = 1e-6);
         }
     }
 
