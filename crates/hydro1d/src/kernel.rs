@@ -29,7 +29,9 @@
 //! reflecting wall with a trailing free surface to measure the restitution `e_eff` (ADR-0001).
 
 use crate::Primitive;
-use crate::eos::{Eos, IdealGas};
+use crate::conduction::Solid;
+use crate::eos::{Eos, IdealGas, TableEos};
+use crate::radiation::{Limiter, Medium, RadBc, RadConstants, fld_substep};
 
 /// CFL number for the explicit timestep.
 const CFL: f64 = 0.4;
@@ -534,5 +536,447 @@ impl<E: Eos> Tube<E> {
             e_eff: wall_impulse / incident - 1.0,
             peak_wall_force: peak,
         }
+    }
+}
+
+/// Per-cell inputs for one radiation substep, built from the gas state of a [`Tube<TableEos>`] (B5).
+/// Owns the `Vec`s so a borrowed [`Medium`] can be constructed from it for a single `fld_substep`.
+#[derive(Debug)]
+struct RadFields {
+    dx: Vec<f64>,
+    center_spacing: Vec<f64>,
+    temp: Vec<f64>,
+    cv_vol: Vec<f64>,
+    chi_planck: Vec<f64>,
+    chi_ross: Vec<f64>,
+}
+
+impl RadFields {
+    /// Borrow as a [`Medium`] for one radiation substep (no external volumetric source).
+    fn medium(&self) -> Medium<'_> {
+        Medium {
+            dx: &self.dx,
+            center_spacing: &self.center_spacing,
+            temp: &self.temp,
+            cv_vol: &self.cv_vol,
+            chi_planck: &self.chi_planck,
+            chi_ross: &self.chi_ross,
+            source: None,
+        }
+    }
+}
+
+impl Tube<TableEos> {
+    /// Build the radiation medium from the current gas state: per cell the temperature `T(ρ, e)`,
+    /// the volumetric heat capacity `ρ c_v`, and the per-length opacities `χ = κ ρ` — Planck for
+    /// emission/absorption, Rosseland for the flux-limited diffusion (ADR-0006). The mesh geometry
+    /// (`dx`, the `N−1` center-to-center spacings) is read from the current Lagrangian node
+    /// positions, so it tracks the moving mesh each step.
+    fn radiation_fields(&self) -> RadFields {
+        let n = self.cells();
+        let table = self.eos.table();
+        let dx: Vec<f64> = (0..n).map(|j| self.width(j)).collect();
+        let center_spacing: Vec<f64> = (0..n - 1)
+            .map(|i| self.center(i + 1) - self.center(i))
+            .collect();
+        let mut temp = vec![0.0; n];
+        let mut cv_vol = vec![0.0; n];
+        let mut chi_planck = vec![0.0; n];
+        let mut chi_ross = vec![0.0; n];
+        for j in 0..n {
+            let rho = self.density(j);
+            let t = self.eos.temperature(rho, self.energy[j]);
+            temp[j] = t;
+            cv_vol[j] = rho * table.cv(rho, t);
+            chi_planck[j] = rho * table.kappa_planck(rho, t);
+            chi_ross[j] = rho * table.kappa_rosseland(rho, t);
+        }
+        RadFields {
+            dx,
+            center_spacing,
+            temp,
+            cv_vol,
+            chi_planck,
+            chi_ross,
+        }
+    }
+}
+
+/// Outcome of a coupled bounce: the [`BounceResult`] plus the three energy loss channels
+/// (per unit wall area) the rigid wall splits the deficit into (ADR-0016).
+#[derive(Debug, Clone, Copy)]
+pub struct CoupledBounceResult {
+    /// The usual restitution/impulse bookkeeping.
+    pub bounce: BounceResult,
+    /// Channel 1a — radiation absorbed at the wall (`x = 0`), `∫ (c/2)(E₀ − e_inc) dt`.
+    pub loss_radiative_wall: f64,
+    /// Channel 1b — radiation escaping to space at the far (re-expansion) end.
+    pub loss_escape_space: f64,
+    /// Channel 2 — heat conducted into the wall solid, `∫ q_wall dt`.
+    pub loss_conductive: f64,
+}
+
+/// A radiation + conduction coupled slug bounce (B5b). Holds the gas [`Tube<TableEos>`], the
+/// per-cell radiation energy density `e_rad`, an optional wall conducting [`Solid`], the physical
+/// constants, and the accumulated loss channels. One step is **Lie-split** at the hydro `dt`: the
+/// hydro update, then one implicit gray-FLD substep (radiation transport + matter exchange), then
+/// the conductive wall loss — each operator reading the state the previous one left (ADR-0006,
+/// ADR-0005). Radiation work/pressure on the gas is deferred (ADR-0006); this moves radiation
+/// *energy* and the loss it carries off through the wall and to space.
+#[derive(Debug)]
+pub struct CoupledBounce {
+    tube: Tube<TableEos>,
+    e_rad: Vec<f64>,
+    wall: Option<Solid>,
+    consts: RadConstants,
+    limiter: Limiter,
+    /// Radiation BC at the wall (`x = 0`); the cold black absorber is `Marshak(0)` (ADR-0005).
+    bc_wall: RadBc,
+    /// Radiation BC at the far (re-expansion) end; escape to space is `Marshak(0)`.
+    bc_space: RadBc,
+    loss_radiative_wall: f64,
+    loss_escape_space: f64,
+    loss_conductive: f64,
+}
+
+impl CoupledBounce {
+    /// Wrap a tabulated-EOS `tube` (and an optional wall `solid`) for a coupled bounce. Radiation
+    /// starts in local equilibrium `e_rad = a T⁴`; the wall and far end default to cold black
+    /// absorbers (`Marshak(0)`) — loss channels 1a and 1b. Pass `wall = None` to disable conduction.
+    #[must_use]
+    pub fn new(
+        tube: Tube<TableEos>,
+        wall: Option<Solid>,
+        consts: RadConstants,
+        limiter: Limiter,
+    ) -> Self {
+        let e_rad: Vec<f64> = (0..tube.cells())
+            .map(|j| {
+                let rho = tube.density(j);
+                let t = tube.eos.temperature(rho, tube.energy[j]);
+                consts.a * t.powi(4)
+            })
+            .collect();
+        Self {
+            tube,
+            e_rad,
+            wall,
+            consts,
+            limiter,
+            bc_wall: RadBc::Marshak(0.0),
+            bc_space: RadBc::Marshak(0.0),
+            loss_radiative_wall: 0.0,
+            loss_escape_space: 0.0,
+            loss_conductive: 0.0,
+        }
+    }
+
+    /// Total radiation field energy `Σ e_rad_j dx_j` (per unit wall area).
+    #[must_use]
+    pub fn radiation_energy(&self) -> f64 {
+        (0..self.tube.cells())
+            .map(|j| self.e_rad[j] * self.tube.width(j))
+            .sum()
+    }
+
+    /// Total matter internal energy `Σ m_j e_j` (per unit wall area).
+    #[must_use]
+    pub fn matter_internal_energy(&self) -> f64 {
+        (0..self.tube.cells())
+            .map(|j| self.tube.mass[j] * self.tube.energy[j])
+            .sum()
+    }
+
+    /// One implicit gray-FLD substep: transport radiation, exchange energy with the matter, and tally
+    /// the radiation leaving through any absorbing boundary (B4b accounting, post-solve `e_rad`).
+    fn radiation_substep(&mut self, dt: f64) {
+        let fields = self.tube.radiation_fields();
+        let delta_e = fld_substep(
+            &fields.medium(),
+            &mut self.e_rad,
+            self.bc_wall,
+            self.bc_space,
+            dt,
+            self.consts,
+            self.limiter,
+        );
+        // Deposit the matter's share of the exchange: Δe is energy/volume, so Δe/ρ is specific.
+        for (j, &de) in delta_e.iter().enumerate() {
+            let rho = self.tube.density(j);
+            self.tube.energy[j] = (self.tube.energy[j] + de / rho).max(0.0);
+        }
+        // Net outflow through an absorbing end: (c/2)(E_edge − e_inc) per area per time.
+        let c = self.consts.c;
+        if let RadBc::Marshak(e_inc) = self.bc_wall {
+            self.loss_radiative_wall += dt * 0.5 * c * (self.e_rad[0] - e_inc);
+        }
+        if let RadBc::Marshak(e_inc) = self.bc_space {
+            let last = self.tube.cells() - 1;
+            self.loss_escape_space += dt * 0.5 * c * (self.e_rad[last] - e_inc);
+        }
+    }
+
+    /// Conductive wall loss (channel 2): drive the solid with the near-wall gas temperature and
+    /// remove the resulting interface flux from the wall cell (gas-temp Dirichlet → effusivity loss).
+    fn conduction_substep(&mut self, dt: f64) {
+        let rho0 = self.tube.density(0);
+        let t_wall = self.tube.eos.temperature(rho0, self.tube.energy[0]);
+        let q = match self.wall.as_mut() {
+            Some(solid) => solid.step_surface_temp(t_wall, dt),
+            None => return,
+        };
+        let loss = q * dt;
+        self.loss_conductive += loss;
+        let mass0 = self.tube.mass[0];
+        self.tube.energy[0] = (self.tube.energy[0] - loss / mass0).max(0.0);
+    }
+
+    /// One coupled step: hydro, then radiation, then conduction (Lie split at the hydro `dt`).
+    fn coupled_step(&mut self, dt: f64) {
+        self.tube.step(dt);
+        self.radiation_substep(dt);
+        self.conduction_substep(dt);
+    }
+
+    /// Fire the coupled slug at the wall, integrating to the same `10⁻³`-of-peak tail guard as
+    /// [`Tube::run_bounce`], and return the restitution plus the loss-channel decomposition.
+    pub fn run(&mut self) -> CoupledBounceResult {
+        let incident = self.tube.total_momentum().abs();
+        let mut wall_impulse = 0.0;
+        let mut peak: f64 = 0.0;
+        let mut past_peak = false;
+        let mut force_old = self.tube.wall_force();
+        let max_steps = 400 * self.tube.cells() + 10_000;
+
+        for _ in 0..max_steps {
+            peak = peak.max(force_old);
+            if force_old < 0.5 * peak {
+                past_peak = true;
+            }
+            if past_peak && force_old < 1e-3 * peak {
+                break;
+            }
+            let dt = self.tube.stable_dt();
+            self.coupled_step(dt);
+            let force_new = self.tube.wall_force();
+            wall_impulse += 0.5 * dt * (force_old + force_new);
+            force_old = force_new;
+        }
+
+        CoupledBounceResult {
+            bounce: BounceResult {
+                wall_impulse,
+                incident_momentum: incident,
+                residual_momentum: self.tube.total_momentum(),
+                e_eff: wall_impulse / incident - 1.0,
+                peak_wall_force: peak,
+            },
+            loss_radiative_wall: self.loss_radiative_wall,
+            loss_escape_space: self.loss_escape_space,
+            loss_conductive: self.loss_conductive,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Boundary, CoupledBounce, Tube, Viscosity};
+    use crate::conduction::Solid;
+    use crate::eos::TableEos;
+    use crate::radiation::{Limiter, RadBc, RadConstants};
+    use approx::assert_relative_eq;
+    use tables::Table;
+
+    const GAMMA: f64 = 1.4;
+
+    /// An ideal-gas EOS table (`e = T`, so `c_v = 1`) with opacity power laws scaled by the
+    /// coefficients `(kr, kp)`: `κ_R = kr·ρ²·T^-3.5`, `κ_P = kp·ρ·T^-2`. Tiny coefficients make
+    /// the gas effectively **transparent** (`κ → 0`: no emission/absorption, the radiation-off
+    /// regression); `O(1)` coefficients give a strongly coupled, lossy gas. Power laws in `(ρ, T)`,
+    /// so the table's log-log interpolation is exact (the `χ = κ ρ` builder is checkable).
+    fn gas_table(kr: f64, kp: f64) -> TableEos {
+        let n = 8;
+        let rho_grid: Vec<f64> = (0..n)
+            .map(|i| 0.01 * 1000f64.powf(i as f64 / (n - 1) as f64)) // 0.01 … 10
+            .collect();
+        let t_grid: Vec<f64> = (0..n)
+            .map(|j| 0.05 * 4000f64.powf(j as f64 / (n - 1) as f64)) // 0.05 … 200
+            .collect();
+        let (mut p, mut e, mut cs, mut kr_v, mut kp_v) =
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        for &r in &rho_grid {
+            for &t in &t_grid {
+                p.push((GAMMA - 1.0) * r * t);
+                e.push(t); // e = T ⇒ c_v = 1
+                cs.push((GAMMA * (GAMMA - 1.0) * t).sqrt());
+                kr_v.push(kr * r.powf(2.0) * t.powf(-3.5)); // κ_R(ρ,T)
+                kp_v.push(kp * r * t.powf(-2.0)); // κ_P(ρ,T)
+            }
+        }
+        let json = serde_json::json!({
+            "rho_grid": rho_grid,
+            "T_grid": t_grid,
+            "shape": [n, n],
+            "fields": { "p": p, "e": e, "c_s": cs, "kappa_rosseland": kr_v, "kappa_planck": kp_v },
+        });
+        TableEos::new(Table::from_json(&json.to_string()).unwrap())
+    }
+
+    /// A cold gas slug fired at a wall (like [`Tube::slug`]) but carrying a tabulated EOS, for the
+    /// coupled-bounce tests: rigid wall at `x = 0`, trailing free surface at `x = 1`, `ρ₀ = 1`,
+    /// `v = −1`, cold pressure `p₀ = ρ₀ v² / (γ M²)` setting the incident Mach number.
+    fn slug_with_table(cells: usize, mach: f64, eos: TableEos) -> Tube<TableEos> {
+        let x: Vec<f64> = (0..=cells).map(|i| i as f64 / cells as f64).collect();
+        let p0 = 1.0 / (GAMMA * mach * mach);
+        let rho = vec![1.0; cells];
+        let pressure = vec![p0; cells];
+        let vel = vec![-1.0; cells];
+        let mut tube = Tube::with_eos(
+            x,
+            &rho,
+            &vel,
+            &pressure,
+            eos,
+            Viscosity::VON_NEUMANN_RICHTMYER,
+        );
+        tube.right = Boundary::Free;
+        tube.enforce_wall_velocities();
+        tube
+    }
+
+    /// The radiation-medium builder (B5a) reads the gas state correctly: `T = e` (here `c_v = 1`),
+    /// the volumetric heat capacity `ρ c_v = ρ`, and the per-length opacities `χ = κ ρ` from the
+    /// table; plus the moving-mesh geometry (`dx`, `N−1` center spacings).
+    #[test]
+    fn radiation_fields_builds_temperature_cv_and_chi() {
+        let cells = 4;
+        let x: Vec<f64> = (0..=cells).map(|i| i as f64 / cells as f64).collect();
+        let rho = vec![2.0; cells];
+        let vel = vec![0.0; cells];
+        let pressure = vec![8.0; cells]; // T = e = p/((γ−1)ρ) = 8/(0.4·2) = 10, inside the grid
+        let tube = Tube::with_eos(
+            x,
+            &rho,
+            &vel,
+            &pressure,
+            gas_table(0.7, 0.3),
+            Viscosity::VON_NEUMANN_RICHTMYER,
+        );
+
+        let rf = tube.radiation_fields();
+        let (r, t) = (2.0_f64, 10.0_f64);
+        for j in 0..cells {
+            assert_relative_eq!(rf.temp[j], t, max_relative = 1e-9);
+            assert_relative_eq!(rf.cv_vol[j], r * 1.0, max_relative = 1e-6); // c_v = ∂e/∂T = 1
+            assert_relative_eq!(
+                rf.chi_planck[j],
+                r * 0.3 * r * t.powf(-2.0),
+                max_relative = 1e-9
+            );
+            assert_relative_eq!(
+                rf.chi_ross[j],
+                r * 0.7 * r.powf(2.0) * t.powf(-3.5),
+                max_relative = 1e-9
+            );
+        }
+        assert_eq!(rf.dx.len(), cells);
+        assert_eq!(rf.center_spacing.len(), cells - 1);
+        assert_relative_eq!(rf.dx[0], 1.0 / cells as f64, max_relative = 1e-12);
+        assert_relative_eq!(
+            rf.center_spacing[0],
+            1.0 / cells as f64,
+            max_relative = 1e-12
+        );
+    }
+
+    /// **Radiation-off regression (B5b gate).** Matter exchanges energy with the field only through
+    /// the Planck (emission/absorption) opacity `κ_P`, so killing `κ_P → 0` decouples the gas while
+    /// a normal Rosseland `κ_R` keeps the diffusion solve well-conditioned (the radiation still
+    /// diffuses and leaks, it just never touches the matter). With no conducting wall either, the
+    /// Lie-split coupled bounce must then reproduce the pure-hydro [`Tube::run_bounce`] restitution
+    /// to round-off — proving the operator split injects nothing spurious into the hydro path.
+    #[test]
+    fn radiation_off_matches_pure_hydro_bounce() {
+        let (cells, mach) = (200, 5.0);
+        let consts = RadConstants { c: 1.0, a: 1e-3 };
+        let tube = slug_with_table(cells, mach, gas_table(0.7, 1e-12));
+        let reference = tube.clone().run_bounce();
+        let coupled = CoupledBounce::new(tube, None, consts, Limiter::LevermorePomraning).run();
+        assert_relative_eq!(coupled.bounce.e_eff, reference.e_eff, max_relative = 1e-6);
+    }
+
+    /// **Energy balance (B5b gate).** In a closed static box (both walls, reflecting radiation
+    /// ends, no conduction) with the radiation pushed out of equilibrium, matter + radiation
+    /// energy is conserved to machine precision: the FLD substep exchanges exactly the energy the
+    /// radiation gains/loses to the local coupling, and the uniform box never moves (zero `PdV`
+    /// work), so internal energy changes only through that conservative exchange.
+    #[test]
+    fn coupling_conserves_matter_plus_radiation_energy() {
+        let cells = 10;
+        let x: Vec<f64> = (0..=cells).map(|i| i as f64 / cells as f64).collect();
+        let rho = vec![1.0; cells];
+        let vel = vec![0.0; cells];
+        let pressure = vec![4.0; cells]; // (γ−1)·ρ·T = 0.4·1·10 = 4 ⇒ T = e = 10
+        let tube = Tube::with_eos(
+            x,
+            &rho,
+            &vel,
+            &pressure,
+            gas_table(1.0, 1.0),
+            Viscosity::VON_NEUMANN_RICHTMYER,
+        );
+        let consts = RadConstants { c: 1.0, a: 1e-3 };
+        let mut cb = CoupledBounce::new(tube, None, consts, Limiter::LevermorePomraning);
+        // Closed box: no radiation escapes either end.
+        cb.bc_wall = RadBc::Reflecting;
+        cb.bc_space = RadBc::Reflecting;
+        // Push radiation below equilibrium so matter ⇄ radiation actually exchanges energy.
+        for e in &mut cb.e_rad {
+            *e *= 0.5;
+        }
+        let total0 = cb.matter_internal_energy() + cb.radiation_energy();
+        for _ in 0..50 {
+            cb.coupled_step(0.01);
+        }
+        let total1 = cb.matter_internal_energy() + cb.radiation_energy();
+        assert_relative_eq!(total1, total0, max_relative = 1e-10);
+    }
+
+    /// **Loss direction + non-negative channels (B5b gate).** Turning on radiative coupling (loss
+    /// to the wall and to space) and a conducting wall bleeds energy the lossless bounce keeps, so
+    /// the rebound — hence `e_eff` — drops. Each loss channel is a non-negative drain, and the
+    /// total deficit is strictly positive.
+    #[test]
+    fn losses_lower_e_eff_and_split_into_nonneg_channels() {
+        let (cells, mach) = (200, 5.0);
+        let consts = RadConstants { c: 1.0, a: 1e-3 };
+        let lossless = CoupledBounce::new(
+            slug_with_table(cells, mach, gas_table(0.7, 1e-12)), // κ_P→0 decouples matter
+            None,
+            consts,
+            Limiter::LevermorePomraning,
+        )
+        .run();
+        let wall = Solid::new(400, 1.0, 0.0, 0.5, 2.0);
+        let lossy = CoupledBounce::new(
+            slug_with_table(cells, mach, gas_table(1.0, 1.0)),
+            Some(wall),
+            consts,
+            Limiter::LevermorePomraning,
+        )
+        .run();
+
+        // Losses bleed internal energy ⇒ a weaker rebound ⇒ lower restitution.
+        assert!(
+            lossy.bounce.e_eff < lossless.bounce.e_eff,
+            "lossy e_eff {} should be below lossless {}",
+            lossy.bounce.e_eff,
+            lossless.bounce.e_eff
+        );
+        // Each channel is a non-negative drain, and at least one fired.
+        assert!(lossy.loss_radiative_wall >= 0.0);
+        assert!(lossy.loss_escape_space >= 0.0);
+        assert!(lossy.loss_conductive >= 0.0);
+        assert!(lossy.loss_radiative_wall + lossy.loss_escape_space + lossy.loss_conductive > 0.0);
     }
 }
