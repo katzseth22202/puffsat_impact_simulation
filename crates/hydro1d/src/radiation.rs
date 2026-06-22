@@ -614,4 +614,123 @@ mod tests {
         let flux = (d * (e_lo - e_hi) / spacing).abs();
         assert_relative_eq!(flux, cap, max_relative = 1e-4);
     }
+
+    // --- B4b: cold black absorber wall (ADR-0005, radiative loss channel 1a) ---
+
+    /// Total radiation energy `Σ E_j dx_j` (matter decoupled, so this is the only radiation bucket).
+    fn rad_energy(e_rad: &[f64], dx: &[f64]) -> f64 {
+        e_rad.iter().zip(dx).map(|(&e, &d)| e * d).sum()
+    }
+
+    /// The cold black absorber wall is just `RadBc::Marshak(0.0)`: with no incident radiation the
+    /// Marshak current is the pure outflow `F = −(c/2)E_surface` — radiation streams into the wall
+    /// and nothing comes back (ADR-0005: the radiative loss *is* the flux that reaches the wall).
+    ///
+    /// With matter decoupled (`χ_P = 0`, no emission/absorption) and conservative interior diffusion,
+    /// the only sink is the wall, so the discrete energy balance is **exact**:
+    /// `E_total⁺ = E_total⁻ − dt·(c/2)·E_wall⁺`. We verify that accounting every step, plus that the
+    /// energy decreases monotonically, stays non-negative, and a meaningful fraction is actually
+    /// drained (so the check is not passing on ~zero flux).
+    #[test]
+    fn cold_black_absorber_drains_energy_at_half_c_e() {
+        let n = 100;
+        let (c, a) = (2.0, 1.0);
+        let consts = RadConstants { c, a };
+        let dx = vec![0.01; n];
+        let center_spacing = vec![0.01; n - 1];
+        let temp = vec![0.0; n]; // T = 0 and χ_P = 0 ⇒ matter fully decoupled (aT⁴ = 0, k = 0)
+        let cv_vol = vec![1.0; n];
+        let chi_planck = vec![0.0; n];
+        let chi_ross = vec![1.0; n];
+        let mut e_rad = vec![1.0; n]; // uniform radiation; the left wall drains it from step one
+        let dt = 1e-3;
+
+        let initial = rad_energy(&e_rad, &dx);
+        for _ in 0..1000 {
+            let medium = Medium {
+                dx: &dx,
+                center_spacing: &center_spacing,
+                temp: &temp,
+                cv_vol: &cv_vol,
+                chi_planck: &chi_planck,
+                chi_ross: &chi_ross,
+                source: None,
+            };
+            let before = rad_energy(&e_rad, &dx);
+            let _ = fld_substep(
+                &medium,
+                &mut e_rad,
+                RadBc::Marshak(0.0), // cold black absorber at x = 0
+                RadBc::Reflecting,   // closed far end
+                dt,
+                consts,
+                Limiter::Fick,
+            );
+            let after = rad_energy(&e_rad, &dx);
+
+            // Exact flux accounting: the drop equals the implicit wall outflow dt·(c/2)·E_wall⁺.
+            let wall_loss = dt * 0.5 * c * e_rad[0];
+            assert_relative_eq!(
+                before - after,
+                wall_loss,
+                max_relative = 1e-9,
+                epsilon = 1e-14
+            );
+            assert!(after <= before, "energy must not grow through an absorber");
+            assert!(
+                e_rad.iter().all(|&e| e >= -1e-12),
+                "radiation energy stays non-negative"
+            );
+        }
+        let drained = (initial - rad_energy(&e_rad, &dx)) / initial;
+        assert!(
+            drained > 0.3,
+            "absorber drained only {drained:.3} of the energy"
+        );
+    }
+
+    /// Contrast / control: with both ends `Reflecting` and matter decoupled, the same diffusion is
+    /// a closed system — total radiation energy is conserved to round-off. This isolates the loss in
+    /// the absorber test above as the wall, not a diffusion artifact, and checks the reflecting BC.
+    #[test]
+    fn reflecting_walls_conserve_radiation_energy() {
+        let n = 100;
+        let consts = RadConstants { c: 2.0, a: 1.0 };
+        let dx = vec![0.01; n];
+        let center_spacing = vec![0.01; n - 1];
+        let temp = vec![0.0; n];
+        let cv_vol = vec![1.0; n];
+        let chi_planck = vec![0.0; n];
+        let chi_ross = vec![1.0; n];
+        // A non-uniform blob so diffusion actually moves energy around between the closed walls.
+        let mut e_rad: Vec<f64> = (0..n)
+            .map(|j| {
+                let x = (j as f64 + 0.5) / n as f64;
+                (-(x - 0.5) * (x - 0.5) / 0.01).exp()
+            })
+            .collect();
+
+        let total0 = rad_energy(&e_rad, &dx);
+        for _ in 0..400 {
+            let medium = Medium {
+                dx: &dx,
+                center_spacing: &center_spacing,
+                temp: &temp,
+                cv_vol: &cv_vol,
+                chi_planck: &chi_planck,
+                chi_ross: &chi_ross,
+                source: None,
+            };
+            let _ = fld_substep(
+                &medium,
+                &mut e_rad,
+                RadBc::Reflecting,
+                RadBc::Reflecting,
+                1e-3,
+                consts,
+                Limiter::Fick,
+            );
+            assert_relative_eq!(rad_energy(&e_rad, &dx), total0, max_relative = 1e-10);
+        }
+    }
 }
