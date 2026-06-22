@@ -58,6 +58,8 @@ data/results/sweep.jsonl: data/tables/water.json $(wildcard crates/sweep/src/*.r
 	@mkdir -p data/results
 	cargo run --release -p sweep
 
-## analysis: frontier extraction + plots (rung B+); depends on sweep
-analysis:
-	@echo "TODO (rung B): uv run python -m puffsat.analysis"
+## analysis: frontier extraction + plots (rung B) -> data/results/frontier.csv + figures; depends on sweep
+analysis: data/results/frontier.csv
+
+data/results/frontier.csv: data/results/sweep.jsonl python/puffsat/analysis.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis

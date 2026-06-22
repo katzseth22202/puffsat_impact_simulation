@@ -41,6 +41,8 @@ mypy_path = "python"
 explicit_package_bases = true
 
 # Untyped scientific libraries — scoped per module, never a global ignore (CLAUDE.md / ADR-0007).
+# matplotlib lives in the `sci` extra (not installed for `make lint`); its calls are wrapped in
+# analysis.py so no `Any` leaks past the plotting boundary.
 [[tool.mypy.overrides]]
-module = ["CoolProp.*", "cantera.*", "rocketcea.*"]
+module = ["CoolProp.*", "cantera.*", "rocketcea.*", "matplotlib.*"]
 ignore_missing_imports = true
