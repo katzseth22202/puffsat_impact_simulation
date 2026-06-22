@@ -1,0 +1,17 @@
+[package]
+name = "sweep"
+version = "0.1.0"
+description = "Rung-B production sweep: e_eff(rho_impact) at 16 km/s via the coupled rad-hydro bounce; rayon over rho, JSONL out (ADR-0019)."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hydro1d = { path = "../hydro1d" }
+tables = { path = "../tables" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rayon = { workspace = true }
+
+[lints]
+workspace = true

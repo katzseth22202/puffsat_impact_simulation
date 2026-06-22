@@ -51,9 +51,12 @@ data/tables/water.json: python/puffsat/eos_water.py python/puffsat/tables.py
 	@mkdir -p data/tables
 	PYTHONPATH=python $(PY) -m puffsat.tables
 
-## sweep: run the parameter sweep (rung B+); depends on tables
-sweep:
-	@echo "TODO (rung B): cargo run -p sweep --release  ->  data/results/*.jsonl"
+## sweep: run the 16 km/s e_eff(rho) sweep (rung B) -> data/results/sweep.jsonl; depends on tables
+sweep: data/results/sweep.jsonl
+
+data/results/sweep.jsonl: data/tables/water.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep
 
 ## analysis: frontier extraction + plots (rung B+); depends on sweep
 analysis:

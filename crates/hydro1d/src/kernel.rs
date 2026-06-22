@@ -567,6 +567,38 @@ impl RadFields {
 }
 
 impl Tube<TableEos> {
+    /// A cold gas slug fired at a rigid wall (`x = 0`) with a trailing free (vacuum) surface
+    /// (`x = length`), in **SI** units — the production analogue of [`Tube::slug`] (ADR-0001) used
+    /// by the `e_eff(ρ)` sweep (`crates/sweep`).
+    ///
+    /// `cells` cells uniformly fill `x ∈ [0, length]` at density `rho_impact`, all coasting toward
+    /// the wall at `u = −v`. The cold cloud's pressure (and hence specific internal energy) is seeded
+    /// from the table at `(rho_impact, t0)`: `p₀ = p(ρ, T₀)`, and [`Tube::with_eos`] then recovers the
+    /// consistent `e₀ = e(ρ, T₀)` by inverting that pressure. The incident Mach number `v / c_s(ρ, T₀)`
+    /// is therefore set entirely by how cold `T₀` is, exactly as in the normalized [`Tube::slug`].
+    #[must_use]
+    pub fn slug_si(
+        cells: usize,
+        rho_impact: f64,
+        v: f64,
+        length: f64,
+        t0: f64,
+        eos: TableEos,
+        viscosity: Viscosity,
+    ) -> Self {
+        let x: Vec<f64> = (0..=cells)
+            .map(|i| i as f64 / cells as f64 * length)
+            .collect();
+        let p0 = eos.table().pressure(rho_impact, t0);
+        let rho = vec![rho_impact; cells];
+        let pressure = vec![p0; cells];
+        let vel = vec![-v; cells];
+        let mut tube = Self::with_eos(x, &rho, &vel, &pressure, eos, viscosity);
+        tube.right = Boundary::Free;
+        tube.enforce_wall_velocities();
+        tube
+    }
+
     /// Build the radiation medium from the current gas state: per cell the temperature `T(ρ, e)`,
     /// the volumetric heat capacity `ρ c_v`, and the per-length opacities `χ = κ ρ` — Planck for
     /// emission/absorption, Rosseland for the flux-limited diffusion (ADR-0006). The mesh geometry
@@ -780,7 +812,7 @@ impl CoupledBounce {
 
 #[cfg(test)]
 mod tests {
-    use super::{Boundary, CoupledBounce, Tube, Viscosity};
+    use super::{CoupledBounce, Tube, Viscosity};
     use crate::conduction::Solid;
     use crate::eos::TableEos;
     use crate::radiation::{Limiter, RadBc, RadConstants};
@@ -823,25 +855,20 @@ mod tests {
     }
 
     /// A cold gas slug fired at a wall (like [`Tube::slug`]) but carrying a tabulated EOS, for the
-    /// coupled-bounce tests: rigid wall at `x = 0`, trailing free surface at `x = 1`, `ρ₀ = 1`,
-    /// `v = −1`, cold pressure `p₀ = ρ₀ v² / (γ M²)` setting the incident Mach number.
+    /// coupled-bounce tests. A thin wrapper over the production [`Tube::slug_si`] in normalized units
+    /// (`ρ₀ = 1`, `v = 1`, `L = 1`): for the `e = T` synthetic tables a cold `T₀ = 1/(γ(γ−1)M²)` gives
+    /// `p₀ = (γ−1)ρ₀T₀ = 1/(γM²)`, i.e. incident Mach number `M = v/c₀`.
     fn slug_with_table(cells: usize, mach: f64, eos: TableEos) -> Tube<TableEos> {
-        let x: Vec<f64> = (0..=cells).map(|i| i as f64 / cells as f64).collect();
-        let p0 = 1.0 / (GAMMA * mach * mach);
-        let rho = vec![1.0; cells];
-        let pressure = vec![p0; cells];
-        let vel = vec![-1.0; cells];
-        let mut tube = Tube::with_eos(
-            x,
-            &rho,
-            &vel,
-            &pressure,
+        let t0 = 1.0 / (GAMMA * (GAMMA - 1.0) * mach * mach);
+        Tube::slug_si(
+            cells,
+            1.0,
+            1.0,
+            1.0,
+            t0,
             eos,
             Viscosity::VON_NEUMANN_RICHTMYER,
-        );
-        tube.right = Boundary::Free;
-        tube.enforce_wall_velocities();
-        tube
+        )
     }
 
     /// The radiation-medium builder (B5a) reads the gas state correctly: `T = e` (here `c_v = 1`),
