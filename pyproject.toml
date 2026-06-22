@@ -3,17 +3,27 @@ name = "puffsat"
 version = "0.1.0"
 description = "PuffSat impact simulation — Python cold path: EOS/opacity table generation and analysis."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "numpy>=2.4.6",
+]
 
 # Heavy scientific deps arrive at rung B (table pipeline); the smoke test is stdlib-only.
 [project.optional-dependencies]
 sci = ["numpy", "pandas", "matplotlib", "coolprop"]
 
 [dependency-groups]
-dev = ["ruff>=0.6", "mypy>=1.11"]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pytest>=9.1.1",
+]
 
 [tool.uv]
 package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["python"]
+testpaths = ["python/tests"]
 
 [tool.ruff]
 line-length = 100

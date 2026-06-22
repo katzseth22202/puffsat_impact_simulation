@@ -19,9 +19,10 @@ smoke: build
 build:
 	cargo build
 
-## test: run all tests (cargo; pytest once Python tests exist)
+## test: run all tests (cargo + pytest)
 test:
 	cargo test
+	uv run pytest
 
 ## lint: ruff + mypy + clippy + fmt checks (CI gate)
 lint:
