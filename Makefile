@@ -44,9 +44,12 @@ clean:
 	rm -f data/tables/smoke.json data/results/smoke.jsonl
 
 # --- Physics pipeline (stubs filled in at the corresponding build rungs) ---
-## tables: generate EOS/opacity tables (rung B+)
-tables:
-	@echo "TODO (rung B): uv run python -m puffsat.tables  ->  data/tables/*.json"
+## tables: generate the water EOS/opacity table (rung B) -> data/tables/water.json
+tables: data/tables/water.json
+
+data/tables/water.json: python/puffsat/eos_water.py python/puffsat/tables.py
+	@mkdir -p data/tables
+	PYTHONPATH=python $(PY) -m puffsat.tables
 
 ## sweep: run the parameter sweep (rung B+); depends on tables
 sweep:
