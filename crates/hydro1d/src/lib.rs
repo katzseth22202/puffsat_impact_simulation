@@ -8,7 +8,10 @@
 //! - [`riemann`] — the *exact* Riemann solver for the 1D Euler equations, used as the analytic
 //!   oracle for the Sod shock-tube acceptance test. It is test-only and does **not** double as
 //!   a flux function (the AV kernel has no Riemann solver; ADR-0022).
+//! - [`conduction`] — the semi-infinite conducting solid behind the rigid wall (ADR-0005, Rung-B
+//!   B4): the conductive-to-plate loss channel, an implicit 1D heat-conduction mesh.
 
+pub mod conduction;
 pub mod eos;
 pub mod kernel;
 pub mod radiation;
