@@ -1100,6 +1100,55 @@ mod tests {
         );
     }
 
+    /// DIAGNOSTIC (ignored): does the real low-v water slug ever condense at the wall (or anywhere)
+    /// during an *adiabatic* bounce? Run with `cargo test -p hydro1d -- --ignored --nocapture
+    /// diag_lowv`. Tracks the peak liquid fraction reached at the wall cell and across all cells.
+    #[test]
+    #[ignore = "diagnostic; needs data/tables/water_lowv.json"]
+    fn diag_lowv_condensation() {
+        use tables::Table;
+        let table = Table::load(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../data/tables/water_lowv.json"
+        ))
+        .unwrap();
+        let eos = TableEos::new(table);
+        for &t0 in &[350.0_f64, 450.0, 600.0] {
+            let mut tube = Tube::slug_si(
+                200,
+                0.32,
+                3200.0,
+                1.0,
+                t0,
+                eos.clone(),
+                Viscosity::VON_NEUMANN_RICHTMYER,
+            );
+            let (mut max_wall_lf, mut max_any_lf) = (0.0_f64, 0.0_f64);
+            let (mut peak, mut past, mut fold) = (0.0_f64, false, tube.wall_force());
+            for _ in 0..(400 * tube.cells() + 10_000) {
+                peak = peak.max(fold);
+                if fold < 0.5 * peak {
+                    past = true;
+                }
+                if past && fold < 1e-3 * peak {
+                    break;
+                }
+                let dt = tube.stable_dt();
+                tube.step(dt);
+                max_wall_lf =
+                    max_wall_lf.max(tube.eos.liquid_fraction(tube.density(0), tube.energy[0]));
+                for j in 0..tube.cells() {
+                    let lf = tube.eos.liquid_fraction(tube.density(j), tube.energy[j]);
+                    max_any_lf = max_any_lf.max(lf);
+                }
+                fold = tube.wall_force();
+            }
+            println!(
+                "t0={t0}: peak wall liquid_frac={max_wall_lf:.4}, peak any-cell={max_any_lf:.4}"
+            );
+        }
+    }
+
     /// The radiation-medium builder (B5a) reads the gas state correctly: `T = e` (here `c_v = 1`),
     /// the volumetric heat capacity `ρ c_v = ρ`, and the per-length opacities `χ = κ ρ` from the
     /// table; plus the moving-mesh geometry (`dx`, `N−1` center spacings).

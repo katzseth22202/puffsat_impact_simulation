@@ -26,7 +26,7 @@ use std::io::Write as _;
 use std::path::Path;
 
 use hydro1d::eos::TableEos;
-use hydro1d::kernel::{CoupledBounce, Tube, Viscosity};
+use hydro1d::kernel::{CondensingBounce, CoupledBounce, Tube, Viscosity};
 use hydro1d::radiation::{Limiter, RadConstants};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -34,6 +34,8 @@ use tables::Table;
 
 const TABLE_PATH: &str = "data/tables/water.json";
 const RESULT_PATH: &str = "data/results/sweep.jsonl";
+const TABLE_PATH_LOWV: &str = "data/tables/water_lowv.json";
+const RESULT_PATH_LOWV: &str = "data/results/sweep_lowv.jsonl";
 
 /// The production `ρ_impact` grid [kg/m³] (design §3-4): the impact-density axis of `e_eff(ρ)`.
 const RHO_GRID: [f64; 4] = [0.16, 0.32, 0.48, 0.64];
@@ -100,6 +102,9 @@ struct Record {
     /// channel is deferred to its own rung (see the module docstring). The field is retained so the
     /// JSONL schema is stable for when a gas-side boundary-layer conduction model lands.
     loss_conductive: f64,
+    /// Channel 3 — energy carried off by condensate that stuck to the wall (Rung C, low-v). `0` for
+    /// the high-v plasma pass (no condensation); the dominant loss at 3.2 km/s (ADR-0004).
+    loss_condensation: f64,
 }
 
 /// Run one coupled bounce at `rho_impact` with `table` and `cfg`; return its JSONL row.
@@ -127,6 +132,7 @@ fn run_one(rho_impact: f64, table: &Table, cfg: &Config) -> Record {
         loss_radiative_wall: result.loss_radiative_wall,
         loss_escape_space: result.loss_escape_space,
         loss_conductive: result.loss_conductive,
+        loss_condensation: 0.0, // no condensation in the high-v plasma
     }
 }
 
@@ -139,32 +145,106 @@ fn run_sweep(rho_grid: &[f64], table: &Table, cfg: &Config) -> Vec<Record> {
         .collect()
 }
 
+/// Fixed configuration for the 3.2 km/s low-v anchor (Rung C): the cold cloud is warm enough that
+/// every swept `ρ` starts as single-phase vapor (incident Mach ≈ 6); radiation is off (design §3)
+/// and conduction is deferred (B-flux), so the only loss is condensation (`α` = wall sticking).
+#[derive(Debug, Clone, Copy)]
+struct LowvConfig {
+    v: f64,
+    t0: f64,
+    length: f64,
+    gas_cells: usize,
+    /// Wall sticking coefficient (baseline 1 — the pessimistic equilibrium bound, ADR-0004).
+    alpha: f64,
+}
+
+impl LowvConfig {
+    fn anchor() -> Self {
+        Self {
+            v: 3200.0,
+            t0: 450.0,
+            length: 1.0,
+            gas_cells: 300,
+            alpha: 1.0,
+        }
+    }
+}
+
+/// Run one condensing bounce at `rho_impact` (Rung C low-v); return its JSONL row. Radiation and
+/// conduction are off, so only `loss_condensation` is populated.
+fn run_one_lowv(rho_impact: f64, table: &Table, cfg: &LowvConfig) -> Record {
+    let eos = TableEos::new(table.clone());
+    let tube = Tube::slug_si(
+        cfg.gas_cells,
+        rho_impact,
+        cfg.v,
+        cfg.length,
+        cfg.t0,
+        eos,
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    );
+    let result = CondensingBounce::new(tube, cfg.alpha).run();
+    Record {
+        rho_impact,
+        v: cfg.v,
+        e_eff: result.bounce.e_eff,
+        peak_wall_force: result.bounce.peak_wall_force,
+        incident_momentum: result.bounce.incident_momentum,
+        residual_momentum: result.bounce.residual_momentum,
+        wall_impulse: result.bounce.wall_impulse,
+        loss_radiative_wall: 0.0, // radiation off at 3.2 km/s (design §3)
+        loss_escape_space: 0.0,
+        loss_conductive: 0.0, // deferred (B-flux)
+        loss_condensation: result.loss_condensation,
+    }
+}
+
+/// Sweep the low-v anchor in parallel (rayon), preserving input order.
+fn run_sweep_lowv(rho_grid: &[f64], table: &Table, cfg: &LowvConfig) -> Vec<Record> {
+    rho_grid
+        .par_iter()
+        .map(|&rho| run_one_lowv(rho, table, cfg))
+        .collect()
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Optional positional args `[table_path] [result_path]` (defaults = the production paths) let
-    // the B5d-3 opacity-insensitivity scan sweep each opacity-scaled table into its own JSONL.
-    let mut args = std::env::args().skip(1);
-    let table_path = args.next().unwrap_or_else(|| TABLE_PATH.to_string());
-    let result_path = args.next().unwrap_or_else(|| RESULT_PATH.to_string());
+    // `--lowv` selects the 3.2 km/s condensing anchor (Rung C); otherwise the 16 km/s high-v pass.
+    // Optional positional `[table_path] [result_path]` override the defaults (the B5d-3 opacity scan
+    // uses them to sweep each opacity-scaled table into its own JSONL).
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let lowv = args.iter().any(|a| a == "--lowv");
+    let positional: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
+    let (def_table, def_result) = if lowv {
+        (TABLE_PATH_LOWV, RESULT_PATH_LOWV)
+    } else {
+        (TABLE_PATH, RESULT_PATH)
+    };
+    let table_path = positional.first().map_or(def_table, |s| s.as_str());
+    let result_path = positional.get(1).map_or(def_result, |s| s.as_str());
 
-    let table = Table::load(&table_path)?;
-    let cfg = Config::production();
-    let records = run_sweep(&RHO_GRID, &table, &cfg);
+    let table = Table::load(table_path)?;
+    let records = if lowv {
+        run_sweep_lowv(&RHO_GRID, &table, &LowvConfig::anchor())
+    } else {
+        run_sweep(&RHO_GRID, &table, &Config::production())
+    };
 
-    if let Some(parent) = Path::new(&result_path).parent() {
+    if let Some(parent) = Path::new(result_path).parent() {
         fs::create_dir_all(parent)?;
     }
     // A fresh sweep replaces the file; one JSON object per line (ADR-0019).
-    let mut out = fs::File::create(&result_path)?;
+    let mut out = fs::File::create(result_path)?;
     for r in &records {
         writeln!(out, "{}", serde_json::to_string(r)?)?;
         println!(
-            "rust: rho={:.3} -> e_eff={:.4}  (peak F={:.3e}, losses 1a={:.3e} 1b={:.3e} 2={:.3e})",
+            "rust: rho={:.3} -> e_eff={:.4}  (peak F={:.3e}, losses 1a={:.3e} 1b={:.3e} 2={:.3e} 3={:.3e})",
             r.rho_impact,
             r.e_eff,
             r.peak_wall_force,
             r.loss_radiative_wall,
             r.loss_escape_space,
-            r.loss_conductive
+            r.loss_conductive,
+            r.loss_condensation,
         );
     }
     println!("rust: wrote {} rows -> {result_path}", records.len());
@@ -173,7 +253,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, Record, run_one, run_sweep};
+    use super::{Config, LowvConfig, Record, run_one, run_sweep, run_sweep_lowv};
     use hydro1d::radiation::{Limiter, RadConstants};
     use tables::Table;
 
@@ -255,6 +335,7 @@ mod tests {
             assert!(rec.loss_radiative_wall >= 0.0);
             assert!(rec.loss_escape_space >= 0.0);
             assert_eq!(rec.loss_conductive, 0.0); // conductive channel deferred (wall = None)
+            assert_eq!(rec.loss_condensation, 0.0); // no condensation in the high-v plasma
         }
     }
 
@@ -283,8 +364,79 @@ mod tests {
             "loss_radiative_wall",
             "loss_escape_space",
             "loss_conductive",
+            "loss_condensation",
         ] {
             assert!(line.contains(key), "missing field {key}");
+        }
+    }
+
+    /// An `e = T` ideal-gas table with a `liquid_frac` ramp rising with compression, so the low-v
+    /// condensing sweep actually condenses (mirrors the kernel's `condensing_table`).
+    fn tiny_condensing_table() -> Table {
+        let n: usize = 8;
+        let rho_grid: Vec<f64> = (0..n)
+            .map(|i| 0.01 * 1000f64.powf(i as f64 / (n - 1) as f64))
+            .collect();
+        let t_grid: Vec<f64> = (0..n)
+            .map(|j| 0.05 * 4000f64.powf(j as f64 / (n - 1) as f64))
+            .collect();
+        let (mut p, mut e, mut cs, mut kr, mut kp, mut lf) = (
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        for &r in &rho_grid {
+            for &t in &t_grid {
+                p.push((GAMMA - 1.0) * r * t);
+                e.push(t);
+                cs.push((GAMMA * (GAMMA - 1.0) * t).sqrt());
+                kr.push(1e-10);
+                kp.push(1e-10);
+                lf.push(((r - 2.0) / 20.0).clamp(0.0, 1.0));
+            }
+        }
+        let json = serde_json::json!({
+            "rho_grid": rho_grid, "T_grid": t_grid, "shape": [n, n],
+            "fields": { "p": p, "e": e, "c_s": cs,
+                        "kappa_rosseland": kr, "kappa_planck": kp, "liquid_frac": lf },
+        });
+        Table::from_json(&json.to_string()).unwrap()
+    }
+
+    /// The low-v (condensing) sweep produces well-formed rows: `0 < e_eff < 1`, only the condensation
+    /// channel populated (radiation/conduction off), and it is exercised (`> 0`) where the gas
+    /// condenses.
+    #[allow(clippy::float_cmp)] // exact-zero deferral for the off channels; verbatim inputs
+    #[test]
+    fn lowv_sweep_rows_are_well_formed_and_condense() {
+        let table = tiny_condensing_table();
+        let mach = 5.0;
+        let cfg = LowvConfig {
+            v: 1.0,
+            t0: 1.0 / (GAMMA * (GAMMA - 1.0) * mach * mach), // M ≈ 5
+            length: 1.0,
+            gas_cells: 40,
+            alpha: 1.0,
+        };
+        let rho_grid = [1.0, 2.0];
+        let records = run_sweep_lowv(&rho_grid, &table, &cfg);
+
+        assert_eq!(records.len(), rho_grid.len());
+        for (rec, &rho) in records.iter().zip(rho_grid.iter()) {
+            assert_eq!(rec.rho_impact, rho);
+            assert!(
+                rec.e_eff > 0.0 && rec.e_eff < 1.0,
+                "e_eff out of (0,1): {}",
+                rec.e_eff
+            );
+            // Only the condensation channel is active at low-v.
+            assert_eq!(rec.loss_radiative_wall, 0.0);
+            assert_eq!(rec.loss_escape_space, 0.0);
+            assert_eq!(rec.loss_conductive, 0.0);
+            assert!(rec.loss_condensation > 0.0, "no condensation loss recorded");
         }
     }
 
