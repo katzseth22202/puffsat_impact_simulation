@@ -85,6 +85,9 @@ struct RawFields {
     c_s: Vec<f64>,
     kappa_rosseland: Vec<f64>,
     kappa_planck: Vec<f64>,
+    /// Optional condensed mass fraction `∈ [0, 1]` (Rung C low-v tables). Absent in the high-v table.
+    #[serde(default)]
+    liquid_frac: Option<Vec<f64>>,
 }
 
 /// The five material properties at one `(ρ, T)` point.
@@ -117,6 +120,9 @@ pub struct Table {
     log_cs: Vec<f64>,
     log_kr: Vec<f64>,
     log_kp: Vec<f64>,
+    /// Raw (not log) condensed mass fraction, interpolated **linearly** (it is `[0, 1]`-valued and
+    /// legitimately `0`). `None` for tables that omit it — then [`Table::liquid_fraction`] is `0`.
+    liquid_frac: Option<Vec<f64>>,
 }
 
 impl Table {
@@ -185,6 +191,24 @@ impl Table {
             Ok(v.iter().map(|x| x.ln()).collect())
         };
 
+        // `liquid_frac` (optional, Rung C) is interpolated linearly, so it is *not* logged; it must
+        // be fully populated and bounded in `[0, 1]` (this also rejects NaN, which fails `contains`).
+        let liquid_frac = match raw.fields.liquid_frac {
+            Some(v) => {
+                if v.len() != n {
+                    return invalid(format!(
+                        "field `liquid_frac` has {} entries, expected {n}",
+                        v.len()
+                    ));
+                }
+                if let Some(&bad) = v.iter().find(|&&x| !(0.0..=1.0).contains(&x)) {
+                    return invalid(format!("field `liquid_frac` value {bad} outside [0, 1]"));
+                }
+                Some(v)
+            }
+            None => None,
+        };
+
         Ok(Self {
             log_rho: raw.rho_grid.iter().map(|x| x.ln()).collect(),
             log_t: raw.t_grid.iter().map(|x| x.ln()).collect(),
@@ -193,6 +217,7 @@ impl Table {
             log_cs: log_field("c_s", &raw.fields.c_s)?,
             log_kr: log_field("kappa_rosseland", &raw.fields.kappa_rosseland)?,
             log_kp: log_field("kappa_planck", &raw.fields.kappa_planck)?,
+            liquid_frac,
             rho_grid: raw.rho_grid,
             t_grid: raw.t_grid,
         })
@@ -240,6 +265,18 @@ impl Table {
         self.interp(&self.log_kp, rho, t)
     }
 
+    /// Condensed mass fraction `liquid_frac(ρ, T) ∈ [0, 1]` — the Rung C low-v two-phase tables carry
+    /// this for the wall-sticking condensation sink; tables without it (e.g. the high-v table) return
+    /// `0`. Interpolated **linearly** (it is `[0, 1]`-valued and legitimately `0`, unlike the log
+    /// fields), on the same `(log ρ, log T)` axes.
+    #[must_use]
+    pub fn liquid_fraction(&self, rho: f64, t: f64) -> f64 {
+        match &self.liquid_frac {
+            Some(field) => self.interp_linear(field, rho, t),
+            None => 0.0,
+        }
+    }
+
     /// Specific heat capacity `c_v = ∂e/∂T` at fixed `ρ`, by centered finite difference on the
     /// tabulated `e(ρ, T)`. The radiation step (B5) multiplies this by `ρ` to get the volumetric
     /// heat capacity `ρ c_v` it needs. The step `δ` is a small fraction of `T`, matching the EOS's
@@ -272,6 +309,18 @@ impl Table {
         let lo = at(i, j).mul_add(1.0 - ft, at(i, j + 1) * ft);
         let hi = at(i + 1, j).mul_add(1.0 - ft, at(i + 1, j + 1) * ft);
         lo.mul_add(1.0 - fr, hi * fr).exp()
+    }
+
+    /// Bilinear interpolation of a **raw** (non-log) field at `(ρ, T)`, on the `(log ρ, log T)` axes
+    /// — for fields like `liquid_frac` that are `[0, 1]`-valued and may be `0`. No `exp`.
+    fn interp_linear(&self, field: &[f64], rho: f64, t: f64) -> f64 {
+        let (i, fr) = locate(&self.log_rho, rho.ln());
+        let (j, ft) = locate(&self.log_t, t.ln());
+        let n_t = self.t_grid.len();
+        let at = |a: usize, b: usize| field[a * n_t + b];
+        let lo = at(i, j).mul_add(1.0 - ft, at(i, j + 1) * ft);
+        let hi = at(i + 1, j).mul_add(1.0 - ft, at(i + 1, j + 1) * ft);
+        lo.mul_add(1.0 - fr, hi * fr)
     }
 }
 
@@ -461,6 +510,51 @@ mod tests {
             "shape": [2, 2],
             "fields": {"p":[1,1,1,0],"e":[1,1,1,1],"c_s":[1,1,1,1],
                        "kappa_rosseland":[1,1,1,1],"kappa_planck":[1,1,1,1]}
+        }"#;
+        assert!(matches!(
+            Table::from_json(json),
+            Err(TableError::Invalid(_))
+        ));
+    }
+
+    /// `liquid_frac` (optional, Rung C): interpolated linearly, `0` allowed (unlike the log fields),
+    /// corners recovered exactly and the geometric midpoint is the bilinear corner average.
+    #[test]
+    fn liquid_fraction_linear_interp_and_zero_allowed() {
+        let json = r#"{
+            "rho_grid": [1.0, 2.0],
+            "T_grid": [1.0, 2.0],
+            "shape": [2, 2],
+            "fields": {"p":[1,1,1,1],"e":[1,2,1,2],"c_s":[1,1,1,1],
+                       "kappa_rosseland":[1,1,1,1],"kappa_planck":[1,1,1,1],
+                       "liquid_frac":[0.0, 0.2, 0.4, 0.6]}
+        }"#;
+        let table = Table::from_json(json).unwrap();
+        // Corner with value 0.0 loads and is returned exactly (not a positive-log field).
+        assert_relative_eq!(table.liquid_fraction(1.0, 1.0), 0.0, epsilon = 1e-12);
+        assert_relative_eq!(table.liquid_fraction(2.0, 2.0), 0.6, max_relative = 1e-12);
+        // Geometric midpoint (√2, √2) → fr = ft = ½ → average of the four corners.
+        let m = 2f64.sqrt();
+        assert_relative_eq!(table.liquid_fraction(m, m), 0.3, max_relative = 1e-12);
+    }
+
+    /// A table that omits `liquid_frac` (e.g. the high-v table) loads and reports `0` everywhere.
+    #[allow(clippy::float_cmp)] // exact: the absent-field branch returns the literal 0.0
+    #[test]
+    fn liquid_fraction_absent_is_zero() {
+        let table = Table::from_json(&power_law_json(4, 4)).unwrap();
+        assert_eq!(table.liquid_fraction(1.7, 2500.0), 0.0);
+    }
+
+    #[test]
+    fn rejects_liquid_frac_out_of_range() {
+        let json = r#"{
+            "rho_grid": [1.0, 2.0],
+            "T_grid": [1.0, 2.0],
+            "shape": [2, 2],
+            "fields": {"p":[1,1,1,1],"e":[1,1,1,1],"c_s":[1,1,1,1],
+                       "kappa_rosseland":[1,1,1,1],"kappa_planck":[1,1,1,1],
+                       "liquid_frac":[0.0, 0.5, 1.0, 1.5]}
         }"#;
         assert!(matches!(
             Table::from_json(json),

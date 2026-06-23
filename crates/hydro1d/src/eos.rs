@@ -113,6 +113,15 @@ impl TableEos {
             self.table.pressure(rho, t)
         })
     }
+
+    /// Condensed mass fraction `liquid_frac(ρ, e) ∈ [0, 1]` at the kernel's `(ρ, e)`: invert the
+    /// energy for `T`, then read the table's (linearly-interpolated) field — the Rung C wall-sticking
+    /// sink reads this. `0` for tables without the field (e.g. the high-v table).
+    #[must_use]
+    pub fn liquid_fraction(&self, rho: f64, e: f64) -> f64 {
+        let t = self.temperature_from_energy(rho, e);
+        self.table.liquid_fraction(rho, t)
+    }
 }
 
 impl Eos for TableEos {
@@ -253,6 +262,34 @@ mod tests {
             let p = table.pressure(rho, e);
             assert_relative_eq!(table.energy_from_pressure(rho, p), e, max_relative = 1e-8);
         }
+    }
+
+    /// `TableEos::liquid_fraction` (Rung C): a table with `e = T` and a `liquid_frac` field returns
+    /// that field at the inverted `T`; a table without the field returns `0`.
+    #[allow(clippy::float_cmp)] // exact: the absent-field branch returns the literal 0.0
+    #[test]
+    fn liquid_fraction_reads_the_field_or_zero() {
+        // e = T table (so temperature_from_energy is the identity) with a constant condensed fraction.
+        let n: usize = 4;
+        let rho_grid: Vec<f64> = (0..n).map(|i| 0.1 * 10f64.powf(i as f64)).collect(); // 0.1 … 100
+        let t_grid: Vec<f64> = (0..n).map(|j| 300.0 * 2f64.powf(j as f64)).collect(); // 300 … 2400
+        let e_field: Vec<f64> = (0..n * n).map(|idx| t_grid[idx % n]).collect(); // e = T, row-major
+        let lin = |k: f64| vec![k; n * n];
+        let json = serde_json::json!({
+            "rho_grid": rho_grid, "T_grid": t_grid, "shape": [n, n],
+            "fields": {
+                "p": lin(1.0), "e": e_field,
+                "c_s": lin(1.0), "kappa_rosseland": lin(1.0), "kappa_planck": lin(1.0),
+                "liquid_frac": lin(0.3),
+            },
+        });
+        let eos = TableEos::new(Table::from_json(&json.to_string()).unwrap());
+        // e = T, so any e in range inverts to T = e and reads the constant 0.3.
+        assert_relative_eq!(eos.liquid_fraction(1.0, 600.0), 0.3, max_relative = 1e-12);
+
+        // The ideal-gas table omits liquid_frac → 0.
+        let dry = TableEos::new(ideal_gas_table());
+        assert_eq!(dry.liquid_fraction(1.0, 2.5), 0.0);
     }
 
     /// `Eos::temperature` (B5a): the table inverts `e(ρ, T)` for `T` (here `e = T`, so it returns
