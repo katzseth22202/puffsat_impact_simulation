@@ -11,15 +11,18 @@
 //! and opacity-insensitive; the opacity in the loaded table is an interim bracket (B5c-2), and the
 //! B5d-3 sensitivity sweep demonstrates `e_eff` does not move with it.
 //!
-//! **Conductive channel (2) deferred to its own rung (2026-06-22).** The inviscid Lagrangian gas
-//! has no gas-side thermal resistance, so a cold-wall semi-infinite [`Solid`] of very high
-//! effusivity extracts, in its very first step, more heat than the thin wall gas cell contains —
-//! the *physically-correct* first-step flux integral already exceeds the cell's heat content. That
-//! over-drain zeroes the wall cell and collapses the bounce. A faithful conductive loss needs a
-//! gas-side boundary-layer / thermal-resistance model, which is its own modeling rung (parallel to
-//! the deferred real opacity table). `e_eff` is loss-insensitive (0.63 with no conduction vs 0.64
-//! lossless at M≈30), so the deliverable is unaffected: this pass runs with `wall = None` and
-//! reports `loss_conductive = 0` pending that rung.
+//! **Conductive channel (2): operator landed (B-flux), high-v transport still gated.** The inviscid
+//! Lagrangian gas has no gas-side thermal resistance, so a cold-wall semi-infinite [`Solid`] of very
+//! high effusivity once extracted, in its very first step, more heat than the thin wall gas cell
+//! contains — that over-drain zeroed the wall cell and collapsed the bounce (the original deferral,
+//! 2026-06-22). The B-flux gas-side conduction operator ([`Solid::step_coupled`]) now fixes the
+//! *mechanism*: the gas carries its own conductivity `k_gas`, so the interface flux is finite and the
+//! over-drain cannot recur. But it engages only where the table provides `k_gas`, and the **high-v
+//! plasma table has none** — plasma transport (Spitzer-like conductivity) is the deferred B-flux
+//! sibling alongside the real opacity table. `e_eff` is loss-insensitive (0.63 with no conduction vs
+//! 0.64 lossless at M≈30), so this `e_eff(ρ)` pass still runs with `wall = None` and reports
+//! `loss_conductive = 0` pending that high-v transport data. (The low-v CoolProp table *does* carry
+//! `k_gas`, so the low-v path activates the operator.)
 
 use std::fs;
 use std::io::Write as _;

@@ -29,7 +29,7 @@
 //! reflecting wall with a trailing free surface to measure the restitution `e_eff` (ADR-0001).
 
 use crate::Primitive;
-use crate::conduction::Solid;
+use crate::conduction::{GasConductionState, Solid};
 use crate::eos::{Eos, IdealGas, TableEos};
 use crate::radiation::{Limiter, Medium, RadBc, RadConstants, fld_substep};
 
@@ -574,6 +574,31 @@ impl RadFields {
     }
 }
 
+/// Owned per-cell gas-side inputs for one coupled conduction substep (B-flux), built from the gas
+/// state of a `Tube<TableEos>` so a borrowed [`GasConductionState`] can be handed to
+/// [`Solid::step_coupled`]. Carries the specific `c_v` as well, for the post-solve energy update
+/// `Δe = c_v·ΔT` that mirrors the operator's per-cell heat capacity `C = ρ c_v dx`.
+#[derive(Debug)]
+struct GasConductionFields {
+    dx: Vec<f64>,
+    temp: Vec<f64>,
+    cv_vol: Vec<f64>,
+    k_gas: Vec<f64>,
+    cv: Vec<f64>,
+}
+
+impl GasConductionFields {
+    /// Borrow as a [`GasConductionState`] for one [`Solid::step_coupled`] call.
+    fn state(&self) -> GasConductionState<'_> {
+        GasConductionState {
+            dx: &self.dx,
+            temp: &self.temp,
+            cv_vol: &self.cv_vol,
+            k_gas: &self.k_gas,
+        }
+    }
+}
+
 impl Tube<TableEos> {
     /// A cold gas slug fired at a rigid wall (`x = 0`) with a trailing free (vacuum) surface
     /// (`x = length`), in **SI** units — the production analogue of [`Tube::slug`] (ADR-0001) used
@@ -639,6 +664,41 @@ impl Tube<TableEos> {
             chi_planck,
             chi_ross,
         }
+    }
+
+    /// Build the gas-side conduction inputs from the current gas state (B-flux): per cell the width,
+    /// temperature `T(ρ, e)`, volumetric heat capacity `ρ c_v`, thermal conductivity `k_gas(ρ, e)`,
+    /// and specific `c_v`. Returns `None` when the table carries no `k_gas` (no gas transport data —
+    /// e.g. the high-v plasma table, whose transport is the deferred B-flux sibling), in which case
+    /// the gas gets no conduction. `k_gas` is a table-wide property, so a single cell-0 probe decides.
+    fn gas_conduction_fields(&self) -> Option<GasConductionFields> {
+        self.eos.k_gas(self.density(0), self.energy[0])?;
+        let n = self.cells();
+        let table = self.eos.table();
+        let mut dx = vec![0.0; n];
+        let mut temp = vec![0.0; n];
+        let mut cv_vol = vec![0.0; n];
+        let mut k_gas = vec![0.0; n];
+        let mut cv = vec![0.0; n];
+        for j in 0..n {
+            let rho = self.density(j);
+            let t = self.eos.temperature(rho, self.energy[j]);
+            let cvj = table.cv(rho, t);
+            dx[j] = self.width(j);
+            temp[j] = t;
+            cv[j] = cvj;
+            cv_vol[j] = rho * cvj;
+            k_gas[j] = table
+                .k_gas(rho, t)
+                .expect("k_gas present (probed at cell 0)");
+        }
+        Some(GasConductionFields {
+            dx,
+            temp,
+            cv_vol,
+            k_gas,
+            cv,
+        })
     }
 }
 
@@ -756,19 +816,26 @@ impl CoupledBounce {
         }
     }
 
-    /// Conductive wall loss (channel 2): drive the solid with the near-wall gas temperature and
-    /// remove the resulting interface flux from the wall cell (gas-temp Dirichlet → effusivity loss).
+    /// Conductive wall loss (channel 2), via the **gas-side conduction operator** (B-flux, ADR-0005).
+    /// Rather than pinning the interface to the near-wall gas temperature and draining the single wall
+    /// cell — the inviscid kernel's missing gas-side resistance, which over-drained the thin cell and
+    /// collapsed the bounce at high Mach — this solves the gas *and* the wall solid as one conduction
+    /// system ([`Solid::step_coupled`]), so the interface temperature emerges from flux continuity.
+    /// The per-cell gas energy is updated by `Δe = c_v·ΔT`, and the interface flux is tallied as the
+    /// channel-2 loss. No-ops when there is no wall, or when the table carries no `k_gas` (the high-v
+    /// plasma table — its transport is the deferred B-flux sibling, so high-v conduction stays off).
     fn conduction_substep(&mut self, dt: f64) {
-        let rho0 = self.tube.density(0);
-        let t_wall = self.tube.eos.temperature(rho0, self.tube.energy[0]);
-        let q = match self.wall.as_mut() {
-            Some(solid) => solid.step_surface_temp(t_wall, dt),
-            None => return,
+        let Some(fields) = self.tube.gas_conduction_fields() else {
+            return;
         };
-        let loss = q * dt;
-        self.loss_conductive += loss;
-        let mass0 = self.tube.mass[0];
-        self.tube.energy[0] = (self.tube.energy[0] - loss / mass0).max(0.0);
+        let Some(solid) = self.wall.as_mut() else {
+            return;
+        };
+        let step = solid.step_coupled(&fields.state(), dt);
+        for (j, &dtemp) in step.gas_dtemp.iter().enumerate() {
+            self.tube.energy[j] = fields.cv[j].mul_add(dtemp, self.tube.energy[j]).max(0.0);
+        }
+        self.loss_conductive += step.interface_flux * dt;
     }
 
     /// One coupled step: hydro, then radiation, then conduction (Lie split at the hydro `dt`).
@@ -962,8 +1029,14 @@ mod tests {
         let t_grid: Vec<f64> = (0..n)
             .map(|j| 0.05 * 4000f64.powf(j as f64 / (n - 1) as f64)) // 0.05 … 200
             .collect();
-        let (mut p, mut e, mut cs, mut kr_v, mut kp_v) =
-            (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut p, mut e, mut cs, mut kr_v, mut kp_v, mut kg_v) = (
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
         for &r in &rho_grid {
             for &t in &t_grid {
                 p.push((GAMMA - 1.0) * r * t);
@@ -971,13 +1044,20 @@ mod tests {
                 cs.push((GAMMA * (GAMMA - 1.0) * t).sqrt());
                 kr_v.push(kr * r.powf(2.0) * t.powf(-3.5)); // κ_R(ρ,T)
                 kp_v.push(kp * r * t.powf(-2.0)); // κ_P(ρ,T)
+                // A synthetic gas conductivity for the B-flux conduction operator: small enough that
+                // the gas effusivity √(k_gas·ρ·c_v) sits well below the test solids' effusivity, so
+                // the gas-side resistance is real and the cold plate cannot over-drain the wall cell.
+                kg_v.push(0.05);
             }
         }
         let json = serde_json::json!({
             "rho_grid": rho_grid,
             "T_grid": t_grid,
             "shape": [n, n],
-            "fields": { "p": p, "e": e, "c_s": cs, "kappa_rosseland": kr_v, "kappa_planck": kp_v },
+            "fields": {
+                "p": p, "e": e, "c_s": cs,
+                "kappa_rosseland": kr_v, "kappa_planck": kp_v, "k_gas": kg_v,
+            },
         });
         TableEos::new(Table::from_json(&json.to_string()).unwrap())
     }
@@ -1283,5 +1363,43 @@ mod tests {
         assert!(lossy.loss_escape_space >= 0.0);
         assert!(lossy.loss_conductive >= 0.0);
         assert!(lossy.loss_radiative_wall + lossy.loss_escape_space + lossy.loss_conductive > 0.0);
+    }
+
+    /// **No over-drain (B-flux gate).** A single coupled conduction substep against a cold, highly
+    /// effusive wall removes only a bounded share of the thin wall cell's energy: the gas-side
+    /// resistance throttles the interface flux. The old gas-temperature-Dirichlet coupling drained the
+    /// cell to zero in one step for exactly this regime (the B5d-1 `e_eff = −0.97` collapse) — even
+    /// with a deliberately large `dt`, the operator leaves the wall cell hot and positive.
+    #[test]
+    fn coupled_conduction_does_not_over_drain_the_wall_cell() {
+        let cells = 50;
+        let x: Vec<f64> = (0..=cells).map(|i| i as f64 / cells as f64).collect();
+        let rho = vec![1.0; cells];
+        let vel = vec![0.0; cells];
+        let pressure = vec![(GAMMA - 1.0) * 1.0 * 100.0; cells]; // T = e = 100 (hot, inside the grid)
+        let tube = Tube::with_eos(
+            x,
+            &rho,
+            &vel,
+            &pressure,
+            gas_table(0.7, 1e-12),
+            Viscosity::VON_NEUMANN_RICHTMYER,
+        );
+        let consts = RadConstants { c: 1.0, a: 1e-3 };
+        let wall = Solid::new(400, 1.0, 0.0, 0.5, 50.0); // cold (T=0), effusivity 50/√0.5 ≫ the gas's
+        let mut cb = CoupledBounce::new(tube, Some(wall), consts, Limiter::LevermorePomraning);
+
+        let e0 = cb.tube.energy[0];
+        cb.conduction_substep(1.0); // a deliberately large dt — the over-drain regime
+        assert!(
+            cb.tube.energy[0] > 0.0 && cb.tube.energy[0] < e0,
+            "wall cell should cool but never drain to zero: {} (was {e0})",
+            cb.tube.energy[0]
+        );
+        assert!(
+            cb.loss_conductive > 0.0 && cb.loss_conductive.is_finite(),
+            "conduction must bleed a finite, positive amount: {}",
+            cb.loss_conductive
+        );
     }
 }
