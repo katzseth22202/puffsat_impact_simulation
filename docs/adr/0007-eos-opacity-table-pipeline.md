@@ -27,6 +27,25 @@ not the HDF5 originally implied by §8 — it is small and loaded whole into RAM
 container is unjustified. The per-regime provenance this ADR mandates is carried as a nested
 `provenance` object inside the table JSON. See ADR-0019.
 
+**Amendment (Rung B, high-v pass): what landed, and what is deferred.** The 16 km/s `e_eff(ρ)`
+deliverable needs only the high-T half of this pipeline, so Rung B implemented:
+- **EOS — a self-contained analytic equilibrium model** (`python/puffsat/eos_water.py`): H₂O⇌2H+O
+  by mass action + H/O Saha ionization, closed by element conservation + charge neutrality
+  (Zel'dovich & Raizer Ch. III). This *replaces*, for the high-v pass, the CoolProp+CEA seam above —
+  CoolProp only reaches ~1300 K, and the low-T condensation seam is not exercised at 16 km/s. The
+  CoolProp two-phase seam (ADR-0004) is deferred to the low-v (3.2 km/s) anchor that needs it.
+- **Opacity — an explicitly PROVISIONAL Kramers-shaped bracket** (`python/puffsat/tables.py`):
+  `κ_R = κ₀(ρ/ρ_ref)(T/T_ref)^-3.5`, `κ_P = 3κ_R`, calibrated so `τ = ρκ_R L` sits mid-band of the
+  design's `[10², 10⁵]` at the nominal stagnation. The **real per-regime opacity** (HITEMP/ExoMol +
+  soot + TOPS/OPLIB) is deferred to its own *survivability-flux* rung.
+
+  This deferral is **empirically licensed**, not assumed. The B5d-3 scan re-ran the sweep at
+  **0.1× / 1× / 10× opacity** (`python/puffsat/sensitivity.py`, `make sensitivity`): `e_eff` moved
+  by at most **1.0e-2 (1.6% relative)** across that 100× range, while the radiative loss channels
+  (1a/1b) *did* move with κ — exactly design §3 (`e_eff` is EOS/gas-dynamics-dominated and
+  opacity-insensitive at `τ≫1`; the opacity is load-bearing only for the survivability flux). The
+  loader's JSON boundary lets the real opacity table hot-swap in later with no kernel change.
+
 ## Considered Options
 
 - **Single-source EOS or opacity across the whole range.** Rejected: none exists — CoolProp lacks

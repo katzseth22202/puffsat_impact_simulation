@@ -3,7 +3,7 @@
 
 PY := uv run python
 
-.PHONY: all smoke build test lint fmt clean tables sweep analysis
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity
 
 all: smoke
 
@@ -63,3 +63,9 @@ analysis: data/results/frontier.csv
 
 data/results/frontier.csv: data/results/sweep.jsonl python/puffsat/analysis.py
 	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis
+
+## sensitivity: opacity-insensitivity scan (rung B, B5d-3) — sweep at 0.1x/1x/10x opacity, show
+## e_eff barely moves. Builds the release sweep first; writes data/results/opacity_scan/.
+sensitivity:
+	cargo build --release -p sweep
+	PYTHONPATH=python uv run --extra sci python -m puffsat.sensitivity

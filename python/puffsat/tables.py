@@ -16,6 +16,7 @@ Output is the ADR-0007 JSON the Rust loader (`crates/tables`) validates: ascendi
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -46,14 +47,20 @@ TAU_BAND = (1.0e2, 1.0e5)
 DEFAULT_TABLE_PATH = Path("data/tables/water.json")
 
 
-def opacity_grid(rho_grid: Vec, t_grid: Vec) -> tuple[Vec, Vec]:
+def opacity_grid(rho_grid: Vec, t_grid: Vec, kappa_scale: float = 1.0) -> tuple[Vec, Vec]:
     """Bracketing `(kappa_R, kappa_P)` [m^2/kg] on the `(rho, T)` grid, shaped `(n_rho, n_T)`.
 
-    `kappa_R = KAPPA0_R (rho/rho_ref) (T/T_ref)^-3.5`; `kappa_P = PLANCK_OVER_ROSSELAND * kappa_R`.
-    Positive-definite (the loader interpolates `ln kappa`). PROVISIONAL — see the module docstring.
+    `kappa_R = kappa_scale * KAPPA0_R (rho/rho_ref) (T/T_ref)^-3.5`;
+    `kappa_P = PLANCK_OVER_ROSSELAND * kappa_R`. Positive-definite (the loader interpolates
+    `ln kappa`). PROVISIONAL — see the module docstring. `kappa_scale` multiplies both means by a
+    constant factor: the B5d-3 opacity-insensitivity scan generates 0.1x / 1x / 10x tables to show
+    `e_eff` does not move with it (which licenses this interim bracket).
     """
     kappa_r = (
-        KAPPA0_R * (rho_grid[:, None] / KAPPA_RHO_REF) * (t_grid[None, :] / KAPPA_T_REF) ** -3.5
+        kappa_scale
+        * KAPPA0_R
+        * (rho_grid[:, None] / KAPPA_RHO_REF)
+        * (t_grid[None, :] / KAPPA_T_REF) ** -3.5
     )
     kappa_p = PLANCK_OVER_ROSSELAND * kappa_r
     return kappa_r, kappa_p
@@ -65,7 +72,11 @@ def _flatten(a: Vec) -> list[float]:
 
 
 def _provenance(
-    rho_range: tuple[float, float], n_rho: int, t_range: tuple[float, float], n_t: int
+    rho_range: tuple[float, float],
+    n_rho: int,
+    t_range: tuple[float, float],
+    n_t: int,
+    kappa_scale: float,
 ) -> dict[str, object]:
     """Human-readable provenance (free-form to the Rust loader). Flags the opacity PROVISIONAL."""
     return {
@@ -100,6 +111,7 @@ def _provenance(
                 "(rho_ref, T_ref, L_ref)"
             ),
             "kappa0_rosseland": KAPPA0_R,
+            "kappa_scale": kappa_scale,
             "rho_ref": KAPPA_RHO_REF,
             "T_ref": KAPPA_T_REF,
             "L_ref": KAPPA_L_REF,
@@ -119,14 +131,17 @@ def build_table(
     n_rho: int = N_RHO,
     t_range: tuple[float, float] = T_RANGE,
     n_t: int = N_T,
+    kappa_scale: float = 1.0,
 ) -> dict[str, object]:
     """Build the ADR-0007 table dict: log-spaced grids, the equilibrium EOS fields, the bracketing
-    opacity, and nested provenance. Fields are flattened row-major over `(rho, T)`."""
+    opacity (scaled by `kappa_scale`), and nested provenance. Fields are flattened row-major over
+    `(rho, T)`. `kappa_scale != 1` rescales only the opacity (the EOS fields are untouched) — the
+    knob the B5d-3 insensitivity scan turns."""
     rho_grid = np.geomspace(rho_range[0], rho_range[1], n_rho)
     t_grid = np.geomspace(t_range[0], t_range[1], n_t)
 
     p, e, cs = ew.eos_grid(rho_grid, t_grid)
-    kappa_r, kappa_p = opacity_grid(rho_grid, t_grid)
+    kappa_r, kappa_p = opacity_grid(rho_grid, t_grid, kappa_scale)
 
     return {
         "rho_grid": [float(x) for x in rho_grid],
@@ -139,17 +154,29 @@ def build_table(
             "kappa_rosseland": _flatten(kappa_r),
             "kappa_planck": _flatten(kappa_p),
         },
-        "provenance": _provenance(rho_range, n_rho, t_range, n_t),
+        "provenance": _provenance(rho_range, n_rho, t_range, n_t, kappa_scale),
     }
 
 
 def main() -> None:
-    """Generate the production water table at `DEFAULT_TABLE_PATH` (Makefile `tables` target)."""
-    table = build_table()
-    DEFAULT_TABLE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with DEFAULT_TABLE_PATH.open("w") as fh:
+    """Generate the water table (Makefile `tables` target). `--out PATH` and `--kappa-scale S`
+    let the B5d-3 insensitivity scan emit opacity-scaled variants."""
+    parser = argparse.ArgumentParser(description="Generate the ADR-0007 water EOS/opacity table.")
+    parser.add_argument("--out", type=Path, default=DEFAULT_TABLE_PATH, help="output JSON path")
+    parser.add_argument(
+        "--kappa-scale", type=float, default=1.0, help="multiply the bracketing opacity by this"
+    )
+    args = parser.parse_args()
+
+    table = build_table(kappa_scale=args.kappa_scale)
+    out: Path = args.out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w") as fh:
         json.dump(table, fh)
-    print(f"python: wrote water EOS/opacity table -> {DEFAULT_TABLE_PATH} ({N_RHO}x{N_T} nodes)")
+    print(
+        f"python: wrote water EOS/opacity table -> {out} "
+        f"({N_RHO}x{N_T} nodes, kappa_scale={args.kappa_scale})"
+    )
 
 
 if __name__ == "__main__":

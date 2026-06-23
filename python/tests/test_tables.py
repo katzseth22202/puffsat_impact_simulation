@@ -71,3 +71,33 @@ def test_opacity_scales_as_kramers() -> None:
     np.testing.assert_allclose(kappa_r[1, 0], 2.0 * kappa_r[0, 0], rtol=1e-12)
     # T^-3.5 at fixed rho: doubling T scales kappa_R by 2^-3.5.
     np.testing.assert_allclose(kappa_r[0, 1], kappa_r[0, 0] * 2.0**-3.5, rtol=1e-12)
+
+
+def test_kappa_scale_rescales_opacity_only() -> None:
+    """`kappa_scale` multiplies both opacity means by the factor and leaves p, e, c_s untouched.
+
+    This is the knob the B5d-3 insensitivity scan turns: only the opacity moves, so any change in
+    `e_eff` it produces is attributable to opacity alone.
+    """
+    rho = np.array([0.2, 1.0])
+    temp = np.array([1.0e4, 2.0e4])
+    kr1, kp1 = tables.opacity_grid(rho, temp, 1.0)
+    kr10, kp10 = tables.opacity_grid(rho, temp, 10.0)
+    np.testing.assert_allclose(kr10, 10.0 * kr1, rtol=1e-12)
+    np.testing.assert_allclose(kp10, 10.0 * kp1, rtol=1e-12)
+
+    # The EOS fields in a scaled table are identical to the unscaled ones.
+    g = ((0.05, 5.0), 5, (300.0, 50_000.0), 6)  # rho_range, n_rho, t_range, n_t
+    base = tables.build_table(g[0], g[1], g[2], g[3], kappa_scale=1.0)
+    scaled = tables.build_table(g[0], g[1], g[2], g[3], kappa_scale=10.0)
+    base_fields = base["fields"]
+    scaled_fields = scaled["fields"]
+    assert isinstance(base_fields, dict)
+    assert isinstance(scaled_fields, dict)
+    for name in ("p", "e", "c_s"):
+        assert scaled_fields[name] == base_fields[name]
+    np.testing.assert_allclose(
+        scaled_fields["kappa_rosseland"],
+        10.0 * np.array(base_fields["kappa_rosseland"]),
+        rtol=1e-12,
+    )

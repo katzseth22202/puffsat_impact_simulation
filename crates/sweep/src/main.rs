@@ -140,15 +140,21 @@ fn run_sweep(rho_grid: &[f64], table: &Table, cfg: &Config) -> Vec<Record> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let table = Table::load(TABLE_PATH)?;
+    // Optional positional args `[table_path] [result_path]` (defaults = the production paths) let
+    // the B5d-3 opacity-insensitivity scan sweep each opacity-scaled table into its own JSONL.
+    let mut args = std::env::args().skip(1);
+    let table_path = args.next().unwrap_or_else(|| TABLE_PATH.to_string());
+    let result_path = args.next().unwrap_or_else(|| RESULT_PATH.to_string());
+
+    let table = Table::load(&table_path)?;
     let cfg = Config::production();
     let records = run_sweep(&RHO_GRID, &table, &cfg);
 
-    if let Some(parent) = Path::new(RESULT_PATH).parent() {
+    if let Some(parent) = Path::new(&result_path).parent() {
         fs::create_dir_all(parent)?;
     }
     // A fresh sweep replaces the file; one JSON object per line (ADR-0019).
-    let mut out = fs::File::create(RESULT_PATH)?;
+    let mut out = fs::File::create(&result_path)?;
     for r in &records {
         writeln!(out, "{}", serde_json::to_string(r)?)?;
         println!(
@@ -161,7 +167,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             r.loss_conductive
         );
     }
-    println!("rust: wrote {} rows -> {RESULT_PATH}", records.len());
+    println!("rust: wrote {} rows -> {result_path}", records.len());
     Ok(())
 }
 
