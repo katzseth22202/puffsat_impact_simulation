@@ -22,7 +22,9 @@ def _write_jsonl(path: Path, rows: list[dict[str, float]]) -> None:
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
 
 
-def _row(rho: float, e_eff: float, la: float, lb: float, lc: float) -> dict[str, float]:
+def _row(
+    rho: float, e_eff: float, la: float, lb: float, lc: float, ld: float = 0.0
+) -> dict[str, float]:
     return {
         "rho_impact": rho,
         "v": 16_000.0,
@@ -34,6 +36,7 @@ def _row(rho: float, e_eff: float, la: float, lb: float, lc: float) -> dict[str,
         "loss_radiative_wall": la,
         "loss_escape_space": lb,
         "loss_conductive": lc,
+        "loss_condensation": ld,
     }
 
 
@@ -49,6 +52,7 @@ def test_read_sweep_parses_jsonl(tmp_path: Path) -> None:
     assert rows[0].e_eff == 0.63
     assert rows[0].loss_radiative_wall == 100.0
     assert rows[0].loss_conductive == 0.0
+    assert rows[0].loss_condensation == 0.0
 
 
 def test_frontier_sorts_and_normalizes(tmp_path: Path) -> None:
@@ -69,16 +73,33 @@ def test_frontier_sorts_and_normalizes(tmp_path: Path) -> None:
     # zero-loss point: total 0, all fractions 0.
     p0 = pts[0]
     assert p0.total_loss == 0.0
-    assert (p0.frac_radiative_wall, p0.frac_escape_space, p0.frac_conductive) == (0.0, 0.0, 0.0)
+    fracs0 = (
+        p0.frac_radiative_wall,
+        p0.frac_escape_space,
+        p0.frac_conductive,
+        p0.frac_condensation,
+    )
+    assert fracs0 == (0.0, 0.0, 0.0, 0.0)
 
-    # loss-bearing points: fractions sum to 1 and match the channel split.
+    # loss-bearing points: the four channel fractions sum to 1 and match the channel split.
     for p in pts[1:]:
         assert p.total_loss > 0.0
-        assert p.frac_radiative_wall + p.frac_escape_space + p.frac_conductive == pytest.approx(1.0)
-    mid = pts[1]  # rho=0.32: 60/100, 20/100, 20/100
+        s = p.frac_radiative_wall + p.frac_escape_space + p.frac_conductive + p.frac_condensation
+        assert s == pytest.approx(1.0)
+    mid = pts[1]  # rho=0.32: 60/100, 20/100, 20/100, 0
     assert mid.frac_radiative_wall == pytest.approx(0.6)
     assert mid.frac_escape_space == pytest.approx(0.2)
     assert mid.frac_conductive == pytest.approx(0.2)
+    assert mid.frac_condensation == pytest.approx(0.0)
+
+
+def test_frontier_condensation_channel(tmp_path: Path) -> None:
+    """A low-v row whose only loss is condensation (channel 3) reports `frac_condensation == 1`."""
+    path = tmp_path / "sweep_lowv.jsonl"
+    _write_jsonl(path, [_row(0.32, 0.74, 0.0, 0.0, 0.0, ld=500.0)])
+    pts = an.frontier(an.read_sweep(path))
+    assert pts[0].frac_condensation == pytest.approx(1.0)
+    assert pts[0].frac_radiative_wall == pytest.approx(0.0)
 
 
 def test_write_summary_has_header_and_rows(tmp_path: Path) -> None:

@@ -3,7 +3,7 @@
 
 PY := uv run python
 
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv
 
 all: smoke
 
@@ -70,6 +70,20 @@ analysis: data/results/frontier.csv
 
 data/results/frontier.csv: data/results/sweep.jsonl python/puffsat/analysis.py
 	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis
+
+## sweep-lowv: 3.2 km/s condensing e_eff(rho) anchor (rung C) -> data/results/sweep_lowv.jsonl
+sweep-lowv: data/results/sweep_lowv.jsonl
+
+data/results/sweep_lowv.jsonl: data/tables/water_lowv.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --lowv
+
+## analysis-lowv: frontier + figures for the low-v anchor -> data/results/frontier_lowv.csv; depends on sweep-lowv
+analysis-lowv: data/results/frontier_lowv.csv
+
+data/results/frontier_lowv.csv: data/results/sweep_lowv.jsonl python/puffsat/analysis.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis \
+		--sweep data/results/sweep_lowv.jsonl --summary data/results/frontier_lowv.csv --tag lowv_
 
 ## sensitivity: opacity-insensitivity scan (rung B, B5d-3) — sweep at 0.1x/1x/10x opacity, show
 ## e_eff barely moves. Builds the release sweep first; writes data/results/opacity_scan/.

@@ -29,6 +29,21 @@ water's saturation temperature (`T_sat ≈ 520–620 K` at 4–16 MPa stagnation
 is therefore favored — confirming condensation as the dominant low-v sink. Between-pulse heat soak
 would change this but is out of scope (§11).
 
+**Amendment (Rung C, 2026-06): the wall-deposition channel is conduction-gated.** The two channels
+turn out to be *sequenced*, not independent. Rung C implemented both — a CoolProp two-phase EOS (bulk
+channel: `p → p_sat`, latent heat in `e`) and a true mass-sink wall-sticking BC (deposition channel) —
+and swept water at 3.2 km/s with conduction deferred (the B-flux gas-side-resistance gap, ADR-0005).
+Result: `e_eff(ρ) ≈ 0.78→0.735`, with **wall deposition ≈ 0**. The diagnostic shows why and confirms
+this ADR's own reasoning: wall condensation requires the near-wall gas to be cooled below `T_sat`,
+which (per the effusivity argument above) is the *cold wall doing the cooling* — i.e. **conduction**.
+With conduction off, the adiabatic wall cell stays superheated and never condenses. Bulk condensation
+*does* occur (~25 % in the cool re-expansion tail, captured by the EOS) but sits in the low-pressure
+tail, so it barely moves `e_eff` — which is why 3.2 km/s bounces *better* (0.74) than 16 km/s (0.63)
+in the adiabatic model, *contrary* to the worst-case framing. **Consequence:** the condensation-
+dominated low-v worst case only materializes once **B-flux** adds the wall-cooling conduction that
+drives deposition; until then Rung C's `e_eff` is an adiabatic upper bound. The deposition machinery
+(`liquid_frac` table field + `CondensingBounce` sink) is built and verified, dormant until then.
+
 ## Considered Options
 
 - **Single lumped "condensation loss."** Rejected: blurs two mechanisms whose latent-heat

@@ -1,17 +1,19 @@
-"""Frontier extraction + plots for the 16 km/s sweep (B5d-2).
+"""Frontier extraction + plots for the e_eff sweeps (B5d-2, extended for Rung C).
 
-Reads the sweep's JSONL (`crates/sweep` output, ADR-0019), builds the `e_eff(rho_impact)` frontier
-and the per-density loss decomposition (each loss channel as a fraction of the total loss), writes a
+Reads a sweep's JSONL (`crates/sweep` output, ADR-0019), builds the `e_eff(rho_impact)` frontier and
+the per-density loss decomposition (each ADR-0016 channel as a fraction of the total loss), writes a
 summary CSV, and renders the figures. The extraction is **stdlib-only and unit-tested** (no science
 deps); plotting imports matplotlib lazily (the `sci` extra), so this module imports and tests fine
 without it.
 
-This pass plots `e_eff` vs `rho` and the stacked loss decomposition; the opacity-sensitivity overlay
-is added by B5d-3 (which generates the 0.1x/10x-opacity comparison data).
+Channels: 1a radiative-to-wall, 1b escape-to-space, 2 conductive (deferred to B-flux), and
+3 condensation (Rung C low-v). The `--sweep`/`--summary`/`--plot-dir`/`--tag` CLI options point it
+at either the high-v (`sweep.jsonl`) or low-v (`sweep_lowv.jsonl`) results.
 """
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 from dataclasses import dataclass, fields
@@ -33,6 +35,7 @@ class SweepRow:
     loss_radiative_wall: float
     loss_escape_space: float
     loss_conductive: float
+    loss_condensation: float
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,7 @@ class FrontierPoint:
     frac_radiative_wall: float
     frac_escape_space: float
     frac_conductive: float
+    frac_condensation: float
 
 
 def read_sweep(path: Path = DEFAULT_SWEEP_PATH) -> list[SweepRow]:
@@ -63,6 +67,7 @@ def read_sweep(path: Path = DEFAULT_SWEEP_PATH) -> list[SweepRow]:
                 loss_radiative_wall=float(d["loss_radiative_wall"]),
                 loss_escape_space=float(d["loss_escape_space"]),
                 loss_conductive=float(d["loss_conductive"]),
+                loss_condensation=float(d.get("loss_condensation", 0.0)),
             )
         )
     return rows
@@ -72,15 +77,14 @@ def frontier(rows: list[SweepRow]) -> list[FrontierPoint]:
     """Build the `e_eff(rho)` frontier (ascending in rho) with its loss decomposition."""
     points: list[FrontierPoint] = []
     for r in sorted(rows, key=lambda row: row.rho_impact):
-        total = r.loss_radiative_wall + r.loss_escape_space + r.loss_conductive
-        if total > 0.0:
-            fa, fb, fc = (
-                r.loss_radiative_wall / total,
-                r.loss_escape_space / total,
-                r.loss_conductive / total,
-            )
-        else:
-            fa = fb = fc = 0.0
+        losses = (
+            r.loss_radiative_wall,
+            r.loss_escape_space,
+            r.loss_conductive,
+            r.loss_condensation,
+        )
+        total = sum(losses)
+        fa, fb, fc, fd = tuple(x / total for x in losses) if total > 0.0 else (0.0, 0.0, 0.0, 0.0)
         points.append(
             FrontierPoint(
                 rho_impact=r.rho_impact,
@@ -89,6 +93,7 @@ def frontier(rows: list[SweepRow]) -> list[FrontierPoint]:
                 frac_radiative_wall=fa,
                 frac_escape_space=fb,
                 frac_conductive=fc,
+                frac_condensation=fd,
             )
         )
     return points
@@ -105,12 +110,15 @@ def write_summary(points: list[FrontierPoint], path: Path = DEFAULT_SUMMARY_PATH
             writer.writerow([getattr(p, name) for name in header])
 
 
-def plot_frontier(points: list[FrontierPoint], out_dir: Path = DEFAULT_PLOT_DIR) -> list[Path]:
+def plot_frontier(
+    points: list[FrontierPoint], out_dir: Path = DEFAULT_PLOT_DIR, tag: str = ""
+) -> list[Path]:
     """Render `e_eff` vs rho and the stacked loss decomposition. Returns the saved figure paths.
 
-    matplotlib is imported lazily (the `sci` extra) and forced onto the headless `Agg` backend so a
-    `make analysis` run needs no display. The numeric inputs are plain Python floats built above, so
-    no `Any` from the untyped matplotlib API escapes this function.
+    `tag` prefixes the filenames so the low-v figures don't overwrite the high-v ones. matplotlib is
+    imported lazily (the `sci` extra) on the headless `Agg` backend so `make analysis` needs no
+    display. The numeric inputs are plain Python floats built above, so no `Any` from the untyped
+    matplotlib API escapes this function.
     """
     import matplotlib
 
@@ -127,9 +135,9 @@ def plot_frontier(points: list[FrontierPoint], out_dir: Path = DEFAULT_PLOT_DIR)
     ax.plot(rho, e_eff, "o-")
     ax.set_xlabel(r"$\rho_\mathrm{impact}$ [kg/m$^3$]")
     ax.set_ylabel(r"$e_\mathrm{eff}$")
-    ax.set_title(r"Restitution frontier $e_\mathrm{eff}(\rho)$ at 16 km/s")
+    ax.set_title(r"Restitution frontier $e_\mathrm{eff}(\rho)$")
     ax.grid(True, alpha=0.3)
-    frontier_path = out_dir / "e_eff_frontier.png"
+    frontier_path = out_dir / f"{tag}e_eff_frontier.png"
     fig.savefig(frontier_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     saved.append(frontier_path)
@@ -138,18 +146,21 @@ def plot_frontier(points: list[FrontierPoint], out_dir: Path = DEFAULT_PLOT_DIR)
     fa = [p.frac_radiative_wall for p in points]
     fb = [p.frac_escape_space for p in points]
     fc = [p.frac_conductive for p in points]
+    fd = [p.frac_condensation for p in points]
     base_b = list(fa)
     base_c = [a + b for a, b in zip(fa, fb, strict=True)]
+    base_d = [a + b + c for a, b, c in zip(fa, fb, fc, strict=True)]
     fig, ax = plt.subplots()
     width = 0.6 * min((b - a for a, b in pairwise(rho)), default=1.0)
     ax.bar(rho, fa, width=width, label="1a radiative→wall")
     ax.bar(rho, fb, width=width, bottom=base_b, label="1b escape→space")
     ax.bar(rho, fc, width=width, bottom=base_c, label="2 conductive (deferred)")
+    ax.bar(rho, fd, width=width, bottom=base_d, label="3 condensation")
     ax.set_xlabel(r"$\rho_\mathrm{impact}$ [kg/m$^3$]")
     ax.set_ylabel("fraction of total loss")
     ax.set_title("Loss-channel decomposition (ADR-0016)")
     ax.legend(loc="upper right", fontsize="small")
-    losses_path = out_dir / "loss_decomposition.png"
+    losses_path = out_dir / f"{tag}loss_decomposition.png"
     fig.savefig(losses_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     saved.append(losses_path)
@@ -158,15 +169,24 @@ def plot_frontier(points: list[FrontierPoint], out_dir: Path = DEFAULT_PLOT_DIR)
 
 
 def main() -> None:
-    """Read the sweep, extract the frontier, write the CSV summary, and render the figures."""
-    rows = read_sweep()
+    """Read a sweep, extract the frontier, write the CSV summary, and render the figures. The CLI
+    options select the high-v (default) or low-v results."""
+    parser = argparse.ArgumentParser(description="e_eff frontier extraction + loss decomposition.")
+    parser.add_argument("--sweep", type=Path, default=DEFAULT_SWEEP_PATH, help="input sweep JSONL")
+    parser.add_argument("--summary", type=Path, default=DEFAULT_SUMMARY_PATH, help="output CSV")
+    parser.add_argument("--plot-dir", type=Path, default=DEFAULT_PLOT_DIR, help="figure directory")
+    parser.add_argument("--tag", default="", help="figure filename prefix (e.g. 'lowv_')")
+    args = parser.parse_args()
+    sweep_path: Path = args.sweep
+    summary_path: Path = args.summary
+    plot_dir: Path = args.plot_dir
+    tag: str = args.tag
+
+    rows = read_sweep(sweep_path)
     points = frontier(rows)
-    write_summary(points)
-    figs = plot_frontier(points)
-    print(
-        f"python: wrote {DEFAULT_SUMMARY_PATH} and {len(figs)} figure(s): "
-        + ", ".join(map(str, figs))
-    )
+    write_summary(points, summary_path)
+    figs = plot_frontier(points, plot_dir, tag)
+    print(f"python: wrote {summary_path} and {len(figs)} figure(s): " + ", ".join(map(str, figs)))
 
 
 if __name__ == "__main__":

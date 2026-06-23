@@ -24,6 +24,7 @@ def _rows(e_eff_by_rho: dict[float, float], total_loss: float) -> list[SweepRow]
             loss_radiative_wall=total_loss,
             loss_escape_space=0.0,
             loss_conductive=0.0,
+            loss_condensation=0.0,
         )
         for rho, e_eff in e_eff_by_rho.items()
     ]
