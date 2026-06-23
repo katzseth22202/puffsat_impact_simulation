@@ -44,6 +44,22 @@ dominated low-v worst case only materializes once **B-flux** adds the wall-cooli
 drives deposition; until then Rung C's `e_eff` is an adiabatic upper bound. The deposition machinery
 (`liquid_frac` table field + `CondensingBounce` sink) is built and verified, dormant until then.
 
+**Amendment (B-flux conduction added, 2026-06): wall deposition is starved, not merely gated.** The
+gas-side conduction operator landed (combined gas+solid implicit solve, `k_gas` from CoolProp
+transport — see ADR-0005) and is now wired into `CondensingBounce` with a cold SiC-like plate. The
+result revises the "conduction-gated" framing above: conduction is *active* but **negligible** at
+3.2 km/s — it removes only ≈ 0.15 % of the bounce energy, because over the ~µs bounce the thermal
+penetration `√(α_gas·t)` into the poorly-conducting vapor is microns-thick. So it does not cool the
+bulk near-wall gas below `T_sat`, wall deposition stays ≈ 0, and `e_eff(ρ) ≈ 0.783 → 0.735` is
+unchanged from the adiabatic bound. The effusivity argument above still holds *at the interface* (the
+contact surface does sit near the cold wall), but the thin gas layer that cools carries negligible
+mass over a µs, so wall deposition is starved. **Net:** the condensation-dominated low-v worst case
+does **not** appear in 1D — 3.2 km/s bounces better (0.74) than 16 km/s (0.63) *with conduction on*.
+The kinetic-condensation model stays gated (equilibrium already clears a useful `f`). The deposition
+machinery remains built and verified (it fires when conduction is strong enough — a kernel test
+confirms — just not in the low-v µs regime). The coarse wall gas cell reports deposition as exactly
+0; the physical value is ~0 and `e_eff` is mesh-robust (the cooled layer's mass is negligible).
+
 ## Considered Options
 
 - **Single lumped "condensation loss."** Rejected: blurs two mechanisms whose latent-heat

@@ -46,6 +46,19 @@ deliverable needs only the high-T half of this pipeline, so Rung B implemented:
   opacity-insensitive at `τ≫1`; the opacity is load-bearing only for the survivability flux). The
   loader's JSON boundary lets the real opacity table hot-swap in later with no kernel change.
 
+**Amendment (Rung C / B-flux): two optional low-v fields.** The low-v (3.2 km/s) CoolProp table
+(`build_table_lowv`) carries two fields beyond the five standard ones, both optional and `#[serde(
+default)]` so the high-v table and the loader stay backward-compatible:
+- **`liquid_frac` ∈ [0,1]** — the condensed mass fraction for the wall-sticking sink (ADR-0004,
+  channel 3). Interpolated **linearly** (it is legitimately `0`, so it does *not* ride the positive
+  log-interp path the other fields use).
+- **`k_gas` > 0** — the gas thermal conductivity for the B-flux gas-side conduction operator
+  (ADR-0005), from CoolProp/IAPWS transport (`PropsSI("conductivity", …)`; the two-phase dome, where
+  transport is undefined, uses the saturated-vapor value). Strictly positive, so it rides the same
+  **log-interp** path as the opacities. A `k_gas_scale` knob mirrors `kappa_scale` for a sensitivity
+  scan. The **high-v plasma `k_gas`** (Spitzer-like transport) is *not* tabulated — the high-v table
+  has no `k_gas`, so high-v conduction stays off (the deferred B-flux high-v sibling).
+
 ## Considered Options
 
 - **Single-source EOS or opacity across the whole range.** Rejected: none exists — CoolProp lacks

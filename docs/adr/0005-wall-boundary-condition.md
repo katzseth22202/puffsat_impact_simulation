@@ -48,6 +48,24 @@ deliverable is unaffected. The fix is **bundled with the wall-flux/survivability
 "B-flux") alongside the real per-regime opacity table, since channels 1a + 2 are the same plate heat
 load (ADR-0010/0011).
 
+**Amendment (B-flux, 2026-06): gas-side conduction operator landed.** The gas now carries its own
+thermal conductivity `k_gas` (a table field, CoolProp transport at low-v; ADR-0007), and conduction
+is solved as a **combined gas+solid backward-Euler system** — one tridiagonal over the union
+`[gas_{n−1}…gas_0 | solid_0…solid_{m−1}]` on the same Thomas solver (`Solid::step_coupled`). Every
+face uses the series resistance of its two half-cells `G = 1/(½w_L/k_L + ½w_R/k_R)`, which carries the
+non-uniform Lagrangian gas mesh, variable `k_gas`, and the gas|solid material jump in one formula
+(reducing to `k/dx` for the uniform solid, matching the original step-temperature solve). The
+**interface temperature now emerges from flux continuity** instead of being pinned to the bulk gas
+temperature, so the over-drain cannot recur: the gas-side resistance bounds the interface flux.
+Verified test-first against the **two-semi-infinite-media contact** analytic (interface jumps to the
+effusivity-weighted `T_i = (e_g·T_g + e_s·T_s)/(e_g+e_s)`, erf profile each side), plus an
+order-of-accuracy refinement test and an energy-closure check. Wired into both `CoupledBounce` and
+`CondensingBounce`; it engages only where the table provides `k_gas`. **Still deferred:** the high-v
+**plasma transport** `k_gas` (Spitzer-like) — the high-v plasma table carries none, so the 16 km/s
+`e_eff` pass keeps `wall = None`; that, the real opacity table, and the survivability report remain
+the B-flux high-v sibling. (Finding: at low-v, conduction with the real `k_gas` is negligible over the
+µs bounce — see ADR-0004 amendment and design §10 Rung C.)
+
 ## Considered Options
 
 - **Isothermal Dirichlet wall.** Rejected: imposes the interface temperature and makes the conductive
