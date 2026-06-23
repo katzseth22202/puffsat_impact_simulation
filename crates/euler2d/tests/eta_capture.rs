@@ -1,19 +1,22 @@
-//! Flat-plate `eta_capture` acceptance (ADR-0003, D2): the lossless 2D/1D wall-impulse ratio.
+//! `eta_capture` acceptance (ADR-0003): the lossless 2D/1D wall-impulse ratio, flat (D2) and
+//! shallow-concave (D5).
 //!
 //! `eta_capture = (J_wall/p_in)_free / (J_wall/p_in)_confined` (see [`euler2d::bounce`]). The
 //! confined (plane-wave) run is the perfectly-collimated 1D limit and is cross-checked against the
 //! independent 1D `hydro1d` kernel; the free finite-cloud run gives `eta_capture < 1` (radial
-//! rebound + edge escape), rising toward 1 as the cloud widens (less radial relief). The committed
-//! tests use coarse grids for speed; the headline number is the ignored `diag_eta_capture_table`.
+//! rebound + edge escape), rising toward 1 as the cloud widens (less radial relief). A shallow
+//! **concave** plate (ADR-0021) bends the outward rebound back toward the axis, raising the captured
+//! axial momentum — `eta_capture` rises with the dish depth. The committed tests use coarse grids
+//! for speed; the headline numbers are the ignored `diag_*` tables.
 
-use euler2d::bounce::{Bounce2D, SlugConfig, eta_capture, run_slug_bounce};
+use euler2d::bounce::{Bounce2D, PlateShape, SlugConfig, eta_capture, run_slug_bounce};
 use hydro1d::kernel::Tube;
 
 const GAMMA: f64 = 1.4;
 const MACH: f64 = 5.0;
 
-/// The confined (plane-wave / 1D-limit) bounce: cloud fills the radius, reflecting outer wall. Few
-/// radial cells (uniform in r), so it is cheap.
+/// The confined (plane-wave / 1D-limit) bounce: cloud fills the radius, reflecting outer wall, flat
+/// grid-aligned plate. Few radial cells (uniform in r), so it is cheap.
 fn confined(nz: usize) -> Bounce2D {
     run_slug_bounce(&SlugConfig {
         gamma: GAMMA,
@@ -26,11 +29,11 @@ fn confined(nz: usize) -> Bounce2D {
         nr: 8,
         nz,
         confined: true,
+        shape: PlateShape::FlatGridAligned,
     })
 }
 
-/// A free finite-cloud bounce on a large plate (catches the spread, so `eta_capture` measures the
-/// rebound-axiality floor).
+/// A free finite-cloud bounce on a large grid-aligned flat plate (the D2 footprint study).
 fn free(r_foot: f64, nr: usize, nz: usize) -> Bounce2D {
     run_slug_bounce(&SlugConfig {
         gamma: GAMMA,
@@ -43,6 +46,26 @@ fn free(r_foot: f64, nr: usize, nz: usize) -> Bounce2D {
         nr,
         nz,
         confined: false,
+        shape: PlateShape::FlatGridAligned,
+    })
+}
+
+/// A free finite-cloud bounce on a plate of the given shape (`d/D = 0` is the immersed flat
+/// baseline; `> 0` is shallow concave). `r_plate = 2`, `r_max = 3` so the rebound spreads across the
+/// tilted dish before escaping the rim.
+fn free_shape(shape: PlateShape, r_foot: f64, nr: usize, nz: usize) -> Bounce2D {
+    run_slug_bounce(&SlugConfig {
+        gamma: GAMMA,
+        mach: MACH,
+        r_foot,
+        length: 1.0,
+        r_plate: 2.0,
+        r_max: 3.0,
+        z_max: 3.0,
+        nr,
+        nz,
+        confined: false,
+        shape,
     })
 }
 
@@ -81,6 +104,69 @@ fn flat_plate_eta_capture_is_a_fraction_rising_with_footprint() {
     );
 }
 
+/// The immersed flat plate (`Dish` with `d/D = 0`, a raised flat wall through the IBM) reproduces the
+/// verified grid-aligned flat-plate `eta_capture` for the same cloud — the consistency gate that
+/// makes the curvature gain (concave vs immersed-flat, both via the IBM) trustworthy, since the
+/// IBM's boundary error does not cancel against the grid-aligned confined denominator.
+#[test]
+fn immersed_flat_matches_grid_aligned_flat() {
+    let denom = confined(32);
+    let r_foot = 1.0;
+    let (nr, nz) = (40, 32);
+    let eta_ibm = eta_capture(
+        &free_shape(PlateShape::Dish { d_over_d: 0.0 }, r_foot, nr, nz),
+        &denom,
+    );
+    // Same cloud/plate, grid-aligned flat (r_plate = 2, r_max = 3 to match `free_shape`).
+    let eta_grid = eta_capture(
+        &run_slug_bounce(&SlugConfig {
+            gamma: GAMMA,
+            mach: MACH,
+            r_foot,
+            length: 1.0,
+            r_plate: 2.0,
+            r_max: 3.0,
+            z_max: 3.0,
+            nr,
+            nz,
+            confined: false,
+            shape: PlateShape::FlatGridAligned,
+        }),
+        &denom,
+    );
+    let rel = (eta_ibm - eta_grid).abs() / eta_grid;
+    assert!(
+        rel < 0.10,
+        "IBM-flat eta {eta_ibm:.4} vs grid-aligned flat {eta_grid:.4} (rel {rel:.3})"
+    );
+}
+
+/// A shallow-concave plate re-collimates the rebound toward the axis, so `eta_capture` **rises with
+/// the dish depth** `d/D` — the recovery lever (ADR-0021). All three runs go through the same
+/// immersed boundary (`d/D = 0, 0.10, 0.15`), so the gain is pure curvature.
+#[test]
+fn concave_eta_capture_rises_with_depth() {
+    let denom = confined(32);
+    let r_foot = 1.0;
+    let (nr, nz) = (48, 32);
+    let eta_flat = eta_capture(
+        &free_shape(PlateShape::Dish { d_over_d: 0.0 }, r_foot, nr, nz),
+        &denom,
+    );
+    let eta_mild = eta_capture(
+        &free_shape(PlateShape::Dish { d_over_d: 0.10 }, r_foot, nr, nz),
+        &denom,
+    );
+    let eta_deep = eta_capture(
+        &free_shape(PlateShape::Dish { d_over_d: 0.15 }, r_foot, nr, nz),
+        &denom,
+    );
+    assert!(
+        eta_mild > eta_flat && eta_deep > eta_mild,
+        "expected eta to rise with depth: flat {eta_flat:.4}, 0.10 {eta_mild:.4}, 0.15 {eta_deep:.4}"
+    );
+}
+
 /// DIAGNOSTIC (ignored): the flat-plate `eta_capture` vs footprint table at a finer resolution, plus
 /// the confined-vs-1D cross-check. Run with `cargo test -p euler2d --test eta_capture -- --ignored
 /// --nocapture diag`.
@@ -104,5 +190,27 @@ fn diag_eta_capture_table() {
             eta_capture(&b, &denom),
             b.peak_force,
         );
+    }
+}
+
+/// DIAGNOSTIC (ignored): the shallow-concave `eta_capture` vs depth table at finer resolution — the
+/// headline curvature gain. Run with `cargo test -p euler2d --test eta_capture -- --ignored
+/// --nocapture diag_concave`.
+#[test]
+#[ignore = "headline table; slow (fine grid)"]
+fn diag_concave_eta_capture_table() {
+    let denom = confined(60);
+    let (nr, nz) = (80, 48);
+    for r_foot in [1.0, 1.5] {
+        eprintln!("--- r_foot = {r_foot:.1} ---");
+        for d_over_d in [0.0, 0.10, 0.15] {
+            let b = free_shape(PlateShape::Dish { d_over_d }, r_foot, nr, nz);
+            eprintln!(
+                "  d/D={d_over_d:.2}: eta_capture = {:.4}  (peak F={:.3e}, steps={})",
+                eta_capture(&b, &denom),
+                b.peak_force,
+                b.steps,
+            );
+        }
     }
 }

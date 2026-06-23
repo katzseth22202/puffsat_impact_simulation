@@ -24,7 +24,24 @@
 //! plate edge.
 
 use crate::kernel::{Bc, Grid2D};
+use crate::plate::PlateProfile;
 use crate::state::Prim;
+
+/// The plate the slug bounces off.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PlateShape {
+    /// Grid-aligned flat plate at `z = 0` (the verified D2 path; the confined denominator and the
+    /// original flat-plate result use it).
+    FlatGridAligned,
+    /// Immersed shallow-concave dish of depth-to-diameter ratio `d/D` (ADR-0021); `d/D = 0` is a
+    /// raised flat plate imposed through the *same* immersed boundary (ADR-0023). Running both the
+    /// flat baseline (`d/D = 0`) and the concave plates through the IBM keeps the curvature gain
+    /// free of any grid-alignment artifact.
+    Dish {
+        /// Depth-to-diameter ratio `d/D` (`D = 2·r_plate`).
+        d_over_d: f64,
+    },
+}
 
 /// A slug-bounce configuration (normalized `ρ₀ = 1`, `v = 1`; incident Mach `M` sets the cold
 /// pressure `p₀ = 1/(γM²)`, as in the 1D `hydro1d` slug).
@@ -47,6 +64,8 @@ pub struct SlugConfig {
     pub nz: usize,
     /// Confined (plane-wave / 1D-limit) run: reflecting outer `r`-wall, cloud fills the radius.
     pub confined: bool,
+    /// The plate shape (flat or shallow-concave dish).
+    pub shape: PlateShape,
 }
 
 /// The result of one slug bounce.
@@ -90,11 +109,31 @@ pub fn run_slug_bounce(cfg: &SlugConfig) -> Bounce2D {
     } else {
         Bc::Transmissive // gas spreading past the domain edge leaves
     };
-    g.bc_zlo = Bc::Reflect; // the plate (edge governed by plate_radius)
     g.bc_zhi = Bc::Transmissive; // rebounding gas leaves the far end
-    g.set_plate_radius(Some(cfg.r_plate));
 
-    // Cold slug against the plate (z ∈ [0, L]) moving in at v = 1, in near-vacuum ambient.
+    // Configure the plate and find the height the slug starts above. A grid-aligned flat plate sits
+    // at z = 0; an immersed dish is raised a few cells off the floor so a solid layer always
+    // underlies it, and the slug starts above the whole dish (its rim).
+    let z_floor = match cfg.shape {
+        PlateShape::FlatGridAligned => {
+            g.bc_zlo = Bc::Reflect; // the plate (edge governed by plate_radius)
+            g.set_plate_radius(Some(cfg.r_plate));
+            0.0
+        }
+        PlateShape::Dish { d_over_d } => {
+            g.bc_zlo = Bc::Transmissive; // the immersed surface, not z = 0, is the wall
+            let z0 = 4.0 * dz;
+            let depth = d_over_d * 2.0 * cfg.r_plate;
+            g.set_plate_profile(Some(PlateProfile::Dish {
+                r_plate: cfg.r_plate,
+                z0,
+                depth,
+            }));
+            z0 + depth
+        }
+    };
+
+    // Cold slug just above the plate (z ∈ [z_floor, z_floor + L]) moving in at v = 1, in near-vacuum.
     let v = 1.0;
     let rho0 = 1.0;
     let p0 = 1.0 / (cfg.gamma * cfg.mach * cfg.mach);
@@ -103,7 +142,7 @@ pub fn run_slug_bounce(cfg: &SlugConfig) -> Bounce2D {
     g.init(|iz, ir| {
         let z = (iz as f64 + 0.5) * dz;
         let r = (ir as f64 + 0.5) * dr;
-        if z < cfg.length && r < cfg.r_foot {
+        if z >= z_floor && z < z_floor + cfg.length && r < cfg.r_foot {
             Prim::new(rho0, -v, 0.0, p0)
         } else {
             Prim::new(rho_amb, 0.0, 0.0, p_amb)
@@ -112,10 +151,16 @@ pub fn run_slug_bounce(cfg: &SlugConfig) -> Bounce2D {
 
     let incident_momentum = g.axial_momentum().abs();
 
-    // Integrate the plate impulse (trapezoid) until the force decays past the cutoff after its peak.
+    // Integrate the plate impulse (trapezoid) until the force has stayed below the 10⁻³-of-peak
+    // cutoff for a sustained window — not merely crossed it once. A concave plate refocuses the
+    // rebound into a secondary peak (§7); requiring a sustained quiet tail keeps the integration
+    // from truncating in the trough before that secondary impulse arrives. The window resets
+    // whenever the force climbs back above the cutoff (i.e. a secondary peak), so it captures it.
     let mut wall_impulse = 0.0;
     let mut peak = 0.0_f64;
     let mut past_peak = false;
+    let mut steps_below = 0_usize;
+    let window = 40;
     let mut force_old = g.plate_force();
     let max_steps = 400 * cfg.nz + 50_000;
     let mut steps = 0;
@@ -128,8 +173,13 @@ pub fn run_slug_bounce(cfg: &SlugConfig) -> Bounce2D {
         if force_new < 0.999 * peak {
             past_peak = true;
         }
+        if force_new < 1.0e-3 * peak {
+            steps_below += 1;
+        } else {
+            steps_below = 0;
+        }
         steps += 1;
-        if past_peak && force_new < 1.0e-3 * peak {
+        if past_peak && steps_below >= window {
             break;
         }
         force_old = force_new;
