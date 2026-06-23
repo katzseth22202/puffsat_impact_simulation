@@ -154,7 +154,7 @@ def plot_frontier(
     width = 0.6 * min((b - a for a, b in pairwise(rho)), default=1.0)
     ax.bar(rho, fa, width=width, label="1a radiative→wall")
     ax.bar(rho, fb, width=width, bottom=base_b, label="1b escape→space")
-    ax.bar(rho, fc, width=width, bottom=base_c, label="2 conductive (deferred)")
+    ax.bar(rho, fc, width=width, bottom=base_c, label="2 conductive")
     ax.bar(rho, fd, width=width, bottom=base_d, label="3 condensation")
     ax.set_xlabel(r"$\rho_\mathrm{impact}$ [kg/m$^3$]")
     ax.set_ylabel("fraction of total loss")

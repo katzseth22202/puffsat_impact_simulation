@@ -28,6 +28,7 @@ use std::fs;
 use std::io::Write as _;
 use std::path::Path;
 
+use hydro1d::conduction::Solid;
 use hydro1d::eos::TableEos;
 use hydro1d::kernel::{CondensingBounce, CoupledBounce, Tube, Viscosity};
 use hydro1d::radiation::{Limiter, RadConstants};
@@ -148,9 +149,23 @@ fn run_sweep(rho_grid: &[f64], table: &Table, cfg: &Config) -> Vec<Record> {
         .collect()
 }
 
-/// Fixed configuration for the 3.2 km/s low-v anchor (Rung C): the cold cloud is warm enough that
-/// every swept `ρ` starts as single-phase vapor (incident Mach ≈ 6); radiation is off (design §3)
-/// and conduction is deferred (B-flux), so the only loss is condensation (`α` = wall sticking).
+/// A cold conducting wall behind the rigid plate (B-flux, ADR-0005): a semi-infinite [`Solid`] of
+/// `cells` cells over `depth` (m), initially at `t_init` (K), with diffusivity `alpha` (m²/s) and
+/// conductivity `k` (W/m/K). The effusivity `√(kρc) = k/√α` sets the conductive loss and, with the
+/// cold `t_init`, drives the near-wall cooling that condenses (and deposits) the gas.
+#[derive(Debug, Clone, Copy)]
+struct WallParams {
+    cells: usize,
+    depth: f64,
+    t_init: f64,
+    alpha: f64,
+    k: f64,
+}
+
+/// Fixed configuration for the 3.2 km/s low-v anchor (Rung C / B-flux): the cold cloud is warm enough
+/// that every swept `ρ` starts as single-phase vapor (incident Mach ≈ 6); radiation is off (design
+/// §3). With a cold conducting `wall` (B-flux) the near-wall gas is cooled below `T_sat`, activating
+/// the wall-deposition sink (channels 2 + 3); `wall = None` is the adiabatic upper bound.
 #[derive(Debug, Clone, Copy)]
 struct LowvConfig {
     v: f64,
@@ -159,6 +174,8 @@ struct LowvConfig {
     gas_cells: usize,
     /// Wall sticking coefficient (baseline 1 — the pessimistic equilibrium bound, ADR-0004).
     alpha: f64,
+    /// Cold conducting wall (B-flux); `None` for the adiabatic upper bound.
+    wall: Option<WallParams>,
 }
 
 impl LowvConfig {
@@ -169,12 +186,23 @@ impl LowvConfig {
             length: 1.0,
             gas_cells: 300,
             alpha: 1.0,
+            // SiC-like plate (the design baseline): k ≈ 120 W/m/K, ρc ≈ 2.24e6 J/m³/K ⇒
+            // α ≈ 5.4e-5 m²/s, effusivity ≈ 1.6e4 ≫ water vapor's; cold at 300 K. Depth (5 mm) and
+            // cell count keep the thermal penetration √(αt) ≪ depth over the ~µs bounce.
+            wall: Some(WallParams {
+                cells: 200,
+                depth: 5.0e-3,
+                t_init: 300.0,
+                alpha: 5.4e-5,
+                k: 120.0,
+            }),
         }
     }
 }
 
-/// Run one condensing bounce at `rho_impact` (Rung C low-v); return its JSONL row. Radiation and
-/// conduction are off, so only `loss_condensation` is populated.
+/// Run one condensing bounce at `rho_impact` (Rung C / B-flux low-v); return its JSONL row. Radiation
+/// is off (design §3); with a wall the conductive (channel 2) and condensation (channel 3) losses are
+/// both populated, otherwise only condensation (the adiabatic upper bound).
 fn run_one_lowv(rho_impact: f64, table: &Table, cfg: &LowvConfig) -> Record {
     let eos = TableEos::new(table.clone());
     let tube = Tube::slug_si(
@@ -186,7 +214,10 @@ fn run_one_lowv(rho_impact: f64, table: &Table, cfg: &LowvConfig) -> Record {
         eos,
         Viscosity::VON_NEUMANN_RICHTMYER,
     );
-    let result = CondensingBounce::new(tube, cfg.alpha).run();
+    let wall = cfg
+        .wall
+        .map(|w| Solid::new(w.cells, w.depth, w.t_init, w.alpha, w.k));
+    let result = CondensingBounce::new_with_wall(tube, cfg.alpha, wall).run();
     Record {
         rho_impact,
         v: cfg.v,
@@ -197,7 +228,7 @@ fn run_one_lowv(rho_impact: f64, table: &Table, cfg: &LowvConfig) -> Record {
         wall_impulse: result.bounce.wall_impulse,
         loss_radiative_wall: 0.0, // radiation off at 3.2 km/s (design §3)
         loss_escape_space: 0.0,
-        loss_conductive: 0.0, // deferred (B-flux)
+        loss_conductive: result.loss_conductive, // B-flux: gas-side conduction into the cold plate
         loss_condensation: result.loss_condensation,
     }
 }
@@ -423,6 +454,7 @@ mod tests {
             length: 1.0,
             gas_cells: 40,
             alpha: 1.0,
+            wall: None, // adiabatic plumbing check; conduction is exercised by the kernel tests
         };
         let rho_grid = [1.0, 2.0];
         let records = run_sweep_lowv(&rho_grid, &table, &cfg);

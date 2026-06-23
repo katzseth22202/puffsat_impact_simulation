@@ -599,6 +599,25 @@ impl GasConductionFields {
     }
 }
 
+/// One gas-side conduction substep (B-flux, ADR-0005), shared by [`CoupledBounce`] and
+/// [`CondensingBounce`]: cool the gas into the wall `solid` via the combined gas+solid operator
+/// ([`Solid::step_coupled`]), updating each gas cell's energy by `Δe = c_v·ΔT`, and return the
+/// channel-2 interface loss `q·dt`. A no-op returning `0` when there is no wall, or when the table
+/// carries no `k_gas` (no gas transport data — the high-v plasma table; its transport is deferred).
+fn conduction_into_wall(tube: &mut Tube<TableEos>, wall: &mut Option<Solid>, dt: f64) -> f64 {
+    let Some(fields) = tube.gas_conduction_fields() else {
+        return 0.0;
+    };
+    let Some(solid) = wall.as_mut() else {
+        return 0.0;
+    };
+    let step = solid.step_coupled(&fields.state(), dt);
+    for (j, &dtemp) in step.gas_dtemp.iter().enumerate() {
+        tube.energy[j] = fields.cv[j].mul_add(dtemp, tube.energy[j]).max(0.0);
+    }
+    step.interface_flux * dt
+}
+
 impl Tube<TableEos> {
     /// A cold gas slug fired at a rigid wall (`x = 0`) with a trailing free (vacuum) surface
     /// (`x = length`), in **SI** units — the production analogue of [`Tube::slug`] (ADR-0001) used
@@ -825,17 +844,7 @@ impl CoupledBounce {
     /// channel-2 loss. No-ops when there is no wall, or when the table carries no `k_gas` (the high-v
     /// plasma table — its transport is the deferred B-flux sibling, so high-v conduction stays off).
     fn conduction_substep(&mut self, dt: f64) {
-        let Some(fields) = self.tube.gas_conduction_fields() else {
-            return;
-        };
-        let Some(solid) = self.wall.as_mut() else {
-            return;
-        };
-        let step = solid.step_coupled(&fields.state(), dt);
-        for (j, &dtemp) in step.gas_dtemp.iter().enumerate() {
-            self.tube.energy[j] = fields.cv[j].mul_add(dtemp, self.tube.energy[j]).max(0.0);
-        }
-        self.loss_conductive += step.interface_flux * dt;
+        self.loss_conductive += conduction_into_wall(&mut self.tube, &mut self.wall, dt);
     }
 
     /// One coupled step: hydro, then radiation, then conduction (Lie split at the hydro `dt`).
@@ -885,7 +894,7 @@ impl CoupledBounce {
     }
 }
 
-/// Outcome of a condensing bounce (Rung C): the restitution plus the condensation loss channel.
+/// Outcome of a condensing bounce (Rung C / B-flux): the restitution plus the loss channels.
 #[derive(Debug, Clone, Copy)]
 pub struct CondensingBounceResult {
     /// The usual restitution/impulse bookkeeping.
@@ -893,17 +902,25 @@ pub struct CondensingBounceResult {
     /// Channel 3 — energy carried off by condensate that stuck to the wall (per unit wall area;
     /// includes the latent heat, which is already inside `e`).
     pub loss_condensation: f64,
+    /// Channel 2 — heat conducted into the wall solid (per unit wall area). `0` without a wall (the
+    /// adiabatic upper bound); positive once a conducting wall cools the near-wall gas (B-flux).
+    pub loss_conductive: f64,
     /// Condensate mass deposited at the wall (per unit area) — the gas's lost mass, for the
     /// mass-sink closure check.
     pub stuck_mass: f64,
 }
 
-/// A low-v condensing slug bounce (Rung C): the hydro step followed by an irreversible
-/// **wall-deposition mass sink** (ADR-0004 channel 3). Radiation and conduction are off — radiation
-/// is negligible at 3.2 km/s (design §3) and conduction is deferred to the B-flux rung. The other
-/// condensation channel, **bulk vapor-pressure collapse**, needs no code here: it lives in the
-/// two-phase EOS (`p → p_sat(T)`, latent heat folded into `e`), so it acts through the ordinary
-/// pressure the hydro already sees.
+/// A low-v condensing slug bounce (Rung C / B-flux): each step is the hydro update, then an optional
+/// gas-side **conduction** substep into a cold wall (channel 2), then the irreversible
+/// **wall-deposition mass sink** (ADR-0004 channel 3). The other condensation channel, **bulk
+/// vapor-pressure collapse**, needs no code here: it lives in the two-phase EOS (`p → p_sat(T)`,
+/// latent heat folded into `e`), so it acts through the ordinary pressure the hydro already sees.
+///
+/// Conduction and deposition are **sequenced, not independent** (ADR-0004 amendment): wall deposition
+/// only fires once the cold plate cools the near-wall gas below `T_sat`, which raises `liquid_frac` in
+/// the wall cell. With no wall the run is the *adiabatic upper bound* (the original Rung C); adding a
+/// wall (B-flux) activates the dormant deposition that makes 3.2 km/s the condensation-dominated worst
+/// case the design anticipates.
 ///
 /// The sink removes the condensate that *newly forms* in the wall cell each step (so the total stuck
 /// mass tracks the cumulative condensation, not the step count — dt-convergent), carrying off its
@@ -915,7 +932,11 @@ pub struct CondensingBounce {
     tube: Tube<TableEos>,
     /// Sticking coefficient `α ∈ [0, 1]` (baseline 1 — the pessimistic equilibrium bound, ADR-0004).
     alpha: f64,
+    /// Optional cold conducting wall (B-flux). `None` is the adiabatic upper bound (radiation is
+    /// negligible at 3.2 km/s, design §3, so it stays off either way).
+    wall: Option<Solid>,
     loss_condensation: f64,
+    loss_conductive: f64,
     stuck_mass: f64,
     /// Liquid mass in the wall cell at the end of the previous step — the baseline against which
     /// newly-condensed (hence newly-sticking) mass is measured.
@@ -923,17 +944,36 @@ pub struct CondensingBounce {
 }
 
 impl CondensingBounce {
-    /// Wrap a tabulated-EOS `tube` for a condensing bounce with wall sticking coefficient `alpha`.
+    /// Wrap a tabulated-EOS `tube` for an *adiabatic* condensing bounce (no wall) with wall sticking
+    /// coefficient `alpha` — the original Rung C upper bound.
     #[must_use]
     pub fn new(tube: Tube<TableEos>, alpha: f64) -> Self {
+        Self::new_with_wall(tube, alpha, None)
+    }
+
+    /// Wrap a tabulated-EOS `tube` for a condensing bounce with sticking coefficient `alpha` and an
+    /// optional cold conducting `wall` (B-flux). The wall cools the near-wall gas below `T_sat`, which
+    /// is what *drives* the wall-deposition sink (the deposition channel is conduction-gated,
+    /// ADR-0004). Conduction engages only if the table also carries `k_gas`.
+    #[must_use]
+    pub fn new_with_wall(tube: Tube<TableEos>, alpha: f64, wall: Option<Solid>) -> Self {
         let m_liq_prev = Self::wall_liquid_mass(&tube);
         Self {
             tube,
             alpha,
+            wall,
             loss_condensation: 0.0,
+            loss_conductive: 0.0,
             stuck_mass: 0.0,
             m_liq_prev,
         }
+    }
+
+    /// Gas-side conduction into the cold wall (channel 2, B-flux): the same operator
+    /// [`CoupledBounce`] uses. This is what cools the near-wall gas below `T_sat` and thereby
+    /// *activates* the deposition sink. No-op without a wall or `k_gas`.
+    fn conduction_substep(&mut self, dt: f64) {
+        self.loss_conductive += conduction_into_wall(&mut self.tube, &mut self.wall, dt);
     }
 
     /// Condensed (liquid) mass currently in the wall cell, `liquid_frac(ρ₀, e₀) · m₀`.
@@ -985,6 +1025,9 @@ impl CondensingBounce {
             }
             let dt = self.tube.stable_dt();
             self.tube.step(dt);
+            // Conduction first: the cold wall cools the near-wall gas below T_sat, raising
+            // liquid_frac, which the deposition sink then sticks (the two channels are sequenced).
+            self.conduction_substep(dt);
             self.condensation_substep();
             let force_new = self.tube.wall_force();
             wall_impulse += 0.5 * dt * (force_old + force_new);
@@ -1000,6 +1043,7 @@ impl CondensingBounce {
                 peak_wall_force: peak,
             },
             loss_condensation: self.loss_condensation,
+            loss_conductive: self.loss_conductive,
             stuck_mass: self.stuck_mass,
         }
     }
@@ -1120,6 +1164,50 @@ mod tests {
         TableEos::new(Table::from_json(&json.to_string()).unwrap())
     }
 
+    /// A synthetic two-phase table (`e = T`, `c_v = 1`) whose `liquid_frac` requires **both**
+    /// compression *and* cooling: `clamp((ρ−2)/8)·clamp((T_thr−T)/T_thr)` with `T_thr = 3`. So hot
+    /// dense gas is vapor (`liquid_frac ≈ 0`) and only condenses once cooled below the threshold — the
+    /// **conduction-gated** deposition of the ADR-0004 amendment. Carries `k_gas` so the B-flux
+    /// conduction operator engages.
+    fn cooling_condensing_table() -> TableEos {
+        let n: usize = 8;
+        let rho_grid: Vec<f64> = (0..n)
+            .map(|i| 0.01 * 1000f64.powf(i as f64 / (n - 1) as f64))
+            .collect();
+        let t_grid: Vec<f64> = (0..n)
+            .map(|j| 0.05 * 4000f64.powf(j as f64 / (n - 1) as f64))
+            .collect();
+        let t_thr = 3.0;
+        let mut p = Vec::new();
+        let mut e = Vec::new();
+        let mut cs = Vec::new();
+        let mut kr = Vec::new();
+        let mut kp = Vec::new();
+        let mut lf = Vec::new();
+        let mut kg = Vec::new();
+        for &r in &rho_grid {
+            for &t in &t_grid {
+                p.push((GAMMA - 1.0) * r * t);
+                e.push(t);
+                cs.push((GAMMA * (GAMMA - 1.0) * t).sqrt());
+                kr.push(1e-10);
+                kp.push(1e-10);
+                let comp = ((r - 2.0) / 8.0).clamp(0.0, 1.0); // condenses only once compressed
+                let cool = ((t_thr - t) / t_thr).clamp(0.0, 1.0); // …and only once cooled
+                lf.push(comp * cool);
+                kg.push(0.05);
+            }
+        }
+        let json = serde_json::json!({
+            "rho_grid": rho_grid,
+            "T_grid": t_grid,
+            "shape": [n, n],
+            "fields": { "p": p, "e": e, "c_s": cs, "kappa_rosseland": kr,
+                        "kappa_planck": kp, "liquid_frac": lf, "k_gas": kg },
+        });
+        TableEos::new(Table::from_json(&json.to_string()).unwrap())
+    }
+
     /// With `α = 0` the wall-sticking sink is inert, so the condensing bounce reproduces the plain
     /// [`Tube::run_bounce`] exactly and no mass is removed.
     #[allow(clippy::float_cmp)] // α=0 removes nothing → exactly zero stuck mass
@@ -1177,6 +1265,60 @@ mod tests {
         assert!(
             (coarse - fine).abs() < 2e-2,
             "condensing e_eff not grid-convergent: {coarse} vs {fine}"
+        );
+    }
+
+    /// **Wall deposition is conduction-gated (B-flux gate, ADR-0004 amendment).** A hot, dense gas is
+    /// vapor (`liquid_frac ≈ 0`) until something cools it. With a cold conducting wall the gas-side
+    /// conduction operator cools the wall cell below the condensation threshold, raising `liquid_frac`
+    /// so the sink deposits mass; with no wall (the adiabatic upper bound) the cell stays hot and
+    /// nothing deposits. This is the sequencing the rung exists to demonstrate: conduction (channel 2)
+    /// *drives* deposition (channel 3). Driven by the conduction + condensation substeps directly (no
+    /// hydro) to isolate the gating.
+    #[allow(clippy::float_cmp)] // adiabatic path deposits *exactly* nothing → 0.0
+    #[test]
+    fn conduction_gates_wall_deposition() {
+        let make = |wall: Option<Solid>| {
+            let cells = 40;
+            let x: Vec<f64> = (0..=cells).map(|i| i as f64 / cells as f64).collect();
+            let rho = vec![3.0; cells]; // dense (ρ > 2): the compression factor is on
+            let vel = vec![0.0; cells];
+            let pressure = vec![(GAMMA - 1.0) * 3.0 * 5.0; cells]; // T = 5: hot ⇒ vapor (liquid_frac ≈ 0)
+            let tube = Tube::with_eos(
+                x,
+                &rho,
+                &vel,
+                &pressure,
+                cooling_condensing_table(),
+                Viscosity::VON_NEUMANN_RICHTMYER,
+            );
+            CondensingBounce::new_with_wall(tube, 1.0, wall)
+        };
+
+        // Cold conducting wall: cooling the wall cell across the threshold drives deposition.
+        let mut lossy = make(Some(Solid::new(200, 1.0, 0.05, 0.5, 20.0)));
+        for _ in 0..400 {
+            lossy.conduction_substep(1e-3);
+            lossy.condensation_substep();
+        }
+        assert!(
+            lossy.loss_conductive > 0.0,
+            "conduction must remove heat from the gas"
+        );
+        assert!(
+            lossy.stuck_mass > 0.0,
+            "cooling the wall cell below T_sat must drive wall deposition"
+        );
+
+        // Adiabatic (no wall): the cell stays hot, liquid_frac ≈ 0, nothing deposits.
+        let mut adiabatic = make(None);
+        for _ in 0..400 {
+            adiabatic.conduction_substep(1e-3);
+            adiabatic.condensation_substep();
+        }
+        assert_eq!(
+            adiabatic.stuck_mass, 0.0,
+            "no conduction ⇒ no cooling ⇒ no deposition (the dormant channel)"
         );
     }
 
