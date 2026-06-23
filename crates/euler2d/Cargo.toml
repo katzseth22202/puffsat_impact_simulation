@@ -1,0 +1,17 @@
+[package]
+name = "euler2d"
+version = "0.1.0"
+description = "2D axisymmetric Euler kernel (HLLC Godunov, ADR-0023) for the radiation-free eta_capture geometry track (ADR-0003/0008)."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dev-dependencies]
+# hydro1d is a TEST-only dependency: its exact Riemann solver is the Sod oracle and its 1D
+# Lagrangian bounce is the independent-kernel cross-check for eta_capture. The two kernels do not
+# share production code (ADR-0023).
+hydro1d = { path = "../hydro1d" }
+approx = { workspace = true }
+
+[lints]
+workspace = true
