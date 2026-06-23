@@ -31,9 +31,34 @@ trapping. The tracks are separable in their *outputs* but coupled in this one *i
 **The combined-physics cross-code at the optimum (rung F) validates this factorization** — that
 geometry and thermophysics do not cross-couple appreciably — not merely the individual kernels.
 
+## Amendment (2026-06): the `eta_capture` extraction, operationalized (flat plate)
+
+The 2D kernel (`crates/euler2d`, ADR-0023) landed and the flat-plate `eta_capture` is now extracted.
+How the lossless 2D/1D ratio above is realized in code:
+
+- **`J_wall^{2D}` = `Σ_{plate cells} p(r,t)·(n̂·ẑ)·dA`, trapezoid-integrated in time** to the same
+  `10⁻³`-of-peak-force decay cutoff as ADR-0001, with the "don't stop in a trough before a focused
+  secondary peak" guard carried forward (flat plate does not focus, but the concave follow-on will).
+  Gas past the plate edge (`r > r_plate`) is never counted — the plate cells are `r ≤ r_plate`, the
+  rest of the `z=0` boundary is transmissive (§7).
+- **The `1D, no-loss` denominator is a *confined-2D* run of the same kernel** — same cloud mass / `v`
+  / EOS, but reflecting outer `r`-wall and the cloud filling the radius (the perfectly-collimated
+  plane-wave limit). Forming the ratio from two runs of the *same* solver makes the scheme error (not
+  just the EOS error) common-mode, so it cancels — `eta_capture = J_wall^{free}/J_wall^{confined}`.
+  This avoids any per-area normalization and realizes "1D ⇒ `eta_capture = 1`" by construction.
+- **Cross-check (independent kernel):** the confined-2D `1+e_eff` reproduces the 1D `hydro1d` kernel's
+  `run_bounce` to **~5 %** (Eulerian-Godunov vs Lagrangian-AV) — the strongest single check that the
+  2D bounce physics is right, since the two solvers share no code.
+- **Result (flat, M ≈ 5, γ = 1.4):** `eta_capture` rises **0.81 → 0.92** as the footprint widens over
+  `r_foot/L = 0.5 → 2.0` (wider disks re-collimate toward the 1D ceiling 1; narrow slugs splat with
+  more radial relief). Flat is the conservative hemispherical-rebound floor (ADR-0021); shallow
+  concave can only raise it. The parametric sweep and the concave plate are the follow-on rung.
+
 ## Considered Options
 
 - **Raw-throughput `eta_capture`** (2D axial momentum ÷ incident). Rejected: double-counts the
   gas-dynamic re-expansion already present in `e_eff`, understating `f`.
 - **Monolithic 2D rad-hydro swept across the frontier.** Rejected: hundreds of coupled runs,
   impractical and unnecessary — `tau >> 1` localizes the radiation to a 1D wall problem.
+- **Per-area-normalized 2D/1D ratio.** Rejected in favor of the confined-2D denominator: a separate
+  1D-equivalent normalization would reintroduce scheme-error mismatch the same-kernel ratio cancels.

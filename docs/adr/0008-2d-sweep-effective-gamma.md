@@ -20,6 +20,20 @@ equilibrium EOS.
 radiation-free and adiabatic, with `J_wall` extracted by the same `10⁻³` force-decay cutoff as
 ADR-0001. The cost optimization is licensed by the spot-check, not assumed.
 
+## Amendment (2026-06): the effective-gamma kernel landed; spot-check still deferred
+
+The 2D kernel (`crates/euler2d`, ADR-0023) is built with the **calibrated effective-gamma ideal gas
+baked in** (`p = (γ−1)ρe`, `c = √(γ(γ−1)e)`), exactly as this ADR licenses — no per-cell equilibrium
+table lookup. The flat-plate `eta_capture` (0.81 → 0.92 over `r_foot/L = 0.5 → 2`, ADR-0003) is
+reported under this EOS. Both the free and the confined-2D denominator runs use the *identical* γ-law,
+radiation-free and adiabatic, with `J_wall` extracted by the same `10⁻³` cutoff — so the EOS error is
+common-mode by construction at this stage.
+
+**The equilibrium-EOS spot-check remains deferred to the optimum**, per this ADR: the sideways-path
+residual (2D expansion samples a different thermodynamic path than the 1D denominator) is only worth
+measuring at the operating point, and the concave plate + parametric sweep that the spot-check guards
+are themselves the follow-on rung. Nothing landed here changes that deferral.
+
 ## Considered Options
 
 - **Full equilibrium EOS across the whole 2D sweep.** Rejected as baseline: pays a large per-run cost
