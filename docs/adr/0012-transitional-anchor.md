@@ -35,3 +35,32 @@ velocity is swept densely (~5–9 km/s) around the transition rather than interp
   weakest — the one point that most needs a transport check.
 - **Interpolate `f(v)` between the well-modeled ends.** Rejected: `e_eff` may dip at the transition,
   which interpolation would miss.
+
+## Amendment (2026-06): the EOS dip is found; the radiative dip stays pending
+
+The dense sweep landed (`crates/sweep --transitional`, `analysis.py --axis v`; design §10
+"Transitional anchor"). It separates the two anticipated features by the **two pieces of physics that
+are computable now vs not**, and reports both as one decomposition:
+
+- **EOS-only curve (`run_bounce`, radiation+conduction off) — computable now, and it dips.** This is
+  the dissociation/ionization specific-heat feature of the ADR's "two distinct features" clause,
+  isolated from radiation. The ρ-mean `e_eff(v)` has a clear **interior minimum ≈ 0.57 near 11 km/s**,
+  below both the 0.74 (3.2 km/s) and 0.64 (16 km/s) endpoints — so the worst case really is the
+  transition, not an endpoint (vindicating the "located by measurement" stance and the C/B-flux
+  finding that neither endpoint is the floor). The dip velocity (~11 km/s) sits at/above the a-priori
+  ~5–9 km/s window: it bottoms where the equilibrium chemistry most actively absorbs the stagnation
+  enthalpy.
+- **Radiation-on curve (`CoupledBounce`, interim opacity, `wall = None`) — the comparison, not the
+  answer at `τ~1`.** It sits only ≈ 0.004 below the EOS curve (the interim-opacity band). But the
+  interim Kramers opacity (`κ_R ∝ T⁻³·⁵`, B5c-2) is **structurally wrong at the transition** — it
+  yields `τ ≫ 1` where reality is `τ ~ 1` — so it does **not** resolve the separate `τ~1` radiative-
+  leak dip this ADR predicted. That dip is gated on the **real per-regime opacity table** (the deferred
+  B-flux sibling), where `τ` is computed from the real tables (as this ADR requires) and, if `τ~1`
+  there, the transport-level check (Quokka M1 / Sₙ) is deployed.
+- **Decision on sequencing.** The EOS-only floor (≈ 0.57) is the trustworthy worst-case-so-far and a
+  lower bound on `f`'s EOS side; the radiative leak can only push it deeper. So the real-opacity rung
+  is a **refinement of a known floor, not a gate** — if ≈ 0.57 already clears a useful `f`, the radiative
+  dip is a quantification exercise, not a blocker.
+- **Package seam.** The sweep starts at ~5 km/s: below it the high-v `eos_water` dissociation chemistry
+  degrades and the low-v CoolProp/two-phase package (Rung C) takes over. The transitional sweep is the
+  high-v package run down to that ~5 km/s validity seam.
