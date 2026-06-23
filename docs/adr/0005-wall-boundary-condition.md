@@ -32,6 +32,22 @@ not modeled (ADR-0020), but the conductive-to-plate channel (1D output) is its w
 to a material slice of `(1−f)` at any anchor, a bounding turbulent-conduction correction is applied
 there before `f` is quoted.
 
+**Amendment (Rung B, 2026-06): gas-side thermal resistance — the conductive coupling's missing
+half.** Coupling this semi-infinite solid to the *inviscid* gas (Euler + artificial viscosity,
+ADR-0022) at the 16 km/s anchor over-drains the near-wall gas. The kernel has no physical gas-side
+conduction, so no thermal boundary layer forms in the gas and the interface flux is limited *only* by
+the solid's effusivity. The (physically-correct) first-step semi-infinite flux integral
+`effusivity·ΔT·2√(Δt/π)` then exceeds the thin wall *gas* cell's heat content, zeroing it and
+collapsing the bounce — a real physics/numerics gap, not a tuning issue. A faithful conductive
+channel therefore needs a **gas-side conduction operator** (a parabolic diffusion term on the gas
+energy + flux-continuous interface coupling), with its own coupled-conduction analytic acceptance
+test. **Decision (2026-06): defer the conductive channel for the high-v `e_eff` pass** — the sweep
+runs `wall = None` (`loss_conductive = 0`). Justified: `e_eff` is loss-insensitive (0.63 with no
+conduction vs 0.64 lossless; ≤1.6 % over a 100× opacity swing — ADR-0007 amendment), so the
+deliverable is unaffected. The fix is **bundled with the wall-flux/survivability rung** (design §10
+"B-flux") alongside the real per-regime opacity table, since channels 1a + 2 are the same plate heat
+load (ADR-0010/0011).
+
 ## Considered Options
 
 - **Isothermal Dirichlet wall.** Rejected: imposes the interface temperature and makes the conductive
