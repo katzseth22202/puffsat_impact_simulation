@@ -14,6 +14,7 @@ from itertools import pairwise
 from typing import cast
 
 import numpy as np
+import pytest
 
 from puffsat import tables
 
@@ -71,6 +72,24 @@ def test_opacity_scales_as_kramers() -> None:
     np.testing.assert_allclose(kappa_r[1, 0], 2.0 * kappa_r[0, 0], rtol=1e-12)
     # T^-3.5 at fixed rho: doubling T scales kappa_R by 2^-3.5.
     np.testing.assert_allclose(kappa_r[0, 1], kappa_r[0, 0] * 2.0**-3.5, rtol=1e-12)
+
+
+def test_lowv_table_has_liquid_frac_and_loader_contract() -> None:
+    """The Rung C low-v table (CoolProp) carries a `liquid_frac` field; the five log-fields stay
+    positive and `liquid_frac` is in `[0,1]`. (Skipped without the `sci` extra / CoolProp.)"""
+    pytest.importorskip("CoolProp")
+    # Small grid for speed (CoolProp is a per-node query).
+    table = tables.build_table_lowv(rho_range=(0.05, 50.0), n_rho=5, t_range=(300.0, 1700.0), n_t=8)
+
+    n_rho, n_t = cast("list[int]", table["shape"])
+    fields = cast("dict[str, list[float]]", table["fields"])
+    assert set(fields) == {"p", "e", "c_s", "kappa_rosseland", "kappa_planck", "liquid_frac"}
+    for name in ("p", "e", "c_s", "kappa_rosseland", "kappa_planck"):
+        assert len(fields[name]) == n_rho * n_t, name
+        assert all(v > 0.0 for v in fields[name]), name
+    lf = fields["liquid_frac"]
+    assert len(lf) == n_rho * n_t
+    assert all(0.0 <= v <= 1.0 for v in lf)
 
 
 def test_kappa_scale_rescales_opacity_only() -> None:

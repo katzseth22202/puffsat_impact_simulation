@@ -3,7 +3,7 @@
 
 PY := uv run python
 
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv
 
 all: smoke
 
@@ -50,6 +50,13 @@ tables: data/tables/water.json
 data/tables/water.json: python/puffsat/eos_water.py python/puffsat/tables.py
 	@mkdir -p data/tables
 	PYTHONPATH=python $(PY) -m puffsat.tables
+
+## tables-lowv: generate the Rung C cool-gas two-phase table (CoolProp) -> data/tables/water_lowv.json
+tables-lowv: data/tables/water_lowv.json
+
+data/tables/water_lowv.json: python/puffsat/eos_cool.py python/puffsat/tables.py
+	@mkdir -p data/tables
+	PYTHONPATH=python uv run --extra sci python -m puffsat.tables --lowv
 
 ## sweep: run the 16 km/s e_eff(rho) sweep (rung B) -> data/results/sweep.jsonl; depends on tables
 sweep: data/results/sweep.jsonl

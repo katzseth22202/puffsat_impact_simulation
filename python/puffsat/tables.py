@@ -46,6 +46,16 @@ TAU_BAND = (1.0e2, 1.0e5)
 
 DEFAULT_TABLE_PATH = Path("data/tables/water.json")
 
+# --- Low-v (Rung C) cool-gas two-phase table: real-fluid water across the saturation dome
+#     (CoolProp), a generous (rho, T) box (log-spaced packs more points at low T, near the dome edge
+#     T_crit = 647 K). Radiation is off at 3.2 km/s (design §3), so the opacities are transparent.
+RHO_RANGE_LOWV = (0.01, 100.0)  # kg/m^3 — re-expanded vapor up through compressed/condensing gas
+N_RHO_LOWV = 48
+T_RANGE_LOWV = (280.0, 1800.0)  # K — cold vapor through the ~1700 K stagnation (supercritical top)
+N_T_LOWV = 72
+KAPPA_TRANSPARENT = 1.0e-10  # m^2/kg — radiation off at low-v; kept positive for the loader
+DEFAULT_TABLE_PATH_LOWV = Path("data/tables/water_lowv.json")
+
 
 def opacity_grid(rho_grid: Vec, t_grid: Vec, kappa_scale: float = 1.0) -> tuple[Vec, Vec]:
     """Bracketing `(kappa_R, kappa_P)` [m^2/kg] on the `(rho, T)` grid, shaped `(n_rho, n_T)`.
@@ -158,25 +168,89 @@ def build_table(
     }
 
 
+def build_table_lowv(
+    rho_range: tuple[float, float] = RHO_RANGE_LOWV,
+    n_rho: int = N_RHO_LOWV,
+    t_range: tuple[float, float] = T_RANGE_LOWV,
+    n_t: int = N_T_LOWV,
+) -> dict[str, object]:
+    """Build the low-v (Rung C) ADR-0007 table from the CoolProp two-phase water EOS.
+
+    Same JSON shape as `build_table` plus a `liquid_frac` field (the condensed mass fraction the
+    wall-sticking sink reads, C3). Opacities are transparent (radiation off at 3.2 km/s, design §3).
+    CoolProp is imported lazily so this module still imports without the `sci` extra (the high-v
+    `build_table` path is CoolProp-free)."""
+    from puffsat import eos_cool as ec
+
+    rho_grid = np.geomspace(rho_range[0], rho_range[1], n_rho)
+    t_grid = np.geomspace(t_range[0], t_range[1], n_t)
+
+    p, e, cs, liquid_frac = ec.eos_grid_lowv(rho_grid, t_grid)
+    transparent = [KAPPA_TRANSPARENT] * (n_rho * n_t)
+
+    return {
+        "rho_grid": [float(x) for x in rho_grid],
+        "T_grid": [float(x) for x in t_grid],
+        "shape": [n_rho, n_t],
+        "fields": {
+            "p": _flatten(p),
+            "e": _flatten(e),
+            "c_s": _flatten(cs),
+            "kappa_rosseland": list(transparent),
+            "kappa_planck": list(transparent),
+            "liquid_frac": _flatten(liquid_frac),
+        },
+        "provenance": {
+            "schema": "ADR-0007",
+            "generated_by": "puffsat.tables.build_table_lowv",
+            "grid": {
+                "rho_range": list(rho_range),
+                "n_rho": n_rho,
+                "T_range": list(t_range),
+                "n_T": n_t,
+                "spacing": "geometric (log-spaced) in both axes",
+                "units": "rho kg/m^3, T K, p Pa, e J/kg, c_s m/s, liquid_frac [0,1]",
+            },
+            "eos": {
+                "model": "real-fluid equilibrium water across the dome (CoolProp/IAPWS95)",
+                "two_phase": "p -> p_sat(T); latent heat folded into e (bulk channel, ADR-0004)",
+                "liquid_frac": "condensed mass fraction for the C3 wall-sticking sink (channel 3)",
+                "c_s": "sqrt((dp/drho)_s) via a (D,S) finite difference (two-phase-safe)",
+            },
+            "opacity": {
+                "status": "TRANSPARENT placeholder — radiation is off at 3.2 km/s (design §3); "
+                "kept positive only for the loader",
+            },
+        },
+    }
+
+
 def main() -> None:
-    """Generate the water table (Makefile `tables` target). `--out PATH` and `--kappa-scale S`
-    let the B5d-3 insensitivity scan emit opacity-scaled variants."""
+    """Generate the water table (Makefile `tables`/`tables-lowv`). `--lowv` builds the Rung C
+    cool-gas two-phase table; `--out PATH`/`--kappa-scale S` let the B5d-3 scan emit variants."""
     parser = argparse.ArgumentParser(description="Generate the ADR-0007 water EOS/opacity table.")
-    parser.add_argument("--out", type=Path, default=DEFAULT_TABLE_PATH, help="output JSON path")
+    parser.add_argument("--out", type=Path, default=None, help="output JSON path")
     parser.add_argument(
         "--kappa-scale", type=float, default=1.0, help="multiply the bracketing opacity by this"
     )
+    parser.add_argument(
+        "--lowv", action="store_true", help="build the low-v (Rung C) cool-gas two-phase table"
+    )
     args = parser.parse_args()
 
-    table = build_table(kappa_scale=args.kappa_scale)
-    out: Path = args.out
+    if args.lowv:
+        table = build_table_lowv()
+        out: Path = args.out or DEFAULT_TABLE_PATH_LOWV
+        label = f"cool-gas two-phase table -> {out} ({N_RHO_LOWV}x{N_T_LOWV} nodes)"
+    else:
+        table = build_table(kappa_scale=args.kappa_scale)
+        out = args.out or DEFAULT_TABLE_PATH
+        label = f"EOS/opacity table -> {out} ({N_RHO}x{N_T} nodes, kappa_scale={args.kappa_scale})"
+
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w") as fh:
         json.dump(table, fh)
-    print(
-        f"python: wrote water EOS/opacity table -> {out} "
-        f"({N_RHO}x{N_T} nodes, kappa_scale={args.kappa_scale})"
-    )
+    print(f"python: wrote water {label}")
 
 
 if __name__ == "__main__":
