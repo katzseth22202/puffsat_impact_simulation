@@ -28,6 +28,7 @@ use std::fs;
 use std::io::Write as _;
 use std::path::Path;
 
+use euler2d::bounce::{PlateShape, SlugConfig, eta_capture, run_slug_bounce};
 use hydro1d::conduction::Solid;
 use hydro1d::eos::TableEos;
 use hydro1d::kernel::{CondensingBounce, CoupledBounce, Tube, Viscosity};
@@ -42,6 +43,7 @@ const TABLE_PATH_LOWV: &str = "data/tables/water_lowv.json";
 const RESULT_PATH_LOWV: &str = "data/results/sweep_lowv.jsonl";
 const RESULT_PATH_TRANS_EOS: &str = "data/results/sweep_transitional_eos.jsonl";
 const RESULT_PATH_TRANS_RAD: &str = "data/results/sweep_transitional_rad.jsonl";
+const RESULT_PATH_GEOMETRY: &str = "data/results/sweep_geometry.jsonl";
 
 /// The production `ρ_impact` grid [kg/m³] (design §3-4): the impact-density axis of `e_eff(ρ)`.
 const RHO_GRID: [f64; 4] = [0.16, 0.32, 0.48, 0.64];
@@ -307,9 +309,143 @@ fn run_sweep_transitional(
         .unzip()
 }
 
+// ---- Geometry sweep (Rung D follow-on): eta_capture(curvature × L/D × r_foot/R) -----------------
+//
+// The 2D `eta_capture` track (ADR-0003), driven by the radiation-free axisymmetric Euler kernel
+// (`euler2d`, ADR-0023). `eta_capture` is scale-invariant (Euler + geometry, no intrinsic length),
+// so the footprint is fixed at `r_foot = 1` WLOG and the plate radius follows from `r_foot/R`; the
+// cloud length follows from `L/D = L/(2·r_foot)`. Each case is sized to its own cloud (so a fixed
+// cell count gives comparable resolution) and forms `eta_capture = (J_wall/p_in)_free,dish /
+// (J_wall/p_in)_confined,planewave`, the same-kernel ratio that cancels the common re-expansion.
+
+/// Plate curvature axis: flat (`d/D = 0`) + the two shallow-concave depths (ADR-0021).
+const GEO_D_OVER_D: [f64; 3] = [0.0, 0.10, 0.15];
+/// Cloud aspect `L/D` (disk → roughly unity); long cylinders are survivability-driven and out of
+/// this first sweep's scope.
+const GEO_L_OVER_D: [f64; 3] = [0.3, 0.6, 1.0];
+/// Footprint coverage `r_foot/R` (design §sweep 0.3–1.0; `R` fixed, the shared knob).
+const GEO_RFOOT_OVER_R: [f64; 3] = [0.3, 0.5, 0.7];
+/// Incident-Mach anchors. `eta_capture` is geometry-dominated and only weakly Mach-dependent, so two
+/// anchors bracket that dependence; D7 pairs them with the 1D `e_eff` velocity anchors.
+const GEO_MACH: [f64; 2] = [5.0, 10.0];
+
+/// Fixed resolution for the geometry sweep (cells per case; the domain is sized per case so this is
+/// a comparable resolution across cases). Coarse for wall-time; the `diag_*` tables refine.
+#[derive(Debug, Clone, Copy)]
+struct GeoConfig {
+    gamma: f64,
+    nr: usize,
+    nz: usize,
+}
+
+impl GeoConfig {
+    fn production() -> Self {
+        Self {
+            gamma: 1.4,
+            nr: 56,
+            nz: 40,
+        }
+    }
+}
+
+/// One geometry-sweep row: the case (curvature, shape, footprint, Mach) and its `eta_capture` with
+/// the two restitution ratios it is formed from.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+struct GeoRecord {
+    /// Plate depth-to-diameter ratio `d/D` (0 = flat).
+    d_over_d: f64,
+    /// Cloud aspect `L/D`.
+    l_over_d: f64,
+    /// Footprint coverage `r_foot/R`.
+    r_foot_over_r: f64,
+    /// Incident Mach number.
+    mach: f64,
+    /// `eta_capture = (J_wall/p_in)_free / (J_wall/p_in)_confined` (ADR-0003).
+    eta_capture: f64,
+    /// `J_wall/p_in` of the free (finite-cloud, dished) run.
+    restitution_free: f64,
+    /// `J_wall/p_in` of the confined (plane-wave) denominator.
+    restitution_confined: f64,
+    /// Peak axial plate force of the free run (the survivability proxy, reported not gated here).
+    peak_force: f64,
+}
+
+/// Run one `eta_capture` case: a free dished bounce over its confined plane-wave denominator. The
+/// domain is sized to the cloud (`r_foot = 1` WLOG); `r_plate = r_foot/(r_foot/R)`, `L = (L/D)·2`.
+fn run_eta_case(
+    d_over_d: f64,
+    l_over_d: f64,
+    r_foot_over_r: f64,
+    mach: f64,
+    cfg: &GeoConfig,
+) -> GeoRecord {
+    let r_foot = 1.0;
+    let r_plate = r_foot / r_foot_over_r;
+    let length = l_over_d * 2.0 * r_foot;
+    let r_max = r_plate * 1.4; // room past the rim for gas to escape (§7)
+    let depth = d_over_d * 2.0 * r_plate;
+    let z_max = depth + 2.0 * length + 1.5; // dish + cloud + rebound headroom
+    let free = run_slug_bounce(&SlugConfig {
+        gamma: cfg.gamma,
+        mach,
+        r_foot,
+        length,
+        r_plate,
+        r_max,
+        z_max,
+        nr: cfg.nr,
+        nz: cfg.nz,
+        confined: false,
+        shape: PlateShape::Dish { d_over_d },
+    });
+    // The plane-wave denominator: same column (L, ρ, Mach), cloud fills the radius, flat plate.
+    let confined = run_slug_bounce(&SlugConfig {
+        gamma: cfg.gamma,
+        mach,
+        r_foot: r_max,
+        length,
+        r_plate: r_max,
+        r_max,
+        z_max,
+        nr: 8,
+        nz: cfg.nz,
+        confined: true,
+        shape: PlateShape::FlatGridAligned,
+    });
+    GeoRecord {
+        d_over_d,
+        l_over_d,
+        r_foot_over_r,
+        mach,
+        eta_capture: eta_capture(&free, &confined),
+        restitution_free: free.restitution_ratio(),
+        restitution_confined: confined.restitution_ratio(),
+        peak_force: free.peak_force,
+    }
+}
+
+/// Sweep the full (curvature × `L/D` × `r_foot/R` × Mach) grid in parallel (rayon, ADR-0002).
+fn run_geometry_sweep(cfg: &GeoConfig) -> Vec<GeoRecord> {
+    let cases: Vec<(f64, f64, f64, f64)> = GEO_MACH
+        .iter()
+        .flat_map(|&m| {
+            GEO_RFOOT_OVER_R.iter().flat_map(move |&rf| {
+                GEO_L_OVER_D
+                    .iter()
+                    .flat_map(move |&ld| GEO_D_OVER_D.iter().map(move |&dd| (dd, ld, rf, m)))
+            })
+        })
+        .collect();
+    cases
+        .par_iter()
+        .map(|&(dd, ld, rf, m)| run_eta_case(dd, ld, rf, m, cfg))
+        .collect()
+}
+
 /// Write `records` as JSONL (one object per line, ADR-0019), creating the parent dir and replacing
-/// the file. Shared by the transitional dispatch, which emits two files in one invocation.
-fn write_rows(path: &str, records: &[Record]) -> Result<(), Box<dyn std::error::Error>> {
+/// the file. Generic over the row type so the transitional (`Record`) and geometry (`GeoRecord`)
+/// sweeps share it.
+fn write_rows<T: Serialize>(path: &str, records: &[T]) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(parent) = Path::new(path).parent() {
         fs::create_dir_all(parent)?;
     }
@@ -348,6 +484,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "rust: wrote {} eos + {} rad rows -> {RESULT_PATH_TRANS_EOS} , {RESULT_PATH_TRANS_RAD}",
             eos.len(),
             rad.len(),
+        );
+        return Ok(());
+    }
+
+    // Geometry sweep (Rung D follow-on): eta_capture(curvature × L/D × r_foot/R) from the euler2d
+    // kernel; no EOS/opacity table needed (radiation-free, effective-γ, ADR-0008).
+    if args.iter().any(|a| a == "--geometry") {
+        let rows = run_geometry_sweep(&GeoConfig::production());
+        write_rows(RESULT_PATH_GEOMETRY, &rows)?;
+        for r in &rows {
+            println!(
+                "rust: d/D={:.2} L/D={:.2} r_foot/R={:.2} M={:.0} -> eta_capture={:.4} (free {:.4} / confined {:.4}, peak F={:.3e})",
+                r.d_over_d,
+                r.l_over_d,
+                r.r_foot_over_r,
+                r.mach,
+                r.eta_capture,
+                r.restitution_free,
+                r.restitution_confined,
+                r.peak_force,
+            );
+        }
+        println!(
+            "rust: wrote {} geometry rows -> {RESULT_PATH_GEOMETRY}",
+            rows.len()
         );
         return Ok(());
     }
@@ -394,7 +555,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Config, LowvConfig, Record, run_one, run_sweep, run_sweep_lowv, run_sweep_transitional,
+        Config, GeoConfig, GeoRecord, LowvConfig, Record, run_eta_case, run_one, run_sweep,
+        run_sweep_lowv, run_sweep_transitional,
     };
     use hydro1d::radiation::{Limiter, RadConstants};
     use tables::Table;
@@ -708,5 +870,65 @@ mod tests {
         for (x, y) in a.iter().zip(b.iter()) {
             assert_eq!(x.e_eff.to_bits(), y.e_eff.to_bits());
         }
+    }
+
+    /// A tiny geometry config — coarse enough that `eta_capture` cases run fast in a unit test.
+    fn tiny_geo() -> GeoConfig {
+        GeoConfig {
+            gamma: GAMMA,
+            nr: 24,
+            nz: 18,
+        }
+    }
+
+    /// A geometry case yields a well-formed positive `eta_capture` from two restitution ratios, and
+    /// the case parameters pass through into the row. The upper bound is generous (not 1): a concave
+    /// plate can *over-collimate* — bend the rebound to be more axial than the flat plane-wave limit
+    /// — so `eta_capture` legitimately exceeds 1 for the best short-disk/deep-dish cases.
+    #[test]
+    fn geometry_case_is_well_formed() {
+        let r = run_eta_case(0.10, 0.6, 0.5, 5.0, &tiny_geo());
+        assert!((r.d_over_d - 0.10).abs() < 1e-12 && (r.l_over_d - 0.6).abs() < 1e-12);
+        assert!((r.r_foot_over_r - 0.5).abs() < 1e-12 && (r.mach - 5.0).abs() < 1e-12);
+        assert!(
+            r.eta_capture > 0.0 && r.eta_capture < 1.5,
+            "eta_capture out of range: {}",
+            r.eta_capture
+        );
+        assert!(r.restitution_free > 0.0 && r.restitution_confined > 0.0);
+    }
+
+    /// The curvature gain survives into the sweep driver: a shallow-concave plate captures more
+    /// axial momentum than the flat plate at the same cloud — `eta_capture(0.15) > eta_capture(0)`.
+    #[test]
+    fn geometry_concave_beats_flat() {
+        let cfg = tiny_geo();
+        let flat = run_eta_case(0.0, 0.6, 0.5, 5.0, &cfg).eta_capture;
+        let concave = run_eta_case(0.15, 0.6, 0.5, 5.0, &cfg).eta_capture;
+        assert!(
+            concave > flat,
+            "expected concave to beat flat: flat {flat:.4}, concave {concave:.4}"
+        );
+    }
+
+    /// A `GeoRecord` round-trips through the JSONL boundary (ADR-0019): the case parameters (round
+    /// numbers) exactly, the computed `eta_capture` and ratios to round-off (`serde_json`'s default
+    /// float parse can drift a ULP — the boundary is plaintext consumed as f64 by Python, so that is
+    /// the contract, not bit-equality).
+    #[test]
+    #[allow(clippy::float_cmp)] // exact compares on the verbatim round-number case inputs
+    fn geo_record_jsonl_roundtrip() {
+        let r = run_eta_case(0.10, 0.6, 0.5, 5.0, &tiny_geo());
+        let line = serde_json::to_string(&r).unwrap();
+        let back: GeoRecord = serde_json::from_str(&line).unwrap();
+        assert_eq!(back.d_over_d, r.d_over_d);
+        assert_eq!(back.l_over_d, r.l_over_d);
+        assert_eq!(back.r_foot_over_r, r.r_foot_over_r);
+        assert_eq!(back.mach, r.mach);
+        let close = |a: f64, b: f64| (a - b).abs() <= 1e-12 * a.abs().max(1.0);
+        assert!(close(back.eta_capture, r.eta_capture));
+        assert!(close(back.restitution_free, r.restitution_free));
+        assert!(close(back.restitution_confined, r.restitution_confined));
+        assert!(close(back.peak_force, r.peak_force));
     }
 }

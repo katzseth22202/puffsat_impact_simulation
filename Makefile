@@ -3,7 +3,7 @@
 
 PY := uv run python
 
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry
 
 all: smoke
 
@@ -99,6 +99,21 @@ analysis-transitional: data/results/frontier_transitional.csv
 
 data/results/frontier_transitional.csv: data/results/sweep_transitional_eos.jsonl data/results/sweep_transitional_rad.jsonl python/puffsat/analysis.py
 	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis --axis v
+
+## sweep-geometry: 2D eta_capture(curvature x L/D x r_foot/R) sweep (Rung D follow-on) ->
+## data/results/sweep_geometry.jsonl. Radiation-free (euler2d, effective-gamma), so no table needed.
+sweep-geometry: data/results/sweep_geometry.jsonl
+
+data/results/sweep_geometry.jsonl: $(wildcard crates/sweep/src/*.rs) $(wildcard crates/euler2d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --geometry
+
+## analysis-geometry: f = eta_capture*(1+e_eff)/2 reconciliation + eta/f figures (Rung D follow-on)
+## -> data/results/frontier_geometry.csv; depends on sweep-geometry.
+analysis-geometry: data/results/frontier_geometry.csv
+
+data/results/frontier_geometry.csv: data/results/sweep_geometry.jsonl python/puffsat/analysis.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis --axis geometry
 
 ## sensitivity: opacity-insensitivity scan (rung B, B5d-3) — sweep at 0.1x/1x/10x opacity, show
 ## e_eff barely moves. Builds the release sweep first; writes data/results/opacity_scan/.
