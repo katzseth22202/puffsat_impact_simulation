@@ -13,6 +13,7 @@
 //! (the plate sits at `z = 0`, `iz = 0`), `r` increasing with `ir` (the axis at `r = 0`, `ir = 0`).
 //! The transverse velocity is passively advected (see [`riemann`]).
 
+use crate::plate::PlateProfile;
 use crate::riemann::{DirCons, DirFlux, DirState, hllc_flux, phys_flux};
 use crate::state::{Cons, Prim};
 
@@ -50,6 +51,10 @@ pub struct Grid2D {
     /// and is transmissive beyond (gas past the plate edge escapes — §7). `None` ⇒ use `bc_zlo`
     /// uniformly.
     plate_radius: Option<f64>,
+    /// Shallow-concave (or inclined) plate imposed as a ghost-cell immersed boundary (true-normal
+    /// mirror, ADR-0023 amendment). When `Some`, solid cells under the surface are refilled before
+    /// each sweep and the wall impulse is taken at the surface cell. `None` ⇒ the grid-aligned path.
+    plate_profile: Option<PlateProfile>,
     /// Conserved cells, `idx(iz, ir) = iz·nr + ir`.
     u: Vec<Cons>,
     /// `z = 0` (plate) and `z = z_max` boundaries.
@@ -80,6 +85,7 @@ impl Grid2D {
             cfl: 0.4,
             axisymmetric: false,
             plate_radius: None,
+            plate_profile: None,
             u: vec![placeholder; nz * nr],
             bc_zlo: Bc::Transmissive,
             bc_zhi: Bc::Transmissive,
@@ -101,23 +107,63 @@ impl Grid2D {
         self.plate_radius = r_plate;
     }
 
+    /// Impose a curved/inclined reflecting plate as a ghost-cell immersed boundary (ADR-0023
+    /// amendment): solid cells under the surface are refilled by mirroring the adjacent fluid across
+    /// the true local normal before each sweep, and the axial wall impulse is taken at the surface
+    /// cell. `None` restores the grid-aligned path. The `z`-lo boundary should be transmissive (the
+    /// immersed surface, not the grid edge, is the wall).
+    pub fn set_plate_profile(&mut self, profile: Option<PlateProfile>) {
+        self.plate_profile = profile;
+    }
+
     /// Radial coordinate of cell `ir`'s center.
     #[inline]
     fn r_center(&self, ir: usize) -> f64 {
         (ir as f64 + 0.5) * self.dr
     }
 
-    /// Net axial force on the plate `= Σ_{r ≤ r_plate} p(z=0, r)·dA` (flat plate, `n̂·ẑ = 1`; the
-    /// `2π` of the annular area `dA = 2π r dr` is dropped — it cancels in the `J_wall/p_in`
-    /// restitution ratio `eta_capture` uses). The wall pressure is taken from the cell adjacent to
-    /// the plate (`iz = 0`).
+    /// Axial coordinate of cell `iz`'s center.
+    #[inline]
+    fn z_center(&self, iz: usize) -> f64 {
+        (iz as f64 + 0.5) * self.dz
+    }
+
+    /// Whether cell `(iz, ir)` lies inside an immersed plate (always false without a profile).
+    #[must_use]
+    pub fn is_solid(&self, iz: usize, ir: usize) -> bool {
+        self.plate_profile
+            .is_some_and(|p| p.is_solid(self.z_center(iz), self.r_center(ir)))
+    }
+
+    /// Net **axial** force on the plate `= ∫ p (n̂·ẑ) dA`. For a surface `z = z_s(r)` the tilt
+    /// cancels — `(n̂·ẑ)·dA = (1/√(1+s²))·(2π r √(1+s²) dr) = 2π r dr`, the projected annulus — so the
+    /// axial force is `Σ p(surface, r)·r·dr` whatever the slope, with the common `2π` dropped (it
+    /// cancels in the `J_wall/p_in` restitution ratio `eta_capture` uses). With an immersed
+    /// [`PlateProfile`] the pressure is taken at the lowest fluid cell in each column (the surface
+    /// cell); otherwise at the grid-aligned plate (`iz = 0`, `r ≤ r_plate`).
     #[must_use]
     pub fn plate_force(&self) -> f64 {
-        let rp = self.plate_radius.unwrap_or(f64::INFINITY);
-        (0..self.nr)
-            .filter(|&ir| self.r_center(ir) <= rp)
-            .map(|ir| self.prim(0, ir).p * self.r_center(ir) * self.dr)
-            .sum()
+        if let Some(profile) = self.plate_profile {
+            (0..self.nr)
+                .filter(|&ir| profile.covers(self.r_center(ir)))
+                .filter_map(|ir| {
+                    self.surface_cell(ir)
+                        .map(|iz| self.prim(iz, ir).p * self.r_center(ir) * self.dr)
+                })
+                .sum()
+        } else {
+            let rp = self.plate_radius.unwrap_or(f64::INFINITY);
+            (0..self.nr)
+                .filter(|&ir| self.r_center(ir) <= rp)
+                .map(|ir| self.prim(0, ir).p * self.r_center(ir) * self.dr)
+                .sum()
+        }
+    }
+
+    /// The lowest fluid cell in column `ir` — the cell whose pressure acts on the immersed surface —
+    /// or `None` if the entire column is solid.
+    fn surface_cell(&self, ir: usize) -> Option<usize> {
+        (0..self.nz).find(|&iz| !self.is_solid(iz, ir))
     }
 
     /// Total axial momentum `Σ ρu_z dV` (with the common `2π` dropped, as in [`Self::plate_force`]).
@@ -172,22 +218,84 @@ impl Grid2D {
     #[must_use]
     pub fn stable_dt(&self) -> f64 {
         let mut inv = 0.0_f64;
-        for &c in &self.u {
-            let w = Prim::from_cons(c, self.gamma);
-            let cs = w.sound_speed(self.gamma);
-            inv = inv
-                .max((w.uz.abs() + cs) / self.dz)
-                .max((w.ur.abs() + cs) / self.dr);
+        for iz in 0..self.nz {
+            for ir in 0..self.nr {
+                // Solid (under-plate) cells hold mirror/garbage values between sweeps; they do not
+                // constrain the physical time step.
+                if self.is_solid(iz, ir) {
+                    continue;
+                }
+                let w = self.prim(iz, ir);
+                let cs = w.sound_speed(self.gamma);
+                inv = inv
+                    .max((w.uz.abs() + cs) / self.dz)
+                    .max((w.ur.abs() + cs) / self.dr);
+            }
         }
         self.cfl / inv
     }
 
     /// Advance one step of size `dt` by Strang splitting `Z(dt/2) · R(dt) · Z(dt/2)` (second order
-    /// in time when each sweep is the second-order MUSCL-Hancock solve).
+    /// in time when each sweep is the second-order MUSCL-Hancock solve). With an immersed
+    /// [`PlateProfile`] the reflecting ghost values are re-imposed before each sub-sweep; without
+    /// one [`Self::apply_immersed_bc`] is a no-op, so the verification suite is untouched.
     pub fn step(&mut self, dt: f64) {
+        self.apply_immersed_bc();
         self.sweep(Axis::Z, 0.5 * dt);
+        self.apply_immersed_bc();
         self.sweep(Axis::R, dt);
+        self.apply_immersed_bc();
         self.sweep(Axis::Z, 0.5 * dt);
+    }
+
+    /// Refill solid cells under an immersed plate surface by mirroring the adjacent fluid across the
+    /// true local normal — the ghost-cell immersed boundary (ADR-0023 amendment). For each solid
+    /// cell: reflect its center across the surface to an image point in the fluid, sample the fluid
+    /// state there (nearest fluid cell), copy `ρ` and `p`, and reverse the wall-normal velocity
+    /// component (`u → u − 2(u·n̂)n̂`). No-op when no profile is set.
+    // n_z/n_r are the two components of one normal vector — intrinsically similar names.
+    #[allow(clippy::similar_names)]
+    fn apply_immersed_bc(&mut self) {
+        let Some(profile) = self.plate_profile else {
+            return;
+        };
+        for iz in 0..self.nz {
+            for ir in 0..self.nr {
+                let z = self.z_center(iz);
+                let r = self.r_center(ir);
+                if !profile.is_solid(z, r) {
+                    continue;
+                }
+                let dist = profile.signed_distance(z, r); // < 0 inside the solid
+                let (n_z, n_r) = profile.normal(r);
+                // Image point = the cell center reflected across the surface (into the fluid).
+                let z_img = z - 2.0 * dist * n_z;
+                let r_img = (r - 2.0 * dist * n_r).max(0.0);
+                let src = self.sample_fluid(z_img, r_img, profile);
+                // Mirror: reverse the wall-normal velocity component, leaving ρ and p.
+                let u_n = src.uz * n_z + src.ur * n_r;
+                let mirrored = Prim::new(
+                    src.rho,
+                    src.uz - 2.0 * u_n * n_z,
+                    src.ur - 2.0 * u_n * n_r,
+                    src.p,
+                );
+                let k = self.idx(iz, ir);
+                self.u[k] = Cons::from_prim(mirrored, self.gamma);
+            }
+        }
+    }
+
+    /// Sample the fluid primitive nearest the image point `(z, r)` for the immersed-boundary mirror.
+    /// The image lies in the fluid by construction; should rounding land on a solid cell (a near-rim
+    /// corner) march up in `z` to the first fluid cell.
+    fn sample_fluid(&self, z: f64, r: f64, profile: PlateProfile) -> Prim {
+        let ir = nearest_index(r, self.dr, self.nr);
+        let mut iz = nearest_index(z, self.dz, self.nz);
+        while iz + 1 < self.nz && profile.is_solid(self.z_center(iz), self.r_center(ir)) {
+            iz += 1;
+        }
+        self.prim(iz, ir)
     }
 
     /// Advance to `t_end`, clamping the final step to land exactly on it. Returns the step count.
@@ -318,6 +426,16 @@ fn floored(c: Cons, gamma: f64) -> Cons {
     } else {
         Cons::from_prim(Prim::new(RHO_FLOOR, 0.0, 0.0, P_FLOOR), gamma)
     }
+}
+
+/// Index of the cell whose center is nearest coordinate `x` along an axis of spacing `dx` with `n`
+/// cells, clamped to `[0, n−1]`.
+fn nearest_index(x: f64, dx: f64, n: usize) -> usize {
+    let f = (x / dx - 0.5).round().max(0.0);
+    // SAFE: `f` is clamped to ≥ 0 above and to ≤ n−1 below; no truncation or sign loss.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let i = f as usize;
+    i.min(n - 1)
 }
 
 /// Map a full conserved cell to the directional conserved vector for a sweep axis (reorder the

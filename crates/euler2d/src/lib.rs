@@ -14,5 +14,6 @@
 
 pub mod bounce;
 pub mod kernel;
+pub mod plate;
 pub mod riemann;
 pub mod state;
