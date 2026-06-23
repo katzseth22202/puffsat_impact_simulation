@@ -173,11 +173,14 @@ def build_table_lowv(
     n_rho: int = N_RHO_LOWV,
     t_range: tuple[float, float] = T_RANGE_LOWV,
     n_t: int = N_T_LOWV,
+    k_gas_scale: float = 1.0,
 ) -> dict[str, object]:
-    """Build the low-v (Rung C) ADR-0007 table from the CoolProp two-phase water EOS.
+    """Build the low-v (Rung C / B-flux) ADR-0007 table from the CoolProp two-phase water EOS.
 
     Same JSON shape as `build_table` plus a `liquid_frac` field (the condensed mass fraction the
-    wall-sticking sink reads, C3). Opacities are transparent (radiation off at 3.2 km/s, design §3).
+    wall-sticking sink reads, C3) and a `k_gas` field (the gas thermal conductivity the B-flux
+    conduction operator reads, ADR-0005). `k_gas_scale != 1` rescales only `k_gas` (the 0.1x/10x
+    conduction sensitivity scan). Opacities are transparent (radiation off at 3.2 km/s, design §3).
     CoolProp is imported lazily so this module still imports without the `sci` extra (the high-v
     `build_table` path is CoolProp-free)."""
     from puffsat import eos_cool as ec
@@ -185,7 +188,7 @@ def build_table_lowv(
     rho_grid = np.geomspace(rho_range[0], rho_range[1], n_rho)
     t_grid = np.geomspace(t_range[0], t_range[1], n_t)
 
-    p, e, cs, liquid_frac = ec.eos_grid_lowv(rho_grid, t_grid)
+    p, e, cs, liquid_frac, k_gas = ec.eos_grid_lowv(rho_grid, t_grid)
     transparent = [KAPPA_TRANSPARENT] * (n_rho * n_t)
 
     return {
@@ -199,6 +202,7 @@ def build_table_lowv(
             "kappa_rosseland": list(transparent),
             "kappa_planck": list(transparent),
             "liquid_frac": _flatten(liquid_frac),
+            "k_gas": _flatten(k_gas * k_gas_scale),
         },
         "provenance": {
             "schema": "ADR-0007",
@@ -209,13 +213,15 @@ def build_table_lowv(
                 "T_range": list(t_range),
                 "n_T": n_t,
                 "spacing": "geometric (log-spaced) in both axes",
-                "units": "rho kg/m^3, T K, p Pa, e J/kg, c_s m/s, liquid_frac [0,1]",
+                "units": "rho kg/m^3, T K, p Pa, e J/kg, c_s m/s, liquid_frac [0,1], k_gas W/m/K",
             },
             "eos": {
                 "model": "real-fluid equilibrium water across the dome (CoolProp/IAPWS95)",
                 "two_phase": "p -> p_sat(T); latent heat folded into e (bulk channel, ADR-0004)",
                 "liquid_frac": "condensed mass fraction for the C3 wall-sticking sink (channel 3)",
                 "c_s": "sqrt((dp/drho)_s) via a (D,S) finite difference (two-phase-safe)",
+                "k_gas": "gas thermal conductivity for the B-flux conduction operator (ADR-0005); "
+                f"CoolProp/IAPWS transport, dome -> saturated vapor; k_gas_scale={k_gas_scale}",
             },
             "opacity": {
                 "status": "TRANSPARENT placeholder — radiation is off at 3.2 km/s (design §3); "
@@ -234,14 +240,20 @@ def main() -> None:
         "--kappa-scale", type=float, default=1.0, help="multiply the bracketing opacity by this"
     )
     parser.add_argument(
+        "--k-gas-scale", type=float, default=1.0, help="multiply the low-v gas conductivity by this"
+    )
+    parser.add_argument(
         "--lowv", action="store_true", help="build the low-v (Rung C) cool-gas two-phase table"
     )
     args = parser.parse_args()
 
     if args.lowv:
-        table = build_table_lowv()
+        table = build_table_lowv(k_gas_scale=args.k_gas_scale)
         out: Path = args.out or DEFAULT_TABLE_PATH_LOWV
-        label = f"cool-gas two-phase table -> {out} ({N_RHO_LOWV}x{N_T_LOWV} nodes)"
+        label = (
+            f"cool-gas two-phase table -> {out} "
+            f"({N_RHO_LOWV}x{N_T_LOWV} nodes, k_gas_scale={args.k_gas_scale})"
+        )
     else:
         table = build_table(kappa_scale=args.kappa_scale)
         out = args.out or DEFAULT_TABLE_PATH

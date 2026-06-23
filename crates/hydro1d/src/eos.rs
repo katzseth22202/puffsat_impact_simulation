@@ -122,6 +122,16 @@ impl TableEos {
         let t = self.temperature_from_energy(rho, e);
         self.table.liquid_fraction(rho, t)
     }
+
+    /// Gas thermal conductivity `k_gas(ρ, e) > 0` [W/m/K] at the kernel's `(ρ, e)`: invert the energy
+    /// for `T`, then read the table's (log-interpolated) field — the B-flux conduction operator reads
+    /// this (ADR-0005). `None` for tables without the field (e.g. the high-v table), where the gas
+    /// gets no conduction.
+    #[must_use]
+    pub fn k_gas(&self, rho: f64, e: f64) -> Option<f64> {
+        let t = self.temperature_from_energy(rho, e);
+        self.table.k_gas(rho, t)
+    }
 }
 
 impl Eos for TableEos {
@@ -290,6 +300,33 @@ mod tests {
         // The ideal-gas table omits liquid_frac → 0.
         let dry = TableEos::new(ideal_gas_table());
         assert_eq!(dry.liquid_fraction(1.0, 2.5), 0.0);
+    }
+
+    /// `TableEos::k_gas` (B-flux): a table with `e = T` and a `k_gas` field returns that field at the
+    /// inverted `T`; a table without it returns `None` (the gas gets no conduction).
+    #[test]
+    fn k_gas_reads_the_field_or_none() {
+        // e = T table (so temperature_from_energy is the identity) with a constant conductivity.
+        let n: usize = 4;
+        let rho_grid: Vec<f64> = (0..n).map(|i| 0.1 * 10f64.powf(i as f64)).collect(); // 0.1 … 100
+        let t_grid: Vec<f64> = (0..n).map(|j| 300.0 * 2f64.powf(j as f64)).collect(); // 300 … 2400
+        let e_field: Vec<f64> = (0..n * n).map(|idx| t_grid[idx % n]).collect(); // e = T, row-major
+        let lin = |k: f64| vec![k; n * n];
+        let json = serde_json::json!({
+            "rho_grid": rho_grid, "T_grid": t_grid, "shape": [n, n],
+            "fields": {
+                "p": lin(1.0), "e": e_field,
+                "c_s": lin(1.0), "kappa_rosseland": lin(1.0), "kappa_planck": lin(1.0),
+                "k_gas": lin(0.05),
+            },
+        });
+        let eos = TableEos::new(Table::from_json(&json.to_string()).unwrap());
+        // e = T, so any e in range inverts to T = e and reads the constant 0.05.
+        assert_relative_eq!(eos.k_gas(1.0, 600.0).unwrap(), 0.05, max_relative = 1e-12);
+
+        // The ideal-gas table omits k_gas → None.
+        let dry = TableEos::new(ideal_gas_table());
+        assert!(dry.k_gas(1.0, 2.5).is_none());
     }
 
     /// `Eos::temperature` (B5a): the table inverts `e(ρ, T)` for `T` (here `e = T`, so it returns

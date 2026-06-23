@@ -82,14 +82,36 @@ def test_liquid_fraction_spans_the_phases() -> None:
     np.testing.assert_allclose(ec.liquid_fraction(0.5 * (rho_g + rho_f), temp), 1.0 - q, rtol=1e-9)
 
 
+def test_conductivity_matches_coolprop_single_phase_and_is_finite_in_dome() -> None:
+    """`k_gas` matches CoolProp's transport conductivity in single-phase vapor and is finite (the
+    saturated-vapor value) inside the dome, where the direct transport query is undefined."""
+    rho, temp = 0.05, 600.0  # single-phase superheated vapor
+    np.testing.assert_allclose(
+        ec.conductivity(rho, temp),
+        CP.PropsSI("conductivity", "D", rho, "T", temp, "Water"),
+        rtol=1e-9,
+    )
+
+    temp = 500.0
+    rho_g = CP.PropsSI("D", "T", temp, "Q", 1, "Water")
+    rho_f = CP.PropsSI("D", "T", temp, "Q", 0, "Water")
+    k_dome = ec.conductivity(0.5 * (rho_g + rho_f), temp)  # deep in the dome
+    assert np.isfinite(k_dome) and k_dome > 0.0
+    # The dome value is the saturated-vapor conductivity (the near-wall gas the cold plate cools).
+    np.testing.assert_allclose(
+        k_dome, CP.PropsSI("conductivity", "D", rho_g, "T", temp, "Water"), rtol=1e-9
+    )
+
+
 def test_grid_fields_positive_and_energy_monotone() -> None:
-    """`p, e, c_s > 0` and `e(T)` strictly increasing at fixed rho (the loader's requirements)."""
+    """`p, e, c_s, k_gas > 0` and `e(T)` strictly increasing at fixed rho (the loader's reqs)."""
     rho_grid = np.array([0.05, 0.5, 5.0])
     t_grid = np.geomspace(300.0, 1700.0, 24)
-    p, e, cs, lf = ec.eos_grid_lowv(rho_grid, t_grid)
+    p, e, cs, lf, kg = ec.eos_grid_lowv(rho_grid, t_grid)
 
     assert np.all(p > 0.0)
     assert np.all(e > 0.0)
     assert np.all(cs > 0.0)
+    assert np.all(kg > 0.0)
     assert np.all((lf >= 0.0) & (lf <= 1.0))
     assert np.all(np.diff(e, axis=1) > 0.0)  # e increases with T along every density row

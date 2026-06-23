@@ -88,6 +88,9 @@ struct RawFields {
     /// Optional condensed mass fraction `∈ [0, 1]` (Rung C low-v tables). Absent in the high-v table.
     #[serde(default)]
     liquid_frac: Option<Vec<f64>>,
+    /// Optional gas thermal conductivity `k_gas > 0` (B-flux low-v tables). Absent in the high-v table.
+    #[serde(default)]
+    k_gas: Option<Vec<f64>>,
 }
 
 /// The five material properties at one `(ρ, T)` point.
@@ -123,6 +126,10 @@ pub struct Table {
     /// Raw (not log) condensed mass fraction, interpolated **linearly** (it is `[0, 1]`-valued and
     /// legitimately `0`). `None` for tables that omit it — then [`Table::liquid_fraction`] is `0`.
     liquid_frac: Option<Vec<f64>>,
+    /// Natural-log of the gas thermal conductivity `k_gas > 0` (the B-flux conduction operator's
+    /// gas-side property; ADR-0005). On the positive log-interp path like the opacities. `None` for
+    /// tables that omit it — then [`Table::k_gas`] is `None` and the gas gets no conduction.
+    log_k_gas: Option<Vec<f64>>,
 }
 
 impl Table {
@@ -209,6 +216,15 @@ impl Table {
             None => None,
         };
 
+        // `k_gas` (optional, B-flux) is strictly positive and spans decades, so it rides the same
+        // positive log-interp path as the opacities (`log_field` validates length and `> 0`).
+        let log_k_gas = raw
+            .fields
+            .k_gas
+            .as_deref()
+            .map(|v| log_field("k_gas", v))
+            .transpose()?;
+
         Ok(Self {
             log_rho: raw.rho_grid.iter().map(|x| x.ln()).collect(),
             log_t: raw.t_grid.iter().map(|x| x.ln()).collect(),
@@ -218,6 +234,7 @@ impl Table {
             log_kr: log_field("kappa_rosseland", &raw.fields.kappa_rosseland)?,
             log_kp: log_field("kappa_planck", &raw.fields.kappa_planck)?,
             liquid_frac,
+            log_k_gas,
             rho_grid: raw.rho_grid,
             t_grid: raw.t_grid,
         })
@@ -275,6 +292,17 @@ impl Table {
             Some(field) => self.interp_linear(field, rho, t),
             None => 0.0,
         }
+    }
+
+    /// Gas thermal conductivity `k_gas(ρ, T) > 0` [W/m/K] — the B-flux conduction operator's gas-side
+    /// property (ADR-0005). `Some` for the low-v B-flux tables that carry it (log-interpolated like
+    /// the opacities), `None` for tables that omit it (e.g. the high-v table), where the caller gives
+    /// the gas no conduction.
+    #[must_use]
+    pub fn k_gas(&self, rho: f64, t: f64) -> Option<f64> {
+        self.log_k_gas
+            .as_ref()
+            .map(|field| self.interp(field, rho, t))
     }
 
     /// Specific heat capacity `c_v = ∂e/∂T` at fixed `ρ`, by centered finite difference on the
@@ -555,6 +583,50 @@ mod tests {
             "fields": {"p":[1,1,1,1],"e":[1,1,1,1],"c_s":[1,1,1,1],
                        "kappa_rosseland":[1,1,1,1],"kappa_planck":[1,1,1,1],
                        "liquid_frac":[0.0, 0.5, 1.0, 1.5]}
+        }"#;
+        assert!(matches!(
+            Table::from_json(json),
+            Err(TableError::Invalid(_))
+        ));
+    }
+
+    /// `k_gas` (optional, B-flux): strictly positive, log-interpolated like the opacities — a
+    /// power-law field `k_gas = ρ·T` is reproduced exactly; a table that omits it returns `None`
+    /// (no gas conduction).
+    #[test]
+    fn k_gas_log_interp_and_absent_is_none() {
+        let json = r#"{
+            "rho_grid": [1.0, 2.0],
+            "T_grid": [1.0, 2.0],
+            "shape": [2, 2],
+            "fields": {"p":[1,1,1,1],"e":[1,1,1,1],"c_s":[1,1,1,1],
+                       "kappa_rosseland":[1,1,1,1],"kappa_planck":[1,1,1,1],
+                       "k_gas":[1.0, 2.0, 2.0, 4.0]}
+        }"#;
+        let table = Table::from_json(json).unwrap();
+        assert_relative_eq!(table.k_gas(1.0, 1.0).unwrap(), 1.0, max_relative = 1e-12);
+        assert_relative_eq!(table.k_gas(2.0, 2.0).unwrap(), 4.0, max_relative = 1e-12);
+        // Geometric midpoint (√2, √2): log-log interp of ρ·T is exact ⇒ √2·√2 = 2.
+        let m = 2f64.sqrt();
+        assert_relative_eq!(table.k_gas(m, m).unwrap(), 2.0, max_relative = 1e-12);
+        // A table without the field (e.g. the high-v table) has no gas conduction.
+        assert!(
+            Table::from_json(&power_law_json(4, 4))
+                .unwrap()
+                .k_gas(1.7, 2500.0)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn rejects_non_positive_k_gas() {
+        let json = r#"{
+            "rho_grid": [1.0, 2.0],
+            "T_grid": [1.0, 2.0],
+            "shape": [2, 2],
+            "fields": {"p":[1,1,1,1],"e":[1,1,1,1],"c_s":[1,1,1,1],
+                       "kappa_rosseland":[1,1,1,1],"kappa_planck":[1,1,1,1],
+                       "k_gas":[1.0, 0.0, 2.0, 4.0]}
         }"#;
         assert!(matches!(
             Table::from_json(json),

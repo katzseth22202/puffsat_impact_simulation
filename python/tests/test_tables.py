@@ -75,21 +75,44 @@ def test_opacity_scales_as_kramers() -> None:
 
 
 def test_lowv_table_has_liquid_frac_and_loader_contract() -> None:
-    """The Rung C low-v table (CoolProp) carries a `liquid_frac` field; the five log-fields stay
-    positive and `liquid_frac` is in `[0,1]`. (Skipped without the `sci` extra / CoolProp.)"""
+    """The Rung C / B-flux low-v table (CoolProp) carries `liquid_frac` and `k_gas` fields; the six
+    log-fields (incl. `k_gas`) stay positive and `liquid_frac` is in `[0,1]`. (Skipped without the
+    `sci` extra / CoolProp.)"""
     pytest.importorskip("CoolProp")
     # Small grid for speed (CoolProp is a per-node query).
     table = tables.build_table_lowv(rho_range=(0.05, 50.0), n_rho=5, t_range=(300.0, 1700.0), n_t=8)
 
     n_rho, n_t = cast("list[int]", table["shape"])
     fields = cast("dict[str, list[float]]", table["fields"])
-    assert set(fields) == {"p", "e", "c_s", "kappa_rosseland", "kappa_planck", "liquid_frac"}
-    for name in ("p", "e", "c_s", "kappa_rosseland", "kappa_planck"):
+    assert set(fields) == {
+        "p",
+        "e",
+        "c_s",
+        "kappa_rosseland",
+        "kappa_planck",
+        "liquid_frac",
+        "k_gas",
+    }
+    for name in ("p", "e", "c_s", "kappa_rosseland", "kappa_planck", "k_gas"):
         assert len(fields[name]) == n_rho * n_t, name
         assert all(v > 0.0 for v in fields[name]), name
     lf = fields["liquid_frac"]
     assert len(lf) == n_rho * n_t
     assert all(0.0 <= v <= 1.0 for v in lf)
+
+
+def test_k_gas_scale_rescales_conductivity_only() -> None:
+    """`k_gas_scale` multiplies only `k_gas` and leaves p, e, c_s, liquid_frac untouched — the knob
+    the B-flux conduction sensitivity scan turns. (Skipped without the `sci` extra / CoolProp.)"""
+    pytest.importorskip("CoolProp")
+    g = ((0.05, 50.0), 4, (300.0, 1700.0), 6)  # rho_range, n_rho, t_range, n_t
+    base = tables.build_table_lowv(g[0], g[1], g[2], g[3], k_gas_scale=1.0)
+    scaled = tables.build_table_lowv(g[0], g[1], g[2], g[3], k_gas_scale=10.0)
+    fb = cast("dict[str, list[float]]", base["fields"])
+    fs = cast("dict[str, list[float]]", scaled["fields"])
+    np.testing.assert_allclose(fs["k_gas"], [10.0 * v for v in fb["k_gas"]], rtol=1e-12)
+    for name in ("p", "e", "c_s", "liquid_frac"):
+        np.testing.assert_array_equal(fs[name], fb[name])
 
 
 def test_kappa_scale_rescales_opacity_only() -> None:

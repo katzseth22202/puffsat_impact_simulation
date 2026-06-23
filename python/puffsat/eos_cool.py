@@ -4,8 +4,8 @@ At 3.2 km/s the stagnated gas is cool (~1700 K), neutral, and optically thin, so
 gas-dynamic re-expansion minus condensation (design §3, ADR-0004). Unlike the high-v package's
 from-scratch plasma EOS ([`puffsat.eos_water`]), the low-v range is real-fluid water near and across
 the saturation dome — exactly CoolProp's IAPWS-95 home. This module is the typed boundary around
-CoolProp (untyped; isolated per-module in mypy, CLAUDE.md): it returns `(p, e, c_s, liquid_frac)`
-on a `(rho, T)` grid for the ADR-0007 table.
+CoolProp (untyped; isolated per-module in mypy, CLAUDE.md): it returns `(p, e, c_s, liquid_frac,
+k_gas)` on a `(rho, T)` grid for the ADR-0007 table.
 
 The **bulk vapor-pressure-collapse** channel (ADR-0004) is captured automatically — inside the dome
 the equilibrium EOS returns the lower saturation pressure and folds latent heat into `e(rho, T)`.
@@ -83,21 +83,42 @@ def liquid_fraction(rho: float, temp: float) -> float:
     return 1.0 - q
 
 
-def eos_grid_lowv(rho_grid: Vec, t_grid: Vec) -> tuple[Vec, Vec, Vec, Vec]:
-    """Evaluate `(p, e, c_s, liquid_frac)` on the full `(rho, T)` grid, row-major over `(rho, T)`.
+def conductivity(rho: float, temp: float) -> float:
+    """Gas thermal conductivity `k_gas [W/m/K]` from CoolProp/IAPWS transport (the B-flux conduction
+    operator's gas-side property; ADR-0005).
 
-    Returns four `(n_rho, n_T)` arrays. Each `(rho, T)` node is independent (CoolProp is stateless),
+    CoolProp's transport conductivity is undefined for a two-phase `(rho, T)` input, so inside the
+    saturation dome we evaluate it at the **saturated-vapor** density `rho_g(temp)` — the near-wall
+    gas that the cold plate cools to drive condensation is vapor, not the mixture. Single-phase
+    states (vapor, compressed liquid, supercritical) are queried directly. Strictly positive, so it
+    rides the loader's log-interpolation path like the opacities.
+    """
+    if temp < _T_CRIT:
+        rho_g = float(CP.PropsSI("D", "T", temp, "Q", 1, FLUID))  # saturated vapor
+        rho_f = float(CP.PropsSI("D", "T", temp, "Q", 0, FLUID))  # saturated liquid
+        if rho_g < rho < rho_f:  # two-phase: transport undefined → use the saturated vapor
+            return _props("conductivity", rho_g, temp)
+    return _props("conductivity", rho, temp)
+
+
+def eos_grid_lowv(rho_grid: Vec, t_grid: Vec) -> tuple[Vec, Vec, Vec, Vec, Vec]:
+    """Evaluate `(p, e, c_s, liquid_frac, k_gas)` on the `(rho, T)` grid, row-major over `(rho, T)`.
+
+    Returns five `(n_rho, n_T)` arrays. Each `(rho, T)` node is independent (CoolProp is stateless),
     matching `eos_water.eos_grid` so the table assembly (`tables.py`) treats the two EOS the same.
+    `k_gas` is the gas thermal conductivity for the B-flux conduction operator (ADR-0005).
     """
     n_rho, n_t = len(rho_grid), len(t_grid)
     p = np.empty((n_rho, n_t))
     e = np.empty((n_rho, n_t))
     cs = np.empty((n_rho, n_t))
     lf = np.empty((n_rho, n_t))
+    kg = np.empty((n_rho, n_t))
     for i, rho in enumerate(rho_grid):
         for j, temp in enumerate(t_grid):
             r, t = float(rho), float(temp)
             p[i, j], e[i, j] = pressure_energy(r, t)
             cs[i, j] = sound_speed(r, t)
             lf[i, j] = liquid_fraction(r, t)
-    return p, e, cs, lf
+            kg[i, j] = conductivity(r, t)
+    return p, e, cs, lf, kg
