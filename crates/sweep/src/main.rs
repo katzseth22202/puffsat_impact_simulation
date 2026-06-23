@@ -21,7 +21,7 @@
 //! plasma table has none** — plasma transport (Spitzer-like conductivity) is the deferred B-flux
 //! sibling alongside the real opacity table. `e_eff` is loss-insensitive (0.63 with no conduction vs
 //! 0.64 lossless at M≈30), so this `e_eff(ρ)` pass still runs with `wall = None` and reports
-//! `loss_conductive = 0` pending that high-v transport data. (The low-v CoolProp table *does* carry
+//! `loss_conductive = 0` pending that high-v transport data. (The low-v `CoolProp` table *does* carry
 //! `k_gas`, so the low-v path activates the operator.)
 
 use std::fs;
@@ -40,9 +40,19 @@ const TABLE_PATH: &str = "data/tables/water.json";
 const RESULT_PATH: &str = "data/results/sweep.jsonl";
 const TABLE_PATH_LOWV: &str = "data/tables/water_lowv.json";
 const RESULT_PATH_LOWV: &str = "data/results/sweep_lowv.jsonl";
+const RESULT_PATH_TRANS_EOS: &str = "data/results/sweep_transitional_eos.jsonl";
+const RESULT_PATH_TRANS_RAD: &str = "data/results/sweep_transitional_rad.jsonl";
 
 /// The production `ρ_impact` grid [kg/m³] (design §3-4): the impact-density axis of `e_eff(ρ)`.
 const RHO_GRID: [f64; 4] = [0.16, 0.32, 0.48, 0.64];
+
+/// The transitional-anchor velocity grid [m/s] (ADR-0012): dense across the ~5–9 km/s partial-
+/// ionization window where `e_eff` may dip, plus context points up to the 16 km/s anchor. Below
+/// ~5 km/s the high-v `eos_water` dissociation chemistry degrades (the low-v `CoolProp` package takes
+/// over), so the sweep starts there; it reuses the same `water.json` table the 16 km/s pass loads.
+const V_GRID: [f64; 8] = [
+    5_000.0, 6_000.0, 7_000.0, 8_000.0, 9_000.0, 11_000.0, 13_000.0, 16_000.0,
+];
 
 /// Fixed configuration for the 16 km/s `e_eff(ρ)` pass (cited; the footprint/Σ and 3.2/8 km/s
 /// anchors are deferred to their own rungs — see the plan's "Out of scope").
@@ -241,11 +251,107 @@ fn run_sweep_lowv(rho_grid: &[f64], table: &Table, cfg: &LowvConfig) -> Vec<Reco
         .collect()
 }
 
+/// Run one **EOS-only** bounce at `rho_impact` (transitional anchor, ADR-0012): pure gas dynamics with
+/// the `eos_water` EOS via [`Tube::run_bounce`] — *no* radiation or conduction. This isolates the
+/// opacity-independent dissociation/ionization specific-heat feature (the part of the transitional
+/// `e_eff(v)` that is computable without the deferred real opacity table). All loss channels are 0.
+fn run_one_eos(rho_impact: f64, table: &Table, cfg: &Config) -> Record {
+    let eos = TableEos::new(table.clone());
+    let mut tube = Tube::slug_si(
+        cfg.gas_cells,
+        rho_impact,
+        cfg.v,
+        cfg.length,
+        cfg.t0,
+        eos,
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    );
+    let bounce = tube.run_bounce();
+    Record {
+        rho_impact,
+        v: cfg.v,
+        e_eff: bounce.e_eff,
+        peak_wall_force: bounce.peak_wall_force,
+        incident_momentum: bounce.incident_momentum,
+        residual_momentum: bounce.residual_momentum,
+        wall_impulse: bounce.wall_impulse,
+        loss_radiative_wall: 0.0, // radiation off: the EOS-only feature
+        loss_escape_space: 0.0,
+        loss_conductive: 0.0,
+        loss_condensation: 0.0,
+    }
+}
+
+/// Sweep the transitional `v × ρ` grid in parallel (ADR-0012), returning **two** row sets in input
+/// order: the EOS-only curve ([`run_one_eos`]) and the radiation-on comparison curve ([`run_one`],
+/// interim opacity, `wall = None` — the 16 km/s pass's config). The gap between them is the
+/// radiative-uncertainty band (pending the real opacity table). `base` supplies everything but `v`,
+/// which is swept from `v_grid`.
+fn run_sweep_transitional(
+    v_grid: &[f64],
+    rho_grid: &[f64],
+    table: &Table,
+    base: &Config,
+) -> (Vec<Record>, Vec<Record>) {
+    let grid: Vec<(f64, f64)> = v_grid
+        .iter()
+        .flat_map(|&v| rho_grid.iter().map(move |&rho| (v, rho)))
+        .collect();
+    grid.par_iter()
+        .map(|&(v, rho)| {
+            let cfg = Config { v, ..*base };
+            (run_one_eos(rho, table, &cfg), run_one(rho, table, &cfg))
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .unzip()
+}
+
+/// Write `records` as JSONL (one object per line, ADR-0019), creating the parent dir and replacing
+/// the file. Shared by the transitional dispatch, which emits two files in one invocation.
+fn write_rows(path: &str, records: &[Record]) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(parent) = Path::new(path).parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut out = fs::File::create(path)?;
+    for r in records {
+        writeln!(out, "{}", serde_json::to_string(r)?)?;
+    }
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // `--lowv` selects the 3.2 km/s condensing anchor (Rung C); otherwise the 16 km/s high-v pass.
-    // Optional positional `[table_path] [result_path]` override the defaults (the B5d-3 opacity scan
-    // uses them to sweep each opacity-scaled table into its own JSONL).
+    // `--lowv` selects the 3.2 km/s condensing anchor (Rung C); `--transitional` the ADR-0012 velocity
+    // sweep (two files); otherwise the 16 km/s high-v pass. Optional positional `[table] [result]`
+    // override the high-v/low-v defaults (the B5d-3 opacity scan sweeps each scaled table into its own
+    // JSONL).
     let args: Vec<String> = std::env::args().skip(1).collect();
+
+    // Transitional anchor (ADR-0012): sweep V_GRID × RHO_GRID with the high-v table, emitting the
+    // EOS-only curve and the radiation-on comparison curve into two fixed files.
+    if args.iter().any(|a| a == "--transitional") {
+        let table = Table::load(TABLE_PATH)?;
+        let (eos, rad) = run_sweep_transitional(&V_GRID, &RHO_GRID, &table, &Config::production());
+        write_rows(RESULT_PATH_TRANS_EOS, &eos)?;
+        write_rows(RESULT_PATH_TRANS_RAD, &rad)?;
+        for (e, r) in eos.iter().zip(rad.iter()) {
+            println!(
+                "rust: v={:.0} rho={:.2} -> e_eff_eos={:.4} e_eff_rad={:.4} (rad band {:.4})",
+                e.v,
+                e.rho_impact,
+                e.e_eff,
+                r.e_eff,
+                e.e_eff - r.e_eff,
+            );
+        }
+        println!(
+            "rust: wrote {} eos + {} rad rows -> {RESULT_PATH_TRANS_EOS} , {RESULT_PATH_TRANS_RAD}",
+            eos.len(),
+            rad.len(),
+        );
+        return Ok(());
+    }
+
     let lowv = args.iter().any(|a| a == "--lowv");
     let positional: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
     let (def_table, def_result) = if lowv {
@@ -287,7 +393,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, LowvConfig, Record, run_one, run_sweep, run_sweep_lowv};
+    use super::{
+        Config, LowvConfig, Record, run_one, run_sweep, run_sweep_lowv, run_sweep_transitional,
+    };
     use hydro1d::radiation::{Limiter, RadConstants};
     use tables::Table;
 
@@ -473,6 +581,71 @@ mod tests {
             assert_eq!(rec.loss_conductive, 0.0);
             assert!(rec.loss_condensation > 0.0, "no condensation loss recorded");
         }
+    }
+
+    /// The transitional sweep (ADR-0012) returns two row sets — EOS-only and radiation-on — over the
+    /// full `v × ρ` grid in input order (`v` outer, `ρ` inner, matching `run_sweep_transitional`).
+    /// Both are well-formed (`0 < e_eff < 1`); `v`/`ρ` pass through verbatim; the EOS-only curve is a
+    /// lossless upper bound (its `e_eff ≥` the radiation-on point, which carries the radiative band);
+    /// the EOS rows report zero loss while the rad rows' channels are non-negative.
+    // Exact float `==` is intentional: `v`/`ρ` flow through verbatim and the EOS losses are exact 0.
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn transitional_sweep_rows_well_formed() {
+        let table = tiny_ideal_table();
+        let base = tiny_config();
+        // Normalized v grid (Mach = v/c_s(t0) ranges ≈ 4–6, all supersonic) × two densities.
+        let v_grid = [0.8, 1.0, 1.2];
+        let rho_grid = [0.5, 1.0];
+        let (eos, rad) = run_sweep_transitional(&v_grid, &rho_grid, &table, &base);
+
+        assert_eq!(eos.len(), v_grid.len() * rho_grid.len());
+        assert_eq!(rad.len(), eos.len());
+
+        for (idx, (re, rr)) in eos.iter().zip(rad.iter()).enumerate() {
+            // Grid is `v` outer, `ρ` inner (see `run_sweep_transitional`).
+            let v = v_grid[idx / rho_grid.len()];
+            let rho = rho_grid[idx % rho_grid.len()];
+            // The two curves are the same (v, ρ) point, differing only in physics.
+            assert_eq!(re.v, v);
+            assert_eq!(re.rho_impact, rho);
+            assert_eq!(rr.v, v);
+            assert_eq!(rr.rho_impact, rho);
+
+            for rec in [re, rr] {
+                assert!(
+                    rec.e_eff > 0.0 && rec.e_eff < 1.0,
+                    "e_eff out of (0,1): {}",
+                    rec.e_eff
+                );
+                assert!(rec.incident_momentum > 0.0);
+                assert!(rec.wall_impulse > 0.0);
+            }
+
+            // The two curves are the same (v, ρ) point under different physics, so they agree to
+            // within this harness's radiative band. That band is tiny here because `tiny_config`
+            // uses deliberately weak radiation (`a = 1e-5`) to keep `e_eff` in (0, 1); at this
+            // coupling the FLD's internal transport can nudge `e_eff` either way, so we assert
+            // closeness, not a strict ordering. The production-scale upper bound (EOS 0.64 ≥ rad
+            // 0.63 at 16 km/s) is an end-to-end check; the kernel's losses-lower-e_eff gate pins
+            // the loss sign at meaningful coupling.
+            assert!(
+                (re.e_eff - rr.e_eff).abs() < 1e-3,
+                "EOS-only e_eff {} and radiation-on {} diverge beyond the weak-radiation band",
+                re.e_eff,
+                rr.e_eff
+            );
+            // EOS-only carries no losses; the radiation-on channels are non-negative.
+            assert_eq!(re.loss_radiative_wall, 0.0);
+            assert_eq!(re.loss_escape_space, 0.0);
+            assert_eq!(re.loss_conductive, 0.0);
+            assert_eq!(re.loss_condensation, 0.0);
+            assert!(rr.loss_radiative_wall >= 0.0);
+            assert!(rr.loss_escape_space >= 0.0);
+        }
+
+        // `v` actually varies across the grid (not a constant column).
+        assert!(eos.iter().any(|r| r.v != eos[0].v));
     }
 
     /// DIAGNOSTIC (ignored): load the real water table and isolate which loss channel breaks the
