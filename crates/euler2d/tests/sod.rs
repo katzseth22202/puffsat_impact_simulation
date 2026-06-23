@@ -57,10 +57,10 @@ fn sod_mean_abs_density_error() -> f64 {
 #[test]
 fn sod_density_matches_exact_in_l1() {
     let err = sod_mean_abs_density_error();
-    // Measured 0.00738 at 400 cells: the first-order HLLC Godunov level (the contact smears with no
-    // self-steepening, so it loses to the 1D AV scheme's 0.00129 — D1's MUSCL-Hancock tightens it).
-    // The bound guards against scheme regressions (a real bug gives an O(1) miss).
-    assert!(err < 9e-3, "Sod mean-abs density error = {err}");
+    // Measured 0.00177 at 400 cells with the second-order MUSCL-Hancock scheme (D1) — close to the
+    // 1D AV kernel's 0.00129, and a 4× improvement over the first-order Godunov's 0.00738. The
+    // bound guards against scheme regressions (a real bug gives an O(1) miss).
+    assert!(err < 2.5e-3, "Sod mean-abs density error = {err}");
 }
 
 /// Every `r`-row is identical: the embedded-1D problem stays uniform in `r` (no spurious transverse

@@ -38,13 +38,77 @@ pub struct DirFlux {
     pub e: f64,
 }
 
+/// Directional **conserved** vector `[ρ, ρu_n, ρu_t, E]` — the currency of the MUSCL reconstruction
+/// (slope-limited per component) and the Hancock half-step predictor (kernel.rs).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DirCons {
+    /// Mass density `ρ`.
+    pub rho: f64,
+    /// Normal momentum density `ρu_n`.
+    pub mn: f64,
+    /// Transverse momentum density `ρu_t`.
+    pub mt: f64,
+    /// Total energy density `E`.
+    pub e: f64,
+}
+
+impl DirCons {
+    /// Directional conserved vector for a directional primitive state.
+    #[must_use]
+    pub fn from_state(s: DirState, gamma: f64) -> Self {
+        Self {
+            rho: s.rho,
+            mn: s.rho * s.un,
+            mt: s.rho * s.ut,
+            e: total_energy(s, gamma),
+        }
+    }
+
+    /// Directional primitive state for this conserved vector.
+    #[must_use]
+    pub fn to_state(self, gamma: f64) -> DirState {
+        let un = self.mn / self.rho;
+        let ut = self.mt / self.rho;
+        let p = (gamma - 1.0) * (self.e - 0.5 * self.rho * (un * un + ut * ut));
+        DirState {
+            rho: self.rho,
+            un,
+            ut,
+            p,
+        }
+    }
+
+    /// `self + scale · other` (component-wise) — slope/extrapolation arithmetic.
+    #[must_use]
+    pub fn axpy(self, scale: f64, other: DirCons) -> Self {
+        Self {
+            rho: self.rho + scale * other.rho,
+            mn: self.mn + scale * other.mn,
+            mt: self.mt + scale * other.mt,
+            e: self.e + scale * other.e,
+        }
+    }
+
+    /// `self + scale · flux` (component-wise) — the Hancock half-step predictor (`DirFlux` shares
+    /// the `[ρ, ρu_n, ρu_t, E]` layout).
+    #[must_use]
+    pub fn add_flux(self, scale: f64, f: DirFlux) -> Self {
+        Self {
+            rho: self.rho + scale * f.rho,
+            mn: self.mn + scale * f.mn,
+            mt: self.mt + scale * f.mt,
+            e: self.e + scale * f.e,
+        }
+    }
+}
+
 /// Total energy density `E = p/(γ−1) + ½ρ(u_n² + u_t²)` for a directional state.
 fn total_energy(s: DirState, gamma: f64) -> f64 {
     s.p / (gamma - 1.0) + 0.5 * s.rho * (s.un * s.un + s.ut * s.ut)
 }
 
 /// The physical Euler flux of `[ρ, ρu_n, ρu_t, E]` for a single state.
-fn phys_flux(s: DirState, gamma: f64) -> DirFlux {
+pub(crate) fn phys_flux(s: DirState, gamma: f64) -> DirFlux {
     let e = total_energy(s, gamma);
     DirFlux {
         rho: s.rho * s.un,
