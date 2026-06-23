@@ -1,4 +1,5 @@
-"""Frontier extraction + plots for the e_eff sweeps (B5d-2, extended for Rung C).
+"""Frontier extraction + plots for the e_eff sweeps (B5d-2, extended for Rung C and the
+transitional anchor).
 
 Reads a sweep's JSONL (`crates/sweep` output, ADR-0019), builds the `e_eff(rho_impact)` frontier and
 the per-density loss decomposition (each ADR-0016 channel as a fraction of the total loss), writes a
@@ -9,6 +10,13 @@ without it.
 Channels: 1a radiative-to-wall, 1b escape-to-space, 2 conductive (deferred to B-flux), and
 3 condensation (Rung C low-v). The `--sweep`/`--summary`/`--plot-dir`/`--tag` CLI options point it
 at either the high-v (`sweep.jsonl`) or low-v (`sweep_lowv.jsonl`) results.
+
+**`--axis v` (transitional anchor, ADR-0012):** instead of the `e_eff(rho)` frontier, build the
+`e_eff(v)` curves from the two transitional sweeps (`sweep_transitional_eos.jsonl` and
+`..._rad.jsonl`): the EOS-only (opacity-independent) curve and the radiation-on (interim-opacity)
+curve, the gap between them being the radiative-uncertainty band. The dip locator reports whether
+the EOS-only `e_eff(v)` has an interior minimum below the swept endpoints — the dissociation/
+ionization specific-heat floor the rung exists to find.
 """
 
 from __future__ import annotations
@@ -16,6 +24,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass, fields
 from itertools import pairwise
 from pathlib import Path
@@ -23,6 +32,17 @@ from pathlib import Path
 DEFAULT_SWEEP_PATH = Path("data/results/sweep.jsonl")
 DEFAULT_SUMMARY_PATH = Path("data/results/frontier.csv")
 DEFAULT_PLOT_DIR = Path("data/results")
+
+# Transitional anchor (ADR-0012): the two `crates/sweep --transitional` outputs and their frontier.
+DEFAULT_TRANS_EOS_PATH = Path("data/results/sweep_transitional_eos.jsonl")
+DEFAULT_TRANS_RAD_PATH = Path("data/results/sweep_transitional_rad.jsonl")
+DEFAULT_TRANS_SUMMARY_PATH = Path("data/results/frontier_transitional.csv")
+
+# Design reference anchors from the prior rungs, marked on the `e_eff(v)` figure for context: the
+# 3.2 km/s adiabatic low-v point (Rung C) and the 16 km/s radiation-on point (Rung B, B5d-1). Each
+# is `(v [m/s], e_eff)`.
+ANCHOR_LOWV = (3200.0, 0.74)
+ANCHOR_HIGHV = (16000.0, 0.63)
 
 
 @dataclass(frozen=True)
@@ -99,15 +119,20 @@ def frontier(rows: list[SweepRow]) -> list[FrontierPoint]:
     return points
 
 
-def write_summary(points: list[FrontierPoint], path: Path = DEFAULT_SUMMARY_PATH) -> None:
-    """Write the frontier to a CSV (header = the `FrontierPoint` field names), ascending in rho."""
+def _write_csv(header: list[str], rows: Iterable[Iterable[object]], path: Path) -> None:
+    """Write a CSV with `header` then `rows`, creating the parent directory. Shared by the rho and
+    velocity frontier writers."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    header = [f.name for f in fields(FrontierPoint)]
     with path.open("w", newline="") as fh:
         writer = csv.writer(fh)
         writer.writerow(header)
-        for p in points:
-            writer.writerow([getattr(p, name) for name in header])
+        writer.writerows(rows)
+
+
+def write_summary(points: list[FrontierPoint], path: Path = DEFAULT_SUMMARY_PATH) -> None:
+    """Write the frontier to a CSV (header = the `FrontierPoint` field names), ascending in rho."""
+    header = [f.name for f in fields(FrontierPoint)]
+    _write_csv(header, ([getattr(p, name) for name in header] for p in points), path)
 
 
 def plot_frontier(
@@ -168,20 +193,195 @@ def plot_frontier(
     return saved
 
 
+@dataclass(frozen=True)
+class TransitionalPoint:
+    """One velocity on the transitional `e_eff(v)` frontier (ADR-0012). `e_eff_eos`/`e_eff_rad` are
+    the rho-mean restitutions of the EOS-only and radiation-on sweeps; `rad_band = e_eff_eos -
+    e_eff_rad` is the radiative-uncertainty band; `e_eff_eos_min`/`_max` bracket the spread over the
+    swept densities (the shaded band on the figure)."""
+
+    v: float
+    e_eff_eos: float
+    e_eff_rad: float
+    rad_band: float
+    e_eff_eos_min: float
+    e_eff_eos_max: float
+
+
+def _mean_e_eff_by_v(rows: list[SweepRow]) -> dict[float, list[float]]:
+    """Group `e_eff` by impact speed `v` (the transitional sweep keys; each `v` has one row per
+    swept density)."""
+    groups: dict[float, list[float]] = {}
+    for r in rows:
+        groups.setdefault(r.v, []).append(r.e_eff)
+    return groups
+
+
+def transitional_frontier(
+    eos_rows: list[SweepRow], rad_rows: list[SweepRow]
+) -> list[TransitionalPoint]:
+    """Build the rho-mean `e_eff_eos(v)` and `e_eff_rad(v)` curves (ascending in v) from the two
+    transitional sweeps over the same `v x rho` grid. A velocity present in the EOS sweep but absent
+    from the radiation sweep gets `nan` for the radiation-on value (the band is then undefined)."""
+    eos_by_v = _mean_e_eff_by_v(eos_rows)
+    rad_by_v = _mean_e_eff_by_v(rad_rows)
+    points: list[TransitionalPoint] = []
+    for v in sorted(eos_by_v):
+        es = eos_by_v[v]
+        rs = rad_by_v.get(v, [])
+        e_eos = sum(es) / len(es)
+        e_rad = sum(rs) / len(rs) if rs else float("nan")
+        points.append(
+            TransitionalPoint(
+                v=v,
+                e_eff_eos=e_eos,
+                e_eff_rad=e_rad,
+                rad_band=e_eos - e_rad,
+                e_eff_eos_min=min(es),
+                e_eff_eos_max=max(es),
+            )
+        )
+    return points
+
+
+def locate_dip(points: list[TransitionalPoint]) -> TransitionalPoint | None:
+    """Return the interior velocity of minimum EOS-only `e_eff` if it is a genuine dip — strictly
+    below *both* swept endpoints — else `None` (the floor sits at an endpoint, so any transitional
+    dip is purely radiative and needs the deferred real opacity table). `points` must be ascending
+    in v, as `transitional_frontier` returns."""
+    if len(points) < 3:
+        return None
+    dip = min(points[1:-1], key=lambda p: p.e_eff_eos)
+    if dip.e_eff_eos < points[0].e_eff_eos and dip.e_eff_eos < points[-1].e_eff_eos:
+        return dip
+    return None
+
+
+def write_transitional_summary(
+    points: list[TransitionalPoint], path: Path = DEFAULT_TRANS_SUMMARY_PATH
+) -> None:
+    """Write the `e_eff(v)` frontier to a CSV (header = the `TransitionalPoint` field names),
+    ascending in v."""
+    header = [f.name for f in fields(TransitionalPoint)]
+    _write_csv(header, ([getattr(p, name) for name in header] for p in points), path)
+
+
+def plot_transitional(
+    points: list[TransitionalPoint],
+    dip: TransitionalPoint | None,
+    out_dir: Path = DEFAULT_PLOT_DIR,
+    tag: str = "",
+) -> list[Path]:
+    """Render the `e_eff(v)` overlay: the EOS-only and radiation-on curves with the EOS spread over
+    rho shaded, the prior-rung anchors marked, and the located dip (if any) annotated. Returns the
+    saved figure path. matplotlib is imported lazily (the `sci` extra) on the headless `Agg`
+    backend; all numeric inputs are plain Python floats, so no `Any` escapes."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    v = [p.v / 1000.0 for p in points]  # km/s
+    e_eos = [p.e_eff_eos for p in points]
+    e_rad = [p.e_eff_rad for p in points]
+    lo = [p.e_eff_eos_min for p in points]
+    hi = [p.e_eff_eos_max for p in points]
+
+    fig, ax = plt.subplots()
+    ax.fill_between(v, lo, hi, alpha=0.15, color="C0", label=r"EOS-only spread over $\rho$")
+    ax.plot(v, e_eos, "o-", color="C0", label=r"$e_\mathrm{eff}$ EOS-only ($\rho$-mean)")
+    ax.plot(v, e_rad, "s--", color="C1", label=r"$e_\mathrm{eff}$ radiation-on (interim opacity)")
+    ax.scatter(
+        [ANCHOR_LOWV[0] / 1000.0],
+        [ANCHOR_LOWV[1]],
+        marker="*",
+        s=140,
+        color="k",
+        zorder=5,
+        label="3.2 km/s anchor (Rung C)",
+    )
+    ax.scatter(
+        [ANCHOR_HIGHV[0] / 1000.0],
+        [ANCHOR_HIGHV[1]],
+        marker="D",
+        s=55,
+        color="k",
+        zorder=5,
+        label="16 km/s anchor (Rung B)",
+    )
+    if dip is not None:
+        ax.axvline(dip.v / 1000.0, color="C3", ls=":", alpha=0.7)
+        ax.annotate(
+            f"EOS dip {dip.e_eff_eos:.3f}\n@ {dip.v / 1000.0:.0f} km/s",
+            xy=(dip.v / 1000.0, dip.e_eff_eos),
+            xytext=(6, 12),
+            textcoords="offset points",
+            fontsize="small",
+            color="C3",
+        )
+    ax.set_xlabel(r"impact speed $v$ [km/s]")
+    ax.set_ylabel(r"$e_\mathrm{eff}$")
+    ax.set_title(r"Transitional restitution $e_\mathrm{eff}(v)$ (ADR-0012)")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best", fontsize="small")
+    path = out_dir / f"{tag}transitional_e_eff_v.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return [path]
+
+
+def _run_transitional(
+    eos_path: Path, rad_path: Path, summary_path: Path, plot_dir: Path, tag: str
+) -> None:
+    """The `--axis v` path: read the two transitional sweeps, build the `e_eff(v)` frontier, locate
+    the EOS dip, write the CSV, and render the overlay figure."""
+    points = transitional_frontier(read_sweep(eos_path), read_sweep(rad_path))
+    dip = locate_dip(points)
+    write_transitional_summary(points, summary_path)
+    figs = plot_transitional(points, dip, plot_dir, tag)
+    if dip is not None:
+        print(
+            f"python: EOS-only dip e_eff={dip.e_eff_eos:.4f} at v={dip.v / 1000.0:.1f} km/s "
+            f"(radiative band {dip.rad_band:+.4f}); below both swept endpoints."
+        )
+    else:
+        print("python: no interior EOS dip — the e_eff(v) floor is at a swept endpoint.")
+    print(f"python: wrote {summary_path} and {len(figs)} figure(s): " + ", ".join(map(str, figs)))
+
+
 def main() -> None:
-    """Read a sweep, extract the frontier, write the CSV summary, and render the figures. The CLI
-    options select the high-v (default) or low-v results."""
+    """Read a sweep, extract the frontier, write the CSV summary, and render the figures. `--axis
+    rho` (default) builds the `e_eff(rho)` frontier + loss decomposition for the high-v/low-v
+    sweeps; `--axis v` builds the transitional `e_eff(v)` overlay (ADR-0012) from the two
+    transitional sweeps."""
     parser = argparse.ArgumentParser(description="e_eff frontier extraction + loss decomposition.")
-    parser.add_argument("--sweep", type=Path, default=DEFAULT_SWEEP_PATH, help="input sweep JSONL")
-    parser.add_argument("--summary", type=Path, default=DEFAULT_SUMMARY_PATH, help="output CSV")
+    parser.add_argument("--axis", choices=["rho", "v"], default="rho", help="frontier axis")
+    parser.add_argument(
+        "--sweep", type=Path, default=None, help="input sweep JSONL (EOS-only file when --axis v)"
+    )
+    parser.add_argument(
+        "--sweep-rad",
+        type=Path,
+        default=DEFAULT_TRANS_RAD_PATH,
+        help="radiation-on transitional sweep JSONL (--axis v only)",
+    )
+    parser.add_argument("--summary", type=Path, default=None, help="output CSV")
     parser.add_argument("--plot-dir", type=Path, default=DEFAULT_PLOT_DIR, help="figure directory")
     parser.add_argument("--tag", default="", help="figure filename prefix (e.g. 'lowv_')")
     args = parser.parse_args()
-    sweep_path: Path = args.sweep
-    summary_path: Path = args.summary
     plot_dir: Path = args.plot_dir
     tag: str = args.tag
 
+    if args.axis == "v":
+        eos_path: Path = args.sweep or DEFAULT_TRANS_EOS_PATH
+        rad_path: Path = args.sweep_rad
+        summary_path: Path = args.summary or DEFAULT_TRANS_SUMMARY_PATH
+        _run_transitional(eos_path, rad_path, summary_path, plot_dir, tag)
+        return
+
+    sweep_path: Path = args.sweep or DEFAULT_SWEEP_PATH
+    summary_path = args.summary or DEFAULT_SUMMARY_PATH
     rows = read_sweep(sweep_path)
     points = frontier(rows)
     write_summary(points, summary_path)

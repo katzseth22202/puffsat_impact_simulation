@@ -40,6 +40,27 @@ def _row(
     }
 
 
+def _vrow(v: float, rho: float, e_eff: float) -> dict[str, float]:
+    """A transitional-sweep row at a chosen impact speed `v` (lossless; the EOS/rad files differ
+    only in `e_eff`)."""
+    d = _row(rho, e_eff, 0.0, 0.0, 0.0)
+    d["v"] = v
+    return d
+
+
+def _tp(v: float, e_eos: float, e_rad: float = 0.0) -> an.TransitionalPoint:
+    """A `TransitionalPoint` with the rho-spread collapsed onto `e_eos` (enough for the dip/plot
+    tests, which key on the EOS-only value)."""
+    return an.TransitionalPoint(
+        v=v,
+        e_eff_eos=e_eos,
+        e_eff_rad=e_rad,
+        rad_band=e_eos - e_rad,
+        e_eff_eos_min=e_eos,
+        e_eff_eos_max=e_eos,
+    )
+
+
 def test_read_sweep_parses_jsonl(tmp_path: Path) -> None:
     """`read_sweep` reads one object per line (tolerating a trailing blank) into `SweepRow`s."""
     path = tmp_path / "sweep.jsonl"
@@ -129,3 +150,69 @@ def test_plot_frontier_writes_files(tmp_path: Path) -> None:
     for fig_path in saved:
         assert fig_path.exists()
         assert fig_path.stat().st_size > 0
+
+
+def test_transitional_frontier_sorts_and_means(tmp_path: Path) -> None:
+    """The `e_eff(v)` frontier is ascending in v; each point is the rho-mean of its velocity, and
+    `rad_band = e_eff_eos - e_eff_rad`. The rho-spread is bracketed by min/max."""
+    eos = tmp_path / "eos.jsonl"
+    rad = tmp_path / "rad.jsonl"
+    _write_jsonl(
+        eos,
+        [
+            _vrow(11_000, 0.16, 0.56),  # out of order on purpose
+            _vrow(11_000, 0.64, 0.58),  # 11 km/s rho-mean 0.57
+            _vrow(5_000, 0.16, 0.68),
+            _vrow(5_000, 0.64, 0.70),  # 5 km/s rho-mean 0.69
+        ],
+    )
+    _write_jsonl(
+        rad,
+        [
+            _vrow(11_000, 0.16, 0.55),
+            _vrow(11_000, 0.64, 0.57),  # 11 km/s rho-mean 0.56
+            _vrow(5_000, 0.16, 0.67),
+            _vrow(5_000, 0.64, 0.69),  # 5 km/s rho-mean 0.68
+        ],
+    )
+    pts = an.transitional_frontier(an.read_sweep(eos), an.read_sweep(rad))
+
+    assert [p.v for p in pts] == [5_000.0, 11_000.0]  # ascending in v
+    assert pts[0].e_eff_eos == pytest.approx(0.69)
+    assert pts[1].e_eff_eos == pytest.approx(0.57)
+    assert pts[1].e_eff_rad == pytest.approx(0.56)
+    assert pts[1].rad_band == pytest.approx(0.57 - 0.56)
+    assert pts[1].e_eff_eos_min == pytest.approx(0.56)
+    assert pts[1].e_eff_eos_max == pytest.approx(0.58)
+
+
+def test_locate_dip_finds_interior_minimum() -> None:
+    """A planted interior minimum below both endpoints is found and returned."""
+    pts = [
+        _tp(5_000, 0.68),
+        _tp(8_000, 0.59),
+        _tp(11_000, 0.567),
+        _tp(13_000, 0.58),
+        _tp(16_000, 0.64),
+    ]
+    dip = an.locate_dip(pts)
+    assert dip is not None
+    assert dip.v == 11_000.0
+    assert dip.e_eff_eos == pytest.approx(0.567)
+
+
+def test_locate_dip_none_when_monotonic() -> None:
+    """A monotone curve (minimum at an endpoint) reports no interior dip — the floor is at an edge,
+    so any transitional dip would be purely radiative."""
+    pts = [_tp(5_000, 0.50), _tp(8_000, 0.55), _tp(11_000, 0.60), _tp(16_000, 0.64)]
+    assert an.locate_dip(pts) is None
+
+
+def test_plot_transitional_writes_file(tmp_path: Path) -> None:
+    """The `e_eff(v)` overlay renders one figure with the dip annotated (skipped w/o matplotlib)."""
+    pytest.importorskip("matplotlib")
+    pts = [_tp(5_000, 0.68, 0.67), _tp(11_000, 0.567, 0.56), _tp(16_000, 0.64, 0.63)]
+    saved = an.plot_transitional(pts, an.locate_dip(pts), tmp_path)
+    assert len(saved) == 1
+    assert saved[0].exists()
+    assert saved[0].stat().st_size > 0
