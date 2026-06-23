@@ -46,6 +46,10 @@ pub struct Grid2D {
     cfl: f64,
     /// When true the radial sweep uses the cylindrical (axisymmetric) update; otherwise Cartesian.
     axisymmetric: bool,
+    /// Finite plate at `z = 0`: when `Some(r_plate)` the `z`-lo boundary reflects for `r ≤ r_plate`
+    /// and is transmissive beyond (gas past the plate edge escapes — §7). `None` ⇒ use `bc_zlo`
+    /// uniformly.
+    plate_radius: Option<f64>,
     /// Conserved cells, `idx(iz, ir) = iz·nr + ir`.
     u: Vec<Cons>,
     /// `z = 0` (plate) and `z = z_max` boundaries.
@@ -75,6 +79,7 @@ impl Grid2D {
             gamma,
             cfl: 0.4,
             axisymmetric: false,
+            plate_radius: None,
             u: vec![placeholder; nz * nr],
             bc_zlo: Bc::Transmissive,
             bc_zhi: Bc::Transmissive,
@@ -87,6 +92,42 @@ impl Grid2D {
     /// face) should carry [`Bc::Reflect`]; the zero face area there makes it a no-op regardless.
     pub fn set_axisymmetric(&mut self, on: bool) {
         self.axisymmetric = on;
+    }
+
+    /// Set a finite plate radius at `z = 0`: the boundary reflects for `r ≤ r_plate` and is
+    /// transmissive beyond (the flat-plate bounce; gas past the edge escapes). `None` restores the
+    /// uniform [`Self::bc_zlo`].
+    pub fn set_plate_radius(&mut self, r_plate: Option<f64>) {
+        self.plate_radius = r_plate;
+    }
+
+    /// Radial coordinate of cell `ir`'s center.
+    #[inline]
+    fn r_center(&self, ir: usize) -> f64 {
+        (ir as f64 + 0.5) * self.dr
+    }
+
+    /// Net axial force on the plate `= Σ_{r ≤ r_plate} p(z=0, r)·dA` (flat plate, `n̂·ẑ = 1`; the
+    /// `2π` of the annular area `dA = 2π r dr` is dropped — it cancels in the `J_wall/p_in`
+    /// restitution ratio `eta_capture` uses). The wall pressure is taken from the cell adjacent to
+    /// the plate (`iz = 0`).
+    #[must_use]
+    pub fn plate_force(&self) -> f64 {
+        let rp = self.plate_radius.unwrap_or(f64::INFINITY);
+        (0..self.nr)
+            .filter(|&ir| self.r_center(ir) <= rp)
+            .map(|ir| self.prim(0, ir).p * self.r_center(ir) * self.dr)
+            .sum()
+    }
+
+    /// Total axial momentum `Σ ρu_z dV` (with the common `2π` dropped, as in [`Self::plate_force`]).
+    /// Its magnitude at `t = 0` is the incident axial momentum `p_in`.
+    #[must_use]
+    pub fn axial_momentum(&self) -> f64 {
+        (0..self.nz)
+            .flat_map(|iz| (0..self.nr).map(move |ir| (iz, ir)))
+            .map(|(iz, ir)| self.cons(iz, ir).mz * self.r_center(ir) * self.dr * self.dz)
+            .sum()
     }
 
     #[inline]
@@ -192,7 +233,14 @@ impl Grid2D {
                 let (iz, ir) = cell(i);
                 p[i + 2] = dir_cons(self.cons(iz, ir), axis);
             }
-            fill_ghosts(&mut p, n, bc_lo, bc_hi);
+            // The finite plate makes the z-lo boundary depend on the line's radius: reflect on the
+            // plate (r ≤ r_plate), transmissive past its edge. Other boundaries are uniform.
+            let bc_lo_line = match (axis, self.plate_radius) {
+                (Axis::Z, Some(rp)) if self.r_center(line) > rp => Bc::Transmissive,
+                (Axis::Z, Some(_)) => Bc::Reflect,
+                _ => bc_lo,
+            };
+            fill_ghosts(&mut p, n, bc_lo_line, bc_hi);
 
             // MUSCL slope reconstruction + Hancock half-step predictor for every padded index that
             // borders a physical face (1 ..= n+2). The predictor uses the plane flux (the geometric
@@ -248,9 +296,27 @@ impl Grid2D {
                         e: dc.e - inv * (f_hi.e - f_lo.e),
                     }
                 };
-                self.u[k] = from_dir_cons(updated, axis);
+                self.u[k] = floored(from_dir_cons(updated, axis), gamma);
             }
         }
+    }
+}
+
+/// Density / pressure floor below which a cell is treated as vacuum. The bounce's rarefaction tail
+/// evacuates to near-vacuum; such cells carry negligible mass and momentum, so resetting them to a
+/// quiescent floor keeps the scheme robust without affecting the wall impulse (the same spirit as
+/// the 1D tail guard, ADR-0001).
+const RHO_FLOOR: f64 = 1.0e-9;
+const P_FLOOR: f64 = 1.0e-12;
+
+/// Pass a healthy cell through unchanged; reset a vacuum/invalid cell (non-positive or non-finite
+/// density or pressure) to a quiescent floor state.
+fn floored(c: Cons, gamma: f64) -> Cons {
+    let w = Prim::from_cons(c, gamma);
+    if w.rho.is_finite() && w.p.is_finite() && w.rho >= RHO_FLOOR && w.p >= P_FLOOR {
+        c
+    } else {
+        Cons::from_prim(Prim::new(RHO_FLOOR, 0.0, 0.0, P_FLOOR), gamma)
     }
 }
 
