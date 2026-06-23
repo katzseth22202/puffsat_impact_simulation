@@ -428,6 +428,14 @@ impl<E: Eos> Tube<E> {
             .sum()
     }
 
+    /// Total (Lagrangian-conserved) gas mass `Σ_j m_j`. Conserved by the hydro step; a wall-sticking
+    /// condensation sink (Rung C) is the only operator that removes it, so the drop equals the stuck
+    /// mass (the mass-sink closure check exercises this).
+    #[cfg(test)]
+    fn total_mass(&self) -> f64 {
+        self.mass.iter().sum()
+    }
+
     /// Force the gas exerts on the rigid wall at `x = 0`: the total pressure `p + q` of cell 0.
     fn wall_force(&self) -> f64 {
         self.pressure(0) + self.artificial_viscosity(0)
@@ -810,9 +818,129 @@ impl CoupledBounce {
     }
 }
 
+/// Outcome of a condensing bounce (Rung C): the restitution plus the condensation loss channel.
+#[derive(Debug, Clone, Copy)]
+pub struct CondensingBounceResult {
+    /// The usual restitution/impulse bookkeeping.
+    pub bounce: BounceResult,
+    /// Channel 3 — energy carried off by condensate that stuck to the wall (per unit wall area;
+    /// includes the latent heat, which is already inside `e`).
+    pub loss_condensation: f64,
+    /// Condensate mass deposited at the wall (per unit area) — the gas's lost mass, for the
+    /// mass-sink closure check.
+    pub stuck_mass: f64,
+}
+
+/// A low-v condensing slug bounce (Rung C): the hydro step followed by an irreversible
+/// **wall-deposition mass sink** (ADR-0004 channel 3). Radiation and conduction are off — radiation
+/// is negligible at 3.2 km/s (design §3) and conduction is deferred to the B-flux rung. The other
+/// condensation channel, **bulk vapor-pressure collapse**, needs no code here: it lives in the
+/// two-phase EOS (`p → p_sat(T)`, latent heat folded into `e`), so it acts through the ordinary
+/// pressure the hydro already sees.
+///
+/// The sink removes the condensate that *newly forms* in the wall cell each step (so the total stuck
+/// mass tracks the cumulative condensation, not the step count — dt-convergent), carrying off its
+/// mass, momentum, and energy. Removing rebounding mass is what lowers `e_eff` below the lossless
+/// ceiling; the dead-stick floor `e_eff → 0` is recovered when the compression impulse alone
+/// (`= p_in`) is delivered and no gas rebounds.
+#[derive(Debug)]
+pub struct CondensingBounce {
+    tube: Tube<TableEos>,
+    /// Sticking coefficient `α ∈ [0, 1]` (baseline 1 — the pessimistic equilibrium bound, ADR-0004).
+    alpha: f64,
+    loss_condensation: f64,
+    stuck_mass: f64,
+    /// Liquid mass in the wall cell at the end of the previous step — the baseline against which
+    /// newly-condensed (hence newly-sticking) mass is measured.
+    m_liq_prev: f64,
+}
+
+impl CondensingBounce {
+    /// Wrap a tabulated-EOS `tube` for a condensing bounce with wall sticking coefficient `alpha`.
+    #[must_use]
+    pub fn new(tube: Tube<TableEos>, alpha: f64) -> Self {
+        let m_liq_prev = Self::wall_liquid_mass(&tube);
+        Self {
+            tube,
+            alpha,
+            loss_condensation: 0.0,
+            stuck_mass: 0.0,
+            m_liq_prev,
+        }
+    }
+
+    /// Condensed (liquid) mass currently in the wall cell, `liquid_frac(ρ₀, e₀) · m₀`.
+    fn wall_liquid_mass(tube: &Tube<TableEos>) -> f64 {
+        let e0 = tube.energy[0];
+        if e0 <= 0.0 {
+            return 0.0;
+        }
+        tube.eos.liquid_fraction(tube.density(0), e0) * tube.mass[0]
+    }
+
+    /// Wall-deposition sink (channel 3): the liquid that has newly condensed in the wall cell since
+    /// the previous step sticks irreversibly with coefficient `α`, removing its mass (a Lagrangian
+    /// mass sink — its momentum leaves with it) and energy from the gas.
+    fn condensation_substep(&mut self) {
+        let e0 = self.tube.energy[0];
+        if e0 <= 0.0 {
+            return;
+        }
+        let m_liq = Self::wall_liquid_mass(&self.tube);
+        let newly = m_liq - self.m_liq_prev; // liquid that condensed since the last step
+        if newly > 0.0 && self.alpha > 0.0 {
+            let stuck = (self.alpha * newly).min(self.tube.mass[0]);
+            self.loss_condensation += stuck * e0; // energy leaving with the condensate (incl. latent)
+            self.stuck_mass += stuck;
+            self.tube.mass[0] -= stuck; // mass sink; the condensate's momentum leaves with the mass
+        }
+        // Re-baseline to the liquid still present (intensive `liquid_frac` is unchanged this step).
+        self.m_liq_prev = Self::wall_liquid_mass(&self.tube);
+    }
+
+    /// Fire the condensing slug at the wall, integrating to the same `10⁻³`-of-peak tail guard as
+    /// [`Tube::run_bounce`], and return the restitution plus the condensation loss.
+    pub fn run(&mut self) -> CondensingBounceResult {
+        let incident = self.tube.total_momentum().abs();
+        let mut wall_impulse = 0.0;
+        let mut peak: f64 = 0.0;
+        let mut past_peak = false;
+        let mut force_old = self.tube.wall_force();
+        let max_steps = 400 * self.tube.cells() + 10_000;
+
+        for _ in 0..max_steps {
+            peak = peak.max(force_old);
+            if force_old < 0.5 * peak {
+                past_peak = true;
+            }
+            if past_peak && force_old < 1e-3 * peak {
+                break;
+            }
+            let dt = self.tube.stable_dt();
+            self.tube.step(dt);
+            self.condensation_substep();
+            let force_new = self.tube.wall_force();
+            wall_impulse += 0.5 * dt * (force_old + force_new);
+            force_old = force_new;
+        }
+
+        CondensingBounceResult {
+            bounce: BounceResult {
+                wall_impulse,
+                incident_momentum: incident,
+                residual_momentum: self.tube.total_momentum(),
+                e_eff: wall_impulse / incident - 1.0,
+                peak_wall_force: peak,
+            },
+            loss_condensation: self.loss_condensation,
+            stuck_mass: self.stuck_mass,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{CoupledBounce, Tube, Viscosity};
+    use super::{CondensingBounce, CoupledBounce, Tube, Viscosity};
     use crate::conduction::Solid;
     use crate::eos::TableEos;
     use crate::radiation::{Limiter, RadBc, RadConstants};
@@ -869,6 +997,107 @@ mod tests {
             eos,
             Viscosity::VON_NEUMANN_RICHTMYER,
         )
+    }
+
+    /// An ideal-gas EOS table (`e = T`, like [`gas_table`]) carrying a synthetic `liquid_frac` field
+    /// that rises gently with compression (`liquid_frac = clamp((ρ − 2)/20, 0, 1)`), so a slug
+    /// compressing at the wall condenses and the wall-sticking sink (Rung C) engages. `liquid_frac`
+    /// is an independent field exercising the *sink mechanism*; the real two-phase physics lives in
+    /// the low-v table (C1).
+    fn condensing_table() -> TableEos {
+        let n: usize = 8;
+        let rho_grid: Vec<f64> = (0..n)
+            .map(|i| 0.01 * 1000f64.powf(i as f64 / (n - 1) as f64)) // 0.01 … 10
+            .collect();
+        let t_grid: Vec<f64> = (0..n)
+            .map(|j| 0.05 * 4000f64.powf(j as f64 / (n - 1) as f64)) // 0.05 … 200
+            .collect();
+        let (mut p, mut e, mut cs, mut kr, mut kp, mut lf) = (
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        for &r in &rho_grid {
+            for &t in &t_grid {
+                p.push((GAMMA - 1.0) * r * t);
+                e.push(t);
+                cs.push((GAMMA * (GAMMA - 1.0) * t).sqrt());
+                kr.push(1e-10); // transparent: radiation off at low-v
+                kp.push(1e-10);
+                lf.push(((r - 2.0) / 20.0).clamp(0.0, 1.0)); // condenses as the gas compresses
+            }
+        }
+        let json = serde_json::json!({
+            "rho_grid": rho_grid,
+            "T_grid": t_grid,
+            "shape": [n, n],
+            "fields": { "p": p, "e": e, "c_s": cs,
+                        "kappa_rosseland": kr, "kappa_planck": kp, "liquid_frac": lf },
+        });
+        TableEos::new(Table::from_json(&json.to_string()).unwrap())
+    }
+
+    /// With `α = 0` the wall-sticking sink is inert, so the condensing bounce reproduces the plain
+    /// [`Tube::run_bounce`] exactly and no mass is removed.
+    #[allow(clippy::float_cmp)] // α=0 removes nothing → exactly zero stuck mass
+    #[test]
+    fn condensing_alpha_zero_matches_plain_bounce() {
+        let tube = slug_with_table(150, 4.0, condensing_table());
+        let plain = tube.clone().run_bounce().e_eff;
+        let cond = CondensingBounce::new(tube, 0.0).run();
+        assert_relative_eq!(cond.bounce.e_eff, plain, max_relative = 1e-12);
+        assert_eq!(cond.stuck_mass, 0.0);
+    }
+
+    /// `α = 1`: the wall sink removes condensate (mass-sink closure: the gas's lost mass equals the
+    /// tallied stuck mass), which lowers `e_eff` below the lossless ceiling while staying physical.
+    #[test]
+    fn condensing_mass_sink_closes_and_lowers_e_eff() {
+        let tube = slug_with_table(150, 4.0, condensing_table());
+        let m_init = tube.total_mass();
+        let e_plain = tube.clone().run_bounce().e_eff;
+        let mut cb = CondensingBounce::new(tube, 1.0);
+        let r = cb.run();
+
+        // The sink is the only mass remover: the tube's lost mass == the tallied stuck mass.
+        assert_relative_eq!(
+            m_init - cb.tube.total_mass(),
+            r.stuck_mass,
+            max_relative = 1e-10
+        );
+        assert!(r.stuck_mass > 0.0, "no condensate stuck");
+        assert!(r.loss_condensation > 0.0);
+        assert!(
+            r.bounce.e_eff < e_plain,
+            "α=1 did not lower e_eff: {} vs {e_plain}",
+            r.bounce.e_eff
+        );
+        assert!(
+            r.bounce.e_eff > 0.0,
+            "e_eff went non-physical: {}",
+            r.bounce.e_eff
+        );
+    }
+
+    /// The condensation sink is dt-convergent (it tracks newly-condensed mass, not step count), so
+    /// `e_eff(α=1)` is grid-converged under refinement.
+    #[test]
+    fn condensing_e_eff_is_grid_convergent() {
+        let coarse = CondensingBounce::new(slug_with_table(100, 4.0, condensing_table()), 1.0)
+            .run()
+            .bounce
+            .e_eff;
+        let fine = CondensingBounce::new(slug_with_table(200, 4.0, condensing_table()), 1.0)
+            .run()
+            .bounce
+            .e_eff;
+        assert!(
+            (coarse - fine).abs() < 2e-2,
+            "condensing e_eff not grid-convergent: {coarse} vs {fine}"
+        );
     }
 
     /// The radiation-medium builder (B5a) reads the gas state correctly: `T = e` (here `c_v = 1`),
