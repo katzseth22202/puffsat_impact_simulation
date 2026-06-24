@@ -32,6 +32,17 @@ tension), Ti toughness — not the absorber.
 the 1D solver's peak-load history. The sim supplies the load; the spall check is structural analysis
 on top.
 
+## Amendment (2026-06, Rung S): the reflected-tensile check, operationalized
+
+The survivability frontier (design §7) now tests both limits. The reflected tensile stress at the
+SiC–Ti interface is taken as `|R|·peak ≈ 0.15·peak` (this ADR's impedance result), against SiC dynamic
+spall strength 0.3–1 GPa. With the binding compressive peaks landing at the 400 MPa baseline, the
+reflected tension is ~60 MPa — far below spall — so **the compressive facesheet limit binds first**,
+exactly as this ADR's "sub-dominant at baseline" analysis predicted, now confirmed numerically across
+the swept shapes. The reflected-tensile check is carried in `classify_survivability` as the second
+gate but never controls the frontier at these loads; it would only bind if incident stress reached
+~2 GPa (which the foreclosed `f`-max corner does reach, but that corner already fails on compression).
+
 ## Considered Options
 
 - **Delegate spall mitigation to the shock absorber.** Rejected: timescale mismatch ~10³× — the

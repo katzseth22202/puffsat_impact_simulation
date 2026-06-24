@@ -22,6 +22,28 @@ is linear in `f`, so `f(v)` is reported with the rule "an X% shortfall in `f` is
 required mass ratio." That hands any future performance study the lever without this sim defining
 the mission.
 
+## Amendment (2026-06, Rung S): the gate evaluated against the *survivable* frontier
+
+The survivability frontier (design §7, ADR-0010/0011) now lets the gate be evaluated against the
+*survivable* `f`, not the unconstrained best — the honest reading, since an operating point that
+exceeds the facesheet pressure limit is not available:
+
+- **At the transitional dip (the conservative worst case, `e_eff ≈ 0.57`, 11 km/s):** the best
+  survivable `f ≈ 0.80` — it **clears the gate**, on a moderate-footprint shallow-concave disk that
+  peaks at ~370 MPa (under the 400 MPa baseline) even after a 1.78× concave focusing penalty. The
+  unconstrained `f`-max corner (short disk + tight footprint) is foreclosed: it peaks at ~2.3 GPa.
+- **At 16 km/s (`e_eff ≈ 0.63`):** the best survivable `f ≈ 0.78` under the 400 MPa **baseline** —
+  *just below* the gate — rising to `≈ 0.84` at the **relaxed 900 MPa** high-v limit (the §7 sweep
+  to 700/900). So at 16 km/s the verdict is limit-conditional: it clears 0.8 only if the SiC+Ti stack
+  carries the relaxed pressure, which is exactly the kind of one-sided refinement the gate triggers.
+
+**Consequence for the lever-gating logic above:** the conservative baseline clears 0.8 at the dip
+(settled there) but sits marginally below at 16 km/s under the baseline pressure limit — so the
+16 km/s anchor is where the recovery levers (ablating wall, ADR-0014; the relaxed `P_limit`) earn
+their keep. This is still a conservative-floor reading (rigid wall, worst-case `e_eff`, the concave
+focusing penalty applied); the best-estimate curve (ADR-0013) only moves it up. No `f` is quoted
+externally until validation (design §9).
+
 ## Considered Options
 
 - **A performance/mission-derived threshold.** Rejected: drags in the out-of-scope vehicle analysis

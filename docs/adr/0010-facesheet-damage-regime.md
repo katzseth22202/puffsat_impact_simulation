@@ -40,3 +40,17 @@ atom-stopping.
 
 Crystal displacement, sputtering, and penetration damage are not modeled. The survivability frontier
 is limited by peak facesheet pressure (structural) and ablation burn-through (thermal/logistical) only.
+
+## Amendment (2026-06, Rung S): the peak-pressure frontier, operationalized
+
+The pressure-limited frontier this ADR scopes is now computed (design §7). Peak facesheet pressure is
+the stagnation pressure **`≈ 2.0·ρv²`**, verified physical from the 1D kernel's `peak_wall_force` (the
+coefficient is 2.0 at both 11 and 16 km/s, i.e. `peak ≈ 2·ρv²`, the cold-cloud ram pressure
+recompressed at the wall). The `Σ = m/(π r_foot²) = ρL` contract (ADR-0003) maps each cloud shape to a
+density, so the frontier is `peak(L/D, r_foot/R, v)` against the **`P_limit = 400 MPa` baseline** (the
+§5 conservative floor), swept to 700/900 MPa at 16 km/s. The damage regime is unchanged — thermal /
+structural, atomic damage out of scope — and the binding limit is the compressive facesheet pressure
+(the reflected-tensile spall stays sub-dominant, ADR-0011). Ablation-per-pulse is reported as a
+back-propagated MEMS-replenishment *requirement*, not gated here. **Result:** the `f`-maximizing
+short-disk / tight-footprint corner fails by a wide margin (~2.3 GPa at 16 km/s); the best *survivable*
+`f` is ≈ 0.80 (dip) / ≈ 0.78 (16 km/s baseline) / ≈ 0.84 (16 km/s relaxed 900 MPa).

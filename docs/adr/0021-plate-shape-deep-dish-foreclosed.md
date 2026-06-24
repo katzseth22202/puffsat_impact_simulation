@@ -71,6 +71,25 @@ schedule's job, so it is recorded here as a *deferred finding, not yet a paper c
   Orion pusher plate, adjacent to bomb-Orion. The primary PDF was not read (OSTI firewalled), so confirm
   the exact `C₀` attribution against the original Orion sources before quoting it.
 
+## Amendment (2026-06, Rung S): the `L/D ↔ survivability` trade is now measured
+
+This ADR asserts that `L/D` "trades `eta_capture` directly against survivability" and that the pressure
+limit "*forces* the cloud toward the splat-prone elongated shape." The survivability frontier (design
+§7, ADR-0010/0011) now measures it. Via the `Σ = m/(π r_foot²) = ρL` contract, a short disk (small
+`L/D`) or tight footprint (small `r_foot/R`) packs the mass into a dense column → high peak pressure;
+so the **`f`-maximizing corner (short disk + tight footprint) is exactly the densest, least survivable
+case** — it peaks at ~2.3 GPa at 16 km/s (with the concave local-peak focusing folded in, below) and is
+foreclosed. The survivable optimum is the intermediate, elongated, wider-footprint shape this ADR
+predicted: best survivable `f ≈ 0.80` at the dip, ≈ 0.78 / 0.84 at 16 km/s (baseline / relaxed).
+
+**The concave focusing penalty is also now quantified** (Rung S `euler2d` `max_plate_pressure`): a
+shallow dish focuses the rebound to a peak *local* facesheet pressure **1.0–2.4×** the flat plane-wave
+value (the survivability cost of the re-collimation gain this ADR credits concavity with — and the
+shallow-plate cousin of the focal hot spot that forecloses the deep dish). It is folded into the
+frontier, so the survivable-`f` numbers above already carry it (e.g. the best dip survivor peaks at
+370 MPa *after* a 1.78× focusing penalty). Curvature thus cuts both ways — it lifts `eta_capture` but
+raises the local peak — and the shallow `d/D ≤ 0.15` band stays net-favorable; a deeper dish would not.
+
 ## Consequence
 
 `eta_capture(v)` is a measured sweep output, **allowed to come in below 1 at high-v** — it is never
