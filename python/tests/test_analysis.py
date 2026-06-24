@@ -421,3 +421,44 @@ def test_plot_survivability_writes_file(tmp_path: Path) -> None:
     assert len(saved) == 1
     assert saved[0].exists()
     assert saved[0].stat().st_size > 0
+
+
+def test_margin_map_widening_or_lightening_buys_f(tmp_path: Path) -> None:
+    """The closed-form margin map: a wider plate (R↑) or smaller pulse (m↓) relaxes the pressure
+    ceiling (`peak ∝ m/R³`) and admits a denser, higher-`f` shape that fails at the baseline. Three
+    shapes at 16 km/s: a dense corner (~2 GPa, never survives), an intermediate disk (~435 MPa at
+    R=5/m=25, just over baseline), and a dilute cylinder (~48 MPa, always survives). At the baseline
+    only the cylinder survives; widening to R=5.5 m *or* lightening to 20 kg flips the intermediate
+    in, lifting the best survivable `f` from the cylinder's to the intermediate's."""
+    path = tmp_path / "geom.jsonl"
+    _write_jsonl(
+        path,
+        [
+            _grow(0.0, 0.3, 0.3, 1.00),  # dense corner: ~2 GPa, never survives in the grid
+            _grow(0.0, 0.3, 0.5, 0.90),  # intermediate: ~435 MPa at R=5/m=25 (just fails 400)
+            _grow(0.0, 1.0, 0.7, 0.73),  # dilute cylinder: ~48 MPa, always survives
+        ],
+    )
+    pts = an.margin_map(
+        an.read_geometry(path),
+        [(16_000.0, 0.63, 2.0)],
+        plate_radii=(5.0, 5.5),
+        masses=(25.0, 20.0),
+    )
+    cell = {(p.plate_radius, p.mass): p for p in pts}
+    f_cyl = an.reconcile_f(0.73, 0.63)
+    f_mid = an.reconcile_f(0.90, 0.63)
+
+    # headroom is exact: (R/R0)^3 * (m0/m)
+    assert cell[(5.0, 25.0)].headroom == pytest.approx(1.0)
+    assert cell[(5.5, 25.0)].headroom == pytest.approx((5.5 / 5.0) ** 3)
+    assert cell[(5.0, 20.0)].headroom == pytest.approx(25.0 / 20.0)
+
+    # at the pinned baseline only the dilute cylinder survives
+    assert cell[(5.0, 25.0)].best_f_baseline == pytest.approx(f_cyl)
+    # widening the plate OR lightening the pulse flips the intermediate in -> higher f
+    assert cell[(5.5, 25.0)].best_f_baseline == pytest.approx(f_mid)
+    assert cell[(5.0, 20.0)].best_f_baseline == pytest.approx(f_mid)
+    assert f_mid > f_cyl
+    # the dense corner never survives even at the most-relaxed grid cell (still ~1.2 GPa)
+    assert cell[(5.5, 20.0)].best_f_baseline == pytest.approx(f_mid)

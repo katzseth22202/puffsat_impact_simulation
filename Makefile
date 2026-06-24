@@ -3,7 +3,7 @@
 
 PY := uv run python
 
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin
 
 all: smoke
 
@@ -123,6 +123,15 @@ analysis-survivability: data/results/frontier_survivability.csv
 
 data/results/frontier_survivability.csv: data/results/sweep_geometry.jsonl data/results/sweep.jsonl data/results/sweep_transitional_eos.jsonl python/puffsat/analysis.py
 	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis --axis survivability
+
+## analysis-margin: closed-form f-margin exploration (design §7, ADR-0010 amendment) ->
+## data/results/frontier_margin.csv. Rescales the survivability frontier over the (plate radius R,
+## pulse mass m) grid (peak ∝ m/R³, eta_capture scale-invariant) to map how much survivable f a
+## wider plate / smaller pulse buys above the passing baseline. Reuses existing results, no sweep.
+analysis-margin: data/results/frontier_margin.csv
+
+data/results/frontier_margin.csv: data/results/sweep_geometry.jsonl data/results/sweep.jsonl data/results/sweep_transitional_eos.jsonl python/puffsat/analysis.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis --axis margin
 
 ## sensitivity: opacity-insensitivity scan (rung B, B5d-3) — sweep at 0.1x/1x/10x opacity, show
 ## e_eff barely moves. Builds the release sweep first; writes data/results/opacity_scan/.

@@ -49,6 +49,7 @@ ANCHOR_HIGHV = (16000.0, 0.63)
 DEFAULT_GEOMETRY_PATH = Path("data/results/sweep_geometry.jsonl")
 DEFAULT_GEOMETRY_SUMMARY_PATH = Path("data/results/frontier_geometry.csv")
 DEFAULT_SURVIVABILITY_SUMMARY_PATH = Path("data/results/frontier_survivability.csv")
+DEFAULT_MARGIN_SUMMARY_PATH = Path("data/results/frontier_margin.csv")
 
 # 1D `e_eff` anchors for the `f = eta_capture·(1+e_eff)/2` reconciliation (ADR-0003). `EEFF_DIP` is
 # the transitional EOS worst case (the conservative floor, ADR-0012); `EEFF_HIGHV` the 16 km/s point
@@ -73,6 +74,16 @@ P_LIMIT_HIGHV = (700.0e6, 900.0e6)  # relaxed limits swept at the 16 km/s anchor
 REFLECT_FRAC = 0.15  # |R| at the SiC-Ti impedance step -> reflected tensile fraction (ADR-0011)
 SIC_SPALL_LO = 0.3e9  # SiC dynamic spall strength, conservative end (ADR-0011)
 SIC_SPALL_HI = 1.0e9  # SiC dynamic spall strength, upper end
+
+# --- closed-form `f`-margin exploration (design §7, ADR-0010 amendment) ---
+# Peak facesheet pressure `c_stag·rho·v²` is intensive (set by the gas at the wall); via the Σ
+# contract `rho = m/(2π·(L/D)·(r_foot/R)³·R³)` it scales analytically as `rho ∝ m/R³`, while
+# `eta_capture(r_foot/R)` is scale-invariant. So a wider plate (R↑) or a smaller pulse (m↓) only
+# relaxes the pressure ceiling, admitting denser/higher-`eta` shapes and buying `f` back above the
+# 0.8 gate (ADR-0009). R/m are otherwise PINNED — R by the vehicle dry-mass budget, m by the
+# per-pulse thrust x pulse-rate — so this maps the f-side of a system trade, not an optimum.
+MARGIN_PLATE_RADII_M = (5.0, 5.5, 6.0, 6.5, 7.0)  # current R=5 m up to +40% (design §2/§7)
+MARGIN_MASSES_KG = (25.0, 20.0, 15.0)  # current m=25 kg down to 15 kg (more, smaller pulses)
 
 
 @dataclass(frozen=True)
@@ -703,6 +714,66 @@ def write_survivability_summary(
     _write_csv(header, ([getattr(p, name) for name in header] for p in points), path)
 
 
+@dataclass(frozen=True)
+class MarginPoint:
+    """The best survivable `f` at a scaled plate radius `R` and pulse mass `m`, per velocity anchor:
+    one cell of the closed-form margin map. `headroom` is the pressure-ceiling relief vs the fixed
+    baseline `(R=5 m, m=25 kg)`: `(R/R0)**3 * (m0/m)`, the exact `1/rho` factor by which every
+    shape's peak `2*rho*v**2` drops, since `rho` scales as `m/R**3` (the Sigma contract). A higher
+    headroom admits denser shapes and lifts the best survivable `f`."""
+
+    v: float
+    plate_radius: float
+    mass: float
+    headroom: float
+    best_f_baseline: float | None  # best survivable f at the 400 MPa baseline
+    best_f_relaxed: float | None  # best survivable f at the relaxed 900 MPa high-v limit
+
+
+def margin_map(
+    rows: list[GeoRow],
+    anchors: Iterable[tuple[float, float, float]],
+    *,
+    plate_radii: Iterable[float] = MARGIN_PLATE_RADII_M,
+    masses: Iterable[float] = MARGIN_MASSES_KG,
+    base_radius: float = PLATE_RADIUS_M,
+    base_mass: float = PULSE_MASS_KG,
+) -> list[MarginPoint]:
+    """The closed-form `f`-margin map: best survivable `f` over the `(plate radius R, pulse mass m)`
+    grid, per velocity anchor. A pure rescaling of `survivability_frontier`: only `impact_density`
+    (which scales as `m/R**3`) changes between cells, so the geometry/anchor data is reused with no
+    kernel reruns. This is the f-SIDE of a system trade; the cost-side (plate-mass and pulse-count)
+    is out of scope. It quantifies margin above the already-passing `f ~ 0.8` (de-risk, not a
+    necessity). See design §7 / ADR-0010 (amendment)."""
+    anchors = list(anchors)
+    points: list[MarginPoint] = []
+    for radius in plate_radii:
+        for mass in masses:
+            headroom = (radius / base_radius) ** 3 * (base_mass / mass)
+            resolved = survivability_frontier(rows, anchors, mass=mass, plate_radius=radius)
+            for v in sorted({p.v for p in resolved}):
+                at_v = [p for p in resolved if p.v == v]
+                points.append(
+                    MarginPoint(
+                        v=v,
+                        plate_radius=radius,
+                        mass=mass,
+                        headroom=headroom,
+                        best_f_baseline=best_survivable_f(at_v, relaxed=False),
+                        best_f_relaxed=best_survivable_f(at_v, relaxed=True),
+                    )
+                )
+    return points
+
+
+def write_margin_summary(
+    points: list[MarginPoint], path: Path = DEFAULT_MARGIN_SUMMARY_PATH
+) -> None:
+    """Write the closed-form margin map to a CSV (header = `MarginPoint` field names)."""
+    header = [f.name for f in fields(MarginPoint)]
+    _write_csv(header, ([getattr(p, name) for name in header] for p in points), path)
+
+
 def plot_survivability(
     points: list[SurvivabilityPoint], out_dir: Path = DEFAULT_PLOT_DIR, tag: str = ""
 ) -> list[Path]:
@@ -800,6 +871,54 @@ def _run_survivability(
     print(f"python: wrote {summary_path} and {len(figs)} figure(s): " + ", ".join(map(str, figs)))
 
 
+def _run_margin(
+    geometry_path: Path,
+    highv_sweep_path: Path,
+    dip_sweep_path: Path,
+    summary_path: Path,
+) -> None:
+    """The `--axis margin` path: the closed-form `f`-margin exploration (design §7, ADR-0010
+    amendment). Reuses the survivability anchors (c_stag from the 1D sweeps) and rescales the
+    frontier over the `(R, m)` grid — no kernel reruns — to report how much survivable `f` a wider
+    plate or a smaller pulse buys above the already-passing baseline."""
+    c_stag_hi = stagnation_coefficient(read_sweep(highv_sweep_path), ANCHOR_HIGHV[0])
+    c_stag_dip = stagnation_coefficient(read_sweep(dip_sweep_path), V_DIP)
+    anchors = [(V_DIP, EEFF_DIP, c_stag_dip), (ANCHOR_HIGHV[0], EEFF_HIGHV, c_stag_hi)]
+    points = margin_map(read_geometry(geometry_path), anchors)
+    write_margin_summary(points, summary_path)
+
+    def _fmt(x: float | None) -> str:
+        return f"{x:.3f}" if x is not None else "  none "
+
+    for v in sorted({p.v for p in points}):
+        print(f"python: f-margin map at {v / 1000:.0f} km/s (best survivable f, 400 MPa baseline):")
+        print("python:   R\\m (kg) |" + "".join(f"  {m:>5.0f}" for m in MARGIN_MASSES_KG))
+        for radius in MARGIN_PLATE_RADII_M:
+            cells = "".join(
+                _fmt(
+                    next(
+                        p.best_f_baseline
+                        for p in points
+                        if p.v == v and p.plate_radius == radius and p.mass == m
+                    )
+                )
+                for m in MARGIN_MASSES_KG
+            )
+            print(f"python:   R={radius:>4.1f} m | {cells}")
+    base = next(
+        p
+        for p in points
+        if p.plate_radius == PLATE_RADIUS_M and p.mass == PULSE_MASS_KG and p.v == ANCHOR_HIGHV[0]
+    )
+    best = max(points, key=lambda p: (p.v == ANCHOR_HIGHV[0], p.best_f_baseline or 0.0))
+    print(
+        f"python: 16 km/s baseline rises from f={_fmt(base.best_f_baseline)} (R=5 m, m=25 kg) to "
+        f"f={_fmt(best.best_f_baseline)} (R={best.plate_radius:.1f} m, m={best.mass:.0f} kg, "
+        f"headroom {best.headroom:.1f}x). R and m are pinned by external budgets — this is the "
+        f"f-side of a system trade. Wrote {summary_path}."
+    )
+
+
 def main() -> None:
     """Read a sweep, extract the frontier, write the CSV summary, and render the figures. `--axis
     rho` (default) builds the `e_eff(rho)` frontier + loss decomposition for the high-v/low-v
@@ -811,7 +930,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="e_eff frontier extraction + loss decomposition.")
     parser.add_argument(
         "--axis",
-        choices=["rho", "v", "geometry", "survivability"],
+        choices=["rho", "v", "geometry", "survivability", "margin"],
         default="rho",
         help="frontier axis",
     )
@@ -855,6 +974,12 @@ def main() -> None:
             plot_dir,
             tag,
         )
+        return
+
+    if args.axis == "margin":
+        geometry_path = args.sweep or DEFAULT_GEOMETRY_PATH
+        summary_path = args.summary or DEFAULT_MARGIN_SUMMARY_PATH
+        _run_margin(geometry_path, DEFAULT_SWEEP_PATH, DEFAULT_TRANS_EOS_PATH, summary_path)
         return
 
     sweep_path: Path = args.sweep or DEFAULT_SWEEP_PATH
