@@ -46,6 +46,31 @@ The flat / 0.10 / 0.15 depth-to-diameter shapes are now run through the 2D kerne
 This is a shallow-plate result at two Mach anchors; the deep dish stays foreclosed (above), and the
 focal-radiation penalty that forecloses it at 16 km/s is untouched by these radiation-free runs.
 
+## Amendment (2026-06): Orion's geometric loss is *interception* (collimation `C₀ ≈ 0.5`), not sideways rebound — a conditional PuffSat advantage to claim later
+
+Sanity-checking the §3.2 Orion comparison turned up a **distinct, larger geometric difference than the
+rebound-axiality lever this ADR scopes** — but it lives in mechanism #1 (interception), the cloud
+schedule's job, so it is recorded here as a *deferred finding, not yet a paper claim*.
+
+- **What Orion concluded (verified against the Orion literature).** Orion's plasma **reflects and
+  transfers momentum** to the pusher plate — it does not "escape sideways"; reflection *is* the
+  propulsion principle (~6000 s Iₛₚ). Its dominant *geometric* loss is the **collimation factor
+  `C₀ ≈ 0.5`** — only about half the bomb's debris hits the plate, the rest overspilling the edge from
+  a quasi-point-source expansion — improvable by shaping the propellant (a disk reaction mass → a
+  focused "cigar" jet) and matching plate diameter to fireball diameter. This is **interception**
+  (debris *missing* the plate), not rebound axiality (`eta_capture`), and not the radiative §3.2 thesis.
+- **The PuffSat difference (conditional).** A *controlled, shaped gas cloud sized inside the plate
+  footprint* (`r_foot/R < 1`, "room before the edge") can drive PuffSat's collimation factor toward
+  **~1 vs Orion's ~0.5** — a near-2× geometric advantage, and a *separate multiplicative factor* from
+  the `eta_capture` rebound term (the 2D sweep already assumes the gas lands, i.e. implicitly credits
+  collimation ≈ 1). **Gate:** this is only a paper claim *if the deferred cloud-schedule / delivery
+  study confirms PuffSat can actually deliver the cloud onto the footprint*; until then it stays a note.
+- **Citation caveat.** `C₀ ≈ 0.5` is from secondary Orion references (standard Orion literature, ultimately
+  Dyson / General Atomics). The paper's "Balcomb 1970" = **LA-4541-MS, "Nuclear Pulsed Space Propulsion
+  Systems," J.D. Balcomb et al., LASL, Oct 1970** — the *laser-driven* micro-pulse variant using the
+  Orion pusher plate, adjacent to bomb-Orion. The primary PDF was not read (OSTI firewalled), so confirm
+  the exact `C₀` attribution against the original Orion sources before quoting it.
+
 ## Consequence
 
 `eta_capture(v)` is a measured sweep output, **allowed to come in below 1 at high-v** — it is never
