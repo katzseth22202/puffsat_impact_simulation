@@ -216,3 +216,63 @@ def test_plot_transitional_writes_file(tmp_path: Path) -> None:
     assert len(saved) == 1
     assert saved[0].exists()
     assert saved[0].stat().st_size > 0
+
+
+def _grow(d_over_d: float, l_over_d: float, r_foot_over_r: float, eta: float) -> dict[str, float]:
+    """A geometry-sweep row at the given case; the two restitution ratios are stand-ins (the reader
+    keeps them but the reconciliation keys on `eta_capture`)."""
+    return {
+        "d_over_d": d_over_d,
+        "l_over_d": l_over_d,
+        "r_foot_over_r": r_foot_over_r,
+        "mach": 10.0,
+        "eta_capture": eta,
+        "restitution_free": eta * 1.5,
+        "restitution_confined": 1.5,
+        "peak_force": 0.6,
+    }
+
+
+def test_reconcile_f_formula() -> None:
+    """`f = eta_capture·(1 + e_eff)/2` (ADR-0003)."""
+    assert an.reconcile_f(0.9, 0.57) == pytest.approx(0.9 * 1.57 / 2.0)
+    assert an.reconcile_f(1.0, 1.0) == pytest.approx(1.0)  # elastic + perfect collimation
+
+
+def test_geometry_frontier_reconciles_f_and_sigma(tmp_path: Path) -> None:
+    """The geometry frontier reconciles `f` at both `e_eff` anchors, reports the `Sigma` contract
+    (`= 2·L/D`, footprint-independent), and sorts by `(mach, L/D, r_foot/R, d/D)`."""
+    path = tmp_path / "geom.jsonl"
+    _write_jsonl(
+        path,
+        [
+            _grow(0.15, 0.6, 0.5, 0.93),  # out of order on purpose
+            _grow(0.0, 0.6, 0.5, 0.83),
+        ],
+    )
+    pts = an.geometry_frontier(an.read_geometry(path))
+    assert [p.d_over_d for p in pts] == [0.0, 0.15]  # sorted ascending in d/D within the slice
+    flat, concave = pts[0], pts[1]
+    assert flat.f_dip == pytest.approx(0.83 * (1.0 + an.EEFF_DIP) / 2.0)
+    assert concave.f_highv == pytest.approx(0.93 * (1.0 + an.EEFF_HIGHV) / 2.0)
+    assert concave.f_dip > flat.f_dip  # the concave plate lifts f over the flat floor
+    assert flat.sigma_over_rho == pytest.approx(2.0 * 0.6)  # Sigma set by L/D, not footprint
+
+
+def test_plot_geometry_writes_file(tmp_path: Path) -> None:
+    """The geometry figure renders for a representative slice (skipped without matplotlib)."""
+    pytest.importorskip("matplotlib")
+    path = tmp_path / "geom.jsonl"
+    _write_jsonl(
+        path,
+        [
+            _grow(dd, 0.6, rf, 0.8 + dd + 0.05 * rf)
+            for dd in (0.0, 0.10, 0.15)
+            for rf in (0.3, 0.5, 0.7)
+        ],
+    )
+    pts = an.geometry_frontier(an.read_geometry(path))
+    saved = an.plot_geometry(pts, tmp_path)
+    assert len(saved) == 1
+    assert saved[0].exists()
+    assert saved[0].stat().st_size > 0

@@ -44,6 +44,19 @@ DEFAULT_TRANS_SUMMARY_PATH = Path("data/results/frontier_transitional.csv")
 ANCHOR_LOWV = (3200.0, 0.74)
 ANCHOR_HIGHV = (16000.0, 0.63)
 
+# Geometry sweep (Rung D follow-on): the `crates/sweep --geometry` output and its f-reconciliation.
+DEFAULT_GEOMETRY_PATH = Path("data/results/sweep_geometry.jsonl")
+DEFAULT_GEOMETRY_SUMMARY_PATH = Path("data/results/frontier_geometry.csv")
+
+# 1D `e_eff` anchors for the `f = eta_capture·(1+e_eff)/2` reconciliation (ADR-0003). `EEFF_DIP` is
+# the transitional EOS worst case (the conservative floor, ADR-0012); `EEFF_HIGHV` the 16 km/s point
+# (Rung B). `eta_capture` is geometry-dominated and ~velocity-independent, so the first bracket
+# pairs it with these two `e_eff` scenarios; the full `Sigma`-resolved `e_eff(rho(r_foot))` lookup
+# is the deferred refinement (the dual-curve `f(v)` deliverable, ADR-0013).
+EEFF_DIP = 0.57
+EEFF_HIGHV = 0.63
+USEFUL_F_GATE = 0.8  # the useful-`f` gate (ADR-0009), marked on the figure
+
 
 @dataclass(frozen=True)
 class SweepRow:
@@ -350,13 +363,176 @@ def _run_transitional(
     print(f"python: wrote {summary_path} and {len(figs)} figure(s): " + ", ".join(map(str, figs)))
 
 
+@dataclass(frozen=True)
+class GeoRow:
+    """One geometry-sweep result row (`crates/sweep --geometry`, ADR-0023): the case and its
+    `eta_capture` with the two restitution ratios it was formed from."""
+
+    d_over_d: float
+    l_over_d: float
+    r_foot_over_r: float
+    mach: float
+    eta_capture: float
+    restitution_free: float
+    restitution_confined: float
+    peak_force: float
+
+
+@dataclass(frozen=True)
+class GeometryPoint:
+    """One reconciled operating point: the geometry case, its `eta_capture`, the axial column
+    density it implies (the `Sigma` contract), and `f = eta_capture·(1+e_eff)/2` at the two
+    `e_eff` anchors."""
+
+    d_over_d: float
+    l_over_d: float
+    r_foot_over_r: float
+    mach: float
+    eta_capture: float
+    # Axial column density per unit cloud density, `Sigma/rho = L = 2·(L/D)·r_foot` (`r_foot = 1`).
+    # The `Sigma = m/(pi r_foot^2)` contract (ADR-0003) is set by `L/D` alone — the footprint
+    # cancels for a uniform cylinder, so `r_foot/R` is purely the `eta_capture` lever, not a
+    # `Sigma` knob.
+    sigma_over_rho: float
+    f_dip: float  # f at the transitional worst-case e_eff (the conservative floor)
+    f_highv: float  # f at the 16 km/s e_eff
+
+
+def read_geometry(path: Path = DEFAULT_GEOMETRY_PATH) -> list[GeoRow]:
+    """Parse the geometry sweep JSONL (one JSON object per line; blank lines tolerated)."""
+    rows: list[GeoRow] = []
+    for line in Path(path).read_text().splitlines():
+        if not line.strip():
+            continue
+        d = json.loads(line)
+        rows.append(
+            GeoRow(
+                d_over_d=float(d["d_over_d"]),
+                l_over_d=float(d["l_over_d"]),
+                r_foot_over_r=float(d["r_foot_over_r"]),
+                mach=float(d["mach"]),
+                eta_capture=float(d["eta_capture"]),
+                restitution_free=float(d["restitution_free"]),
+                restitution_confined=float(d["restitution_confined"]),
+                peak_force=float(d["peak_force"]),
+            )
+        )
+    return rows
+
+
+def reconcile_f(eta_capture: float, e_eff: float) -> float:
+    """The paper's fudge factor `f = eta_capture·(1 + e_eff)/2` (ADR-0003)."""
+    return eta_capture * (1.0 + e_eff) / 2.0
+
+
+def geometry_frontier(rows: list[GeoRow]) -> list[GeometryPoint]:
+    """Reconcile each geometry case into `f` at the two `e_eff` anchors, sorted by
+    `(mach, L/D, r_foot/R, d/D)` for a stable CSV/plot order."""
+    points: list[GeometryPoint] = []
+    for r in sorted(rows, key=lambda x: (x.mach, x.l_over_d, x.r_foot_over_r, x.d_over_d)):
+        points.append(
+            GeometryPoint(
+                d_over_d=r.d_over_d,
+                l_over_d=r.l_over_d,
+                r_foot_over_r=r.r_foot_over_r,
+                mach=r.mach,
+                eta_capture=r.eta_capture,
+                sigma_over_rho=2.0 * r.l_over_d,
+                f_dip=reconcile_f(r.eta_capture, EEFF_DIP),
+                f_highv=reconcile_f(r.eta_capture, EEFF_HIGHV),
+            )
+        )
+    return points
+
+
+def write_geometry_summary(
+    points: list[GeometryPoint], path: Path = DEFAULT_GEOMETRY_SUMMARY_PATH
+) -> None:
+    """Write the reconciled geometry frontier to a CSV (header = `GeometryPoint` field names)."""
+    header = [f.name for f in fields(GeometryPoint)]
+    _write_csv(header, ([getattr(p, name) for name in header] for p in points), path)
+
+
+def plot_geometry(
+    points: list[GeometryPoint], out_dir: Path = DEFAULT_PLOT_DIR, tag: str = ""
+) -> list[Path]:
+    """Render `eta_capture` and `f` vs footprint `r_foot/R`, one curve per curvature `d/D`, for a
+    representative `(Mach, L/D)` slice — the flat plate is the floor, the shallow-concave plates the
+    recovery lever. `f` uses the transitional worst-case `e_eff` (the conservative floor), with the
+    useful-`f` gate marked. matplotlib is imported lazily (`sci` extra); all inputs are plain
+    floats, so no `Any` escapes."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # A representative slice: the higher Mach anchor and the median L/D.
+    machs = sorted({p.mach for p in points})
+    lds = sorted({p.l_over_d for p in points})
+    sel_mach = machs[-1]
+    sel_ld = lds[len(lds) // 2]
+    sliced = [p for p in points if p.mach == sel_mach and p.l_over_d == sel_ld]
+    curvatures = sorted({p.d_over_d for p in sliced})
+
+    fig, (ax_eta, ax_f) = plt.subplots(2, 1, sharex=True, figsize=(6, 7))
+    for dd in curvatures:
+        row = sorted((p for p in sliced if p.d_over_d == dd), key=lambda p: p.r_foot_over_r)
+        rf = [p.r_foot_over_r for p in row]
+        label = "flat" if dd == 0.0 else f"d/D = {dd:.2f}"
+        ax_eta.plot(rf, [p.eta_capture for p in row], "o-", label=label)
+        ax_f.plot(rf, [p.f_dip for p in row], "o-", label=label)
+    ax_eta.axhline(1.0, color="grey", ls=":", alpha=0.6, label="1D limit (flat ceiling)")
+    ax_eta.set_ylabel(r"$\eta_\mathrm{capture}$")
+    ax_eta.set_title(
+        rf"Geometry sweep: $M={sel_mach:.0f}$, $L/D={sel_ld:.2f}$ "
+        r"(concave lifts $\eta$ over the flat floor)"
+    )
+    ax_eta.grid(True, alpha=0.3)
+    ax_eta.legend(loc="best", fontsize="small")
+    ax_f.axhline(
+        USEFUL_F_GATE, color="C3", ls="--", alpha=0.7, label=rf"useful-$f$ gate {USEFUL_F_GATE}"
+    )
+    ax_f.set_xlabel(r"footprint $r_\mathrm{foot}/R$")
+    ax_f.set_ylabel(rf"$f = \eta\,(1+e_\mathrm{{eff}})/2$, $e_\mathrm{{eff}}={EEFF_DIP}$")
+    ax_f.grid(True, alpha=0.3)
+    ax_f.legend(loc="best", fontsize="small")
+    path = out_dir / f"{tag}geometry_eta_f.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return [path]
+
+
+def _run_geometry(geometry_path: Path, summary_path: Path, plot_dir: Path, tag: str) -> None:
+    """The `--axis geometry` path: read the geometry sweep, reconcile `f`, write the CSV, render the
+    figure, and report the flat-floor vs best-concave `f` bracket."""
+    points = geometry_frontier(read_geometry(geometry_path))
+    write_geometry_summary(points, summary_path)
+    figs = plot_geometry(points, plot_dir, tag)
+    flat = [p for p in points if p.d_over_d == 0.0]
+    concave = [p for p in points if p.d_over_d > 0.0]
+    if flat and concave:
+        best_flat = max(p.f_dip for p in flat)
+        best_concave = max(p.f_dip for p in concave)
+        best_concave_hi = max(p.f_highv for p in concave)
+        print(
+            f"python: f (dip e_eff={EEFF_DIP}) — flat floor up to {best_flat:.3f}, "
+            f"concave up to {best_concave:.3f}; at 16 km/s (e_eff={EEFF_HIGHV}) concave up to "
+            f"{best_concave_hi:.3f} (gate {USEFUL_F_GATE})."
+        )
+    print(f"python: wrote {summary_path} and {len(figs)} figure(s): " + ", ".join(map(str, figs)))
+
+
 def main() -> None:
     """Read a sweep, extract the frontier, write the CSV summary, and render the figures. `--axis
     rho` (default) builds the `e_eff(rho)` frontier + loss decomposition for the high-v/low-v
     sweeps; `--axis v` builds the transitional `e_eff(v)` overlay (ADR-0012) from the two
-    transitional sweeps."""
+    transitional sweeps; `--axis geometry` reconciles `f = eta_capture·(1+e_eff)/2` from the
+    geometry sweep (ADR-0003, Rung D follow-on)."""
     parser = argparse.ArgumentParser(description="e_eff frontier extraction + loss decomposition.")
-    parser.add_argument("--axis", choices=["rho", "v"], default="rho", help="frontier axis")
+    parser.add_argument(
+        "--axis", choices=["rho", "v", "geometry"], default="rho", help="frontier axis"
+    )
     parser.add_argument(
         "--sweep", type=Path, default=None, help="input sweep JSONL (EOS-only file when --axis v)"
     )
@@ -378,6 +554,12 @@ def main() -> None:
         rad_path: Path = args.sweep_rad
         summary_path: Path = args.summary or DEFAULT_TRANS_SUMMARY_PATH
         _run_transitional(eos_path, rad_path, summary_path, plot_dir, tag)
+        return
+
+    if args.axis == "geometry":
+        geometry_path: Path = args.sweep or DEFAULT_GEOMETRY_PATH
+        summary_path = args.summary or DEFAULT_GEOMETRY_SUMMARY_PATH
+        _run_geometry(geometry_path, summary_path, plot_dir, tag)
         return
 
     sweep_path: Path = args.sweep or DEFAULT_SWEEP_PATH

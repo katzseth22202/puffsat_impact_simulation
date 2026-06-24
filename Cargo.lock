@@ -179,6 +179,7 @@ dependencies = [
 name = "sweep"
 version = "0.1.0"
 dependencies = [
+ "euler2d",
  "hydro1d",
  "rayon",
  "serde",
