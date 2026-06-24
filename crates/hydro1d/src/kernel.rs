@@ -605,6 +605,25 @@ impl GasConductionFields {
 /// channel-2 interface loss `q·dt`. A no-op returning `0` when there is no wall, or when the table
 /// carries no `k_gas` (no gas transport data — the high-v plasma table; its transport is deferred).
 fn conduction_into_wall(tube: &mut Tube<TableEos>, wall: &mut Option<Solid>, dt: f64) -> f64 {
+    conduction_into_wall_scaled(tube, wall, dt, 1.0)
+}
+
+/// As [`conduction_into_wall`], but with the conducted heat attenuated by the **blowing factor**
+/// `phi ∈ (0, 1]` (Rung E, E2): the injected vapor curtain intercepts a fraction `(1 − φ)` of the
+/// heat the gas would conduct to the plate and convects it back into the gas, so the gas net-cools by
+/// `φ·ΔT` and the plate receives `φ` of the flux. `phi = 1` is the unblown conduction the rigid-wall
+/// bounces use (an exact no-op of the attenuation).
+///
+/// Attenuating the *delivered heat* — rather than the gas-side conductance — is the physically right
+/// lever: over a full bounce the integrated conductive loss is rate-insensitive (the near-wall gas
+/// dumps its enthalpy into the deep solid sink whatever the conductance), so only intercepting the
+/// heat actually reduces channel 2.
+fn conduction_into_wall_scaled(
+    tube: &mut Tube<TableEos>,
+    wall: &mut Option<Solid>,
+    dt: f64,
+    phi: f64,
+) -> f64 {
     let Some(fields) = tube.gas_conduction_fields() else {
         return 0.0;
     };
@@ -613,9 +632,9 @@ fn conduction_into_wall(tube: &mut Tube<TableEos>, wall: &mut Option<Solid>, dt:
     };
     let step = solid.step_coupled(&fields.state(), dt);
     for (j, &dtemp) in step.gas_dtemp.iter().enumerate() {
-        tube.energy[j] = fields.cv[j].mul_add(dtemp, tube.energy[j]).max(0.0);
+        tube.energy[j] = (phi * fields.cv[j]).mul_add(dtemp, tube.energy[j]).max(0.0);
     }
-    step.interface_flux * dt
+    phi * step.interface_flux * dt
 }
 
 impl Tube<TableEos> {
@@ -1060,11 +1079,16 @@ pub struct Ablation {
     q_star: f64,
     /// Injected-vapor temperature [K] — the cold vapor's specific energy is read from the table here.
     t_vapor: f64,
+    /// Blowing-correction coefficient (E2; `0` = off). The injected vapor thickens the boundary
+    /// layer, reducing the gas-side conductance by `φ = 1/(1 + B)` with the dimensionless blowing
+    /// rate `B = blowing · ablated_mass / m_cloud`. Cuts the conductive wall loss where conduction is
+    /// active; **null at the high-v anchors** (no `k_gas`, so conduction is off).
+    blowing: f64,
 }
 
 impl Ablation {
     /// An ablation model with heat of ablation `q_star` [J/kg] and cold-vapor injection temperature
-    /// `t_vapor` [K] (E2 blowing / E3 vapor-shielding parameters are added by later slices).
+    /// `t_vapor` [K]. Blowing (E2) is off by default; set it with [`Ablation::with_blowing`].
     ///
     /// # Panics
     /// Panics unless `q_star > 0` and `t_vapor > 0`.
@@ -1074,7 +1098,23 @@ impl Ablation {
             q_star > 0.0 && t_vapor > 0.0,
             "Q* and t_vapor must be positive"
         );
-        Self { q_star, t_vapor }
+        Self {
+            q_star,
+            t_vapor,
+            blowing: 0.0,
+        }
+    }
+
+    /// Set the blowing-correction coefficient (E2). `> 0` makes the vapor curtain thicken as ablation
+    /// proceeds, monotonically cutting the conductive wall loss; `0` recovers the unblown conduction.
+    ///
+    /// # Panics
+    /// Panics if `coeff < 0`.
+    #[must_use]
+    pub fn with_blowing(mut self, coeff: f64) -> Self {
+        assert!(coeff >= 0.0, "blowing coefficient must be non-negative");
+        self.blowing = coeff;
+        self
     }
 }
 
@@ -1115,6 +1155,8 @@ pub struct AblatingBounce {
     bc_wall: RadBc,
     bc_space: RadBc,
     ablation: Ablation,
+    /// Initial cloud mass per area `ρ·L` — the reference for the dimensionless blowing rate (E2).
+    m_ref: f64,
     loss_radiative_wall: f64,
     loss_escape_space: f64,
     loss_conductive: f64,
@@ -1141,6 +1183,7 @@ impl AblatingBounce {
                 consts.a * t.powi(4)
             })
             .collect();
+        let m_ref: f64 = tube.mass.iter().sum();
         Self {
             tube,
             e_rad,
@@ -1150,6 +1193,7 @@ impl AblatingBounce {
             bc_wall: RadBc::Marshak(0.0),
             bc_space: RadBc::Marshak(0.0),
             ablation,
+            m_ref,
             loss_radiative_wall: 0.0,
             loss_escape_space: 0.0,
             loss_conductive: 0.0,
@@ -1189,10 +1233,22 @@ impl AblatingBounce {
         wall_flux
     }
 
-    /// Conductive wall loss (channel 2), via the shared gas-side operator. Returns the flux conducted
-    /// into the wall this step — the conductive part of `q_in`. `0` when `wall = None` or no `k_gas`.
+    /// The blowing-reduction factor `φ = 1/(1 + B)` (E2, ADR-0014), with the dimensionless blowing
+    /// rate `B = blowing · ablated_mass / m_cloud` lagged on the ablation accumulated so far (so there
+    /// is no within-step circularity). `φ = 1` when blowing is off or before any ablation.
+    fn blowing_factor(&self) -> f64 {
+        let b = self.ablation.blowing * self.ablated_mass / self.m_ref;
+        1.0 / (1.0 + b)
+    }
+
+    /// Conductive wall loss (channel 2), via the shared gas-side operator with the **blowing
+    /// correction** (E2): the conducted heat is attenuated by `φ` so the injected vapor curtain
+    /// intercepts the flux into the plate. Returns the (blown) flux conducted this step — the
+    /// conductive part of `q_in`. `0` when `wall = None` or the table carries no `k_gas` (the high-v
+    /// anchors, where blowing is therefore null).
     fn conduction_substep(&mut self, dt: f64) -> f64 {
-        let q = conduction_into_wall(&mut self.tube, &mut self.wall, dt);
+        let phi = self.blowing_factor();
+        let q = conduction_into_wall_scaled(&mut self.tube, &mut self.wall, dt, phi);
         self.loss_conductive += q;
         q
     }

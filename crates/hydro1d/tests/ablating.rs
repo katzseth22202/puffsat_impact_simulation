@@ -15,6 +15,7 @@
 //!  - **the ablated mass is a small fraction of the cloud** — the quasi-steady regime (~1.5 %,
 //!    ADR-0014), so the bounce is a perturbation of the rigid floor, not a different problem.
 
+use hydro1d::conduction::Solid;
 use hydro1d::eos::TableEos;
 use hydro1d::kernel::{AblatingBounce, Ablation, CoupledBounce, Tube, Viscosity};
 use hydro1d::radiation::{Limiter, RadConstants};
@@ -169,5 +170,143 @@ fn ablated_mass_is_small_quasi_steady() {
         r.ablated_mass > 0.0 && r.ablated_mass < 0.2 * cloud_mass,
         "ablated mass {} outside the quasi-steady band (0, 0.2·cloud)",
         r.ablated_mass
+    );
+}
+
+// ---- E2: blowing correction on the conductive flux (verify-and-bound) ----
+//
+// Blowing — the injected vapor thickening the boundary layer — cuts the conductive flux into the
+// plate (ADR-0014). We model it as a monotone factor `φ(B) ∈ (0,1]` attenuating the conducted heat
+// delivered to the plate (the vapor curtain convects the intercepted fraction back into the gas),
+// with the dimensionless blowing rate `B ∝ ablated_mass` (so `φ → 1` as blowing → 0). The key
+// finding it bounds: at the *science anchors* conduction is off (the high-v table carries no
+// `k_gas`), so blowing is identically null there — the live recovery is vapor shielding (E3).
+
+/// An ideal-gas radiating table that *also* carries a constant gas conductivity `k_gas`, so the
+/// gas-side conduction operator engages (blowing has something to reduce).
+fn radiating_conducting_table() -> Table {
+    let n = 8;
+    let rho_grid: Vec<f64> = (0..n)
+        .map(|i| 1e-3 * 1e5_f64.powf(i as f64 / (n - 1) as f64))
+        .collect();
+    let t_grid: Vec<f64> = (0..n)
+        .map(|j| 1e-3 * 1e6_f64.powf(j as f64 / (n - 1) as f64))
+        .collect();
+    let (mut p, mut e, mut cs) = (Vec::new(), Vec::new(), Vec::new());
+    for &r in &rho_grid {
+        for &t in &t_grid {
+            p.push((GAMMA - 1.0) * r * t);
+            e.push(t);
+            cs.push((GAMMA * (GAMMA - 1.0) * t).sqrt());
+        }
+    }
+    let one = vec![1.0; n * n];
+    let json = serde_json::json!({
+        "rho_grid": rho_grid,
+        "T_grid": t_grid,
+        "shape": [n, n],
+        "fields": {
+            "p": p, "e": e, "c_s": cs,
+            "kappa_rosseland": one, "kappa_planck": one, "k_gas": one,
+        },
+    });
+    Table::from_json(&json.to_string()).unwrap()
+}
+
+/// A cold, high-effusivity conducting plate behind the wall (the conduction sink). Coarse (40 cells)
+/// to keep the conducting-wall bounces cheap — these tests check the blowing *direction*, not a
+/// converged number.
+fn conducting_wall() -> Solid {
+    Solid::new(40, 1.0, T_VAPOR, 0.1, 10.0)
+}
+
+/// A small slug (60 cells) for the conducting-wall tests: the coupled conduction over a gas+solid
+/// mesh is the expensive path, so these run on a coarse grid (the claims are qualitative).
+fn small_slug(table: &Table) -> Tube<TableEos> {
+    Tube::slug_si(
+        60,
+        1.0,
+        1.0,
+        1.0,
+        T_VAPOR,
+        TableEos::new(table.clone()),
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    )
+}
+
+fn run_with(
+    table: &Table,
+    wall: Option<Solid>,
+    ablation: Ablation,
+) -> hydro1d::kernel::AblatingBounceResult {
+    AblatingBounce::new(small_slug(table), wall, CONSTS, LIMITER, ablation).run()
+}
+
+/// Blowing strictly cuts the conductive wall loss: at a finite `Q*` and a conducting wall, turning
+/// blowing on lowers `loss_conductive` below the unblown ablating bounce.
+#[test]
+fn blowing_reduces_conductive_loss() {
+    let table = radiating_conducting_table();
+    let unblown = run_with(
+        &table,
+        Some(conducting_wall()),
+        Ablation::new(50.0, T_VAPOR),
+    );
+    let blown = run_with(
+        &table,
+        Some(conducting_wall()),
+        Ablation::new(50.0, T_VAPOR).with_blowing(50.0),
+    );
+    assert!(
+        unblown.loss_conductive > 0.0,
+        "conduction must be active for the test: {}",
+        unblown.loss_conductive
+    );
+    assert!(
+        blown.loss_conductive < unblown.loss_conductive,
+        "blowing must cut conduction: {} vs unblown {}",
+        blown.loss_conductive,
+        unblown.loss_conductive
+    );
+}
+
+/// In the strong-blowing limit the conductive channel is largely choked off — the vapor curtain
+/// insulates the plate (the blowing → ∞ limit `φ → 0`). The residual is the early conduction that
+/// occurs *before* the curtain accumulates (φ starts at 1 and falls as ablation builds — blowing
+/// cannot retroactively block heat already delivered), so the bar is a >90 % cut, not zero.
+#[test]
+fn strong_blowing_chokes_conduction() {
+    let table = radiating_conducting_table();
+    let unblown = run_with(
+        &table,
+        Some(conducting_wall()),
+        Ablation::new(50.0, T_VAPOR),
+    );
+    let choked = run_with(
+        &table,
+        Some(conducting_wall()),
+        Ablation::new(50.0, T_VAPOR).with_blowing(1e6),
+    );
+    assert!(
+        choked.loss_conductive < 0.1 * unblown.loss_conductive,
+        "strong blowing must choke conduction by >90%: {} vs unblown {}",
+        choked.loss_conductive,
+        unblown.loss_conductive
+    );
+}
+
+/// The bound: at the realistic high-v config (`wall = None`, conduction off) blowing acts on
+/// nothing — `loss_conductive` is identically 0 and `e_eff` is unchanged by the blowing coefficient.
+/// So blowing is foreclosed from the headline recovery; that is vapor shielding (E3).
+#[test]
+fn blowing_is_null_without_conduction() {
+    let table = radiating_ideal_table();
+    let base = run_with(&table, None, Ablation::new(50.0, T_VAPOR));
+    let blown = run_with(&table, None, Ablation::new(50.0, T_VAPOR).with_blowing(1e6));
+    assert_eq!(base.loss_conductive, 0.0, "no wall ⇒ no conduction");
+    assert_eq!(blown.loss_conductive, 0.0, "no wall ⇒ no conduction, blown");
+    assert_eq!(
+        base.bounce.e_eff, blown.bounce.e_eff,
+        "blowing changes nothing when conduction is off"
     );
 }
