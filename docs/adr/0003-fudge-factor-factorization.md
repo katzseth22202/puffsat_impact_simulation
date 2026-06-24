@@ -54,6 +54,26 @@ How the lossless 2D/1D ratio above is realized in code:
   more radial relief). Flat is the conservative hemispherical-rebound floor (ADR-0021); shallow
   concave can only raise it. The parametric sweep and the concave plate are the follow-on rung.
 
+## Amendment (2026-06): the concave `eta_capture` and the `f`-reconciliation + `Σ` contract, operationalized
+
+The shallow-concave plate landed (ghost-cell IBM, ADR-0023 amended) and the `f = eta_capture·(1+e_eff)/2`
+product is now formed in code (`analysis.py --axis geometry`):
+
+- **Both flat and concave run through the same IBM boundary**, so the same-kernel cancellation above
+  extends to the curved case — the curvature gain carries no grid-alignment artifact (a D4c consistency
+  gate ties the IBM flat wall to the verified grid-aligned flat `eta_capture`, rel < 0.10). Shallow
+  concave can push `eta_capture > 1` (over-collimation past the flat plane-wave limit, ADR-0021); the
+  "1D ⇒ `eta_capture = 1`" identity above fixes the *flat* plane-wave denominator and is not a ceiling.
+- **The `Σ = m_engaged/(π r_foot²)` contract reduces, for a uniform cylinder, to `Σ/ρ = L = 2·(L/D)·r_foot`** —
+  the footprint `r_foot` cancels (mass scales with the same `π r_foot²`), so `r_foot/R` is purely the
+  `eta_capture` lever and `L/D` alone sets the 1D column density that fixed `e_eff`. In the sweep's
+  normalized units (`ρ = 1`, `r_foot = 1`) this is `sigma_over_rho = 2·(L/D)`.
+- **First `f` bracket (the deliverable of this rung):** pair each geometry case with the two 1D `e_eff`
+  anchors — the transitional worst case `e_eff = 0.57` (≈ 11 km/s, the conservative floor, ADR-0012)
+  and `e_eff = 0.63` (16 km/s). Flat floor `f ≈ 0.696` at the dip, shallow concave **`f ≈ 0.83` (> the
+  0.8 useful gate)**; `f ≈ 0.86` at 16 km/s. The full `Σ`-resolved `e_eff(ρ(r_foot))` lookup that feeds
+  the dual-curve `f(v)` deliverable (ADR-0013) is the noted refinement, a later rung.
+
 ## Considered Options
 
 - **Raw-throughput `eta_capture`** (2D axial momentum ÷ incident). Rejected: double-counts the

@@ -26,6 +26,26 @@ v⁸`), **`τ≫1`** gas and couples radiation into the otherwise radiation-free
 maximum-re-collimation geometry is foreclosed at the one anchor that most wants it. It stays an
 **unrun upper-bound note, not a high-v contingency.**
 
+## Amendment (2026-06): the shallow-concave `eta_capture` gain is measured, and it rises with depth
+
+The flat / 0.10 / 0.15 depth-to-diameter shapes are now run through the 2D kernel's ghost-cell IBM
+(ADR-0023 amended), confirming curvature *is* the rebound-axiality recovery lever this ADR posits:
+
+- **Shallow concave lifts `eta_capture` above the flat floor, monotone in depth.** At a short
+  disk-like cloud (`L/D = 0.3`, `r_foot/R = 0.3`, M ≈ 5) `eta_capture` rises **0.88 → 1.02 → 1.03**
+  over `d/D = 0 / 0.10 / 0.15`; the gain holds across the swept `L/D` and footprint grid. Concave can
+  **over-collimate past 1** — it bends the rebound *more* axial than a flat plane wave (the 1D limit),
+  so `eta_capture > 1` is physical here, not a numerical artifact (and not a contradiction of ADR-0003's
+  "1D ⇒ `eta_capture = 1`", which fixes the *flat* plane-wave denominator, not a ceiling on shaped plates).
+- **It clears the useful gate where the cloud need not be stretched.** Combined with the 1D `e_eff`
+  (ADR-0003 `f`-reconciliation): at the transitional dip `e_eff = 0.57` the flat floor is `f ≈ 0.696`
+  and shallow concave reaches **`f ≈ 0.83` (> the 0.8 useful gate, ADR-0009)**; at 16 km/s
+  (`e_eff = 0.63`) concave reaches `f ≈ 0.86`. The recovery lever is real at the low/mid-v anchors
+  where there is no focal penalty — exactly the regime this ADR reserved it for.
+
+This is a shallow-plate result at two Mach anchors; the deep dish stays foreclosed (above), and the
+focal-radiation penalty that forecloses it at 16 km/s is untouched by these radiation-free runs.
+
 ## Consequence
 
 `eta_capture(v)` is a measured sweep output, **allowed to come in below 1 at high-v** — it is never
