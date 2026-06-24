@@ -21,6 +21,7 @@ def _rows(e_eff_by_rho: dict[float, float], total_loss: float) -> list[SweepRow]
             rho_impact=rho,
             v=16_000.0,
             e_eff=e_eff,
+            peak_wall_force=0.0,
             loss_radiative_wall=total_loss,
             loss_escape_space=0.0,
             loss_conductive=0.0,

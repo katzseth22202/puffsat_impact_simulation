@@ -276,3 +276,74 @@ def test_plot_geometry_writes_file(tmp_path: Path) -> None:
     assert len(saved) == 1
     assert saved[0].exists()
     assert saved[0].stat().st_size > 0
+
+
+# --- Rung S: survivability frontier (peak facesheet pressure vs P_limit) ---
+
+
+def test_peak_facesheet_pressure_is_c_stag_rho_v2() -> None:
+    """Peak facesheet pressure is the stagnation pressure `c_stag·rho·v²` (design §7): a cold
+    coasting cloud feels the ram pressure recompressed at the wall."""
+    # c_stag ~ 2.0 at 16 km/s (the measured 1D coefficient), rho = 0.64 -> 330 MPa.
+    peak = an.peak_facesheet_pressure(0.64, 16_000.0, 2.0)
+    assert peak == pytest.approx(2.0 * 0.64 * 16_000.0**2)
+    assert peak == pytest.approx(3.2768e8)
+
+
+def test_stagnation_coefficient_recovered_from_sweep() -> None:
+    """`stagnation_coefficient` backs `c_stag = peak_wall_force / (rho·v²)` out of the 1D sweep
+    rows, averaging over the densities at one velocity."""
+    v = 16_000.0
+    rows = [
+        an.SweepRow(
+            rho_impact=rho,
+            v=v,
+            e_eff=0.63,
+            peak_wall_force=2.0 * rho * v**2,  # exactly c_stag = 2.0
+            loss_radiative_wall=0.0,
+            loss_escape_space=0.0,
+            loss_conductive=0.0,
+            loss_condensation=0.0,
+        )
+        for rho in (0.16, 0.32, 0.64)
+    ]
+    assert an.stagnation_coefficient(rows, v) == pytest.approx(2.0)
+
+
+def test_impact_density_sigma_bridge() -> None:
+    """The Σ contract maps a geometry case to a physical impact density:
+    `rho = m / (2π·(L/D)·(r_foot/R)³·R³)` (m=25 kg, R=5 m). A disk (small L/D) is dense; a
+    cylinder dilute; a tighter footprint is denser (∝ 1/(r_foot/R)³)."""
+    rho_disk = an.impact_density(0.3, 0.5)  # L/D=0.3, r_foot/R=0.5
+    rho_cyl = an.impact_density(1.0, 0.5)
+    assert rho_disk == pytest.approx(0.849, abs=2e-3)
+    assert rho_cyl == pytest.approx(0.2546, abs=2e-3)
+    # density scales as 1/(L/D): the disk is (1.0/0.3)x the cylinder
+    assert rho_disk / rho_cyl == pytest.approx(1.0 / 0.3)
+    # tighter footprint is denser as 1/(r_foot/R)^3
+    assert an.impact_density(0.3, 0.25) / rho_disk == pytest.approx((0.5 / 0.25) ** 3)
+
+
+def test_density_ceiling_inverts_the_pressure_law() -> None:
+    """`density_ceiling` is the densest cloud under `P_limit`: `rho = P_limit/(c_stag·v²)`."""
+    rho_ceil = an.density_ceiling(16_000.0, 2.0, an.P_LIMIT_BASELINE)
+    assert rho_ceil == pytest.approx(400.0e6 / (2.0 * 16_000.0**2))
+    assert rho_ceil == pytest.approx(0.78125, abs=1e-4)
+
+
+def test_classify_survivability_disk_fails_cylinder_passes() -> None:
+    """At 16 km/s baseline 400 MPa: the disk (rho~0.85 -> ~439 MPa) fails the compressive limit
+    but its reflected tension (~66 MPa) clears SiC spall; the cylinder (rho~0.25 -> ~130 MPa)
+    clears both. This is the punchline: the f>0.8 disk corner is not survivable at baseline."""
+    v, c_stag = 16_000.0, 2.0
+    peak_disk = an.peak_facesheet_pressure(an.impact_density(0.3, 0.5), v, c_stag)
+    peak_cyl = an.peak_facesheet_pressure(an.impact_density(1.0, 0.5), v, c_stag)
+    disk = an.classify_survivability(peak_disk, an.P_LIMIT_BASELINE, an.SIC_SPALL_LO)
+    cyl = an.classify_survivability(peak_cyl, an.P_LIMIT_BASELINE, an.SIC_SPALL_LO)
+    assert disk.peak_compressive == pytest.approx(peak_disk)
+    assert disk.reflected_tensile == pytest.approx(an.REFLECT_FRAC * peak_disk)
+    assert not disk.survives_compressive  # ~439 MPa > 400 MPa baseline
+    assert disk.survives_spall  # reflected ~66 MPa < SiC spall 0.3 GPa
+    assert cyl.survives_compressive and cyl.survives_spall
+    # the disk survives once the high-v limit is relaxed to 900 MPa
+    assert an.classify_survivability(peak_disk, 900.0e6, an.SIC_SPALL_LO).survives_compressive

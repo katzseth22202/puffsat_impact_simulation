@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass, fields
 from itertools import pairwise
@@ -57,6 +58,21 @@ EEFF_DIP = 0.57
 EEFF_HIGHV = 0.63
 USEFUL_F_GATE = 0.8  # the useful-`f` gate (ADR-0009), marked on the figure
 
+# --- Rung S: survivability frontier (design §7, ADR-0010/0011) ---
+# Peak facesheet pressure is the stagnation pressure `c_stag·rho·v²`; `c_stag` (~2.0 at 16 km/s)
+# is backed out of the 1D `peak_wall_force` so the frontier inherits the kernel's measured number,
+# not an assumed ideal. The structural limits are the SiC+Ti facesheet's: a compressive `P_limit`
+# (the §5 band) and a reflected-tensile spall limit at the SiC-Ti interface (ADR-0011), where
+# `|R| ~ 0.15` of the incident compressive returns as tension.
+PULSE_MASS_KG = 25.0  # gas delivered per PuffSat (design §2)
+PLATE_RADIUS_M = 5.0  # plate radius R, fixed (design §2/§7)
+V_DIP = 11_000.0  # transitional worst-case velocity (~11 km/s, ADR-0012), paired with EEFF_DIP
+P_LIMIT_BASELINE = 400.0e6  # conservative floor of the §5 SiC+Ti band (Pa)
+P_LIMIT_HIGHV = (700.0e6, 900.0e6)  # relaxed limits swept at the 16 km/s anchor (design §7)
+REFLECT_FRAC = 0.15  # |R| at the SiC-Ti impedance step -> reflected tensile fraction (ADR-0011)
+SIC_SPALL_LO = 0.3e9  # SiC dynamic spall strength, conservative end (ADR-0011)
+SIC_SPALL_HI = 1.0e9  # SiC dynamic spall strength, upper end
+
 
 @dataclass(frozen=True)
 class SweepRow:
@@ -65,6 +81,7 @@ class SweepRow:
     rho_impact: float
     v: float
     e_eff: float
+    peak_wall_force: float
     loss_radiative_wall: float
     loss_escape_space: float
     loss_conductive: float
@@ -97,6 +114,7 @@ def read_sweep(path: Path = DEFAULT_SWEEP_PATH) -> list[SweepRow]:
                 rho_impact=float(d["rho_impact"]),
                 v=float(d["v"]),
                 e_eff=float(d["e_eff"]),
+                peak_wall_force=float(d.get("peak_wall_force", 0.0)),
                 loss_radiative_wall=float(d["loss_radiative_wall"]),
                 loss_escape_space=float(d["loss_escape_space"]),
                 loss_conductive=float(d["loss_conductive"]),
@@ -521,6 +539,79 @@ def _run_geometry(geometry_path: Path, summary_path: Path, plot_dir: Path, tag: 
             f"{best_concave_hi:.3f} (gate {USEFUL_F_GATE})."
         )
     print(f"python: wrote {summary_path} and {len(figs)} figure(s): " + ", ".join(map(str, figs)))
+
+
+# --- Rung S: survivability frontier primitives (design §7, ADR-0010/0011) ---
+
+
+@dataclass(frozen=True)
+class SurvivabilityVerdict:
+    """A peak facesheet load classified against the SiC+Ti structural limits (ADR-0010/0011)."""
+
+    peak_compressive: float  # peak facesheet pressure (Pa)
+    reflected_tensile: float  # reflected tension at the SiC-Ti interface (Pa)
+    survives_compressive: bool
+    survives_spall: bool
+
+
+def peak_facesheet_pressure(rho: float, v: float, c_stag: float) -> float:
+    """Peak facesheet pressure = the stagnation pressure `c_stag·rho·v²` (design §7): a cold
+    coasting cloud's ram pressure recompressed at the wall."""
+    return c_stag * rho * v * v
+
+
+def stagnation_coefficient(rows: list[SweepRow], v: float, *, tol: float = 1.0) -> float:
+    """Back the stagnation coefficient `c_stag = peak_wall_force/(rho·v²)` out of the 1D sweep,
+    averaged over the densities at velocity `v` — so survivability uses the kernel's measured number
+    rather than an assumed ideal (`peak ≈ 2.0·rho·v²` at 16 km/s)."""
+    coeffs = [
+        r.peak_wall_force / (r.rho_impact * r.v * r.v)
+        for r in rows
+        if abs(r.v - v) <= tol and r.rho_impact > 0.0
+    ]
+    if not coeffs:
+        raise ValueError(f"no sweep rows at v={v}")
+    return sum(coeffs) / len(coeffs)
+
+
+def impact_density(
+    l_over_d: float,
+    r_foot_over_r: float,
+    mass: float = PULSE_MASS_KG,
+    plate_radius: float = PLATE_RADIUS_M,
+) -> float:
+    """The Σ contract (ADR-0003) made physical: `Σ = m/(π r_foot²) = rho·L`, with
+    `L = 2·(L/D)·r_foot` and `r_foot = (r_foot/R)·R`, so `rho = m / (2π·(L/D)·r_foot³)`. A disk
+    (small L/D) is dense (high peak pressure); a cylinder dilute; a tighter footprint is denser
+    (∝ 1/(r_foot/R)³)."""
+    r_foot = r_foot_over_r * plate_radius
+    return mass / (2.0 * math.pi * l_over_d * r_foot * r_foot * r_foot)
+
+
+def density_ceiling(v: float, c_stag: float, p_limit: float) -> float:
+    """The densest cloud whose peak pressure stays under `p_limit`: inverts the pressure law to
+    `rho = p_limit/(c_stag·v²)`."""
+    return p_limit / (c_stag * v * v)
+
+
+def reflected_tensile(peak_compressive: float) -> float:
+    """The tensile wave reflected into the brittle SiC at the SiC-Ti impedance step: `|R|·peak`,
+    `R ~ -0.15` (ADR-0011)."""
+    return REFLECT_FRAC * peak_compressive
+
+
+def classify_survivability(
+    peak_compressive: float, p_limit: float, spall_strength: float = SIC_SPALL_LO
+) -> SurvivabilityVerdict:
+    """Classify a peak facesheet load against the two structural limits (ADR-0010/0011): the
+    compressive `p_limit` and the reflected-tensile SiC spall strength."""
+    tensile = reflected_tensile(peak_compressive)
+    return SurvivabilityVerdict(
+        peak_compressive=peak_compressive,
+        reflected_tensile=tensile,
+        survives_compressive=peak_compressive < p_limit,
+        survives_spall=tensile < spall_strength,
+    )
 
 
 def main() -> None:
