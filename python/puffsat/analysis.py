@@ -48,6 +48,7 @@ ANCHOR_HIGHV = (16000.0, 0.63)
 # Geometry sweep (Rung D follow-on): the `crates/sweep --geometry` output and its f-reconciliation.
 DEFAULT_GEOMETRY_PATH = Path("data/results/sweep_geometry.jsonl")
 DEFAULT_GEOMETRY_SUMMARY_PATH = Path("data/results/frontier_geometry.csv")
+DEFAULT_SURVIVABILITY_SUMMARY_PATH = Path("data/results/frontier_survivability.csv")
 
 # 1D `e_eff` anchors for the `f = eta_capture·(1+e_eff)/2` reconciliation (ADR-0003). `EEFF_DIP` is
 # the transitional EOS worst case (the conservative floor, ADR-0012); `EEFF_HIGHV` the 16 km/s point
@@ -614,15 +615,192 @@ def classify_survivability(
     )
 
 
+@dataclass(frozen=True)
+class SurvivabilityPoint:
+    """One geometry case resolved to physical survivability at a velocity anchor: the Σ-bridge
+    density, the peak facesheet pressure it implies, its `f`, and whether it clears the baseline /
+    relaxed structural limits (ADR-0010/0011)."""
+
+    d_over_d: float
+    l_over_d: float
+    r_foot_over_r: float
+    mach: float
+    v: float
+    e_eff: float
+    eta_capture: float
+    rho_impact: float
+    peak_compressive: float
+    reflected_tensile: float
+    f: float
+    survives_baseline: bool  # peak < P_LIMIT_BASELINE (400 MPa) and spall OK
+    survives_relaxed: bool  # peak < max(P_LIMIT_HIGHV) (900 MPa) and spall OK
+
+
+def survivability_frontier(
+    rows: list[GeoRow],
+    anchors: Iterable[tuple[float, float, float]],
+    *,
+    mass: float = PULSE_MASS_KG,
+    plate_radius: float = PLATE_RADIUS_M,
+    spall_strength: float = SIC_SPALL_LO,
+) -> list[SurvivabilityPoint]:
+    """Resolve each geometry case to physical survivability at each `(v, e_eff, c_stag)` anchor: the
+    Σ contract gives `rho`, the stagnation law the peak pressure, and `classify_survivability` the
+    verdict against the 400 MPa baseline and the relaxed 900 MPa high-v limit (design §7)."""
+    relaxed_limit = max(P_LIMIT_HIGHV)
+    points: list[SurvivabilityPoint] = []
+    for v, e_eff, c_stag in anchors:
+        for r in sorted(rows, key=lambda x: (x.mach, x.l_over_d, x.r_foot_over_r, x.d_over_d)):
+            rho = impact_density(r.l_over_d, r.r_foot_over_r, mass, plate_radius)
+            peak = peak_facesheet_pressure(rho, v, c_stag)
+            base = classify_survivability(peak, P_LIMIT_BASELINE, spall_strength)
+            relaxed = classify_survivability(peak, relaxed_limit, spall_strength)
+            points.append(
+                SurvivabilityPoint(
+                    d_over_d=r.d_over_d,
+                    l_over_d=r.l_over_d,
+                    r_foot_over_r=r.r_foot_over_r,
+                    mach=r.mach,
+                    v=v,
+                    e_eff=e_eff,
+                    eta_capture=r.eta_capture,
+                    rho_impact=rho,
+                    peak_compressive=peak,
+                    reflected_tensile=base.reflected_tensile,
+                    f=reconcile_f(r.eta_capture, e_eff),
+                    survives_baseline=base.survives_compressive and base.survives_spall,
+                    survives_relaxed=relaxed.survives_compressive and relaxed.survives_spall,
+                )
+            )
+    return points
+
+
+def best_survivable_f(points: list[SurvivabilityPoint], *, relaxed: bool = False) -> float | None:
+    """The highest `f` among the cases that clear the limit (baseline by default, relaxed 900 MPa if
+    `relaxed`). `None` if nothing survives — the answer to 'what is the best survivable f?'."""
+    survivors = [p for p in points if (p.survives_relaxed if relaxed else p.survives_baseline)]
+    return max((p.f for p in survivors), default=None)
+
+
+def write_survivability_summary(
+    points: list[SurvivabilityPoint], path: Path = DEFAULT_SURVIVABILITY_SUMMARY_PATH
+) -> None:
+    """Write the survivability frontier to a CSV (header = `SurvivabilityPoint` field names)."""
+    header = [f.name for f in fields(SurvivabilityPoint)]
+    _write_csv(header, ([getattr(p, name) for name in header] for p in points), path)
+
+
+def plot_survivability(
+    points: list[SurvivabilityPoint], out_dir: Path = DEFAULT_PLOT_DIR, tag: str = ""
+) -> list[Path]:
+    """Render the survivability story at the highest-v anchor: peak facesheet pressure vs `L/D` (one
+    curve per footprint, with the 400/700/900 MPa `P_limit` lines) over `f` vs `L/D` with survivable
+    points filled and non-survivable open. The high-`f` short-disk / tight-footprint corner sits
+    above the pressure limit — the elongated, wider-footprint shapes are the survivable ones. The
+    deepest curvature is shown for `f`; peak pressure is curvature-independent (the Σ bridge). Lazy
+    matplotlib (`sci` extra); all inputs are plain floats/bools, so no `Any` escapes."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    sel_v = max(p.v for p in points)
+    sel_mach = max(p.mach for p in points if p.v == sel_v)
+    sel_dd = max(p.d_over_d for p in points)
+    sliced = [p for p in points if p.v == sel_v and p.mach == sel_mach and p.d_over_d == sel_dd]
+    footprints = sorted({p.r_foot_over_r for p in sliced})
+
+    fig, (ax_p, ax_f) = plt.subplots(2, 1, sharex=True, figsize=(6, 7))
+    for rf in footprints:
+        row = sorted((p for p in sliced if p.r_foot_over_r == rf), key=lambda p: p.l_over_d)
+        ld = [p.l_over_d for p in row]
+        ax_p.plot(ld, [p.peak_compressive / 1e6 for p in row], "o-", label=rf"$r_f/R={rf:.1f}$")
+        surv = [p.survives_baseline for p in row]
+        fvals = [p.f for p in row]
+        ax_f.plot(ld, fvals, "-", color="grey", alpha=0.4)
+        ax_f.scatter(
+            ld,
+            fvals,
+            marker="o",
+            facecolors=["C0" if s else "none" for s in surv],
+            edgecolors="C0",
+        )
+    for plim, style in ((400.0, "--"), (700.0, ":"), (900.0, "-.")):
+        ax_p.axhline(plim, color="C3", ls=style, alpha=0.7, label=f"{plim:.0f} MPa")
+    ax_p.set_yscale("log")
+    ax_p.set_ylabel("peak facesheet pressure (MPa)")
+    ax_p.set_title(
+        rf"Survivability at $v={sel_v / 1000:.0f}$ km/s "
+        r"(high-$f$ disk/tight-footprint fails on pressure)"
+    )
+    ax_p.grid(True, alpha=0.3, which="both")
+    ax_p.legend(loc="best", fontsize="small", ncol=2)
+    ax_f.axhline(USEFUL_F_GATE, color="C3", ls="--", alpha=0.7, label=r"useful-$f$ gate")
+    ax_f.set_xlabel(r"$L/D$")
+    ax_f.set_ylabel(rf"$f$ ($e_\mathrm{{eff}}={sliced[0].e_eff}$); filled = survives 400 MPa")
+    ax_f.grid(True, alpha=0.3)
+    ax_f.legend(loc="best", fontsize="small")
+    path = out_dir / f"{tag}survivability.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return [path]
+
+
+def _run_survivability(
+    geometry_path: Path,
+    highv_sweep_path: Path,
+    dip_sweep_path: Path,
+    summary_path: Path,
+    plot_dir: Path,
+    tag: str,
+) -> None:
+    """The `--axis survivability` path: back `c_stag` out of the 1D sweeps at each anchor, resolve
+    every geometry case to a peak facesheet pressure via the Σ contract, classify against the SiC+Ti
+    limits, write the CSV + figure, and report the best survivable `f` per anchor."""
+    c_stag_hi = stagnation_coefficient(read_sweep(highv_sweep_path), ANCHOR_HIGHV[0])
+    c_stag_dip = stagnation_coefficient(read_sweep(dip_sweep_path), V_DIP)
+    anchors = [(V_DIP, EEFF_DIP, c_stag_dip), (ANCHOR_HIGHV[0], EEFF_HIGHV, c_stag_hi)]
+    points = survivability_frontier(read_geometry(geometry_path), anchors)
+    write_survivability_summary(points, summary_path)
+    figs = plot_survivability(points, plot_dir, tag)
+
+    hi = [p for p in points if p.v == ANCHOR_HIGHV[0]]
+    dip = [p for p in points if p.v == V_DIP]
+
+    def _fmt(x: float | None) -> str:
+        return f"{x:.3f}" if x is not None else "none survive"
+
+    best_dip = best_survivable_f(dip)
+    best_hi_base = best_survivable_f(hi)
+    best_hi_relax = best_survivable_f(hi, relaxed=True)
+    worst = max(points, key=lambda p: p.peak_compressive)
+    print(
+        f"python: best survivable f — dip ({V_DIP / 1000:.0f} km/s, 400 MPa) {_fmt(best_dip)}; "
+        f"16 km/s baseline 400 MPa {_fmt(best_hi_base)}, relaxed 900 MPa {_fmt(best_hi_relax)}."
+    )
+    print(
+        f"python: the f-max corner (L/D={worst.l_over_d}, r_foot/R={worst.r_foot_over_r}) peaks at "
+        f"{worst.peak_compressive / 1e6:.0f} MPa at {worst.v / 1000:.0f} km/s — "
+        f"{'survives' if worst.survives_relaxed else 'fails'} the relaxed limit."
+    )
+    print(f"python: wrote {summary_path} and {len(figs)} figure(s): " + ", ".join(map(str, figs)))
+
+
 def main() -> None:
     """Read a sweep, extract the frontier, write the CSV summary, and render the figures. `--axis
     rho` (default) builds the `e_eff(rho)` frontier + loss decomposition for the high-v/low-v
     sweeps; `--axis v` builds the transitional `e_eff(v)` overlay (ADR-0012) from the two
     transitional sweeps; `--axis geometry` reconciles `f = eta_capture·(1+e_eff)/2` from the
-    geometry sweep (ADR-0003, Rung D follow-on)."""
+    geometry sweep (ADR-0003, Rung D follow-on); `--axis survivability` resolves each geometry case
+    to a peak facesheet pressure via the Σ contract and reports the best survivable `f` per anchor
+    against the SiC+Ti limits (Rung S, ADR-0010/0011)."""
     parser = argparse.ArgumentParser(description="e_eff frontier extraction + loss decomposition.")
     parser.add_argument(
-        "--axis", choices=["rho", "v", "geometry"], default="rho", help="frontier axis"
+        "--axis",
+        choices=["rho", "v", "geometry", "survivability"],
+        default="rho",
+        help="frontier axis",
     )
     parser.add_argument(
         "--sweep", type=Path, default=None, help="input sweep JSONL (EOS-only file when --axis v)"
@@ -651,6 +829,19 @@ def main() -> None:
         geometry_path: Path = args.sweep or DEFAULT_GEOMETRY_PATH
         summary_path = args.summary or DEFAULT_GEOMETRY_SUMMARY_PATH
         _run_geometry(geometry_path, summary_path, plot_dir, tag)
+        return
+
+    if args.axis == "survivability":
+        geometry_path = args.sweep or DEFAULT_GEOMETRY_PATH
+        summary_path = args.summary or DEFAULT_SURVIVABILITY_SUMMARY_PATH
+        _run_survivability(
+            geometry_path,
+            DEFAULT_SWEEP_PATH,
+            DEFAULT_TRANS_EOS_PATH,
+            summary_path,
+            plot_dir,
+            tag,
+        )
         return
 
     sweep_path: Path = args.sweep or DEFAULT_SWEEP_PATH

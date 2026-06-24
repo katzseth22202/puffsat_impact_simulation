@@ -3,7 +3,7 @@
 
 PY := uv run python
 
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability
 
 all: smoke
 
@@ -114,6 +114,15 @@ analysis-geometry: data/results/frontier_geometry.csv
 
 data/results/frontier_geometry.csv: data/results/sweep_geometry.jsonl python/puffsat/analysis.py
 	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis --axis geometry
+
+## analysis-survivability: peak facesheet pressure vs P_limit + the survivability-resolved f frontier
+## (Rung S) -> data/results/frontier_survivability.csv. Resolves each geometry case to a peak
+## stagnation pressure via the Sigma contract (c_stag from the 1D sweeps) and classifies it against
+## the SiC+Ti limits (ADR-0010/0011); reuses existing results, no new sweep.
+analysis-survivability: data/results/frontier_survivability.csv
+
+data/results/frontier_survivability.csv: data/results/sweep_geometry.jsonl data/results/sweep.jsonl data/results/sweep_transitional_eos.jsonl python/puffsat/analysis.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis --axis survivability
 
 ## sensitivity: opacity-insensitivity scan (rung B, B5d-3) — sweep at 0.1x/1x/10x opacity, show
 ## e_eff barely moves. Builds the release sweep first; writes data/results/opacity_scan/.

@@ -347,3 +347,48 @@ def test_classify_survivability_disk_fails_cylinder_passes() -> None:
     assert cyl.survives_compressive and cyl.survives_spall
     # the disk survives once the high-v limit is relaxed to 900 MPa
     assert an.classify_survivability(peak_disk, 900.0e6, an.SIC_SPALL_LO).survives_compressive
+
+
+def test_survivability_frontier_maps_sigma_and_classifies(tmp_path: Path) -> None:
+    """Each geometry case is resolved to physical (rho, peak) via the Σ bridge at a velocity anchor
+    and classified. At 16 km/s the disk (L/D=0.3) fails the 400 MPa baseline but clears the relaxed
+    900; the cylinder (L/D=1.0) clears both."""
+    path = tmp_path / "geom.jsonl"
+    _write_jsonl(path, [_grow(0.0, 0.3, 0.5, 0.87), _grow(0.0, 1.0, 0.5, 0.73)])
+    pts = an.survivability_frontier(an.read_geometry(path), [(16_000.0, 0.63, 2.0)])
+    by_ld = {p.l_over_d: p for p in pts}
+    disk, cyl = by_ld[0.3], by_ld[1.0]
+    assert disk.rho_impact == pytest.approx(an.impact_density(0.3, 0.5))
+    assert disk.peak_compressive == pytest.approx(2.0 * disk.rho_impact * 16_000.0**2)
+    assert disk.f == pytest.approx(an.reconcile_f(0.87, 0.63))
+    assert not disk.survives_baseline  # ~438 MPa > 400
+    assert disk.survives_relaxed  # < 900
+    assert cyl.survives_baseline and cyl.survives_relaxed
+
+
+def test_best_survivable_f_excludes_the_unsurvivable_high_f_corner(tmp_path: Path) -> None:
+    """The f-maximizing corner (short disk + tight footprint) is the densest case and fails even the
+    relaxed limit, so `best_survivable_f` returns a strictly lower f from an intermediate shape."""
+    path = tmp_path / "geom.jsonl"
+    _write_jsonl(path, [_grow(0.10, 0.3, 0.3, 1.02), _grow(0.10, 0.6, 0.7, 0.87)])
+    pts = an.survivability_frontier(an.read_geometry(path), [(16_000.0, 0.63, 2.0)])
+    corner = next(p for p in pts if p.l_over_d == 0.3)
+    assert not corner.survives_baseline and not corner.survives_relaxed  # ~2 GPa
+    best = an.best_survivable_f(pts)
+    assert best == pytest.approx(an.reconcile_f(0.87, 0.63))
+    assert best is not None and best < corner.f
+
+
+def test_plot_survivability_writes_file(tmp_path: Path) -> None:
+    """The survivability figure renders for the high-v anchor (skipped without matplotlib)."""
+    pytest.importorskip("matplotlib")
+    path = tmp_path / "geom.jsonl"
+    _write_jsonl(
+        path,
+        [_grow(0.10, ld, rf, 0.9) for ld in (0.3, 0.6, 1.0) for rf in (0.3, 0.5, 0.7)],
+    )
+    pts = an.survivability_frontier(an.read_geometry(path), [(16_000.0, 0.63, 2.0)])
+    saved = an.plot_survivability(pts, tmp_path)
+    assert len(saved) == 1
+    assert saved[0].exists()
+    assert saved[0].stat().st_size > 0
