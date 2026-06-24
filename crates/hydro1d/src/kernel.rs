@@ -1049,6 +1049,232 @@ impl CondensingBounce {
     }
 }
 
+/// Parameters of the quasi-steady **ablating wall** (Rung E, ADR-0014). The incoming wall flux boils
+/// off ablator at the surface energy balance `ṁ = q_in / Q*`; the vapor is injected as a cold mass
+/// source at the wall. `Q*` is the effective heat of ablation (silicone ~2–10 MJ/kg literature);
+/// `t_vapor` is the (cold) temperature the injected vapor enters at — conservatively the cloud's own
+/// `T₀`, so the vapor adds little enthalpy and the recovery is not flattered.
+#[derive(Debug, Clone, Copy)]
+pub struct Ablation {
+    /// Effective heat of ablation `Q*` [J/kg]. Larger `Q*` ⇒ less ablation; `Q* → ∞` ⇒ rigid wall.
+    q_star: f64,
+    /// Injected-vapor temperature [K] — the cold vapor's specific energy is read from the table here.
+    t_vapor: f64,
+}
+
+impl Ablation {
+    /// An ablation model with heat of ablation `q_star` [J/kg] and cold-vapor injection temperature
+    /// `t_vapor` [K] (E2 blowing / E3 vapor-shielding parameters are added by later slices).
+    ///
+    /// # Panics
+    /// Panics unless `q_star > 0` and `t_vapor > 0`.
+    #[must_use]
+    pub fn new(q_star: f64, t_vapor: f64) -> Self {
+        assert!(
+            q_star > 0.0 && t_vapor > 0.0,
+            "Q* and t_vapor must be positive"
+        );
+        Self { q_star, t_vapor }
+    }
+}
+
+/// Outcome of an ablating bounce (Rung E): the restitution/loss decomposition of [`CoupledBounce`]
+/// plus the ablation bookkeeping (per unit wall area).
+#[derive(Debug, Clone, Copy)]
+pub struct AblatingBounceResult {
+    /// The usual restitution/impulse bookkeeping.
+    pub bounce: BounceResult,
+    /// Channel 1a — radiation absorbed at the wall.
+    pub loss_radiative_wall: f64,
+    /// Channel 1b — radiation escaping to space at the re-expansion end.
+    pub loss_escape_space: f64,
+    /// Channel 2 — heat conducted into the wall solid (`0` when `wall = None`).
+    pub loss_conductive: f64,
+    /// Total vapor mass boiled off and injected at the wall, per unit area [kg/m²].
+    pub ablated_mass: f64,
+    /// Energy consumed by ablation `Σ Q*·ṁ·dt` [J/m²] — by the quasi-steady balance this equals the
+    /// incoming wall flux it converts (`loss_radiative_wall + loss_conductive`).
+    pub loss_ablation: f64,
+}
+
+/// A radiation + conduction slug bounce against a **quasi-steady ablating wall** (Rung E, ADR-0014):
+/// [`CoupledBounce`] plus an ablation **mass source** — the inverse of [`CondensingBounce`]'s wall
+/// sink. Each step is Lie-split `hydro → radiation → conduction → **ablation**`: the incoming wall
+/// flux `q_in = q_rad_wall + q_cond` boils off `ṁ = q_in/Q*` of ablator (the surface energy balance),
+/// injected as cold vapor into the wall cell. The rigid [`CoupledBounce`] is the conservative floor;
+/// the ablating wall is the best-estimate refinement (ADR-0013), and `Q* → ∞` recovers the floor
+/// exactly. Runs with `wall = None` as its realistic high-v config (the high-v table carries no
+/// `k_gas`, so conduction — hence blowing — is off; the recovery is shielding + mass injection).
+#[derive(Debug)]
+pub struct AblatingBounce {
+    tube: Tube<TableEos>,
+    e_rad: Vec<f64>,
+    wall: Option<Solid>,
+    consts: RadConstants,
+    limiter: Limiter,
+    bc_wall: RadBc,
+    bc_space: RadBc,
+    ablation: Ablation,
+    loss_radiative_wall: f64,
+    loss_escape_space: f64,
+    loss_conductive: f64,
+    ablated_mass: f64,
+    loss_ablation: f64,
+}
+
+impl AblatingBounce {
+    /// Wrap a tabulated-EOS `tube` (and optional wall `solid`) for an ablating bounce with the given
+    /// `ablation` model. Radiation starts in local equilibrium `e_rad = a T⁴`; the wall and far end
+    /// are cold black absorbers (`Marshak(0)`), as in [`CoupledBounce::new`].
+    #[must_use]
+    pub fn new(
+        tube: Tube<TableEos>,
+        wall: Option<Solid>,
+        consts: RadConstants,
+        limiter: Limiter,
+        ablation: Ablation,
+    ) -> Self {
+        let e_rad: Vec<f64> = (0..tube.cells())
+            .map(|j| {
+                let rho = tube.density(j);
+                let t = tube.eos.temperature(rho, tube.energy[j]);
+                consts.a * t.powi(4)
+            })
+            .collect();
+        Self {
+            tube,
+            e_rad,
+            wall,
+            consts,
+            limiter,
+            bc_wall: RadBc::Marshak(0.0),
+            bc_space: RadBc::Marshak(0.0),
+            ablation,
+            loss_radiative_wall: 0.0,
+            loss_escape_space: 0.0,
+            loss_conductive: 0.0,
+            ablated_mass: 0.0,
+            loss_ablation: 0.0,
+        }
+    }
+
+    /// One implicit gray-FLD substep (as [`CoupledBounce::radiation_substep`]), returning the
+    /// **radiative wall flux absorbed this step** `dt·(c/2)(E₀ − e_inc)` — the radiative part of the
+    /// `q_in` that drives ablation.
+    fn radiation_substep(&mut self, dt: f64) -> f64 {
+        let fields = self.tube.radiation_fields();
+        let delta_e = fld_substep(
+            &fields.medium(),
+            &mut self.e_rad,
+            self.bc_wall,
+            self.bc_space,
+            dt,
+            self.consts,
+            self.limiter,
+        );
+        for (j, &de) in delta_e.iter().enumerate() {
+            let rho = self.tube.density(j);
+            self.tube.energy[j] = (self.tube.energy[j] + de / rho).max(0.0);
+        }
+        let c = self.consts.c;
+        let mut wall_flux = 0.0;
+        if let RadBc::Marshak(e_inc) = self.bc_wall {
+            wall_flux = dt * 0.5 * c * (self.e_rad[0] - e_inc);
+            self.loss_radiative_wall += wall_flux;
+        }
+        if let RadBc::Marshak(e_inc) = self.bc_space {
+            let last = self.tube.cells() - 1;
+            self.loss_escape_space += dt * 0.5 * c * (self.e_rad[last] - e_inc);
+        }
+        wall_flux
+    }
+
+    /// Conductive wall loss (channel 2), via the shared gas-side operator. Returns the flux conducted
+    /// into the wall this step — the conductive part of `q_in`. `0` when `wall = None` or no `k_gas`.
+    fn conduction_substep(&mut self, dt: f64) -> f64 {
+        let q = conduction_into_wall(&mut self.tube, &mut self.wall, dt);
+        self.loss_conductive += q;
+        q
+    }
+
+    /// Ablation substep: the quasi-steady surface energy balance. The incoming wall flux `q_in`
+    /// (energy/area this step) boils off `ṁ·dt = q_in/Q*` of ablator, injected as **cold vapor** into
+    /// the wall cell — the inverse of [`CondensingBounce`]'s wall sink. The vapor enters at the wall
+    /// node (`u = 0`), adding no axial momentum directly; it acts on `e_eff` through the near-wall
+    /// pressure it raises (E1) and, in later slices, by shielding radiation (E3). Mass is added to
+    /// cell 0 and its specific energy mass-blended toward the cold vapor's.
+    fn ablation_substep(&mut self, q_in: f64) {
+        if q_in <= 0.0 {
+            return;
+        }
+        let dm = q_in / self.ablation.q_star;
+        if dm <= 0.0 {
+            return;
+        }
+        let rho_wall = self.tube.density(0);
+        let e_vapor = self
+            .tube
+            .eos
+            .table()
+            .energy(rho_wall, self.ablation.t_vapor);
+        let m_old = self.tube.mass[0];
+        let e_old = self.tube.energy[0];
+        self.tube.mass[0] = m_old + dm;
+        self.tube.energy[0] = dm.mul_add(e_vapor, m_old * e_old) / (m_old + dm);
+        self.ablated_mass += dm;
+        self.loss_ablation += q_in; // = dm · Q*
+    }
+
+    /// One ablating step: hydro, radiation, conduction, then ablation (Lie split at the hydro `dt`).
+    fn ablating_step(&mut self, dt: f64) {
+        self.tube.step(dt);
+        let q_rad = self.radiation_substep(dt);
+        let q_cond = self.conduction_substep(dt);
+        self.ablation_substep((q_rad + q_cond).max(0.0));
+    }
+
+    /// Fire the ablating slug at the wall, integrating to the same `10⁻³`-of-peak tail guard as
+    /// [`CoupledBounce::run`], and return the restitution, loss decomposition, and ablation tally.
+    pub fn run(&mut self) -> AblatingBounceResult {
+        let incident = self.tube.total_momentum().abs();
+        let mut wall_impulse = 0.0;
+        let mut peak: f64 = 0.0;
+        let mut past_peak = false;
+        let mut force_old = self.tube.wall_force();
+        let max_steps = 400 * self.tube.cells() + 10_000;
+
+        for _ in 0..max_steps {
+            peak = peak.max(force_old);
+            if force_old < 0.5 * peak {
+                past_peak = true;
+            }
+            if past_peak && force_old < 1e-3 * peak {
+                break;
+            }
+            let dt = self.tube.stable_dt();
+            self.ablating_step(dt);
+            let force_new = self.tube.wall_force();
+            wall_impulse += 0.5 * dt * (force_old + force_new);
+            force_old = force_new;
+        }
+
+        AblatingBounceResult {
+            bounce: BounceResult {
+                wall_impulse,
+                incident_momentum: incident,
+                residual_momentum: self.tube.total_momentum(),
+                e_eff: wall_impulse / incident - 1.0,
+                peak_wall_force: peak,
+            },
+            loss_radiative_wall: self.loss_radiative_wall,
+            loss_escape_space: self.loss_escape_space,
+            loss_conductive: self.loss_conductive,
+            ablated_mass: self.ablated_mass,
+            loss_ablation: self.loss_ablation,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{CondensingBounce, CoupledBounce, Tube, Viscosity};
