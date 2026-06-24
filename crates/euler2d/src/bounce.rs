@@ -77,6 +77,9 @@ pub struct Bounce2D {
     pub incident_momentum: f64,
     /// Peak axial plate force during the bounce.
     pub peak_force: f64,
+    /// Peak *local* facesheet pressure (max surface-cell pressure over time) — the survivability
+    /// concentration that a concave plate focuses above the flat stagnation value (Rung S).
+    pub peak_local_pressure: f64,
     /// Number of time steps taken.
     pub steps: usize,
 }
@@ -158,6 +161,7 @@ pub fn run_slug_bounce(cfg: &SlugConfig) -> Bounce2D {
     // whenever the force climbs back above the cutoff (i.e. a secondary peak), so it captures it.
     let mut wall_impulse = 0.0;
     let mut peak = 0.0_f64;
+    let mut peak_local = 0.0_f64;
     let mut past_peak = false;
     let mut steps_below = 0_usize;
     let window = 40;
@@ -170,6 +174,7 @@ pub fn run_slug_bounce(cfg: &SlugConfig) -> Bounce2D {
         let force_new = g.plate_force();
         wall_impulse += 0.5 * dt * (force_old + force_new);
         peak = peak.max(force_new);
+        peak_local = peak_local.max(g.max_plate_pressure());
         if force_new < 0.999 * peak {
             past_peak = true;
         }
@@ -189,6 +194,7 @@ pub fn run_slug_bounce(cfg: &SlugConfig) -> Bounce2D {
         wall_impulse,
         incident_momentum,
         peak_force: peak,
+        peak_local_pressure: peak_local,
         steps,
     }
 }

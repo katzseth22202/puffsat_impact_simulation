@@ -160,6 +160,26 @@ impl Grid2D {
         }
     }
 
+    /// The peak *local* facesheet pressure: the maximum surface-cell pressure over the plate
+    /// (`r ≤ r_plate`). A concave plate focuses the rebound, so its local peak exceeds the flat
+    /// plate's near-uniform stagnation pressure — the survivability concentration factor (Rung S,
+    /// ADR-0010/0021). Companion to [`Self::plate_force`], which integrates the same surface cells.
+    #[must_use]
+    pub fn max_plate_pressure(&self) -> f64 {
+        if let Some(profile) = self.plate_profile {
+            (0..self.nr)
+                .filter(|&ir| profile.covers(self.r_center(ir)))
+                .filter_map(|ir| self.surface_cell(ir).map(|iz| self.prim(iz, ir).p))
+                .fold(0.0_f64, f64::max)
+        } else {
+            let rp = self.plate_radius.unwrap_or(f64::INFINITY);
+            (0..self.nr)
+                .filter(|&ir| self.r_center(ir) <= rp)
+                .map(|ir| self.prim(0, ir).p)
+                .fold(0.0_f64, f64::max)
+        }
+    }
+
     /// The lowest fluid cell in column `ir` — the cell whose pressure acts on the immersed surface —
     /// or `None` if the entire column is solid.
     fn surface_cell(&self, ir: usize) -> Option<usize> {

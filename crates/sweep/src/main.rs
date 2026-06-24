@@ -368,6 +368,9 @@ struct GeoRecord {
     restitution_confined: f64,
     /// Peak axial plate force of the free run (the survivability proxy, reported not gated here).
     peak_force: f64,
+    /// Peak *local* facesheet pressure of the free run — the concave focusing concentration the
+    /// survivability frontier divides by its flat (`d/D = 0`) counterpart (Rung S, ADR-0010/0021).
+    peak_local_pressure: f64,
 }
 
 /// Run one `eta_capture` case: a free dished bounce over its confined plane-wave denominator. The
@@ -421,6 +424,7 @@ fn run_eta_case(
         restitution_free: free.restitution_ratio(),
         restitution_confined: confined.restitution_ratio(),
         peak_force: free.peak_force,
+        peak_local_pressure: free.peak_local_pressure,
     }
 }
 
@@ -930,5 +934,6 @@ mod tests {
         assert!(close(back.restitution_free, r.restitution_free));
         assert!(close(back.restitution_confined, r.restitution_confined));
         assert!(close(back.peak_force, r.peak_force));
+        assert!(close(back.peak_local_pressure, r.peak_local_pressure));
     }
 }

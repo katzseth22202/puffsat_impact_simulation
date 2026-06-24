@@ -395,6 +395,7 @@ class GeoRow:
     restitution_free: float
     restitution_confined: float
     peak_force: float
+    peak_local_pressure: float  # peak local plate pressure of the free run (Rung S focusing factor)
 
 
 @dataclass(frozen=True)
@@ -434,6 +435,7 @@ def read_geometry(path: Path = DEFAULT_GEOMETRY_PATH) -> list[GeoRow]:
                 restitution_free=float(d["restitution_free"]),
                 restitution_confined=float(d["restitution_confined"]),
                 peak_force=float(d["peak_force"]),
+                peak_local_pressure=float(d.get("peak_local_pressure", 0.0)),
             )
         )
     return rows
@@ -629,7 +631,8 @@ class SurvivabilityPoint:
     e_eff: float
     eta_capture: float
     rho_impact: float
-    peak_compressive: float
+    focusing_factor: float  # concave local-peak concentration over the flat reference (Rung S)
+    peak_compressive: float  # the plane-wave stagnation peak scaled by focusing_factor
     reflected_tensile: float
     f: float
     survives_baseline: bool  # peak < P_LIMIT_BASELINE (400 MPa) and spall OK
@@ -645,14 +648,23 @@ def survivability_frontier(
     spall_strength: float = SIC_SPALL_LO,
 ) -> list[SurvivabilityPoint]:
     """Resolve each geometry case to physical survivability at each `(v, e_eff, c_stag)` anchor: the
-    Σ contract gives `rho`, the stagnation law the peak pressure, and `classify_survivability` the
-    verdict against the 400 MPa baseline and the relaxed 900 MPa high-v limit (design §7)."""
+    Σ contract gives `rho`, the stagnation law the plane-wave peak, the concave focusing factor (the
+    case's local peak over its flat `d/D=0` counterpart at the same `L/D, r_foot/R, mach`) the local
+    concentration, and `classify_survivability` the verdict against the 400 MPa baseline and the
+    relaxed 900 MPa high-v limit (design §7)."""
     relaxed_limit = max(P_LIMIT_HIGHV)
+    flat_local = {
+        (r.l_over_d, r.r_foot_over_r, r.mach): r.peak_local_pressure
+        for r in rows
+        if r.d_over_d == 0.0 and r.peak_local_pressure > 0.0
+    }
     points: list[SurvivabilityPoint] = []
     for v, e_eff, c_stag in anchors:
         for r in sorted(rows, key=lambda x: (x.mach, x.l_over_d, x.r_foot_over_r, x.d_over_d)):
             rho = impact_density(r.l_over_d, r.r_foot_over_r, mass, plate_radius)
-            peak = peak_facesheet_pressure(rho, v, c_stag)
+            ref = flat_local.get((r.l_over_d, r.r_foot_over_r, r.mach))
+            focusing = r.peak_local_pressure / ref if ref else 1.0
+            peak = peak_facesheet_pressure(rho, v, c_stag) * focusing
             base = classify_survivability(peak, P_LIMIT_BASELINE, spall_strength)
             relaxed = classify_survivability(peak, relaxed_limit, spall_strength)
             points.append(
@@ -665,6 +677,7 @@ def survivability_frontier(
                     e_eff=e_eff,
                     eta_capture=r.eta_capture,
                     rho_impact=rho,
+                    focusing_factor=focusing,
                     peak_compressive=peak,
                     reflected_tensile=base.reflected_tensile,
                     f=reconcile_f(r.eta_capture, e_eff),

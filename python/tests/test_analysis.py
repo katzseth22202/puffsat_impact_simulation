@@ -218,9 +218,16 @@ def test_plot_transitional_writes_file(tmp_path: Path) -> None:
     assert saved[0].stat().st_size > 0
 
 
-def _grow(d_over_d: float, l_over_d: float, r_foot_over_r: float, eta: float) -> dict[str, float]:
+def _grow(
+    d_over_d: float,
+    l_over_d: float,
+    r_foot_over_r: float,
+    eta: float,
+    peak_local: float = 1.0,
+) -> dict[str, float]:
     """A geometry-sweep row at the given case; the two restitution ratios are stand-ins (the reader
-    keeps them but the reconciliation keys on `eta_capture`)."""
+    keeps them but the reconciliation keys on `eta_capture`). `peak_local` is the free run's local
+    peak pressure, the Rung S focusing factor's numerator."""
     return {
         "d_over_d": d_over_d,
         "l_over_d": l_over_d,
@@ -230,6 +237,7 @@ def _grow(d_over_d: float, l_over_d: float, r_foot_over_r: float, eta: float) ->
         "restitution_free": eta * 1.5,
         "restitution_confined": 1.5,
         "peak_force": 0.6,
+        "peak_local_pressure": peak_local,
     }
 
 
@@ -377,6 +385,27 @@ def test_best_survivable_f_excludes_the_unsurvivable_high_f_corner(tmp_path: Pat
     best = an.best_survivable_f(pts)
     assert best == pytest.approx(an.reconcile_f(0.87, 0.63))
     assert best is not None and best < corner.f
+
+
+def test_survivability_applies_concave_focusing_factor(tmp_path: Path) -> None:
+    """A concave plate focuses the local peak above the flat reference at the same (L/D, r_foot/R),
+    so its survivability peak is scaled up by the focusing factor (concave local / flat local). The
+    flat reference itself has focusing 1.0."""
+    path = tmp_path / "geom.jsonl"
+    _write_jsonl(
+        path,
+        [
+            _grow(0.0, 0.6, 0.5, 0.83, peak_local=1.0),  # flat reference
+            _grow(0.15, 0.6, 0.5, 0.93, peak_local=1.5),  # concave focuses 1.5x
+        ],
+    )
+    pts = an.survivability_frontier(an.read_geometry(path), [(16_000.0, 0.63, 2.0)])
+    flat = next(p for p in pts if p.d_over_d == 0.0)
+    concave = next(p for p in pts if p.d_over_d == 0.15)
+    assert flat.focusing_factor == pytest.approx(1.0)
+    assert concave.focusing_factor == pytest.approx(1.5)
+    assert concave.rho_impact == pytest.approx(flat.rho_impact)  # same L/D, footprint
+    assert concave.peak_compressive == pytest.approx(1.5 * flat.peak_compressive)
 
 
 def test_plot_survivability_writes_file(tmp_path: Path) -> None:

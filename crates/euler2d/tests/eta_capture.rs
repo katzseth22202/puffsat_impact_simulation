@@ -167,6 +167,40 @@ fn concave_eta_capture_rises_with_depth() {
     );
 }
 
+/// A concave plate focuses the rebound, so its peak *local* facesheet pressure exceeds the flat
+/// plate's near-uniform stagnation pressure at the same cloud/M — the survivability concentration
+/// factor (Rung S, ADR-0010/0021), the quantitative cousin of why the deep dish is foreclosed.
+#[test]
+fn concave_focuses_local_peak_above_flat() {
+    let r_foot = 1.0;
+    let (nr, nz) = (48, 32);
+    let flat = free_shape(PlateShape::Dish { d_over_d: 0.0 }, r_foot, nr, nz);
+    let deep = free_shape(PlateShape::Dish { d_over_d: 0.15 }, r_foot, nr, nz);
+    let focus = deep.peak_local_pressure / flat.peak_local_pressure;
+    assert!(
+        focus > 1.0 && focus < 8.0,
+        "concave should focus the local peak above flat: flat {:.3e}, deep {:.3e}, factor {focus:.3}",
+        flat.peak_local_pressure,
+        deep.peak_local_pressure,
+    );
+}
+
+/// The flat-plate peak local pressure is positive and the same order as the r-weighted mean implied
+/// by the integrated plate force (`peak_force / (r_plate²/2)`) — the local and integrated loads agree.
+#[test]
+fn flat_local_peak_ties_to_integrated_force() {
+    let r_plate = 2.0;
+    let flat = free_shape(PlateShape::Dish { d_over_d: 0.0 }, 1.0, 48, 32);
+    let mean = flat.peak_force / (0.5 * r_plate * r_plate);
+    assert!(flat.peak_local_pressure > 0.0);
+    assert!(
+        flat.peak_local_pressure > 0.2 * mean && flat.peak_local_pressure < 8.0 * mean,
+        "flat local peak {:.3e} should track the r-weighted mean {:.3e}",
+        flat.peak_local_pressure,
+        mean,
+    );
+}
+
 /// DIAGNOSTIC (ignored): the flat-plate `eta_capture` vs footprint table at a finer resolution, plus
 /// the confined-vs-1D cross-check. Run with `cargo test -p euler2d --test eta_capture -- --ignored
 /// --nocapture diag`.
