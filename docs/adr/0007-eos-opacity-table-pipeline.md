@@ -59,6 +59,23 @@ default)]` so the high-v table and the loader stay backward-compatible:
   scan. The **high-v plasma `k_gas`** (Spitzer-like transport) is *not* tabulated — the high-v table
   has no `k_gas`, so high-v conduction stays off (the deferred B-flux high-v sibling).
 
+**Amendment (Rung E, 2026-06): the real per-regime opacity table is still unbuilt — firewall-blocked,
+and gated off by a decisive interim result.** Rung E (E5) was the gated slice to build the regime-
+stitched table (HITEMP/ExoMol molecular bands + soot + TOPS/OPLIB plasma) so the `τ~1` transitional
+leak (ADR-0012) and the ablating-wall shield (ADR-0014) run on real `τ`. It was **not pulled**, on
+both gate conditions:
+- **Data unreachable.** A firewall probe of the four canonical sources returned HTTP 403 for all —
+  `hitran.org`, `www.exomol.com`, `aphysics2.lanl.gov`, `oplib.lanl.gov` — each *"no matching allow
+  rule — blocked by default deny policy"* (not a corporate/system deny; the user could
+  `sbx policy allow network <domain>` on the host, but that needs their action).
+- **Decision not τ-limited.** The Rung E recovery is mass-injection-dominated; real opacity sharpens
+  only the ~38 % shielding sub-component and cannot fill the EOS dip, so the `f ≥ 0.8` call is
+  `Q*`/EOS-limited, not opacity-limited. The interim-opacity **τ-bracket** (via the in-process
+  `Table::with_opacity_scale` knob) is the deliverable; the point estimate defers to Rung F.
+
+The loader hot-swaps the real table with no kernel change when the data becomes reachable (the
+original design intent), so this remains a drop-in refinement.
+
 ## Considered Options
 
 - **Single-source EOS or opacity across the whole range.** Rejected: none exists — CoolProp lacks

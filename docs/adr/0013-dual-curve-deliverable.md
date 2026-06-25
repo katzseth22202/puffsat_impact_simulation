@@ -25,6 +25,18 @@ multigroup (ADR-0006), equilibrium-EOS spot-check (ADR-0008), transport check (A
 pulled **only where the conservative floor dips below the `f = 0.8` useful-f line** (ADR-0009).
 Modeling effort is spent exactly where the pessimistic floor fails to clear the bar, and nowhere else.
 
+**Amendment (Rung E, 2026-06): the best-estimate curve now carries the ablating-wall refinement —
+but it is a *small* lift, not the dip-filler.** The ablating wall (ADR-0014) is the best-estimate
+counterpart to the rigid floor, pulled here per the "gated where the floor dips below `f = 0.8`"
+logic. Landed, it adds: dip (11 km/s) `e_eff` floor 0.57 → ≤ 0.580 (≤ +0.014); 16 km/s `e_eff`
+0.629 → [0.638, 0.678], best survivable `f` 0.784 → [0.788, 0.807] (straddling the gate, cleared only
+at the optimistic `Q*`/τ corner). So on the dual-curve picture the best-estimate `e_eff` sits only
+marginally above the rigid floor, and **the geometry lever (concave `eta_capture`, Rung D), not the
+wall, is what actually carries `f` over 0.8** at the dip. The recovery's error band is the **τ-bracket**
+(interim opacity; the real-opacity refinement, ADR-0007, is firewall-gated and `Q*`/EOS-decision
+shows it would not change the call) plus the `Q* ∈ {2,5,10} MJ/kg` spread — both reported, not
+collapsed.
+
 ## Considered Options
 
 - **A single best-estimate `f(v)` with symmetric error bars.** Rejected: it discards the defensible

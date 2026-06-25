@@ -64,3 +64,13 @@ are computable now vs not**, and reports both as one decomposition:
 - **Package seam.** The sweep starts at ~5 km/s: below it the high-v `eos_water` dissociation chemistry
   degrades and the low-v CoolProp/two-phase package (Rung C) takes over. The transitional sweep is the
   high-v package run down to that ~5 km/s validity seam.
+
+**Amendment (Rung E, 2026-06): the dip is *not* radiatively fillable by the ablating shield.** Rung E
+(ADR-0014) tested the ablating wall as the candidate lever to fill this dip. It does **not**: the
+0.57 worst case is an **EOS specific-heat sink** (enthalpy into dissociation/ionization), not a wall
+radiative loss, so the vapor shield has almost nothing to recover there — ablating lifts the 11 km/s
+`e_eff` only to **[0.570, 0.580]** (recovery ≤ +0.014). This *sharpens* the "refinement, not a gate"
+decision above: the real-opacity radiative-leak quantification matters for the rigid floor's **loss
+accounting** (channel 1a), but it cannot lift the dip's `e_eff` via ablation, because the dip's loss
+is in the EOS, not in the radiation field. The 0.57 EOS floor stands as the worst case; the geometry
+(concave `eta_capture`) lever, not the wall, is what clears a useful `f` there (Rung D, `f ≈ 0.83`).

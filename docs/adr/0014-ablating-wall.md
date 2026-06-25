@@ -45,3 +45,51 @@ extent the shield stays RT-coherent; the ablating wall is where RT bites hardest
 - **Treat ablation mass-loading as a first-order perturbation needing full vapor chemistry.**
   Rejected as baseline: `ṁ ~ 1.5%` of the pulse; the dominant effect is on the loss channels
   (blowing, shielding), captured with an effective `Q*` + gray absorber.
+
+## Outcome (Rung E, 2026-06) — landed, with three corrections to this ADR's framing
+
+The `AblatingBounce` kernel landed (1D Lagrangian, `wall = None`): a quasi-steady `Q*` surface
+energy balance with a wall **mass source** `ṁ = q_in/Q*`, a **blowing factor** `φ = 1/(1+B)` on the
+conductive flux, and a **vapor shield**. Each is verified against its off-limit (`Q* → ∞` recovers
+the rigid floor with mass/energy closure; `φ → 1` recovers the bare conductive flux; `κ_vapor → 0`
+recovers the bare wall; shielding monotonically cuts `loss_radiative_wall` and the recovery tracks
+the recoverable loss — the τ-leverage). The `--ablating` sweep × `analysis.py --axis ablating`
+deliver the recovery as a **τ-bracket** (opacity-scale knob) against the rigid floor, folded through
+the Σ→ρ→peak survivability frontier (Rung S). Three findings amend the framing above:
+
+1. **The dip is *not* radiatively fillable — this ADR's central "leverage peaks at the transitional
+   dip" thesis does not hold for the dip's worst case.** The thesis assumed the dip is a radiative
+   `τ~1` leak the shield can recover. But the measured 0.57 dip (ADR-0012) is an **EOS dissociation
+   specific-heat sink**, not a wall radiative loss — energy goes into breaking bonds, not into
+   radiation headed at the plate — so the shield has almost nothing to claw back there: ablating
+   lifts the 11 km/s `e_eff` from ≈ 0.566 only to **[0.570, 0.580]** (recovery ≤ +0.014). The shield
+   *can* recover a real radiative loss (its τ-leverage is confirmed where one exists), but the dip
+   is not where that loss lives.
+
+2. **The recovery is mass-injection-dominated, not shielding-dominated** (refining the "two channels
+   = blowing + shielding" model). **Blowing is null at both science anchors** — the high-v table
+   carries no `k_gas` and low-v conduction is negligible (Rung C), so it is a verified-and-bounded
+   channel, not a live lever. Of what remains, mass injection leads: at 16 km/s the transparent
+   (no-shield) floor is already `+0.017…+0.028`, with the shielding τ-leverage adding only `~+0.017`
+   on top (~38 % of the recovery). So the live channels at the anchors are **injection (primary) +
+   shielding (secondary)**.
+
+3. **The shield is a throttled-conductance BC, and `ṁ` is larger than the ~1.5 % assumed.** The
+   shield is implemented as `RadBc::MarshakAttenuated` scaling the Marshak surface conductance by
+   `1/(1+τ_v)` and *retaining the intercepted radiation in the near-wall field* (energy-conserving,
+   self-consistent) — chosen after a χ-augmentation attempt failed (the Marshak flux is a surface
+   conductance independent of cell-0 opacity) and superseding the manual energy-return first
+   committed. The measured ablated fraction at 16 km/s is **~3.7 % (`Q* = 10 MJ/kg`) to ~8.9 %
+   (`Q* = 2 MJ/kg`)** — well above the ~1.5 % estimate, and at the aggressive end it strains the
+   thin-curtain assumption *and* plate durability (the back-propagated MEMS-replenishment
+   requirement, design §7).
+
+**The recovery-lever decision (was deferred to this rung):** the ablating wall does **not** robustly
+lift 16 km/s over the `f = 0.8` gate. Best survivable `f` 0.784 → **[0.788, 0.807]**: the gate
+**straddles** the bracket, cleared only at the optimistic low-`Q*`/high-τ corner (`f` 0.807, at
+~8.9 % ablation), with the conservative `Q* = 10 MJ/kg` end at 0.788, just under. It clears
+comfortably (0.859) only if the structure tolerates the relaxed 900 MPa `P_limit`. **E5** (real
+per-regime opacity) was **not pulled**: the decision is `Q*`/EOS-limited, not τ-limited (real opacity
+sharpens only the ~38 % shielding sub-component and cannot fill an EOS sink), and the data
+(HITEMP/ExoMol/TOPS/OPLIB) is firewall-blocked by default-deny — see ADR-0007. The **RT-coherence
+caveat above still stands**: the shielding component of the recovery is an upper estimate.
