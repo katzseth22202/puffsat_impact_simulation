@@ -51,6 +51,11 @@ DEFAULT_GEOMETRY_SUMMARY_PATH = Path("data/results/frontier_geometry.csv")
 DEFAULT_SURVIVABILITY_SUMMARY_PATH = Path("data/results/frontier_survivability.csv")
 DEFAULT_MARGIN_SUMMARY_PATH = Path("data/results/frontier_margin.csv")
 
+# Ablating-wall recovery sweep (Rung E, ADR-0014): the `crates/sweep --ablating` output and its
+# tau-bracketed e_eff recovery + the 16 km/s f-gate call.
+DEFAULT_ABLATING_PATH = Path("data/results/sweep_ablating.jsonl")
+DEFAULT_ABLATING_SUMMARY_PATH = Path("data/results/frontier_ablating.csv")
+
 # 1D `e_eff` anchors for the `f = eta_capture·(1+e_eff)/2` reconciliation (ADR-0003). `EEFF_DIP` is
 # the transitional EOS worst case (the conservative floor, ADR-0012); `EEFF_HIGHV` the 16 km/s point
 # (Rung B). `eta_capture` is geometry-dominated and ~velocity-independent, so the first bracket
@@ -919,6 +924,236 @@ def _run_margin(
     )
 
 
+# --- Rung E: ablating-wall recovery (the tau-bracket + the 16 km/s f-gate call, ADR-0014) ---
+
+
+@dataclass(frozen=True)
+class AblatingRow:
+    """One ablating-sweep result row (`crates/sweep --ablating`, ADR-0014): the case axes plus the
+    rigid floor, the ablating restitution, and the ablation bookkeeping."""
+
+    v: float
+    rho_impact: float
+    opacity_scale: float
+    q_star: float
+    kappa_vapor: float
+    e_eff_rigid: float
+    e_eff_ablating: float
+    recovery: float
+    ablated_mass: float
+    ablated_fraction: float
+    loss_radiative_wall: float
+    loss_escape_space: float
+    loss_ablation: float
+    peak_wall_force: float
+
+
+def read_ablating(path: Path = DEFAULT_ABLATING_PATH) -> list[AblatingRow]:
+    """Parse the ablating sweep JSONL (one JSON object per line; blank lines tolerated)."""
+    rows: list[AblatingRow] = []
+    for line in Path(path).read_text().splitlines():
+        if not line.strip():
+            continue
+        d = json.loads(line)
+        rows.append(
+            AblatingRow(
+                v=float(d["v"]),
+                rho_impact=float(d["rho_impact"]),
+                opacity_scale=float(d["opacity_scale"]),
+                q_star=float(d["q_star"]),
+                kappa_vapor=float(d["kappa_vapor"]),
+                e_eff_rigid=float(d["e_eff_rigid"]),
+                e_eff_ablating=float(d["e_eff_ablating"]),
+                recovery=float(d["recovery"]),
+                ablated_mass=float(d["ablated_mass"]),
+                ablated_fraction=float(d["ablated_fraction"]),
+                loss_radiative_wall=float(d["loss_radiative_wall"]),
+                loss_escape_space=float(d["loss_escape_space"]),
+                loss_ablation=float(d["loss_ablation"]),
+                peak_wall_force=float(d["peak_wall_force"]),
+            )
+        )
+    return rows
+
+
+@dataclass(frozen=True)
+class AblatingPoint:
+    """The rho-mean ablating recovery at one `(v, opacity_scale, Q*)` case: the rigid floor, the
+    ablating best estimate, and the recovery, averaged over the impact-density grid (the
+    single-anchor convention the geometry/survivability reconciliation already uses, ADR-0013)."""
+
+    v: float
+    opacity_scale: float
+    q_star: float
+    e_eff_rigid: float
+    e_eff_ablating: float
+    recovery: float
+    ablated_fraction: float
+
+
+def _mean(values: list[float]) -> float:
+    """Arithmetic mean of a non-empty list."""
+    return sum(values) / len(values)
+
+
+def ablating_points(rows: list[AblatingRow]) -> list[AblatingPoint]:
+    """Collapse the impact-density axis: rho-mean the rigid floor, the ablating `e_eff`, and the
+    recovery at each `(v, opacity_scale, Q*)`, sorted for a stable CSV/plot order."""
+    keys = sorted({(r.v, r.opacity_scale, r.q_star) for r in rows})
+    points: list[AblatingPoint] = []
+    for v, scale, q_star in keys:
+        grp = [r for r in rows if r.v == v and r.opacity_scale == scale and r.q_star == q_star]
+        points.append(
+            AblatingPoint(
+                v=v,
+                opacity_scale=scale,
+                q_star=q_star,
+                e_eff_rigid=_mean([r.e_eff_rigid for r in grp]),
+                e_eff_ablating=_mean([r.e_eff_ablating for r in grp]),
+                recovery=_mean([r.recovery for r in grp]),
+                ablated_fraction=_mean([r.ablated_fraction for r in grp]),
+            )
+        )
+    return points
+
+
+def write_ablating_summary(
+    points: list[AblatingPoint], path: Path = DEFAULT_ABLATING_SUMMARY_PATH
+) -> None:
+    """Write the rho-mean ablating recovery to a CSV (header = `AblatingPoint` field names)."""
+    header = [f.name for f in fields(AblatingPoint)]
+    _write_csv(header, ([getattr(p, name) for name in header] for p in points), path)
+
+
+def best_f_at(
+    geo: list[GeoRow], v: float, e_eff: float, c_stag: float, *, relaxed: bool = False
+) -> float | None:
+    """Best survivable `f` at velocity `v` with restitution `e_eff` — resolve the geometry cases to
+    survivability at the `(v, e_eff, c_stag)` anchor and take the survivable maximum (Rung S)."""
+    points = survivability_frontier(geo, [(v, e_eff, c_stag)])
+    return best_survivable_f(points, relaxed=relaxed)
+
+
+def plot_ablating(
+    points: list[AblatingPoint], out_dir: Path = DEFAULT_PLOT_DIR, tag: str = ""
+) -> list[Path]:
+    """Render the ablating recovery vs the opacity scale (the tau-bracket), one curve per `Q*`, one
+    panel per velocity anchor: recovery grows as the gas un-traps (scale drops) and radiation
+    reaches the vapor curtain (ADR-0012). matplotlib is lazy (`sci` extra); inputs are floats."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    velocities = sorted({p.v for p in points})
+    q_stars = sorted({p.q_star for p in points})
+    fig, axes = plt.subplots(1, len(velocities), figsize=(5 * len(velocities), 4.5), squeeze=False)
+    for ax, v in zip(axes[0], velocities, strict=True):
+        for q_star in q_stars:
+            row = sorted(
+                (p for p in points if p.v == v and p.q_star == q_star),
+                key=lambda p: p.opacity_scale,
+            )
+            ax.plot(
+                [p.opacity_scale for p in row],
+                [p.recovery for p in row],
+                "o-",
+                label=rf"$Q^*={q_star / 1e6:.0f}$ MJ/kg",
+            )
+        ax.set_xscale("log")
+        ax.axhline(0.0, color="grey", ls=":", alpha=0.6)
+        ax.set_xlabel("opacity scale (1 = interim Kramers)")
+        ax.set_ylabel(r"$\Delta e_\mathrm{eff}$ (ablating $-$ rigid floor)")
+        ax.set_title(rf"$v={v / 1000:.0f}$ km/s")
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="best", fontsize="small")
+    fig.suptitle("Ablating-wall recovery vs optical depth (the tau-bracket, ADR-0014)")
+    fig.tight_layout()
+    path = out_dir / f"{tag}ablating_recovery.png"
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+    return [path]
+
+
+def _run_ablating(
+    ablating_path: Path,
+    geometry_path: Path,
+    highv_sweep_path: Path,
+    dip_sweep_path: Path,
+    summary_path: Path,
+    plot_dir: Path,
+    tag: str,
+) -> None:
+    """The `--axis ablating` path: read the ablating sweep, rho-mean the recovery, write the CSV +
+    figure, and report (1) the dip-fill as a tau-bracket against the EOS floor and (2) the 16 km/s
+    `f >= 0.8`-at-a-survivable-shape call (the user-deferred recovery-lever decision, ADR-0009)."""
+    rows = read_ablating(ablating_path)
+    points = ablating_points(rows)
+    write_ablating_summary(points, summary_path)
+    figs = plot_ablating(points, plot_dir, tag)
+
+    geo = read_geometry(geometry_path)
+    c_stag_hi = stagnation_coefficient(read_sweep(highv_sweep_path), ANCHOR_HIGHV[0])
+    c_stag_dip = stagnation_coefficient(read_sweep(dip_sweep_path), V_DIP)
+
+    def _fmt(x: float | None) -> str:
+        return f"{x:.3f}" if x is not None else "none survive"
+
+    # Dip fill (the EOS worst case is not radiatively driven, so the shield has little to recover).
+    dip = [p for p in points if p.v == V_DIP]
+    dip_rigid = _mean([p.e_eff_rigid for p in dip])
+    dip_abl = [p.e_eff_ablating for p in dip]
+    print(
+        f"python: dip ({V_DIP / 1000:.0f} km/s) — EOS floor e_eff={EEFF_DIP}; radiation-on rigid "
+        f"{dip_rigid:.3f}; ablating recovers to [{min(dip_abl):.3f}, {max(dip_abl):.3f}] "
+        f"(recovery [{min(p.recovery for p in dip):+.4f}, {max(p.recovery for p in dip):+.4f}]). "
+        "The dip is EOS-dominated, not radiatively fillable."
+    )
+
+    # 16 km/s f-gate call: the ablating e_eff bracket over (scale, Q*) vs the rigid floor. The
+    # bracket's optimistic end is the low-Q*/high-tau corner (most ablation, most shielding); its
+    # conservative end is high-Q*/low-tau. Report which end clears the gate, with the plate ablation
+    # the clearing corner costs — clearing at the optimistic end alone is a marginal, Q*-dependent
+    # clear, not a robust one.
+    hi = [p for p in points if p.v == ANCHOR_HIGHV[0]]
+    e_rigid = _mean([p.e_eff_rigid for p in hi])
+    p_lo = min(hi, key=lambda p: p.e_eff_ablating)
+    p_hi = max(hi, key=lambda p: p.e_eff_ablating)
+    e_abl_lo, e_abl_hi = p_lo.e_eff_ablating, p_hi.e_eff_ablating
+    f_rigid = best_f_at(geo, ANCHOR_HIGHV[0], e_rigid, c_stag_hi)
+    f_abl_lo = best_f_at(geo, ANCHOR_HIGHV[0], e_abl_lo, c_stag_hi)
+    f_abl_hi = best_f_at(geo, ANCHOR_HIGHV[0], e_abl_hi, c_stag_hi)
+    f_abl_hi_relaxed = best_f_at(geo, ANCHOR_HIGHV[0], e_abl_hi, c_stag_hi, relaxed=True)
+    clears_lo = f_abl_lo is not None and f_abl_lo >= USEFUL_F_GATE
+    clears_hi = f_abl_hi is not None and f_abl_hi >= USEFUL_F_GATE
+    if clears_lo:
+        verdict = "CLEARS across the bracket (robust)"
+    elif clears_hi:
+        pct = p_hi.ablated_fraction * 100
+        q_mj = p_hi.q_star / 1e6
+        verdict = (
+            f"STRADDLES the gate — clears only at the optimistic end (f {_fmt(f_abl_hi)}, "
+            f"ablating {pct:.1f}% of the plate at Q*={q_mj:.0f} MJ/kg); "
+            f"the conservative end lands {_fmt(f_abl_lo)}, just under"
+        )
+    else:
+        verdict = "does NOT clear at either end of the bracket"
+    print(
+        f"python: 16 km/s — rigid floor e_eff={e_rigid:.3f} (best survivable f {_fmt(f_rigid)}) -> "
+        f"ablating e_eff [{e_abl_lo:.3f}, {e_abl_hi:.3f}] (best survivable f "
+        f"[{_fmt(f_abl_lo)}, {_fmt(f_abl_hi)}]). Gate {USEFUL_F_GATE} at the 400 MPa baseline: "
+        f"{verdict}. Relaxed 900 MPa: {_fmt(f_abl_hi_relaxed)}."
+    )
+    # The dip f for completeness (ablating barely moves it, so survivability still binds).
+    f_dip_abl = best_f_at(geo, V_DIP, max(dip_abl), c_stag_dip)
+    print(
+        f"python: dip best survivable f at the ablating e_eff {_fmt(f_dip_abl)} "
+        f"(gate {USEFUL_F_GATE})."
+    )
+    print(f"python: wrote {summary_path} and {len(figs)} figure(s): " + ", ".join(map(str, figs)))
+
+
 def main() -> None:
     """Read a sweep, extract the frontier, write the CSV summary, and render the figures. `--axis
     rho` (default) builds the `e_eff(rho)` frontier + loss decomposition for the high-v/low-v
@@ -930,7 +1165,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="e_eff frontier extraction + loss decomposition.")
     parser.add_argument(
         "--axis",
-        choices=["rho", "v", "geometry", "survivability", "margin"],
+        choices=["rho", "v", "geometry", "survivability", "margin", "ablating"],
         default="rho",
         help="frontier axis",
     )
@@ -980,6 +1215,20 @@ def main() -> None:
         geometry_path = args.sweep or DEFAULT_GEOMETRY_PATH
         summary_path = args.summary or DEFAULT_MARGIN_SUMMARY_PATH
         _run_margin(geometry_path, DEFAULT_SWEEP_PATH, DEFAULT_TRANS_EOS_PATH, summary_path)
+        return
+
+    if args.axis == "ablating":
+        ablating_path: Path = args.sweep or DEFAULT_ABLATING_PATH
+        summary_path = args.summary or DEFAULT_ABLATING_SUMMARY_PATH
+        _run_ablating(
+            ablating_path,
+            DEFAULT_GEOMETRY_PATH,
+            DEFAULT_SWEEP_PATH,
+            DEFAULT_TRANS_EOS_PATH,
+            summary_path,
+            plot_dir,
+            tag,
+        )
         return
 
     sweep_path: Path = args.sweep or DEFAULT_SWEEP_PATH

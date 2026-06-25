@@ -31,7 +31,7 @@ use std::path::Path;
 use euler2d::bounce::{PlateShape, SlugConfig, eta_capture, run_slug_bounce};
 use hydro1d::conduction::Solid;
 use hydro1d::eos::TableEos;
-use hydro1d::kernel::{CondensingBounce, CoupledBounce, Tube, Viscosity};
+use hydro1d::kernel::{AblatingBounce, Ablation, CondensingBounce, CoupledBounce, Tube, Viscosity};
 use hydro1d::radiation::{Limiter, RadConstants};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -44,6 +44,7 @@ const RESULT_PATH_LOWV: &str = "data/results/sweep_lowv.jsonl";
 const RESULT_PATH_TRANS_EOS: &str = "data/results/sweep_transitional_eos.jsonl";
 const RESULT_PATH_TRANS_RAD: &str = "data/results/sweep_transitional_rad.jsonl";
 const RESULT_PATH_GEOMETRY: &str = "data/results/sweep_geometry.jsonl";
+const RESULT_PATH_ABLATING: &str = "data/results/sweep_ablating.jsonl";
 
 /// The production `ρ_impact` grid [kg/m³] (design §3-4): the impact-density axis of `e_eff(ρ)`.
 const RHO_GRID: [f64; 4] = [0.16, 0.32, 0.48, 0.64];
@@ -446,6 +447,160 @@ fn run_geometry_sweep(cfg: &GeoConfig) -> Vec<GeoRecord> {
         .collect()
 }
 
+// ---- Ablating-wall recovery sweep (Rung E, ADR-0014) --------------------------------------------
+//
+// The Phase-2 best-estimate refinement above the rigid-wall floor (ADR-0013): a thin vapor layer
+// boils off the plate and (E3) shields incoming radiation before it reaches the cold wall, recovering
+// the radiative wall loss as near-wall pressure → bounce. Each case runs the rigid `CoupledBounce`
+// (the conservative floor) and the `AblatingBounce` (shielding + mass injection) at the same config,
+// so `recovery = e_eff_ablating − e_eff_rigid` is the pure ablating gain. The interim Kramers opacity
+// is structurally `τ ≫ 1` at the anchors (ADR-0012), where radiation is trapped and the shield has
+// little to do; the opacity-scale knob ([`Table::with_opacity_scale`]) scales it down to manufacture
+// the wall-reaching `τ ≲ 1` regime, so the recovery is reported as a **τ-bracket** over the scale.
+// Runs `wall = None` (the high-v table carries no `k_gas`; conduction — hence blowing — is off).
+
+/// The two velocity anchors [m/s]: the transitional dip (~11 km/s, the worst-case `e_eff`, ADR-0012)
+/// and the 16 km/s high-v anchor (the `f = 0.8` recovery-lever decision, ADR-0009).
+const ABL_V: [f64; 2] = [11_000.0, 16_000.0];
+/// Effective heat-of-ablation axis [J/kg] (Q*, 2–10 MJ/kg; ADR-0014). Larger Q* ⇒ less mass boils off
+/// per unit incident flux ⇒ a thinner shield.
+const ABL_Q_STAR: [f64; 3] = [2.0e6, 5.0e6, 10.0e6];
+/// Opacity-scale axis spanning the τ regime (ADR-0012): the interim Kramers opacity (1×, `τ ≫ 1`)
+/// scaled down toward the wall-reaching `τ ≲ 1` window where shielding recovers the most, plus a 10×
+/// over-trapped point to bound the high-τ end.
+const ABL_OPACITY_SCALE: [f64; 4] = [0.01, 0.1, 1.0, 10.0];
+/// Vapor curtain gray opacity `κ_vapor` [m²/kg] (E3): the ablation-product absorbing layer's optical
+/// depth is `τ_v = κ_vapor · ablated_mass`. Calibrated (the `diag_ablating_magnitudes` probe) so a
+/// quasi-steady ablated mass gives an `O(1)` curtain at the anchors — the regime where the shield is
+/// a meaningful but not saturating correction.
+const ABL_KAPPA_VAPOR: f64 = 2.0e2;
+/// Gas cells for the ablating sweep: `e_eff` is an integral momentum ratio and converges fast, so a
+/// coarser-than-production mesh keeps the (v × ρ × scale × Q*) grid tractable.
+const ABL_GAS_CELLS: usize = 200;
+
+/// One ablating-sweep row: the case axes plus the rigid floor, the ablating restitution, and the
+/// ablation bookkeeping (per unit wall area). `recovery = e_eff_ablating − e_eff_rigid`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+struct AblatingRecord {
+    /// Impact speed [m/s].
+    v: f64,
+    /// Impact density `ρ_impact` [kg/m³].
+    rho_impact: f64,
+    /// Opacity scale applied to the table ([`Table::with_opacity_scale`]); 1 = interim Kramers.
+    opacity_scale: f64,
+    /// Effective heat of ablation `Q*` [J/kg].
+    q_star: f64,
+    /// Vapor curtain gray opacity `κ_vapor` [m²/kg].
+    kappa_vapor: f64,
+    /// Rigid coupled-bounce `e_eff` at this `(v, ρ, opacity_scale)` — the conservative floor.
+    e_eff_rigid: f64,
+    /// Ablating-wall `e_eff` (shielding + mass injection) — the best estimate.
+    e_eff_ablating: f64,
+    /// `e_eff_ablating − e_eff_rigid` — the pure ablating recovery.
+    recovery: f64,
+    /// Vapor mass boiled off and injected at the wall, per unit area [kg/m²].
+    ablated_mass: f64,
+    /// `ablated_mass / (ρ_impact · length)` — the quasi-steady fraction of the cloud (ADR-0014).
+    ablated_fraction: f64,
+    /// Channel 1a (shielded) — radiation that reaches the plate.
+    loss_radiative_wall: f64,
+    /// Channel 1b — radiation escaping to space.
+    loss_escape_space: f64,
+    /// Energy spent ablating `Σ Q*·ṁ·dt` [J/m²].
+    loss_ablation: f64,
+    /// Peak wall force of the ablating bounce.
+    peak_wall_force: f64,
+}
+
+/// Build the cold water slug for the ablating sweep at `(rho_impact, v)` on `table` (already
+/// opacity-scaled), with `cfg`'s mesh, length, and `t0`.
+fn ablating_slug(rho_impact: f64, cfg: &Config, table: &Table) -> Tube<TableEos> {
+    Tube::slug_si(
+        cfg.gas_cells,
+        rho_impact,
+        cfg.v,
+        cfg.length,
+        cfg.t0,
+        TableEos::new(table.clone()),
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    )
+}
+
+/// Run the rigid floor and the three `Q*` ablating bounces at one `(v, ρ, opacity_scale)` case;
+/// return the three rows (one per `Q*`). The rigid floor is computed once and shared across `Q*`.
+fn run_ablating_case(
+    v: f64,
+    rho_impact: f64,
+    scale: f64,
+    base: &Config,
+    base_tbl: &Table,
+) -> Vec<AblatingRecord> {
+    let table = base_tbl.with_opacity_scale(scale);
+    let cfg = Config { v, ..*base };
+    let rigid = CoupledBounce::new(
+        ablating_slug(rho_impact, &cfg, &table),
+        None,
+        cfg.consts,
+        cfg.limiter,
+    )
+    .run();
+    let cloud_mass = rho_impact * cfg.length;
+    ABL_Q_STAR
+        .iter()
+        .map(|&q_star| {
+            let ablation = Ablation::new(q_star, cfg.t0).with_vapor_opacity(ABL_KAPPA_VAPOR);
+            let abl = AblatingBounce::new(
+                ablating_slug(rho_impact, &cfg, &table),
+                None,
+                cfg.consts,
+                cfg.limiter,
+                ablation,
+            )
+            .run();
+            AblatingRecord {
+                v,
+                rho_impact,
+                opacity_scale: scale,
+                q_star,
+                kappa_vapor: ABL_KAPPA_VAPOR,
+                e_eff_rigid: rigid.bounce.e_eff,
+                e_eff_ablating: abl.bounce.e_eff,
+                recovery: abl.bounce.e_eff - rigid.bounce.e_eff,
+                ablated_mass: abl.ablated_mass,
+                ablated_fraction: abl.ablated_mass / cloud_mass,
+                loss_radiative_wall: abl.loss_radiative_wall,
+                loss_escape_space: abl.loss_escape_space,
+                loss_ablation: abl.loss_ablation,
+                peak_wall_force: abl.bounce.peak_wall_force,
+            }
+        })
+        .collect()
+}
+
+/// The real high-v EOS/opacity table (`data/tables/water.json`), loaded relative to the workspace
+/// root the sweep binary is launched from (the Makefile runs it there).
+fn base_table() -> Table {
+    Table::load(TABLE_PATH).expect("load data/tables/water.json (run `make tables` first)")
+}
+
+/// Sweep the (v × ρ × opacity-scale) grid in parallel (rayon, ADR-0002); each case emits one row per
+/// `Q*`. Input order is preserved (v outer, then ρ, then scale). The base table is loaded once and
+/// opacity-scaled per case in-process.
+fn run_ablating_sweep(base: &Config, base_tbl: &Table) -> Vec<AblatingRecord> {
+    let cases: Vec<(f64, f64, f64)> = ABL_V
+        .iter()
+        .flat_map(|&v| {
+            RHO_GRID
+                .iter()
+                .flat_map(move |&rho| ABL_OPACITY_SCALE.iter().map(move |&scale| (v, rho, scale)))
+        })
+        .collect();
+    cases
+        .par_iter()
+        .flat_map(|&(v, rho, scale)| run_ablating_case(v, rho, scale, base, base_tbl))
+        .collect()
+}
+
 /// Write `records` as JSONL (one object per line, ADR-0019), creating the parent dir and replacing
 /// the file. Generic over the row type so the transitional (`Record`) and geometry (`GeoRecord`)
 /// sweeps share it.
@@ -488,6 +643,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "rust: wrote {} eos + {} rad rows -> {RESULT_PATH_TRANS_EOS} , {RESULT_PATH_TRANS_RAD}",
             eos.len(),
             rad.len(),
+        );
+        return Ok(());
+    }
+
+    // Ablating-wall recovery sweep (Rung E, ADR-0014): the rigid floor vs the shielding+injection
+    // ablating wall over (v × ρ × opacity-scale × Q*), reporting recovery as a τ-bracket.
+    if args.iter().any(|a| a == "--ablating") {
+        let base_tbl = base_table();
+        let cfg = Config {
+            gas_cells: ABL_GAS_CELLS,
+            ..Config::production()
+        };
+        let rows = run_ablating_sweep(&cfg, &base_tbl);
+        write_rows(RESULT_PATH_ABLATING, &rows)?;
+        for r in &rows {
+            println!(
+                "rust: v={:.0} rho={:.2} scale={:.2} Q*={:.1e} -> e_eff rigid={:.4} abl={:.4} (recovery {:+.4}, ablated {:.2}%)",
+                r.v,
+                r.rho_impact,
+                r.opacity_scale,
+                r.q_star,
+                r.e_eff_rigid,
+                r.e_eff_ablating,
+                r.recovery,
+                100.0 * r.ablated_fraction,
+            );
+        }
+        println!(
+            "rust: wrote {} ablating rows -> {RESULT_PATH_ABLATING}",
+            rows.len()
         );
         return Ok(());
     }
@@ -559,8 +744,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Config, GeoConfig, GeoRecord, LowvConfig, Record, run_eta_case, run_one, run_sweep,
-        run_sweep_lowv, run_sweep_transitional,
+        ABL_KAPPA_VAPOR, ABL_Q_STAR, AblatingRecord, Config, GeoConfig, GeoRecord, LowvConfig,
+        Record, run_ablating_case, run_eta_case, run_one, run_sweep, run_sweep_lowv,
+        run_sweep_transitional,
     };
     use hydro1d::radiation::{Limiter, RadConstants};
     use tables::Table;
@@ -935,5 +1121,143 @@ mod tests {
         assert!(close(back.restitution_confined, r.restitution_confined));
         assert!(close(back.peak_force, r.peak_force));
         assert!(close(back.peak_local_pressure, r.peak_local_pressure));
+    }
+
+    /// One ablating case emits a well-formed row per `Q*`: the rigid floor and the ablating
+    /// restitution are both physical `(0, 1)`, the recovery is their difference, the ablated mass is a
+    /// non-negative small fraction, and the case axes (v, ρ, scale, κ_vapor) pass through. The rigid
+    /// floor is shared across the `Q*` rows. Uses a tiny radiating table + coarse config for speed.
+    #[allow(clippy::float_cmp)] // verbatim input passthrough (v/ρ/scale/Q*/κ_vapor), not arithmetic
+    #[test]
+    fn ablating_sweep_rows_well_formed() {
+        let base_tbl = tiny_ideal_table();
+        let cfg = tiny_config(); // v = 1, M ≈ 5, 40 cells, weak radiation
+        let rows = run_ablating_case(cfg.v, 1.0, 1.0, &cfg, &base_tbl);
+
+        assert_eq!(rows.len(), ABL_Q_STAR.len());
+        for (rec, &q_star) in rows.iter().zip(ABL_Q_STAR.iter()) {
+            assert_eq!(rec.v, cfg.v);
+            assert_eq!(rec.rho_impact, 1.0);
+            assert_eq!(rec.opacity_scale, 1.0);
+            assert_eq!(rec.q_star, q_star);
+            assert_eq!(rec.kappa_vapor, ABL_KAPPA_VAPOR);
+            assert!(
+                rec.e_eff_rigid > 0.0 && rec.e_eff_rigid < 1.0,
+                "rigid e_eff out of (0,1): {}",
+                rec.e_eff_rigid
+            );
+            assert!(
+                rec.e_eff_ablating > 0.0 && rec.e_eff_ablating < 1.0,
+                "ablating e_eff out of (0,1): {}",
+                rec.e_eff_ablating
+            );
+            assert!((rec.recovery - (rec.e_eff_ablating - rec.e_eff_rigid)).abs() < 1e-12);
+            assert!(rec.ablated_mass >= 0.0 && rec.ablated_fraction >= 0.0);
+            assert!(rec.loss_radiative_wall >= 0.0 && rec.loss_escape_space >= 0.0);
+        }
+        // The rigid floor is the same physics at every Q* (shared across the rows).
+        assert_eq!(rows[0].e_eff_rigid, rows[1].e_eff_rigid);
+        assert_eq!(rows[1].e_eff_rigid, rows[2].e_eff_rigid);
+    }
+
+    /// An `AblatingRecord` round-trips through the JSONL boundary (ADR-0019): the Python `--axis
+    /// ablating` reader sees exactly the fields written.
+    #[allow(clippy::float_cmp)] // round-number inputs survive the decimal text verbatim
+    #[test]
+    fn ablating_record_jsonl_roundtrip() {
+        let rec = AblatingRecord {
+            v: 16_000.0,
+            rho_impact: 0.32,
+            opacity_scale: 0.1,
+            q_star: 5.0e6,
+            kappa_vapor: ABL_KAPPA_VAPOR,
+            e_eff_rigid: 0.55,
+            e_eff_ablating: 0.61,
+            recovery: 0.06,
+            ablated_mass: 4.0e-3,
+            ablated_fraction: 0.0125,
+            loss_radiative_wall: 1.0e6,
+            loss_escape_space: 1.0e5,
+            loss_ablation: 2.0e4,
+            peak_wall_force: 3.0e8,
+        };
+        let line = serde_json::to_string(&rec).unwrap();
+        let back: AblatingRecord = serde_json::from_str(&line).unwrap();
+        assert_eq!(back, rec);
+        for key in [
+            "v",
+            "rho_impact",
+            "opacity_scale",
+            "q_star",
+            "kappa_vapor",
+            "e_eff_rigid",
+            "e_eff_ablating",
+            "recovery",
+            "ablated_mass",
+            "ablated_fraction",
+        ] {
+            assert!(line.contains(key), "missing field {key}");
+        }
+    }
+
+    /// DIAGNOSTIC (ignored): calibrate `κ_vapor` and the opacity-scale grid against the real water
+    /// table — print the ablated mass/fraction, the (shielded) radiative wall loss, and the recovery
+    /// at the two anchors over a κ_vapor × Q* × scale grid. Run with
+    /// `cargo test -p sweep -- --ignored --nocapture diag_ablating`.
+    #[test]
+    #[ignore = "diagnostic; needs data/tables/water.json"]
+    fn diag_ablating_magnitudes() {
+        use hydro1d::kernel::{AblatingBounce, Ablation, CoupledBounce, Tube, Viscosity};
+        use tables::Table;
+        let base = Table::load(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../data/tables/water.json"
+        ))
+        .unwrap();
+        let consts = super::Config::production().consts;
+        let (t0, length, cells) = (400.0, 1.0, super::ABL_GAS_CELLS);
+        let rho = 0.64;
+        for v in super::ABL_V {
+            for scale in [0.1, 1.0] {
+                let table = base.with_opacity_scale(scale);
+                let mk = || {
+                    Tube::slug_si(
+                        cells,
+                        rho,
+                        v,
+                        length,
+                        t0,
+                        super::TableEos::new(table.clone()),
+                        Viscosity::VON_NEUMANN_RICHTMYER,
+                    )
+                };
+                let rigid =
+                    CoupledBounce::new(mk(), None, consts, super::Limiter::LevermorePomraning)
+                        .run()
+                        .bounce
+                        .e_eff;
+                for kappa_vapor in [0.0, super::ABL_KAPPA_VAPOR, 800.0] {
+                    for q_star in super::ABL_Q_STAR {
+                        let abl = AblatingBounce::new(
+                            mk(),
+                            None,
+                            consts,
+                            super::Limiter::LevermorePomraning,
+                            Ablation::new(q_star, t0).with_vapor_opacity(kappa_vapor),
+                        )
+                        .run();
+                        println!(
+                            "v={v:.0} scale={scale:.2} kv={kappa_vapor:.0} Q*={q_star:.0e}: rigid={rigid:+.4} abl={:+.4} rec={:+.4} m_abl={:.3e} ({:.2}%) loss1a={:.3e} tau_v={:.3}",
+                            abl.bounce.e_eff,
+                            abl.bounce.e_eff - rigid,
+                            abl.ablated_mass,
+                            100.0 * abl.ablated_mass / (rho * length),
+                            abl.loss_radiative_wall,
+                            kappa_vapor * abl.ablated_mass,
+                        );
+                    }
+                }
+            }
+        }
     }
 }

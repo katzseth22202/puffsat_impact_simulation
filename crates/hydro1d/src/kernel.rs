@@ -1085,10 +1085,11 @@ pub struct Ablation {
     /// loss where conduction is active; **null at the high-v anchors** (no `k_gas`, conduction off).
     blowing: f64,
     /// Vapor gray opacity `κ_vapor` [m²/kg] for shielding (E3; `0` = off). The ablated vapor forms a
-    /// near-wall absorbing curtain of optical depth `τ_vapor = κ_vapor · ablated_mass`; it transmits
-    /// only `1/(1 + τ_vapor)` of the radiation heading for the plate and absorbs the rest, returning
-    /// that energy to the near-wall gas. This cuts the radiative wall loss (channel 1a) and raises
-    /// `e_eff` — the **live recovery lever at the transitional dip** (ADR-0012/0014).
+    /// near-wall absorbing curtain of optical depth `τ_vapor = κ_vapor · ablated_mass` and transmission
+    /// `1/(1 + τ_vapor)`; it throttles the wall's radiative conductance ([`RadBc::MarshakAttenuated`]),
+    /// retaining the intercepted radiation in the near-wall field (which couples back into the gas)
+    /// rather than letting it drain to the cold plate. This cuts the radiative wall loss (channel 1a)
+    /// and raises `e_eff` — the **live recovery lever at the transitional dip** (ADR-0012/0014).
     kappa_vapor: f64,
 }
 
@@ -1228,17 +1229,30 @@ impl AblatingBounce {
     ///
     /// **Vapor shielding (E3):** the ablated vapor forms a near-wall absorbing curtain of optical
     /// depth `τ_vapor = κ_vapor · ablated_mass` (lagged on the ablation so far, no within-step
-    /// circularity) that transmits only `1/(1 + τ_vapor)` of the radiative flux to the cold plate; the
-    /// intercepted remainder is returned to the near-wall gas as internal energy (the vapor absorbs it,
-    /// raising its pressure → bounce). This cuts the radiative wall loss (channel 1a) and raises
-    /// `e_eff`. Mirrors the E2 blowing factor's "attenuate the delivered flux, return the intercepted
-    /// part to the gas" treatment, so the FLD/Su-Olson solver is untouched.
+    /// circularity) and transmission `trans = 1/(1 + τ_vapor)`. Rather than draining the full Marshak
+    /// flux and re-injecting the intercepted part (which over-pressurizes the thin wall cell and
+    /// destabilizes the bounce), the curtain is folded into the boundary condition itself
+    /// ([`RadBc::MarshakAttenuated`]): the wall's radiative conductance is scaled by `trans`, so the
+    /// `(1 − trans)` it intercepts is *retained in the near-wall radiation field* by the implicit solve
+    /// and couples back into the gas self-consistently (raising the near-wall pressure → bounce). This
+    /// cuts the radiative wall loss (channel 1a) and raises `e_eff`, energy-conservingly and stably.
     fn radiation_substep(&mut self, dt: f64) -> f64 {
+        let e_inc = match self.bc_wall {
+            RadBc::Marshak(e) => e,
+            _ => 0.0,
+        };
+        let tau_v = self.ablation.kappa_vapor * self.ablated_mass;
+        let transmission = 1.0 / (1.0 + tau_v);
+        let bc_wall = RadBc::MarshakAttenuated {
+            e_inc,
+            transmission,
+        };
+
         let fields = self.tube.radiation_fields();
         let delta_e = fld_substep(
             &fields.medium(),
             &mut self.e_rad,
-            self.bc_wall,
+            bc_wall,
             self.bc_space,
             dt,
             self.consts,
@@ -1249,20 +1263,9 @@ impl AblatingBounce {
             self.tube.energy[j] = (self.tube.energy[j] + de / rho).max(0.0);
         }
         let c = self.consts.c;
-        let mut wall_flux = 0.0;
-        if let RadBc::Marshak(e_inc) = self.bc_wall {
-            let raw = dt * 0.5 * c * (self.e_rad[0] - e_inc);
-            // Vapor curtain transmits 1/(1+τ_v) of the radiation to the plate; the intercepted
-            // remainder is absorbed by the vapor and returned to the near-wall gas, so it is recovered,
-            // not lost. Only the transmitted part is the true wall loss / the q_in that ablates.
-            let trans = 1.0 / (1.0 + self.ablation.kappa_vapor * self.ablated_mass);
-            wall_flux = raw * trans;
-            let intercepted = raw - wall_flux;
-            if intercepted > 0.0 {
-                self.tube.energy[0] += intercepted / self.tube.mass[0];
-            }
-            self.loss_radiative_wall += wall_flux;
-        }
+        // The true wall loss is the attenuated flux through the throttled surface.
+        let wall_flux = dt * transmission * 0.5 * c * (self.e_rad[0] - e_inc);
+        self.loss_radiative_wall += wall_flux;
         if let RadBc::Marshak(e_inc) = self.bc_space {
             let last = self.tube.cells() - 1;
             self.loss_escape_space += dt * 0.5 * c * (self.e_rad[last] - e_inc);
@@ -1292,10 +1295,16 @@ impl AblatingBounce {
 
     /// Ablation substep: the quasi-steady surface energy balance. The incoming wall flux `q_in`
     /// (energy/area this step) boils off `ṁ·dt = q_in/Q*` of ablator, injected as **cold vapor** into
-    /// the wall cell — the inverse of [`CondensingBounce`]'s wall sink. The vapor enters at the wall
-    /// node (`u = 0`), adding no axial momentum directly; it acts on `e_eff` through the near-wall
-    /// pressure it raises (E1) and, in later slices, by shielding radiation (E3). Mass is added to
-    /// cell 0 and its specific energy mass-blended toward the cold vapor's.
+    /// the near-wall layer — the inverse of [`CondensingBounce`]'s wall sink. The vapor enters at the
+    /// wall node (`u = 0`), adding no axial momentum directly; it acts on `e_eff` through the near-wall
+    /// pressure it raises (E1) and by shielding radiation (E3).
+    ///
+    /// The injected mass is **spread mass-weighted over the first `K = cells/20` cells** rather than
+    /// dumped into cell 0. Concentrating every step's `dm` in the single wall cell quintuples its mass
+    /// over the bounce, spiking its density and collapsing the CFL step at the dense corner (the run
+    /// then starves on `max_steps`). Spreading over the thin near-wall layer keeps the same total
+    /// injected mass and ablation enthalpy — so E1's mass/energy closure is unchanged — while keeping
+    /// each cell's density bounded.
     fn ablation_substep(&mut self, q_in: f64) {
         if q_in <= 0.0 {
             return;
@@ -1304,16 +1313,20 @@ impl AblatingBounce {
         if dm <= 0.0 {
             return;
         }
-        let rho_wall = self.tube.density(0);
-        let e_vapor = self
-            .tube
-            .eos
-            .table()
-            .energy(rho_wall, self.ablation.t_vapor);
-        let m_old = self.tube.mass[0];
-        let e_old = self.tube.energy[0];
-        self.tube.mass[0] = m_old + dm;
-        self.tube.energy[0] = dm.mul_add(e_vapor, m_old * e_old) / (m_old + dm);
+        let k = (self.tube.cells() / 20).max(1);
+        let m_layer: f64 = self.tube.mass[..k].iter().sum();
+        if m_layer <= 0.0 {
+            return;
+        }
+        for j in 0..k {
+            let dm_j = dm * self.tube.mass[j] / m_layer;
+            let rho_j = self.tube.density(j);
+            let e_vapor = self.tube.eos.table().energy(rho_j, self.ablation.t_vapor);
+            let m_old = self.tube.mass[j];
+            let e_old = self.tube.energy[j];
+            self.tube.mass[j] = m_old + dm_j;
+            self.tube.energy[j] = dm_j.mul_add(e_vapor, m_old * e_old) / (m_old + dm_j);
+        }
         self.ablated_mass += dm;
         self.loss_ablation += q_in; // = dm · Q*
     }

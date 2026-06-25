@@ -282,6 +282,28 @@ impl Table {
         self.interp(&self.log_kp, rho, t)
     }
 
+    /// A copy of this table with **both** opacities (Rosseland + Planck) scaled by `factor` — the
+    /// opacity-scale knob (B5d-3 sensitivity scan; Rung E τ-bracket). Multiplying `κ` by `factor`
+    /// shifts its natural-log field by `ln factor`, so the log-log interpolation is preserved exactly
+    /// and only the optical depth moves. `factor = 1` is the identity. The EOS fields (`p`, `e`,
+    /// `c_s`) and any `liquid_frac` / `k_gas` are untouched, isolating the radiative-transport regime.
+    ///
+    /// # Panics
+    /// Panics unless `factor > 0` (`κ` must stay positive for the log interpolation).
+    #[must_use]
+    pub fn with_opacity_scale(&self, factor: f64) -> Self {
+        assert!(factor > 0.0, "opacity scale must be positive");
+        let shift = factor.ln();
+        let mut scaled = self.clone();
+        for v in &mut scaled.log_kr {
+            *v += shift;
+        }
+        for v in &mut scaled.log_kp {
+            *v += shift;
+        }
+        scaled
+    }
+
     /// Condensed mass fraction `liquid_frac(ρ, T) ∈ [0, 1]` — the Rung C low-v two-phase tables carry
     /// this for the wall-sticking condensation sink; tables without it (e.g. the high-v table) return
     /// `0`. Interpolated **linearly** (it is `[0, 1]`-valued and legitimately `0`, unlike the log
@@ -406,6 +428,44 @@ mod tests {
             "provenance": {"source": "power-law unit-test table"},
         });
         table.to_string()
+    }
+
+    /// The opacity-scale knob multiplies both opacities by `factor` at every `(ρ, T)`, leaving the
+    /// EOS fields (`p`, `e`, `c_s`) untouched, and `factor = 1` is the identity.
+    #[test]
+    fn opacity_scale_multiplies_both_opacities() {
+        let table = Table::from_json(&power_law_json(6, 5)).unwrap();
+        let scaled = table.with_opacity_scale(10.0);
+        let identity = table.with_opacity_scale(1.0);
+        for &(rho, t) in &[(0.37, 1234.0), (3.3, 555.0), (42.0, 9001.0)] {
+            assert_relative_eq!(
+                scaled.kappa_rosseland(rho, t),
+                10.0 * table.kappa_rosseland(rho, t),
+                max_relative = 1e-12
+            );
+            assert_relative_eq!(
+                scaled.kappa_planck(rho, t),
+                10.0 * table.kappa_planck(rho, t),
+                max_relative = 1e-12
+            );
+            // EOS fields are untouched by the opacity scale.
+            assert_relative_eq!(
+                scaled.pressure(rho, t),
+                table.pressure(rho, t),
+                max_relative = 1e-12
+            );
+            assert_relative_eq!(
+                scaled.energy(rho, t),
+                table.energy(rho, t),
+                max_relative = 1e-12
+            );
+            // factor = 1 reproduces the original opacity exactly.
+            assert_relative_eq!(
+                identity.kappa_rosseland(rho, t),
+                table.kappa_rosseland(rho, t),
+                max_relative = 1e-12
+            );
+        }
     }
 
     /// log-log bilinear interpolation is exact for power-law fields, at arbitrary off-grid points.

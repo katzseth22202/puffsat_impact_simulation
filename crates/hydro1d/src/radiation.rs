@@ -111,6 +111,13 @@ pub enum RadBc {
     /// diffusion-limit incident-current condition `cE/4 + F/2 = c·e_inc/4`. This is the radiation
     /// source-surface used by the Su–Olson Marshak benchmark (and the wall absorber of B4).
     Marshak(f64),
+    /// A Marshak surface with its conductance scaled by `transmission ∈ (0, 1]` — an intervening gray
+    /// absorbing layer (the Rung E vapor curtain, ADR-0014) of transmission `1/(1+τ)` in series with
+    /// the surface, throttling the net flux to `transmission·(c/2)(e_inc − E_surface)`. The
+    /// `(1−transmission)` fraction is *retained in the radiation field* near the surface (it does not
+    /// leave through the throttled boundary), so the FLD couples it back into the gas self-consistently
+    /// — the energy-conserving "shielded wall". `transmission = 1` is exactly [`RadBc::Marshak`].
+    MarshakAttenuated { e_inc: f64, transmission: f64 },
 }
 
 /// The per-cell material state the radiation step reads (a frozen 1D Lagrangian mesh). All slices
@@ -308,6 +315,14 @@ fn add_boundary(
         }
         RadBc::Marshak(e_inc) => {
             let w = 0.5 * ctx.c / medium.dx[edge];
+            diag[edge] += w;
+            rhs[edge] += w * e_inc;
+        }
+        RadBc::MarshakAttenuated {
+            e_inc,
+            transmission,
+        } => {
+            let w = transmission * 0.5 * ctx.c / medium.dx[edge];
             diag[edge] += w;
             rhs[edge] += w * e_inc;
         }

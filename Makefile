@@ -3,7 +3,7 @@
 
 PY := uv run python
 
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating
 
 all: smoke
 
@@ -132,6 +132,23 @@ analysis-margin: data/results/frontier_margin.csv
 
 data/results/frontier_margin.csv: data/results/sweep_geometry.jsonl data/results/sweep.jsonl data/results/sweep_transitional_eos.jsonl python/puffsat/analysis.py
 	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis --axis margin
+
+## sweep-ablating: ablating-wall recovery sweep (Rung E, ADR-0014) over (v x rho x opacity-scale x
+## Q*) -> data/results/sweep_ablating.jsonl. Rigid floor vs shielding+injection ablating wall;
+## depends on the high-v table (opacity-scaled in-process).
+sweep-ablating: data/results/sweep_ablating.jsonl
+
+data/results/sweep_ablating.jsonl: data/tables/water.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	cargo build --release -p sweep
+	cargo run --release -p sweep -- --ablating
+
+## analysis-ablating: tau-bracketed e_eff recovery + the 16 km/s f>=0.8-at-a-survivable-shape call
+## (Rung E, ADR-0014/0009) -> data/results/frontier_ablating.csv + figure; folds in the geometry +
+## survivability results (no new sweep). Depends on sweep-ablating.
+analysis-ablating: data/results/frontier_ablating.csv
+
+data/results/frontier_ablating.csv: data/results/sweep_ablating.jsonl data/results/sweep_geometry.jsonl data/results/sweep.jsonl python/puffsat/analysis.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis --axis ablating
 
 ## sensitivity: opacity-insensitivity scan (rung B, B5d-3) — sweep at 0.1x/1x/10x opacity, show
 ## e_eff barely moves. Builds the release sweep first; writes data/results/opacity_scan/.

@@ -462,3 +462,117 @@ def test_margin_map_widening_or_lightening_buys_f(tmp_path: Path) -> None:
     assert f_mid > f_cyl
     # the dense corner never survives even at the most-relaxed grid cell (still ~1.2 GPa)
     assert cell[(5.5, 20.0)].best_f_baseline == pytest.approx(f_mid)
+
+
+# --- Rung E: ablating-wall recovery (the tau-bracket + the 16 km/s f-gate call) ---
+
+
+def _arow(
+    v: float,
+    scale: float,
+    q_star: float,
+    rho: float,
+    e_rigid: float,
+    e_abl: float,
+    frac: float = 0.02,
+) -> dict[str, float]:
+    """An ablating-sweep row (`crates/sweep --ablating`): the rigid floor, the ablating restitution,
+    and the recovery, at one `(v, opacity_scale, Q*, rho)` case."""
+    return {
+        "v": v,
+        "rho_impact": rho,
+        "opacity_scale": scale,
+        "q_star": q_star,
+        "kappa_vapor": 200.0,
+        "e_eff_rigid": e_rigid,
+        "e_eff_ablating": e_abl,
+        "recovery": e_abl - e_rigid,
+        "ablated_mass": frac * rho,
+        "ablated_fraction": frac,
+        "loss_radiative_wall": 1.0e4,
+        "loss_escape_space": 1.0e3,
+        "loss_ablation": 2.0e3,
+        "peak_wall_force": 1.0,
+    }
+
+
+def test_read_ablating_parses_jsonl(tmp_path: Path) -> None:
+    """`read_ablating` reads one object per line (tolerating a trailing blank) into rows."""
+    path = tmp_path / "abl.jsonl"
+    path.write_text(json.dumps(_arow(16_000.0, 1.0, 5.0e6, 0.32, 0.63, 0.64)) + "\n\n")
+    rows = an.read_ablating(path)
+    assert len(rows) == 1
+    assert rows[0].v == 16_000.0
+    assert rows[0].e_eff_rigid == 0.63
+    assert rows[0].e_eff_ablating == 0.64
+    assert rows[0].recovery == pytest.approx(0.01)
+
+
+def test_ablating_points_rho_means(tmp_path: Path) -> None:
+    """`ablating_points` collapses the impact-density axis: the rho-mean rigid floor, ablating
+    `e_eff`, and recovery at each `(v, scale, Q*)`."""
+    path = tmp_path / "abl.jsonl"
+    _write_jsonl(
+        path,
+        [
+            _arow(16_000.0, 1.0, 5.0e6, 0.16, 0.62, 0.63),
+            _arow(16_000.0, 1.0, 5.0e6, 0.48, 0.64, 0.67),  # same case, second density
+            _arow(16_000.0, 0.1, 5.0e6, 0.16, 0.62, 0.65),  # different scale
+        ],
+    )
+    pts = an.ablating_points(an.read_ablating(path))
+    assert len(pts) == 2  # two (scale) cases, each rho-meaned
+    scale1 = next(p for p in pts if p.opacity_scale == 1.0)
+    assert scale1.e_eff_rigid == pytest.approx(0.63)  # mean(0.62, 0.64)
+    assert scale1.e_eff_ablating == pytest.approx(0.65)  # mean(0.63, 0.67)
+    assert scale1.recovery == pytest.approx(0.02)
+
+
+def test_best_f_at_lifts_with_recovery(tmp_path: Path) -> None:
+    """`best_f_at` resolves the geometry cases to survivability at the `(v, e_eff, c_stag)` anchor
+    and returns the survivable max `f` — which rises when the ablating recovery lifts `e_eff`, while
+    the unsurvivable dense corner stays excluded."""
+    path = tmp_path / "geom.jsonl"
+    # The dense short-disk corner fails survivability; the elongated, wider-footprint case survives.
+    _write_jsonl(path, [_grow(0.10, 0.3, 0.3, 1.02), _grow(0.10, 0.6, 0.7, 0.87)])
+    geo = an.read_geometry(path)
+    f_floor = an.best_f_at(geo, 16_000.0, 0.63, 2.0)
+    f_recovered = an.best_f_at(geo, 16_000.0, 0.70, 2.0)
+    assert f_floor == pytest.approx(an.reconcile_f(0.87, 0.63))  # survivable case, not the corner
+    assert f_recovered == pytest.approx(an.reconcile_f(0.87, 0.70))
+    assert f_recovered is not None and f_floor is not None and f_recovered > f_floor
+
+
+def test_write_ablating_summary_has_header_and_rows(tmp_path: Path) -> None:
+    """The ablating summary CSV has the `AblatingPoint` header and one row per rho-meaned case."""
+    path = tmp_path / "abl.jsonl"
+    _write_jsonl(
+        path,
+        [_arow(16_000.0, s, 5.0e6, 0.32, 0.63, 0.64) for s in (0.1, 1.0)],
+    )
+    pts = an.ablating_points(an.read_ablating(path))
+    out = tmp_path / "frontier_ablating.csv"
+    an.write_ablating_summary(pts, out)
+    with out.open() as fh:
+        table = list(csv.reader(fh))
+    assert table[0] == [f.name for f in fields(an.AblatingPoint)]
+    assert len(table) == 1 + len(pts)
+
+
+def test_plot_ablating_writes_file(tmp_path: Path) -> None:
+    """The ablating recovery figure renders (skipped without matplotlib)."""
+    pytest.importorskip("matplotlib")
+    path = tmp_path / "abl.jsonl"
+    _write_jsonl(
+        path,
+        [
+            _arow(v, s, q, 0.32, 0.62, 0.62 + 0.01 * (1.0 - s))
+            for v in (11_000.0, 16_000.0)
+            for s in (0.1, 1.0)
+            for q in (2.0e6, 5.0e6)
+        ],
+    )
+    pts = an.ablating_points(an.read_ablating(path))
+    saved = an.plot_ablating(pts, tmp_path)
+    assert len(saved) == 1
+    assert saved[0].exists() and saved[0].stat().st_size > 0
