@@ -1080,10 +1080,16 @@ pub struct Ablation {
     /// Injected-vapor temperature [K] — the cold vapor's specific energy is read from the table here.
     t_vapor: f64,
     /// Blowing-correction coefficient (E2; `0` = off). The injected vapor thickens the boundary
-    /// layer, reducing the gas-side conductance by `φ = 1/(1 + B)` with the dimensionless blowing
-    /// rate `B = blowing · ablated_mass / m_cloud`. Cuts the conductive wall loss where conduction is
-    /// active; **null at the high-v anchors** (no `k_gas`, so conduction is off).
+    /// layer, attenuating the conducted heat delivered to the plate by `φ = 1/(1 + B)` with the
+    /// dimensionless blowing rate `B = blowing · ablated_mass / m_cloud`. Cuts the conductive wall
+    /// loss where conduction is active; **null at the high-v anchors** (no `k_gas`, conduction off).
     blowing: f64,
+    /// Vapor gray opacity `κ_vapor` [m²/kg] for shielding (E3; `0` = off). The ablated vapor forms a
+    /// near-wall absorbing curtain of optical depth `τ_vapor = κ_vapor · ablated_mass`; it transmits
+    /// only `1/(1 + τ_vapor)` of the radiation heading for the plate and absorbs the rest, returning
+    /// that energy to the near-wall gas. This cuts the radiative wall loss (channel 1a) and raises
+    /// `e_eff` — the **live recovery lever at the transitional dip** (ADR-0012/0014).
+    kappa_vapor: f64,
 }
 
 impl Ablation {
@@ -1102,7 +1108,21 @@ impl Ablation {
             q_star,
             t_vapor,
             blowing: 0.0,
+            kappa_vapor: 0.0,
         }
+    }
+
+    /// Set the vapor gray opacity `κ_vapor` [m²/kg] for shielding (E3). `> 0` builds a near-wall
+    /// absorbing layer (`τ_vapor = κ_vapor · ablated_mass`) that intercepts incoming radiation before
+    /// the plate; `0` recovers the bare-wall radiative loss.
+    ///
+    /// # Panics
+    /// Panics if `kappa_vapor < 0`.
+    #[must_use]
+    pub fn with_vapor_opacity(mut self, kappa_vapor: f64) -> Self {
+        assert!(kappa_vapor >= 0.0, "vapor opacity must be non-negative");
+        self.kappa_vapor = kappa_vapor;
+        self
     }
 
     /// Set the blowing-correction coefficient (E2). `> 0` makes the vapor curtain thicken as ablation
@@ -1203,8 +1223,16 @@ impl AblatingBounce {
     }
 
     /// One implicit gray-FLD substep (as [`CoupledBounce::radiation_substep`]), returning the
-    /// **radiative wall flux absorbed this step** `dt·(c/2)(E₀ − e_inc)` — the radiative part of the
-    /// `q_in` that drives ablation.
+    /// **radiative wall flux that reaches the plate this step** — the radiative part of the `q_in`
+    /// that drives ablation.
+    ///
+    /// **Vapor shielding (E3):** the ablated vapor forms a near-wall absorbing curtain of optical
+    /// depth `τ_vapor = κ_vapor · ablated_mass` (lagged on the ablation so far, no within-step
+    /// circularity) that transmits only `1/(1 + τ_vapor)` of the radiative flux to the cold plate; the
+    /// intercepted remainder is returned to the near-wall gas as internal energy (the vapor absorbs it,
+    /// raising its pressure → bounce). This cuts the radiative wall loss (channel 1a) and raises
+    /// `e_eff`. Mirrors the E2 blowing factor's "attenuate the delivered flux, return the intercepted
+    /// part to the gas" treatment, so the FLD/Su-Olson solver is untouched.
     fn radiation_substep(&mut self, dt: f64) -> f64 {
         let fields = self.tube.radiation_fields();
         let delta_e = fld_substep(
@@ -1223,7 +1251,16 @@ impl AblatingBounce {
         let c = self.consts.c;
         let mut wall_flux = 0.0;
         if let RadBc::Marshak(e_inc) = self.bc_wall {
-            wall_flux = dt * 0.5 * c * (self.e_rad[0] - e_inc);
+            let raw = dt * 0.5 * c * (self.e_rad[0] - e_inc);
+            // Vapor curtain transmits 1/(1+τ_v) of the radiation to the plate; the intercepted
+            // remainder is absorbed by the vapor and returned to the near-wall gas, so it is recovered,
+            // not lost. Only the transmitted part is the true wall loss / the q_in that ablates.
+            let trans = 1.0 / (1.0 + self.ablation.kappa_vapor * self.ablated_mass);
+            wall_flux = raw * trans;
+            let intercepted = raw - wall_flux;
+            if intercepted > 0.0 {
+                self.tube.energy[0] += intercepted / self.tube.mass[0];
+            }
             self.loss_radiative_wall += wall_flux;
         }
         if let RadBc::Marshak(e_inc) = self.bc_space {

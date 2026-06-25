@@ -26,10 +26,12 @@ const CONSTS: RadConstants = RadConstants { c: 3.0, a: 1.0 }; // normalized; rad
 const LIMITER: Limiter = Limiter::LevermorePomraning;
 const T_VAPOR: f64 = 0.01; // cold injected-vapor temperature (the slug's T₀ — conservative)
 
-/// An ideal-gas table (`p = (γ−1)ρT`, `e = T`, `c_v = 1`) with a **constant, nonzero** opacity, so
-/// the gray-FLD radiation step is active and the wall absorbs a real radiative flux (the `q_in` that
-/// drives ablation). Power laws in `(ρ, T)` ⇒ the log-log interpolation is exact; `κ = 1` is flat.
-fn radiating_ideal_table() -> Table {
+/// An ideal-gas table (`p = (γ−1)ρT`, `e = T`, `c_v = 1`) with a **constant, nonzero** opacity
+/// `kappa`, so the gray-FLD radiation step is active and the wall absorbs a real radiative flux (the
+/// `q_in` that drives ablation). Power laws in `(ρ, T)` ⇒ the log-log interpolation is exact; the
+/// opacity is flat. `kappa` is the opacity-scale knob the τ-leverage test sweeps to manufacture the
+/// trapped (`κ≫1`, `τ≫1`) vs. wall-reaching (`κ≲1`, `τ≲1`) radiative regimes.
+fn radiating_ideal_table_kappa(kappa: f64) -> Table {
     let n = 8;
     let rho_grid: Vec<f64> = (0..n)
         .map(|i| 1e-3 * 1e5_f64.powf(i as f64 / (n - 1) as f64)) // 1e-3 … 100
@@ -45,14 +47,19 @@ fn radiating_ideal_table() -> Table {
             cs.push((GAMMA * (GAMMA - 1.0) * t).sqrt());
         }
     }
-    let one = vec![1.0; n * n]; // κ_R = κ_P = 1 m²/kg ⇒ χ = ρ
+    let kap = vec![kappa; n * n]; // κ_R = κ_P = kappa m²/kg ⇒ χ = kappa·ρ
     let json = serde_json::json!({
         "rho_grid": rho_grid,
         "T_grid": t_grid,
         "shape": [n, n],
-        "fields": { "p": p, "e": e, "c_s": cs, "kappa_rosseland": one, "kappa_planck": one },
+        "fields": { "p": p, "e": e, "c_s": cs, "kappa_rosseland": kap, "kappa_planck": kap },
     });
     Table::from_json(&json.to_string()).unwrap()
+}
+
+/// The reference radiating table (`κ = 1`, flat) used by the E1 mass-source tests.
+fn radiating_ideal_table() -> Table {
+    radiating_ideal_table_kappa(1.0)
 }
 
 /// A cold water-like slug (ρ = 1, v = 1, M ≈ 9.5 at T₀ = 0.01) coasting into the wall, on `table`.
@@ -308,5 +315,121 @@ fn blowing_is_null_without_conduction() {
     assert_eq!(
         base.bounce.e_eff, blown.bounce.e_eff,
         "blowing changes nothing when conduction is off"
+    );
+}
+
+// ---- E3: vapor shielding (gray near-wall absorber in the FLD) — the live recovery lever ----
+//
+// The ablated vapor forms a near-wall absorbing curtain of optical depth τ_vapor = κ_vapor·m_ablated
+// that transmits only 1/(1+τ_vapor) of the radiation to the cold plate; the intercepted remainder is
+// returned to the near-wall gas (mirroring the E2 blowing treatment). This cuts the radiative wall
+// loss (channel 1a) and so *raises* e_eff — the dominant Phase-2 recovery at the transitional dip
+// (ADR-0012/0014), since conduction (hence blowing) is off at the high-v anchors. Acceptance tests:
+//
+//  - **κ_vapor → 0 recovers the bare wall** — the shield is purely additive (the consistency gate;
+//    `with_vapor_opacity(0)` is a bit-exact no-op vs. the default).
+//  - **shielding monotonically cuts loss_radiative_wall** — more κ_vapor ⇒ thicker curtain ⇒ less
+//    radiation reaches the plate.
+//  - **shielding raises e_eff** — the energy not lost at the wall stays in the gas as pressure, lifting
+//    the captured impulse (the ADR-0014 recovery claim).
+//  - **the recovery grows as the background opacity drops** — when the gas is optically thinner more
+//    radiation reaches the wall, so the same vapor curtain intercepts more of it. This is the
+//    τ≫1 → τ≲1 (right) shoulder of the ADR-0012 peak: shielding matters most once radiation actually
+//    reaches the plate. (The cold-side shoulder is a velocity effect, shown by the E4 sweep.)
+
+/// A radiating slug (100 cells, no wall — the realistic high-v config) on a table of background
+/// opacity `kappa`, run with the given ablation model. Returns the full ablating result.
+fn shield_run(kappa: f64, ablation: Ablation) -> hydro1d::kernel::AblatingBounceResult {
+    let table = radiating_ideal_table_kappa(kappa);
+    let tube = Tube::slug_si(
+        100,
+        1.0,
+        1.0,
+        1.0,
+        T_VAPOR,
+        TableEos::new(table),
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    );
+    AblatingBounce::new(tube, None, CONSTS, LIMITER, ablation).run()
+}
+
+/// `κ_vapor → 0` is a bit-exact no-op: a shield builder with zero opacity reproduces the bare ablating
+/// bounce's radiative wall loss and `e_eff` exactly (the additive-feature consistency gate, ADR-0014).
+#[test]
+fn vapor_opacity_off_recovers_bare_wall() {
+    let bare = shield_run(1.0, Ablation::new(20.0, T_VAPOR));
+    let zeroed = shield_run(1.0, Ablation::new(20.0, T_VAPOR).with_vapor_opacity(0.0));
+    assert_eq!(
+        bare.loss_radiative_wall, zeroed.loss_radiative_wall,
+        "κ_vapor=0 must reproduce the bare-wall radiative loss exactly"
+    );
+    assert_eq!(
+        bare.bounce.e_eff, zeroed.bounce.e_eff,
+        "κ_vapor=0 must reproduce the bare-wall e_eff exactly"
+    );
+}
+
+/// Shielding strictly and monotonically cuts the radiative wall loss: a thicker vapor curtain
+/// (larger κ_vapor) intercepts more incoming radiation before it reaches the cold plate.
+#[test]
+fn shielding_reduces_radiative_wall_loss() {
+    let q_star = 20.0;
+    let bare = shield_run(1.0, Ablation::new(q_star, T_VAPOR)).loss_radiative_wall;
+    let thin = shield_run(1.0, Ablation::new(q_star, T_VAPOR).with_vapor_opacity(10.0))
+        .loss_radiative_wall;
+    let thick = shield_run(
+        1.0,
+        Ablation::new(q_star, T_VAPOR).with_vapor_opacity(100.0),
+    )
+    .loss_radiative_wall;
+    assert!(
+        bare > thin && thin > thick,
+        "more κ_vapor must cut radiative wall loss: bare {bare}, thin {thin}, thick {thick}"
+    );
+}
+
+/// The recovery: shielding the wall keeps energy in the gas (as near-wall pressure) instead of losing
+/// it to the cold plate, so the captured impulse — and `e_eff` — rises. The ADR-0014 claim.
+#[test]
+fn shielding_raises_e_eff() {
+    let q_star = 20.0;
+    let unshielded = shield_run(1.0, Ablation::new(q_star, T_VAPOR)).bounce.e_eff;
+    let shielded = shield_run(
+        1.0,
+        Ablation::new(q_star, T_VAPOR).with_vapor_opacity(100.0),
+    )
+    .bounce
+    .e_eff;
+    assert!(
+        shielded > unshielded,
+        "shielding must raise e_eff: shielded {shielded} vs unshielded {unshielded}"
+    );
+}
+
+/// τ-leverage (the right shoulder of the ADR-0012 peak): the shielding recovery is larger when the
+/// background gas is optically thinner. At low background opacity more radiation reaches the wall, so
+/// the same vapor curtain has more flux to intercept — a larger `Δe_eff` from turning the shield on.
+/// At high background opacity the gas already traps the radiation, leaving little for the shield to do.
+#[test]
+fn shielding_recovery_grows_as_background_opacity_drops() {
+    let q_star = 20.0;
+    let kappa_vapor = 100.0;
+    let recovery = |kappa_bg: f64| {
+        let unshielded = shield_run(kappa_bg, Ablation::new(q_star, T_VAPOR))
+            .bounce
+            .e_eff;
+        let shielded = shield_run(
+            kappa_bg,
+            Ablation::new(q_star, T_VAPOR).with_vapor_opacity(kappa_vapor),
+        )
+        .bounce
+        .e_eff;
+        shielded - unshielded
+    };
+    let thin_bg = recovery(0.1); // τ≲1: radiation reaches the wall
+    let thick_bg = recovery(30.0); // τ≫1: radiation trapped in the gas
+    assert!(
+        thin_bg > thick_bg,
+        "shielding recovery must grow as background opacity drops: thin-bg {thin_bg} vs thick-bg {thick_bg}"
     );
 }
