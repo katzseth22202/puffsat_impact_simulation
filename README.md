@@ -2,6 +2,10 @@
 
 A physics simulation to compute the per-collision coefficient of restitution of PuffSat gas against a pusher plate — the fudge factor `f` in the paper [*Aim Is All You Need: A Speculative White Paper on PuffSat Pulsed Propulsion*](https://github.com/katzseth22202/Balloon-Pulse-Propulsion).
 
+## Bottom line
+
+**`f ≈ 0.8` is physically realistic across the 3.2–16 km/s envelope.** It clears the worst case (the interior ~11 km/s transitional dip, survivable `f ≈ 0.80`) and is reachable at 16 km/s under ordinary design choices — a wider or heavier plate buys the margin (best `f` rising from `0.78` to `0.84`), so it is a forgiving design family, not a knife-edge. This is a **single-code** result; an independent hydrocode cross-check is the one open validation gate. Full reasoning and numbers: [`CONCLUSION.md`](CONCLUSION.md).
+
 ## What This Computes
 
 The core output is `f(v)`, the fudge factor as a function of impact speed across the mission envelope (3.2–16 km/s):
@@ -13,7 +17,7 @@ f = eta_capture * (1 + e_eff) / 2
 - `eta_capture` — fraction of axial momentum that lands and rebounds usefully (geometry)
 - `e_eff` — effective restitution after radiative, conductive, and condensation losses (thermophysics)
 
-This backs paper §3.2, which currently assumes a constant `f = 0.8`. The sim replaces that with a defensible `f(v)` curve and a full loss budget.
+This backs paper §3.2, which assumes a constant `f = 0.8`. The sim replaces that with a defensible `f(v)` curve and a full loss budget — and the result substantiates the assumption (single-code): `f ≈ 0.8` is realistic across the envelope. See [`CONCLUSION.md`](CONCLUSION.md).
 
 ## Architecture
 
