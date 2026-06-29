@@ -25,7 +25,10 @@ Two languages, one repo. The split is ADR-0002.
     behind a swappable module; revisit only if a production table exceeds ~25 MB / ~1s parse.
   - **JSONL** for sweep results (one JSON object per run, appendable + crash-resilient):
     Rust writes (`serde_json`), Python reads (`pandas.read_json(lines=True)`).
-  - Both live under the gitignored `data/` directory.
+  - Both live under the gitignored `data/` directory — except the small deliverable
+    artifacts `CONCLUSION.md` cites as evidence (`data/results/frontier*.csv` and the
+    result `*.png` figures), which are committed in place; the bulk tables/JSONL are not
+    (ADR-0025).
 
 ## Build
 

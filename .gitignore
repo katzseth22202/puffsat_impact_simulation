@@ -30,9 +30,17 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Data boundary — generated EOS/opacity tables (JSON) and sweep results (JSONL).
-# These are produced by `make tables` / `make sweep`; never checked in.
-/data/
+# Data boundary — generated EOS/opacity tables (JSON) and raw sweep results (JSONL)
+# are produced by `make tables` / `make sweep` and are NOT checked in.
+/data/*
+# ...EXCEPT the small deliverable artifacts that CONCLUSION.md cites as its evidence:
+# the frontier CSVs (the quoted numbers) and the result figures. The study is wrapped
+# and the real-opacity table is firewall-blocked, so these can't be regenerated on a
+# fresh clone — they are committed in place as the single source of truth. See ADR-0025.
+!/data/results/
+/data/results/*
+!/data/results/frontier*.csv
+!/data/results/*.png
 
 # Scratch space for temporary working files shared with Claude (e.g. checklists
 # for completing a single task). Disposable; never checked in.
