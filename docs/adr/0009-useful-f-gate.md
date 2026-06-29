@@ -42,7 +42,28 @@ exceeds the facesheet pressure limit is not available:
 16 km/s anchor is where the recovery levers (ablating wall, ADR-0014; the relaxed `P_limit`) earn
 their keep. This is still a conservative-floor reading (rigid wall, worst-case `e_eff`, the concave
 focusing penalty applied); the best-estimate curve (ADR-0013) only moves it up. No `f` is quoted
-externally until validation (design §9).
+externally until validation (design §9). *(Superseded — see the 2026-06 paper-draft amendment
+below: a preliminary, conservative-floor `f` is quotable in the white paper.)*
+
+## Amendment (2026-06, paper draft): a preliminary `f` is quotable in the white paper
+
+The original stance — "no `f` is quoted externally until the hydrocode cross-check lands"
+(design §9) — is **relaxed for the white paper**. The paper is an explicitly speculative concept
+paper, not a validated engineering deliverable, so a preliminary `f` is quotable *provided it is
+framed as preliminary*. The bar for "don't mislead readers" is met by labeling, not by withholding.
+
+Conditions on any externally quoted `f`:
+- Labeled **preliminary** and attributed to a **single in-house code**, with the FLASH cross-check
+  named as the outstanding independent validation (ADR-0009 above / design §9).
+- Quoted as the **conservative-floor** reading *with its sensitivity* (the linear mass-ratio rule
+  above; the two-curve deliverable, ADR-0013) — never as a guaranteed, optimized, or
+  margin-carrying value.
+- Carries the velocity-dependence caveat: the conservative worst case is the **interior ~11 km/s
+  dip**, not an endpoint (ADR-0012), and 16 km/s is limit-conditional (Rung S amendment above).
+
+The FLASH cross-check **remains the open validation gate**: it upgrades the quoted number from
+*preliminary* to *validated*. It no longer blocks external quotation — it gates only the
+"validated" label.
 
 ## Considered Options
 

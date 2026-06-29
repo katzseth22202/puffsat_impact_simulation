@@ -6,9 +6,11 @@ case and reachable at the top of the envelope under ordinary design choices. Thi
 **single-code result**; an independent hydrocode cross-check is the one open validation gate
 (see *Status* below).
 
-> Per [ADR-0009](docs/adr/0009-useful-f-gate.md), no `f` is quoted *externally* (i.e. in the
-> paper) until that cross-check lands. The numbers here are internal modeling results recorded
-> for the project.
+> Per [ADR-0009](docs/adr/0009-useful-f-gate.md) (2026-06 paper-draft amendment), a **preliminary**
+> `f` *is* quotable externally (i.e. in the white paper) ahead of that cross-check, provided it is
+> framed as preliminary: a single-code, conservative-floor result with the FLASH cross-check named
+> as the outstanding independent validation. The cross-check upgrades the number from *preliminary*
+> to *validated*; it no longer blocks quotation.
 
 ## What was asked
 
@@ -59,11 +61,12 @@ fillable ([ADR-0014](docs/adr/0014-ablating-wall.md)).
 
 ## Status & open items
 
-**One validation gate (blocks the externally-quoted number):**
+**One validation gate (upgrades a preliminary number to validated; no longer blocks quotation):**
 
 - **Independent hydrocode cross-check (FLASH).** Everything above is from this study's own
-  solvers. ADR-0009 reserves any external `f` until a second, independent code reproduces the
-  result. This is the single remaining gate.
+  solvers. Per ADR-0009 (2026-06 amendment), a preliminary `f` is quotable in the white paper
+  ahead of this, framed as single-code; the cross-check is what promotes it from *preliminary* to
+  *validated*. This is the single remaining gate.
 
 **Two non-blocking refinements (sharpen a known floor; cannot move the verdict):**
 
