@@ -66,9 +66,11 @@ EEFF_HIGHV = 0.63
 USEFUL_F_GATE = 0.8  # the useful-`f` gate (ADR-0009), marked on the figure
 
 # --- Rung S: survivability frontier (design §7, ADR-0010/0011) ---
-# Peak facesheet pressure is the stagnation pressure `c_stag·rho·v²`; `c_stag` (~2.0 at 16 km/s)
-# is backed out of the 1D `peak_wall_force` so the frontier inherits the kernel's measured number,
-# not an assumed ideal. The structural limits are the SiC+Ti facesheet's: a compressive `P_limit`
+# Peak facesheet pressure is the stagnation pressure `c_stag·rho·v²`; `c_stag` (≈1.1, the
+# reflected-shock (gamma_eff+1)/2) is backed out of the 1D `peak_wall_pressure` (physical EOS p,
+# AV excluded — ADR-0010 correction: the earlier peak_wall_force-based ≈2.0 was the artificial-
+# viscosity spike) so the frontier inherits the kernel's measured number, not an assumed ideal.
+# The structural limits are the SiC+Ti facesheet's: a compressive `P_limit`
 # (the §5 band) and a reflected-tensile spall limit at the SiC-Ti interface (ADR-0011), where
 # `|R| ~ 0.15` of the incident compressive returns as tension.
 PULSE_MASS_KG = 25.0  # gas delivered per PuffSat (design §2)
@@ -99,6 +101,9 @@ class SweepRow:
     v: float
     e_eff: float
     peak_wall_force: float
+    #: Physical peak wall pressure (EOS p only, artificial viscosity excluded) — the facesheet
+    #: survivability load (ADR-0010 correction). 0.0 when reading pre-fix JSONL (stale data).
+    peak_wall_pressure: float
     loss_radiative_wall: float
     loss_escape_space: float
     loss_conductive: float
@@ -132,6 +137,7 @@ def read_sweep(path: Path = DEFAULT_SWEEP_PATH) -> list[SweepRow]:
                 v=float(d["v"]),
                 e_eff=float(d["e_eff"]),
                 peak_wall_force=float(d.get("peak_wall_force", 0.0)),
+                peak_wall_pressure=float(d.get("peak_wall_pressure", 0.0)),
                 loss_radiative_wall=float(d["loss_radiative_wall"]),
                 loss_escape_space=float(d["loss_escape_space"]),
                 loss_conductive=float(d["loss_conductive"]),
@@ -580,17 +586,25 @@ def peak_facesheet_pressure(rho: float, v: float, c_stag: float) -> float:
 
 
 def stagnation_coefficient(rows: list[SweepRow], v: float, *, tol: float = 1.0) -> float:
-    """Back the stagnation coefficient `c_stag = peak_wall_force/(rho·v²)` out of the 1D sweep,
-    averaged over the densities at velocity `v` — so survivability uses the kernel's measured number
-    rather than an assumed ideal (`peak ≈ 2.0·rho·v²` at 16 km/s)."""
+    """Back the stagnation coefficient `c_stag = peak_wall_pressure/(rho·v²)` out of the 1D sweep,
+    averaged over the densities at velocity `v` — the kernel's measured **physical** peak (EOS `p`
+    of the wall cell, artificial viscosity excluded; ≈(gamma_eff+1)/2 ≈ 1.1). The earlier
+    `peak_wall_force`-based value ≈ 2.0 was the AV first-impact spike, a numerical artifact
+    (ADR-0010 correction, 2026-07)."""
     coeffs = [
-        r.peak_wall_force / (r.rho_impact * r.v * r.v)
+        r.peak_wall_pressure / (r.rho_impact * r.v * r.v)
         for r in rows
         if abs(r.v - v) <= tol and r.rho_impact > 0.0
     ]
     if not coeffs:
         raise ValueError(f"no sweep rows at v={v}")
-    return sum(coeffs) / len(coeffs)
+    c_stag = sum(coeffs) / len(coeffs)
+    if c_stag <= 0.0:
+        raise ValueError(
+            f"peak_wall_pressure is 0 at v={v}: stale pre-fix JSONL — rerun `make sweep` "
+            "(and `make sweep-transitional`) to regenerate with the physical peak recorded"
+        )
+    return c_stag
 
 
 def impact_density(

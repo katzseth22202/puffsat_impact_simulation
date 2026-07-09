@@ -10,8 +10,9 @@ relitigated — and so the ablator's role (ADR-0014) is not mistaken for pressur
 **The governing principle: you cannot remove the impulse, only spread it in time.** Peak-pressure
 relief means stretching the load out in time, because the time-integral of pressure *is* the delivered
 momentum — `∫P dt ≈ (1+e_eff)·ρ·v·L` — which is fixed: it is the thrust the plate exists to receive.
-The peak `≈ 2·ρv²` (the cloud's ram pressure recompressed at the wall, verified physical from the 1D
-`peak_wall_force`, ADR-0010) is reached when the cloud is brought to rest. A cushion can lower that peak
+The peak `≈ 1.2·ρv²` (the cloud's ram pressure recompressed at the wall, measured from the 1D
+`peak_wall_pressure` — 2026-07 ADR-0010 correction; the coefficient's exact value does not enter this
+ADR's momentum-conservation argument) is reached when the cloud is brought to rest. A cushion can lower that peak
 *only* if it makes the stagnation take longer.
 
 **Column density is the criterion, and a 0.01 atm balloon fails it by ~100x.** Deceleration is a
@@ -21,7 +22,7 @@ incoming cloud's column density is the `Σ = m/(π r_foot²)` contract (ADR-0003
 standoff is `≈ 0.007 kg/m²` — about **180x lighter** than the cloud; even a 5 m-thick balloon is ~40x
 short. A cushion ~100x lighter than the projectile is transparent to it: the cloud drives a shock
 through the thin gas, sweeps it up, and arrives at the wall at essentially full `v`, stagnating at the
-full `≈ 2·ρv²`. The shock-compressed buffer adds ~kPa against hundreds of MPa from the cloud —
+full `≈ 1.2·ρv²`. The shock-compressed buffer adds ~kPa against hundreds of MPa from the cloud —
 negligible.
 
 **A cushion dense enough to matter is just "a longer cloud."** To match the cloud's column density at a

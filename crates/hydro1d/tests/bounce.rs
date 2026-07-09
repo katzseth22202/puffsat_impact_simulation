@@ -79,3 +79,29 @@ fn dead_stick_absorbs_all_momentum() {
         );
     }
 }
+
+/// The **physical** peak wall pressure excludes the artificial-viscosity spike (ADR-0010
+/// correction). For a γ = 1.4 slug at M = 5, the reflected shock that stagnates the gas gives
+/// `p_peak ≈ (γ+1)/2 · ρ₀v² ≈ 1.2·ρ₀v²` (slightly above, at finite Mach) — while the reported
+/// `peak_wall_force` (`p + q`) is dominated by the first-impact AV spike `≈ c_q·ρ₀v² = 2·ρ₀v²`
+/// under the production VNR viscosity. The two must not be conflated.
+#[test]
+fn peak_wall_pressure_is_physical_not_av_spike() {
+    let gamma = 1.4;
+    // Tube::slug normalizes ρ₀ = 1, v = 1, so ρ₀v² = 1.
+    let r = Tube::slug(400, 5.0, gamma).run_bounce();
+    assert!(
+        (1.0..1.5).contains(&r.peak_wall_pressure),
+        "peak p(0)/ρv² = {:.3}, want ≈ (γ+1)/2 ≈ 1.2 (reflected shock)",
+        r.peak_wall_pressure
+    );
+    assert!(
+        r.peak_wall_force > 1.8,
+        "peak (p+q)/ρv² = {:.3}, want ≳ c_q = 2 (AV first-impact spike)",
+        r.peak_wall_force
+    );
+    assert!(
+        r.peak_wall_pressure < r.peak_wall_force,
+        "physical pressure peak must sit below the p+q peak"
+    );
+}

@@ -45,6 +45,13 @@ focusing penalty applied); the best-estimate curve (ADR-0013) only moves it up. 
 externally until validation (design §9). *(Superseded — see the 2026-06 paper-draft amendment
 below: a preliminary, conservative-floor `f` is quotable in the white paper.)*
 
+*Corrected numbers (2026-07, ADR-0010 correction + converged geometry grid):* the two anchors
+swapped roles. The dip drops to survivable `f ≈ 0.777` (just under the gate, within the ±0.03
+numerics band; ≈ 0.782 with the ablating wall), while 16 km/s rises to `f ≈ 0.805` at the 400 MPa
+baseline and **clears the gate robustly** (`0.809–0.829` across the full ablating `Q*`/τ bracket;
+the relaxed 900 MPa limit is no longer needed and adds almost nothing). The gate verdict as a
+family — best survivable `f ≈ 0.78–0.83`, centered on 0.8 — is unchanged; see CONCLUSION.md.
+
 ## Amendment (2026-06, paper draft): a preliminary `f` is quotable in the white paper
 
 The original stance — "no `f` is quoted externally until the hydrocode cross-check lands"

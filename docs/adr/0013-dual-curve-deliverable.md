@@ -30,9 +30,12 @@ but it is a *small* lift, not the dip-filler.** The ablating wall (ADR-0014) is 
 counterpart to the rigid floor, pulled here per the "gated where the floor dips below `f = 0.8`"
 logic. Landed, it adds: dip (11 km/s) `e_eff` floor 0.57 → ≤ 0.580 (≤ +0.014); 16 km/s `e_eff`
 0.629 → [0.638, 0.678], best survivable `f` 0.784 → [0.788, 0.807] (straddling the gate, cleared only
-at the optimistic `Q*`/τ corner). So on the dual-curve picture the best-estimate `e_eff` sits only
-marginally above the rigid floor, and **the geometry lever (concave `eta_capture`, Rung D), not the
-wall, is what actually carries `f` over 0.8** at the dip. The recovery's error band is the **τ-bracket**
+at the optimistic `Q*`/τ corner) *(2026-07 correction: with the physical `c_stag ≈ 1.24` and the
+converged geometry grid this becomes 0.805 → [0.809, 0.829] — the 16 km/s gate now clears across the
+whole bracket; the dip drops to ≈ 0.777 rigid / 0.782 ablating, just under — ADR-0010)*. So on the
+dual-curve picture the best-estimate `e_eff` sits only marginally above the rigid floor, and **the
+geometry lever (concave `eta_capture`, Rung D), not the wall, is what carries `f` to the 0.8 line**
+at the dip. The recovery's error band is the **τ-bracket**
 (interim opacity; the real-opacity refinement, ADR-0007, is firewall-gated and `Q*`/EOS-decision
 shows it would not change the call) plus the `Q* ∈ {2,5,10} MJ/kg` spread — both reported, not
 collapsed.

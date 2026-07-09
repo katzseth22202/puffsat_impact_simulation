@@ -44,21 +44,46 @@ is limited by peak facesheet pressure (structural) and ablation burn-through (th
 ## Amendment (2026-06, Rung S): the peak-pressure frontier, operationalized
 
 The pressure-limited frontier this ADR scopes is now computed (design §7). Peak facesheet pressure is
-the stagnation pressure **`≈ 2.0·ρv²`**, verified physical from the 1D kernel's `peak_wall_force` (the
-coefficient is 2.0 at both 11 and 16 km/s, i.e. `peak ≈ 2·ρv²`, the cold-cloud ram pressure
-recompressed at the wall). The `Σ = m/(π r_foot²) = ρL` contract (ADR-0003) maps each cloud shape to a
+the stagnation pressure ~~**`≈ 2.0·ρv²`**, verified physical from the 1D kernel's `peak_wall_force`~~
+**`≈ 1.2·ρv²`** (see the 2026-07 correction below — the 2.0 coefficient was an artificial-viscosity
+artifact, not physical). The `Σ = m/(π r_foot²) = ρL` contract (ADR-0003) maps each cloud shape to a
 density, so the frontier is `peak(L/D, r_foot/R, v)` against the **`P_limit = 400 MPa` baseline** (the
 §5 conservative floor), swept to 700/900 MPa at 16 km/s. The damage regime is unchanged — thermal /
 structural, atomic damage out of scope — and the binding limit is the compressive facesheet pressure
 (the reflected-tensile spall stays sub-dominant, ADR-0011). Ablation-per-pulse is reported as a
-back-propagated MEMS-replenishment *requirement*, not gated here. **Result:** the `f`-maximizing
-short-disk / tight-footprint corner fails by a wide margin (~2.3 GPa at 16 km/s); the best *survivable*
-`f` is ≈ 0.80 (dip) / ≈ 0.78 (16 km/s baseline) / ≈ 0.84 (16 km/s relaxed 900 MPa).
+back-propagated MEMS-replenishment *requirement*, not gated here. **Result** (as corrected 2026-07):
+the `f`-maximizing short-disk / tight-footprint corner still fails by a wide margin (~1.6 GPa at
+16 km/s); the best *survivable* `f` is ≈ 0.78 (dip) / ≈ 0.81 (16 km/s baseline) / ≈ 0.81 (16 km/s
+relaxed 900 MPa — with the corrected lower peak, pressure is barely binding at 16 km/s and the relaxed
+limit buys almost nothing).
+
+## Correction (2026-07): the stagnation coefficient is ≈ 1.2, not 2.0 — the 2.0 was an AV artifact
+
+The Rung-S amendment above originally claimed `peak ≈ 2.0·ρv²`, "verified physical from the 1D
+kernel's `peak_wall_force`," on the grounds that the coefficient was 2.0 at both 11 and 16 km/s
+(velocity-independence read as physicality). That inference was wrong. `peak_wall_force` is the wall
+cell's **total** pressure `p + q`, and its first-impact spike is dominated by the von Neumann–Richtmyer
+artificial-viscosity term `q ≈ c_q·ρ·Δu² ≈ 2·ρv²` (production `c_q = 2.0`) — which is *also* ∝ ρv² and
+so velocity-independent in coefficient. Varying `c_q` moves the "measured" coefficient in lockstep
+(c_q = 2.0 → 2.02, c_q = 1.0 → ~1.2), the signature of a numerical artifact. The **physical** wall
+pressure — the EOS `p(0, t)` alone — converges under grid refinement to the reflected-shock stagnation
+value `(γ_eff+1)/2·ρv²` ≈ **1.20·ρv² at 11 km/s and 1.24·ρv² at 16 km/s** (water EOS, γ_eff ≈ 1.1–1.2).
+
+**Fix:** the kernel now reports `peak_wall_pressure` (EOS `p` only, AV excluded) alongside
+`peak_wall_force`, and the survivability/margin analyses back `c_stag` out of that (a stale pre-fix
+JSONL fails loudly). The impulse/`e_eff` bookkeeping is untouched (the AV term belongs in the
+*integrated* wall force; only the *peak* was misattributed). Direction: the old number was
+**conservative** — survivability was ~1.7× too pessimistic. Folded together with the same audit's 2D
+grid-convergence fix (the geometry sweep's 56×40 grid was not converged for the deep-dish/tight-
+footprint corner; now 112×80 with physical Mach anchors 10/20), the best-survivable `f` moved
+`0.804 → 0.777` at the dip and `0.784 → 0.805` at 16 km/s — opposite-sign third-decimal shifts inside
+the study's ±0.03 numerics band. See CONCLUSION.md for the corrected headline numbers.
 
 ## Amendment (2026-06): the closed-form `f`-margin map over plate radius `R` and pulse mass `m`
 
-Peak facesheet pressure is **intensive** — the local stagnation stress `≈ 2·ρv²`, set entirely by the
-gas at the wall — so it is blind to every plate *geometry* change (facesheet thickness, plate width as
+Peak facesheet pressure is **intensive** — the local stagnation stress `≈ 1.2·ρv²` (2026-07
+correction above), set entirely by the gas at the wall — so it is blind to every plate *geometry*
+change (facesheet thickness, plate width as
 empty acreage, total force). Only two things move it: the **gas density** `ρ` (cloud shape, already
 pushed to its `eta_capture` limit at the frontier above) and the **material allowable** `P_limit`
 (low-leverage, design §5/line 105). This amendment records the one remaining handle — the two **scale
@@ -72,17 +97,18 @@ therefore only **relaxes the pressure ceiling** by a `headroom = (R/R₀)³·(m�
 denser, higher-`eta` shape that failed at the baseline, and buying `f` back. The margin map is a pure
 rescaling of the Rung-S frontier (`analysis.py --axis margin`, `margin_map`; `make analysis-margin`):
 
+(Numbers as corrected 2026-07 — physical `c_stag ≈ 1.2` and the converged 112×80 geometry grid:)
+
 | 16 km/s, 400 MPa baseline | headroom | best survivable `f` |
 |---|---|---|
-| `R = 5 m, m = 25 kg` (pinned baseline) | 1.0× | **0.784** (just under the 0.8 gate) |
-| e.g. `R = 5 m, m = 15 kg` | 1.7× | **0.814** (clears the gate) |
-| e.g. `R = 6.5 m, m = 25 kg`  or  `R = 5.5 m, m = 15 kg` | 2.2× | **0.835** (comfortable margin) |
-| `R = 7 m, m = 15 kg` (grid corner) | 4.6× | 0.835 (plateaus) |
+| `R = 5 m, m = 25 kg` (pinned baseline) | 1.0× | **0.805** (already clears the gate) |
+| mid-grid (e.g. `R = 6 m, m = 25 kg`) | ~1.7× | **0.806** (flat — pressure barely binds) |
+| `R = 7 m, m = 15 kg` (grid corner) | 4.6× | **0.822** (plateaus) |
 
-(The dip behaves the same: `0.804 → 0.829`.) Two honest bounds: the gain is **real but modest and
-stepped** (limited to the discrete sampled cloud shapes, `~+0.05` in `f`), and it **plateaus at
-≈0.835** — the absolute `f`-max corner (≈0.86) needs `~5.75×` headroom, beyond even the grid's `4.6×`,
-because that corner is the densest case the frontier already forecloses.
+(The dip: `0.777 → 0.792` across the same grid.) Two honest bounds: with the corrected (lower) peak
+pressure the baseline already survives its best shapes, so the headroom gain is **small and stepped**
+(`~+0.02` in `f`, limited to the discrete sampled cloud shapes), and it **plateaus at ≈0.822** — the
+absolute `f`-max corner is the densest case the frontier forecloses at any sampled headroom.
 
 **These are not levers the study pulls — they are pinned by *external* budgets, and this is only the
 `f`-side of a system trade.** `R` is set by the vehicle dry-mass budget (a wider pusher plate is the

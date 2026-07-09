@@ -83,7 +83,16 @@ pub struct BounceResult {
     /// Effective restitution `e_eff = J_wall / p_in − 1` (ADR-0001).
     pub e_eff: f64,
     /// Peak wall force seen during the bounce (the tail guard stops at `10⁻³` of this).
+    ///
+    /// Includes the artificial viscosity `q`, whose first-impact spike `≈ c_q·ρv²` dominates
+    /// this peak (it tracks `c_q`, not the physics). Use [`Self::peak_wall_pressure`] for the
+    /// physical load on the plate.
     pub peak_wall_force: f64,
+    /// Peak **physical** wall pressure: max over the bounce of the wall cell's EOS pressure
+    /// `p(0)`, excluding artificial viscosity. Converges under refinement to the reflected-shock
+    /// stagnation pressure `≈ (γ_eff+1)/2 · ρv²` (≈1.1·ρv² for the water EOS at 11–16 km/s) —
+    /// the correct facesheet survivability load (ADR-0010 correction).
+    pub peak_wall_pressure: f64,
 }
 
 /// A 1D Lagrangian gas column on a staggered mesh, carrying its equation of state `E`.
@@ -441,6 +450,14 @@ impl<E: Eos> Tube<E> {
         self.pressure(0) + self.artificial_viscosity(0)
     }
 
+    /// Physical wall pressure: the EOS pressure `p` of cell 0 alone, excluding the artificial
+    /// viscosity `q`. The impulse must integrate `p + q` (AV carries real momentum flux through
+    /// the smeared shock), but the *peak* of `p + q` is a numerical artifact `≈ c_q·ρv²`; the
+    /// peak of `p` is the physical stagnation load.
+    fn wall_pressure(&self) -> f64 {
+        self.pressure(0)
+    }
+
     /// Fire the slug at the wall and integrate the bounce until the wall force decays to `10⁻³`
     /// of its peak (ADR-0001's tail guard) or a safety step cap is hit, returning the wall
     /// impulse and the restitution it implies.
@@ -455,12 +472,14 @@ impl<E: Eos> Tube<E> {
         let incident = p_initial.abs();
         let mut wall_impulse = 0.0;
         let mut peak: f64 = 0.0;
+        let mut peak_pressure: f64 = 0.0;
         let mut past_peak = false;
         let mut force_old = self.wall_force();
         let max_steps = 400 * self.cells() + 10_000;
 
         for _ in 0..max_steps {
             peak = peak.max(force_old);
+            peak_pressure = peak_pressure.max(self.wall_pressure());
             if force_old < 0.5 * peak {
                 past_peak = true;
             }
@@ -481,6 +500,7 @@ impl<E: Eos> Tube<E> {
             residual_momentum: residual,
             e_eff: wall_impulse / incident - 1.0,
             peak_wall_force: peak,
+            peak_wall_pressure: peak_pressure,
         }
     }
 
@@ -503,12 +523,14 @@ impl<E: Eos> Tube<E> {
         let incident = p_initial.abs();
         let mut wall_impulse = 0.0;
         let mut peak: f64 = 0.0;
+        let mut peak_pressure: f64 = 0.0;
         let mut p_old = p_initial;
         let mut force_old = self.wall_force();
         let max_steps = 400 * self.cells() + 10_000;
 
         for _ in 0..max_steps {
             peak = peak.max(force_old);
+            peak_pressure = peak_pressure.max(self.wall_pressure());
             let dt = self.stable_dt();
             self.step(dt);
             let force_new = self.wall_force();
@@ -527,6 +549,7 @@ impl<E: Eos> Tube<E> {
                     residual_momentum: 0.0, // gas held at rest; rebound suppressed
                     e_eff: wall_impulse / incident - 1.0,
                     peak_wall_force: peak,
+                    peak_wall_pressure: peak_pressure,
                 };
             }
 
@@ -543,6 +566,7 @@ impl<E: Eos> Tube<E> {
             residual_momentum: self.total_momentum(),
             e_eff: wall_impulse / incident - 1.0,
             peak_wall_force: peak,
+            peak_wall_pressure: peak_pressure,
         }
     }
 }
@@ -879,12 +903,14 @@ impl CoupledBounce {
         let incident = self.tube.total_momentum().abs();
         let mut wall_impulse = 0.0;
         let mut peak: f64 = 0.0;
+        let mut peak_pressure: f64 = 0.0;
         let mut past_peak = false;
         let mut force_old = self.tube.wall_force();
         let max_steps = 400 * self.tube.cells() + 10_000;
 
         for _ in 0..max_steps {
             peak = peak.max(force_old);
+            peak_pressure = peak_pressure.max(self.tube.wall_pressure());
             if force_old < 0.5 * peak {
                 past_peak = true;
             }
@@ -905,6 +931,7 @@ impl CoupledBounce {
                 residual_momentum: self.tube.total_momentum(),
                 e_eff: wall_impulse / incident - 1.0,
                 peak_wall_force: peak,
+                peak_wall_pressure: peak_pressure,
             },
             loss_radiative_wall: self.loss_radiative_wall,
             loss_escape_space: self.loss_escape_space,
@@ -1030,12 +1057,14 @@ impl CondensingBounce {
         let incident = self.tube.total_momentum().abs();
         let mut wall_impulse = 0.0;
         let mut peak: f64 = 0.0;
+        let mut peak_pressure: f64 = 0.0;
         let mut past_peak = false;
         let mut force_old = self.tube.wall_force();
         let max_steps = 400 * self.tube.cells() + 10_000;
 
         for _ in 0..max_steps {
             peak = peak.max(force_old);
+            peak_pressure = peak_pressure.max(self.tube.wall_pressure());
             if force_old < 0.5 * peak {
                 past_peak = true;
             }
@@ -1060,6 +1089,7 @@ impl CondensingBounce {
                 residual_momentum: self.tube.total_momentum(),
                 e_eff: wall_impulse / incident - 1.0,
                 peak_wall_force: peak,
+                peak_wall_pressure: peak_pressure,
             },
             loss_condensation: self.loss_condensation,
             loss_conductive: self.loss_conductive,
@@ -1345,12 +1375,14 @@ impl AblatingBounce {
         let incident = self.tube.total_momentum().abs();
         let mut wall_impulse = 0.0;
         let mut peak: f64 = 0.0;
+        let mut peak_pressure: f64 = 0.0;
         let mut past_peak = false;
         let mut force_old = self.tube.wall_force();
         let max_steps = 400 * self.tube.cells() + 10_000;
 
         for _ in 0..max_steps {
             peak = peak.max(force_old);
+            peak_pressure = peak_pressure.max(self.tube.wall_pressure());
             if force_old < 0.5 * peak {
                 past_peak = true;
             }
@@ -1371,6 +1403,7 @@ impl AblatingBounce {
                 residual_momentum: self.tube.total_momentum(),
                 e_eff: wall_impulse / incident - 1.0,
                 peak_wall_force: peak,
+                peak_wall_pressure: peak_pressure,
             },
             loss_radiative_wall: self.loss_radiative_wall,
             loss_escape_space: self.loss_escape_space,

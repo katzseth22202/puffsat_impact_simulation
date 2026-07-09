@@ -46,6 +46,13 @@ The flat / 0.10 / 0.15 depth-to-diameter shapes are now run through the 2D kerne
 This is a shallow-plate result at two Mach anchors; the deep dish stays foreclosed (above), and the
 focal-radiation penalty that forecloses it at 16 km/s is untouched by these radiation-free runs.
 
+*Corrected magnitudes (2026-07):* the numbers above were from the unconverged 56×40 grid at M ≈ 5.
+On the converged 112×80 grid at the physical Mach anchors (10/20), the same short-disk case gives
+`eta_capture` **0.915 → 0.993 → 1.009** over `d/D = 0 / 0.10 / 0.15` at M = 10 (0.88 → 0.92 → 0.94
+at M = 20): the depth-monotone concave lift and the marginal over-collimation past 1 both survive,
+with smaller magnitude. The corresponding concave `f` maxima are ≈ 0.792 (dip) / 0.822 (16 km/s);
+the decision (shallow concave is the lever, deep dish foreclosed) is unchanged.
+
 ## Amendment (2026-06): Orion's geometric loss is *interception* (collimation `C₀ ≈ 0.5`), not sideways rebound — a conditional PuffSat advantage to claim later
 
 Sanity-checking the §3.2 Orion comparison turned up a **distinct, larger geometric difference than the

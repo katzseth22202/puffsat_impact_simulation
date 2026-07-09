@@ -88,7 +88,14 @@ the Σ→ρ→peak survivability frontier (Rung S). Three findings amend the fra
 lift 16 km/s over the `f = 0.8` gate. Best survivable `f` 0.784 → **[0.788, 0.807]**: the gate
 **straddles** the bracket, cleared only at the optimistic low-`Q*`/high-τ corner (`f` 0.807, at
 ~8.9 % ablation), with the conservative `Q* = 10 MJ/kg` end at 0.788, just under. It clears
-comfortably (0.859) only if the structure tolerates the relaxed 900 MPa `P_limit`. **E5** (real
+comfortably (0.859) only if the structure tolerates the relaxed 900 MPa `P_limit`.
+
+*Corrected (2026-07):* with the physical stagnation coefficient (`c_stag ≈ 1.24`, not the AV-artifact
+2.0; ADR-0010 correction) and the converged 112×80 geometry grid, the 16 km/s rigid baseline itself
+clears at `f ≈ 0.805`, and the ablating bracket becomes **[0.809, 0.829] — the gate clears across the
+whole `Q*`/τ bracket**, no longer straddling; the relaxed 900 MPa limit adds almost nothing (0.830)
+because the corrected peak pressure barely binds. The physics conclusion of this ADR (recovery real
+but small and injection-dominated; the dip not radiatively fillable) is unchanged. **E5** (real
 per-regime opacity) was **not pulled**: the decision is `Q*`/EOS-limited, not τ-limited (real opacity
 sharpens only the ~38 % shielding sub-component and cannot fill an EOS sink), and the data
 (HITEMP/ExoMol/TOPS/OPLIB) is firewall-blocked by default-deny — see ADR-0007. The **RT-coherence

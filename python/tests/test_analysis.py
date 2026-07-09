@@ -30,6 +30,7 @@ def _row(
         "v": 16_000.0,
         "e_eff": e_eff,
         "peak_wall_force": 1.0,  # extra fields the reader ignores
+        "peak_wall_pressure": 0.5,
         "incident_momentum": 1.0,
         "residual_momentum": 0.5,
         "wall_impulse": 1.5,
@@ -292,30 +293,39 @@ def test_plot_geometry_writes_file(tmp_path: Path) -> None:
 def test_peak_facesheet_pressure_is_c_stag_rho_v2() -> None:
     """Peak facesheet pressure is the stagnation pressure `c_stag·rho·v²` (design §7): a cold
     coasting cloud feels the ram pressure recompressed at the wall."""
-    # c_stag ~ 2.0 at 16 km/s (the measured 1D coefficient), rho = 0.64 -> 330 MPa.
+    # Pure formula test (c_stag is an input; the measured physical value is ≈1.1 at 11-16 km/s).
     peak = an.peak_facesheet_pressure(0.64, 16_000.0, 2.0)
     assert peak == pytest.approx(2.0 * 0.64 * 16_000.0**2)
     assert peak == pytest.approx(3.2768e8)
 
 
 def test_stagnation_coefficient_recovered_from_sweep() -> None:
-    """`stagnation_coefficient` backs `c_stag = peak_wall_force / (rho·v²)` out of the 1D sweep
-    rows, averaging over the densities at one velocity."""
+    """`stagnation_coefficient` backs `c_stag = peak_wall_pressure / (rho·v²)` out of the 1D sweep
+    rows — the physical (AV-excluded) peak, NOT `peak_wall_force`, whose first-impact spike is the
+    artificial-viscosity artifact ≈ c_q·rho·v² (ADR-0010 correction)."""
     v = 16_000.0
-    rows = [
-        an.SweepRow(
-            rho_impact=rho,
-            v=v,
-            e_eff=0.63,
-            peak_wall_force=2.0 * rho * v**2,  # exactly c_stag = 2.0
-            loss_radiative_wall=0.0,
-            loss_escape_space=0.0,
-            loss_conductive=0.0,
-            loss_condensation=0.0,
-        )
-        for rho in (0.16, 0.32, 0.64)
-    ]
-    assert an.stagnation_coefficient(rows, v) == pytest.approx(2.0)
+
+    def rows_at(c_stag: float) -> list[an.SweepRow]:
+        return [
+            an.SweepRow(
+                rho_impact=rho,
+                v=v,
+                e_eff=0.63,
+                peak_wall_force=2.0 * rho * v**2,  # the AV spike; must NOT be what's used
+                peak_wall_pressure=c_stag * rho * v**2,
+                loss_radiative_wall=0.0,
+                loss_escape_space=0.0,
+                loss_conductive=0.0,
+                loss_condensation=0.0,
+            )
+            for rho in (0.16, 0.32, 0.64)
+        ]
+
+    assert an.stagnation_coefficient(rows_at(1.1), v) == pytest.approx(1.1)
+    # Stale pre-fix JSONL (peak_wall_pressure defaulted to 0) must fail loudly, not silently
+    # produce c_stag = 0.
+    with pytest.raises(ValueError, match="stale"):
+        an.stagnation_coefficient(rows_at(0.0), v)
 
 
 def test_impact_density_sigma_bridge() -> None:

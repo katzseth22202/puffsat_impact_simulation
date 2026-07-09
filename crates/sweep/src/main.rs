@@ -103,8 +103,13 @@ struct Record {
     v: f64,
     /// Effective restitution `e_eff = J_wall/p_in − 1` (ADR-0001): 0 = stick, 1 = elastic.
     e_eff: f64,
-    /// Peak wall force during the bounce.
+    /// Peak wall force during the bounce (`p + q`; peak dominated by the AV spike `≈ c_q·ρv²`).
     peak_wall_force: f64,
+    /// Peak **physical** wall pressure (EOS `p` only, AV excluded) — the facesheet survivability
+    /// load, `≈ (γ_eff+1)/2 · ρv²` (ADR-0010 correction). Defaults to 0 when reading pre-fix
+    /// JSONL so stale data is detectable downstream.
+    #[serde(default)]
+    peak_wall_pressure: f64,
     /// Incident axial momentum `p_in`.
     incident_momentum: f64,
     /// Gas momentum still in flight at stop (the rebound).
@@ -143,6 +148,7 @@ fn run_one(rho_impact: f64, table: &Table, cfg: &Config) -> Record {
         v: cfg.v,
         e_eff: result.bounce.e_eff,
         peak_wall_force: result.bounce.peak_wall_force,
+        peak_wall_pressure: result.bounce.peak_wall_pressure,
         incident_momentum: result.bounce.incident_momentum,
         residual_momentum: result.bounce.residual_momentum,
         wall_impulse: result.bounce.wall_impulse,
@@ -236,6 +242,7 @@ fn run_one_lowv(rho_impact: f64, table: &Table, cfg: &LowvConfig) -> Record {
         v: cfg.v,
         e_eff: result.bounce.e_eff,
         peak_wall_force: result.bounce.peak_wall_force,
+        peak_wall_pressure: result.bounce.peak_wall_pressure,
         incident_momentum: result.bounce.incident_momentum,
         residual_momentum: result.bounce.residual_momentum,
         wall_impulse: result.bounce.wall_impulse,
@@ -275,6 +282,7 @@ fn run_one_eos(rho_impact: f64, table: &Table, cfg: &Config) -> Record {
         v: cfg.v,
         e_eff: bounce.e_eff,
         peak_wall_force: bounce.peak_wall_force,
+        peak_wall_pressure: bounce.peak_wall_pressure,
         incident_momentum: bounce.incident_momentum,
         residual_momentum: bounce.residual_momentum,
         wall_impulse: bounce.wall_impulse,
@@ -327,8 +335,11 @@ const GEO_L_OVER_D: [f64; 3] = [0.3, 0.6, 1.0];
 /// Footprint coverage `r_foot/R` (design §sweep 0.3–1.0; `R` fixed, the shared knob).
 const GEO_RFOOT_OVER_R: [f64; 3] = [0.3, 0.5, 0.7];
 /// Incident-Mach anchors. `eta_capture` is geometry-dominated and only weakly Mach-dependent, so two
-/// anchors bracket that dependence; D7 pairs them with the 1D `e_eff` velocity anchors.
-const GEO_MACH: [f64; 2] = [5.0, 10.0];
+/// anchors bracket that dependence; D7 pairs them with the 1D `e_eff` velocity anchors. The physical
+/// incident Mach of the production cloud is M ≈ 21 at the 11 km/s dip and M ≈ 32 at 16 km/s
+/// (T₀ = 400–450 K water vapor, c_s ≈ 500 m/s), so the anchors sit at the strong-shock end rather
+/// than the marginal M = 5 the first pass used (2026-07 audit).
+const GEO_MACH: [f64; 2] = [10.0, 20.0];
 
 /// Fixed resolution for the geometry sweep (cells per case; the domain is sized per case so this is
 /// a comparable resolution across cases). Coarse for wall-time; the `diag_*` tables refine.
@@ -341,10 +352,12 @@ struct GeoConfig {
 
 impl GeoConfig {
     fn production() -> Self {
+        // 112×80: the 2026-07 audit showed 56×40 is not converged for the deep-dish/tight-footprint
+        // corner (eta 1.024 → 0.989 at 2×, 0.993 at 3×); 2× is within ~0.5% of 3×.
         Self {
             gamma: 1.4,
-            nr: 56,
-            nz: 40,
+            nr: 112,
+            nz: 80,
         }
     }
 }
@@ -826,6 +839,10 @@ mod tests {
             assert!(rec.incident_momentum > 0.0);
             assert!(rec.wall_impulse > 0.0);
             assert!(rec.peak_wall_force > 0.0);
+            assert!(
+                rec.peak_wall_pressure > 0.0 && rec.peak_wall_pressure < rec.peak_wall_force,
+                "physical pressure peak must be positive and below the p+q peak"
+            );
             assert!(rec.loss_radiative_wall >= 0.0);
             assert!(rec.loss_escape_space >= 0.0);
             assert_eq!(rec.loss_conductive, 0.0); // conductive channel deferred (wall = None)
@@ -855,6 +872,7 @@ mod tests {
             "v",
             "e_eff",
             "peak_wall_force",
+            "peak_wall_pressure",
             "loss_radiative_wall",
             "loss_escape_space",
             "loss_conductive",

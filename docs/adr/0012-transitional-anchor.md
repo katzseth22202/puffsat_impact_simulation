@@ -73,4 +73,5 @@ radiative loss, so the vapor shield has almost nothing to recover there — abla
 decision above: the real-opacity radiative-leak quantification matters for the rigid floor's **loss
 accounting** (channel 1a), but it cannot lift the dip's `e_eff` via ablation, because the dip's loss
 is in the EOS, not in the radiation field. The 0.57 EOS floor stands as the worst case; the geometry
-(concave `eta_capture`) lever, not the wall, is what clears a useful `f` there (Rung D, `f ≈ 0.83`).
+(concave `eta_capture`) lever, not the wall, is what carries `f` to the 0.8 line there (Rung D;
+`f ≈ 0.83` on the original coarse grid, ≈ 0.79 on the converged 112×80 grid — 2026-07, ADR-0010/0003).

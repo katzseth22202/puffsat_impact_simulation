@@ -74,6 +74,12 @@ product is now formed in code (`analysis.py --axis geometry`):
   0.8 useful gate)**; `f ≈ 0.86` at 16 km/s. The full `Σ`-resolved `e_eff(ρ(r_foot))` lookup that feeds
   the dual-curve `f(v)` deliverable (ADR-0013) is the noted refinement, a later rung.
 
+  *Superseded numbers (2026-07):* the bracket above was computed on the original 56×40 grid at
+  Mach anchors 5/10, which the 2026-07 audit showed was not grid-converged for the deep-dish/tight-
+  footprint corner. On the converged 112×80 grid with physical Mach anchors 10/20 the concave
+  maxima are `f ≈ 0.792` at the dip and `f ≈ 0.822` at 16 km/s (before survivability). The
+  factorization decision itself is unchanged.
+
 ## Considered Options
 
 - **Raw-throughput `eta_capture`** (2D axial momentum ÷ incident). Rejected: double-counts the
