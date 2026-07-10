@@ -56,6 +56,11 @@ DEFAULT_MARGIN_SUMMARY_PATH = Path("data/results/frontier_margin.csv")
 DEFAULT_ABLATING_PATH = Path("data/results/sweep_ablating.jsonl")
 DEFAULT_ABLATING_SUMMARY_PATH = Path("data/results/frontier_ablating.csv")
 
+# Frozen-recombination bounding sweep (audit finding 3): the `crates/sweep --frozen` output and its
+# freeze-timing bracket around the equilibrium e_eff(v) curve.
+DEFAULT_FROZEN_PATH = Path("data/results/sweep_frozen.jsonl")
+DEFAULT_FROZEN_SUMMARY_PATH = Path("data/results/frontier_frozen.csv")
+
 # 1D `e_eff` anchors for the `f = eta_capture·(1+e_eff)/2` reconciliation (ADR-0003). `EEFF_DIP` is
 # the transitional EOS worst case (the conservative floor, ADR-0012); `EEFF_HIGHV` the 16 km/s point
 # (Rung B). `eta_capture` is geometry-dominated and ~velocity-independent, so the first bracket
@@ -1168,6 +1173,193 @@ def _run_ablating(
     print(f"python: wrote {summary_path} and {len(figs)} figure(s): " + ", ".join(map(str, figs)))
 
 
+# ---- Frozen-recombination bounding sweep (audit finding 3): freeze-timing brackets --------------
+
+
+@dataclass(frozen=True)
+class FrozenRow:
+    """One frozen-sweep result row (`crates/sweep --frozen`): the three e_eff curves at one case."""
+
+    v: float
+    rho_impact: float
+    e_eff_eq: float
+    e_eff_frozen_rebound: float
+    e_eff_frozen_all: float
+    rho_star: float
+    t_star: float
+    swap_energy_jump_frac: float
+
+
+@dataclass(frozen=True)
+class FrozenPoint:
+    """One `e_eff(v)` point with its freeze-timing bracket (rho-means): the equilibrium curve, the
+    sudden-freeze-at-turnaround pessimistic bound, and the pure-H2O no-chemistry optimistic bound.
+    `delta_frozen = e_eff_eq - e_eff_frozen_rebound >= 0` is the chemistry-return content of the
+    equilibrium rebound — the amount at risk if recombination freezes."""
+
+    v: float
+    e_eff_eq: float
+    e_eff_frozen_rebound: float
+    e_eff_frozen_all: float
+    delta_frozen: float
+    e_eff_frozen_min: float
+    e_eff_frozen_max: float
+
+
+@dataclass(frozen=True)
+class FrozenDipImpact:
+    """The worst-case (dip) points of the equilibrium and frozen-rebound curves and the implied
+    upper bound on the `f` shift, `delta_f_max = eta*(dip_eq - dip_frozen)/2` at `eta = 1`."""
+
+    dip_eq: FrozenPoint
+    dip_frozen: FrozenPoint
+    delta_f_max: float
+
+
+def read_frozen(path: Path = DEFAULT_FROZEN_PATH) -> list[FrozenRow]:
+    """Parse the frozen-sweep JSONL (one JSON object per line; blank lines tolerated)."""
+    rows: list[FrozenRow] = []
+    for line in Path(path).read_text().splitlines():
+        if not line.strip():
+            continue
+        d = json.loads(line)
+        rows.append(FrozenRow(**{f.name: float(d[f.name]) for f in fields(FrozenRow)}))
+    return rows
+
+
+def frozen_frontier(rows: list[FrozenRow]) -> list[FrozenPoint]:
+    """Rho-mean the three curves per velocity (ascending in v), carrying the frozen-rebound spread
+    over rho as `[min, max]`."""
+    groups: dict[float, list[FrozenRow]] = {}
+    for r in rows:
+        groups.setdefault(r.v, []).append(r)
+    points: list[FrozenPoint] = []
+    for v in sorted(groups):
+        rs = groups[v]
+        e_eq = _mean([r.e_eff_eq for r in rs])
+        e_frozen = _mean([r.e_eff_frozen_rebound for r in rs])
+        points.append(
+            FrozenPoint(
+                v=v,
+                e_eff_eq=e_eq,
+                e_eff_frozen_rebound=e_frozen,
+                e_eff_frozen_all=_mean([r.e_eff_frozen_all for r in rs]),
+                delta_frozen=e_eq - e_frozen,
+                e_eff_frozen_min=min(r.e_eff_frozen_rebound for r in rs),
+                e_eff_frozen_max=max(r.e_eff_frozen_rebound for r in rs),
+            )
+        )
+    return points
+
+
+def frozen_dip_impact(points: list[FrozenPoint]) -> FrozenDipImpact:
+    """Locate each curve's minimum over the swept velocities and bound the `f` impact of freezing:
+    `f = eta·(1 + e_eff)/2`, so the dip-to-dip `e_eff` drop costs at most `eta·delta_e/2 ≤
+    delta_e/2` of `f` (`eta ≈ 1` at the concave dip operating point)."""
+    dip_eq = min(points, key=lambda p: p.e_eff_eq)
+    dip_frozen = min(points, key=lambda p: p.e_eff_frozen_rebound)
+    delta = dip_eq.e_eff_eq - dip_frozen.e_eff_frozen_rebound
+    return FrozenDipImpact(dip_eq=dip_eq, dip_frozen=dip_frozen, delta_f_max=delta / 2.0)
+
+
+def write_frozen_summary(
+    points: list[FrozenPoint], path: Path = DEFAULT_FROZEN_SUMMARY_PATH
+) -> None:
+    """Write the freeze-timing bracket to a CSV (header = the `FrozenPoint` field names)."""
+    header = [f.name for f in fields(FrozenPoint)]
+    _write_csv(header, ([getattr(p, name) for name in header] for p in points), path)
+
+
+def plot_frozen(
+    points: list[FrozenPoint],
+    impact: FrozenDipImpact,
+    out_dir: Path = DEFAULT_PLOT_DIR,
+    tag: str = "",
+) -> list[Path]:
+    """Render the freeze-timing bracket around the equilibrium `e_eff(v)` curve: pure-H2O
+    no-chemistry above, sudden-freeze-at-turnaround below (with its rho-spread shaded), the two
+    dips annotated. matplotlib is imported lazily (the `sci` extra) on the headless Agg backend."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    v = [p.v / 1000.0 for p in points]
+    fig, ax = plt.subplots()
+    ax.fill_between(
+        v,
+        [p.e_eff_frozen_min for p in points],
+        [p.e_eff_frozen_max for p in points],
+        alpha=0.15,
+        color="C3",
+        label=r"frozen-rebound spread over $\rho$",
+    )
+    ax.plot(
+        v,
+        [p.e_eff_frozen_all for p in points],
+        "^--",
+        color="C2",
+        label="frozen throughout (no chemistry — freeze before plate)",
+    )
+    ax.plot(
+        v,
+        [p.e_eff_eq for p in points],
+        "o-",
+        color="C0",
+        label="equilibrium (study curve)",
+    )
+    ax.plot(
+        v,
+        [p.e_eff_frozen_rebound for p in points],
+        "v-",
+        color="C3",
+        label="sudden freeze at turnaround (freeze after plate)",
+    )
+    dip = impact.dip_frozen
+    ax.annotate(
+        f"frozen dip {dip.e_eff_frozen_rebound:.3f}\n@ {dip.v / 1000.0:.0f} km/s",
+        xy=(dip.v / 1000.0, dip.e_eff_frozen_rebound),
+        xytext=(6, -24),
+        textcoords="offset points",
+        fontsize="small",
+        color="C3",
+    )
+    ax.set_xlabel(r"impact speed $v$ [km/s]")
+    ax.set_ylabel(r"$e_\mathrm{eff}$")
+    ax.set_title(r"Freeze-timing bracket on $e_\mathrm{eff}(v)$ (EOS-only)")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best", fontsize="small")
+    path = out_dir / f"{tag}frozen_e_eff_v.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return [path]
+
+
+def _run_frozen(frozen_path: Path, summary_path: Path, plot_dir: Path, tag: str) -> None:
+    """The `--axis frozen` path: read the frozen sweep, build the freeze-timing bracket, write the
+    CSV, render the overlay, and report the worst-case dip shift and its `f` impact bound."""
+    rows = read_frozen(frozen_path)
+    points = frozen_frontier(rows)
+    impact = frozen_dip_impact(points)
+    write_frozen_summary(points, summary_path)
+    figs = plot_frozen(points, impact, plot_dir, tag)
+    jump_max = max(abs(r.swap_energy_jump_frac) for r in rows)
+    print(
+        f"python: equilibrium dip e_eff={impact.dip_eq.e_eff_eq:.4f} "
+        f"@ {impact.dip_eq.v / 1000.0:.0f} km/s; sudden-freeze dip "
+        f"e_eff={impact.dip_frozen.e_eff_frozen_rebound:.4f} "
+        f"@ {impact.dip_frozen.v / 1000.0:.0f} km/s "
+        f"(delta_e={impact.dip_eq.e_eff_eq - impact.dip_frozen.e_eff_frozen_rebound:+.4f})."
+    )
+    print(
+        f"python: worst-case f impact of frozen recombination <= {impact.delta_f_max:.4f} "
+        f"(delta_f = eta*delta_e/2 at eta=1); splice energy-jump diagnostic max "
+        f"{jump_max:.2e} of incident KE."
+    )
+    print(f"python: wrote {summary_path} and {len(figs)} figure(s): " + ", ".join(map(str, figs)))
+
+
 def main() -> None:
     """Read a sweep, extract the frontier, write the CSV summary, and render the figures. `--axis
     rho` (default) builds the `e_eff(rho)` frontier + loss decomposition for the high-v/low-v
@@ -1179,7 +1371,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="e_eff frontier extraction + loss decomposition.")
     parser.add_argument(
         "--axis",
-        choices=["rho", "v", "geometry", "survivability", "margin", "ablating"],
+        choices=["rho", "v", "geometry", "survivability", "margin", "ablating", "frozen"],
         default="rho",
         help="frontier axis",
     )
@@ -1243,6 +1435,12 @@ def main() -> None:
             plot_dir,
             tag,
         )
+        return
+
+    if args.axis == "frozen":
+        frozen_path: Path = args.sweep or DEFAULT_FROZEN_PATH
+        summary_path = args.summary or DEFAULT_FROZEN_SUMMARY_PATH
+        _run_frozen(frozen_path, summary_path, plot_dir, tag)
         return
 
     sweep_path: Path = args.sweep or DEFAULT_SWEEP_PATH

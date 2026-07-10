@@ -74,6 +74,54 @@ def test_opacity_scales_as_kramers() -> None:
     np.testing.assert_allclose(kappa_r[0, 1], kappa_r[0, 0] * 2.0**-3.5, rtol=1e-12)
 
 
+def test_frozen_table_satisfies_loader_contract_and_matches_reference() -> None:
+    """The frozen-composition table obeys the loader contract, records its freeze state in the
+    provenance, and agrees with the equilibrium EOS at the freeze reference state."""
+    from puffsat import eos_water as ew
+
+    rho_star, t_star = 1.0, 12_000.0
+    table = tables.build_table_frozen(
+        rho_star, t_star, rho_range=(0.05, 5.0), n_rho=6, t_range=(300.0, 50_000.0), n_t=8
+    )
+
+    n_rho, n_t = cast("list[int]", table["shape"])
+    fields = cast("dict[str, list[float]]", table["fields"])
+    assert set(fields) == {"p", "e", "c_s", "kappa_rosseland", "kappa_planck"}
+    for name, vals in fields.items():
+        assert len(vals) == n_rho * n_t, name
+        assert all(v > 0.0 for v in vals), name
+
+    prov = cast("dict[str, object]", table["provenance"])
+    eos_prov = cast("dict[str, object]", prov["eos"])
+    freeze = cast("dict[str, float]", eos_prov["freeze_state"])
+    assert freeze["rho_star"] == rho_star
+    assert freeze["T_star"] == t_star
+
+    # Spot-check one grid node against the frozen EOS it claims to tabulate.
+    rho_grid = cast("list[float]", table["rho_grid"])
+    t_grid = cast("list[float]", table["T_grid"])
+    y = ew.frozen_composition(rho_star, t_star)
+    p_ref, e_ref = ew.pressure_energy_frozen(rho_grid[2], t_grid[3], y)
+    np.testing.assert_allclose(fields["p"][2 * n_t + 3], p_ref, rtol=1e-12)
+    np.testing.assert_allclose(fields["e"][2 * n_t + 3], e_ref, rtol=1e-12)
+
+
+def test_frozen_table_pure_h2o() -> None:
+    """`build_table_frozen_h2o` tabulates the chemistry-free (freeze-before-the-plate) EOS."""
+    from puffsat import eos_water as ew
+
+    table = tables.build_table_frozen_h2o(
+        rho_range=(0.05, 5.0), n_rho=5, t_range=(300.0, 50_000.0), n_t=6
+    )
+    _n_rho, n_t = cast("list[int]", table["shape"])
+    fields = cast("dict[str, list[float]]", table["fields"])
+    rho_grid = cast("list[float]", table["rho_grid"])
+    t_grid = cast("list[float]", table["T_grid"])
+    p_ref, e_ref = ew.pressure_energy_frozen(rho_grid[1], t_grid[4], ew.PURE_H2O_FROZEN)
+    np.testing.assert_allclose(fields["p"][1 * n_t + 4], p_ref, rtol=1e-12)
+    np.testing.assert_allclose(fields["e"][1 * n_t + 4], e_ref, rtol=1e-12)
+
+
 def test_lowv_table_has_liquid_frac_and_loader_contract() -> None:
     """The Rung C / B-flux low-v table (CoolProp) carries `liquid_frac` and `k_gas` fields; the six
     log-fields (incl. `k_gas`) stay positive and `liquid_frac` is in `[0,1]`. (Skipped without the

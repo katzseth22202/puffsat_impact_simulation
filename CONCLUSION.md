@@ -57,6 +57,19 @@ third-decimal shifts inside the ±0.03 numerics band. The honest statement is un
 best survivable `f` lands at `≈ 0.78–0.83` across the envelope, centered on the paper's `0.8`,
 with the worst case (the dip) just under the line and the top of the envelope above it.
 
+**Freeze-timing bracket (frozen recombination) — the largest quantified physics uncertainty**
+([ADR-0026](docs/adr/0026-frozen-recombination-bracket.md)). The equilibrium EOS *returns* the
+banked dissociation/ionization energy during the rebound — the one assumption stacked
+optimistically, and one a FLASH cross-check with the same equilibrium EOS would silently share.
+Bounding the freeze timing both ways: freezing the composition at turnaround (maximal,
+"freeze-after-the-plate" bound) drops the dip `e_eff` 0.570 → 0.398 (best survivable `f`
+≈ 0.69 dip / ≈ 0.74 at 16 km/s — **below the gate**); chemistry-free pure H₂O
+("freeze-before-the-plate") raises it to 0.661 (`f` ≈ 0.81–0.82). The equilibrium curve stays
+the headline because three-body recombination at the probed turnaround densities
+(`n ~ 10²⁰–10²¹ cm⁻³`) is ~10²–10³× faster than the ~µs rebound, so the gas tracks equilibrium
+through the dense phase where the momentum is exchanged — the sudden-freeze end is a bound,
+not an expectation. But any external quotation of `f` should carry this bracket.
+
 **Loss budget at 16 km/s** (`data/results/frontier.csv`): of the momentum *not* returned,
 ≈ 76–80 % is lost to the radiative wall flux and the remaining ≈ 20–24 % escapes to space;
 conductive loss is negligible on the pulse timescale (Rung C). The ablating wall recovers a real
@@ -71,9 +84,17 @@ fillable ([ADR-0014](docs/adr/0014-ablating-wall.md)).
 - **Independent hydrocode cross-check (FLASH).** Everything above is from this study's own
   solvers. Per ADR-0009 (2026-06 amendment), a preliminary `f` is quotable in the white paper
   ahead of this, framed as single-code; the cross-check is what promotes it from *preliminary* to
-  *validated*. This is the single remaining gate.
+  *validated*. This is the single remaining gate. **Note:** a cross-check run with an equilibrium
+  EOS does *not* discharge the freeze-timing caveat below — it shares the assumption
+  ([ADR-0026](docs/adr/0026-frozen-recombination-bracket.md)).
 
-**Two non-blocking refinements (sharpen a known floor; cannot move the verdict):**
+**Three non-blocking refinements (sharpen a known floor; cannot move the verdict):**
+
+- **Finite-rate recombination chemistry.** The freeze-timing bracket above is two-sided and its
+  physical end is argued from the recombination timescale (~10²–10³× faster than the rebound at
+  turnaround densities); a partial-equilibrium/freeze-out-density rung would interpolate the
+  bracket rather than move the headline (ADR-0026). Named here because the pessimistic bound —
+  unlike every other refinement — does cross the gate.
 
 - **Real opacity table.** Never pulled (data source firewall-blocked). The dip is EOS-sink-limited,
   not opacity-limited, and `e_eff` was shown insensitive to opacity (≤ 1.6 % over a 100× sweep in

@@ -586,3 +586,107 @@ def test_plot_ablating_writes_file(tmp_path: Path) -> None:
     saved = an.plot_ablating(pts, tmp_path)
     assert len(saved) == 1
     assert saved[0].exists() and saved[0].stat().st_size > 0
+
+
+# ---- Frozen-recombination bounding sweep (freeze-timing brackets) -------------------------------
+
+
+def _frow(v: float, rho: float, e_eq: float, e_frozen: float, e_all: float) -> dict[str, float]:
+    """A frozen-sweep row: the three e_eff curves at one (v, rho) case."""
+    return {
+        "v": v,
+        "rho_impact": rho,
+        "e_eff_eq": e_eq,
+        "e_eff_frozen_rebound": e_frozen,
+        "e_eff_frozen_all": e_all,
+        "rho_star": 4.0,
+        "t_star": 12_000.0,
+        "swap_energy_jump_frac": 0.01,
+    }
+
+
+def test_frozen_frontier_sorts_means_and_orders(tmp_path: Path) -> None:
+    """The frozen frontier rho-means each curve per velocity (ascending in v), and carries the
+    freeze-timing deltas: `delta_frozen = e_eq - e_frozen_rebound >= 0` (locked chemistry weakens
+    the rebound) and `delta_all = e_all - e_eq` (no sink at all strengthens it)."""
+    path = tmp_path / "frozen.jsonl"
+    _write_jsonl(
+        path,
+        [
+            # v = 11 km/s listed *after* 9 km/s reversed rho order: exercises sorting + meaning.
+            _frow(11_000.0, 0.32, 0.60, 0.50, 0.80),
+            _frow(11_000.0, 0.16, 0.58, 0.48, 0.78),
+            _frow(9_000.0, 0.32, 0.66, 0.60, 0.82),
+            _frow(9_000.0, 0.16, 0.64, 0.58, 0.80),
+        ],
+    )
+    pts = an.frozen_frontier(an.read_frozen(path))
+
+    assert [p.v for p in pts] == [9_000.0, 11_000.0]
+    assert pts[1].e_eff_eq == pytest.approx(0.59)
+    assert pts[1].e_eff_frozen_rebound == pytest.approx(0.49)
+    assert pts[1].e_eff_frozen_all == pytest.approx(0.79)
+    assert pts[1].delta_frozen == pytest.approx(0.10)
+    assert pts[1].e_eff_frozen_min == pytest.approx(0.48)
+    assert pts[1].e_eff_frozen_max == pytest.approx(0.50)
+
+
+def test_frozen_dip_impact_reports_worst_case_shift() -> None:
+    """`frozen_dip_impact` finds the minimum of each curve and translates the worst-case
+    freeze-timing shift into the f-impact bound `delta_f = eta·delta_e/2` at `eta = 1`."""
+    pts = [
+        an.FrozenPoint(
+            v=v,
+            e_eff_eq=e_eq,
+            e_eff_frozen_rebound=e_fr,
+            e_eff_frozen_all=e_all,
+            delta_frozen=e_eq - e_fr,
+            e_eff_frozen_min=e_fr,
+            e_eff_frozen_max=e_fr,
+        )
+        for v, e_eq, e_fr, e_all in [
+            (9_000.0, 0.62, 0.55, 0.80),
+            (11_000.0, 0.57, 0.47, 0.78),  # both dips here
+            (13_000.0, 0.60, 0.52, 0.82),
+        ]
+    ]
+    impact = an.frozen_dip_impact(pts)
+    assert impact.dip_eq.v == 11_000.0
+    assert impact.dip_frozen.v == 11_000.0
+    assert impact.dip_eq.e_eff_eq == pytest.approx(0.57)
+    assert impact.dip_frozen.e_eff_frozen_rebound == pytest.approx(0.47)
+    # Worst-case f shift at eta = 1: half the dip-to-dip e_eff drop.
+    assert impact.delta_f_max == pytest.approx((0.57 - 0.47) / 2.0)
+
+
+def test_write_frozen_summary_has_header_and_rows(tmp_path: Path) -> None:
+    """The frozen CSV carries one header plus one row per velocity."""
+    path = tmp_path / "frozen.jsonl"
+    _write_jsonl(
+        path,
+        [_frow(v, rho, 0.6, 0.5, 0.8) for v in (9_000.0, 11_000.0) for rho in (0.16, 0.32)],
+    )
+    pts = an.frozen_frontier(an.read_frozen(path))
+    out = tmp_path / "frontier_frozen.csv"
+    an.write_frozen_summary(pts, out)
+    table = out.read_text().strip().splitlines()
+    assert table[0].startswith("v,")
+    assert len(table) == 1 + len(pts)
+
+
+def test_plot_frozen_writes_file(tmp_path: Path) -> None:
+    """The freeze-timing overlay figure renders (skipped without matplotlib)."""
+    pytest.importorskip("matplotlib")
+    path = tmp_path / "frozen.jsonl"
+    _write_jsonl(
+        path,
+        [
+            _frow(v, rho, 0.6 - 0.001 * v / 1000.0, 0.5, 0.8)
+            for v in (9_000.0, 11_000.0, 13_000.0)
+            for rho in (0.16, 0.32)
+        ],
+    )
+    pts = an.frozen_frontier(an.read_frozen(path))
+    saved = an.plot_frozen(pts, an.frozen_dip_impact(pts), tmp_path)
+    assert len(saved) == 1
+    assert saved[0].exists() and saved[0].stat().st_size > 0

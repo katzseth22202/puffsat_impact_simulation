@@ -764,6 +764,148 @@ impl Tube<TableEos> {
     }
 }
 
+/// Outcome of a sudden-freeze bounce ([`Tube::run_bounce_frozen_rebound`]): the usual
+/// [`BounceResult`] plus the freeze-instant diagnostics of the frozen-recombination bounding run.
+#[derive(Debug, Clone, Copy)]
+pub struct FreezeBounceResult {
+    /// The usual restitution/impulse bookkeeping over the *whole* bounce (both EOS phases).
+    pub bounce: BounceResult,
+    /// Mass-weighted mean density at the freeze instant (global momentum zero) [kg/m³];
+    /// `0` if the gas never turned around within the step cap.
+    pub rho_star: f64,
+    /// Mass-weighted mean temperature at the freeze instant [K]; `0` if never turned around.
+    pub t_star: f64,
+    /// Total internal-energy jump `Σ m_j (e_new − e_old)` across the EOS-swap re-seed (per unit
+    /// wall area) — the splice-consistency diagnostic. Exactly the per-cell mismatch between the
+    /// frozen table (one composition for the whole slug) and each cell's own state at the freeze
+    /// instant; `0` when no swap happened.
+    pub swap_energy_jump: f64,
+}
+
+impl Tube<TableEos> {
+    /// Mass-weighted mean `(ρ, T)` over the slug — the freeze reference state recorded at
+    /// turnaround (the probe output the frozen-composition table is generated from).
+    fn mass_weighted_state(&self) -> (f64, f64) {
+        let mut m_tot = 0.0;
+        let mut rho_mean = 0.0;
+        let mut t_mean = 0.0;
+        for j in 0..self.cells() {
+            let m = self.mass[j];
+            let rho = self.density(j);
+            m_tot += m;
+            rho_mean += m * rho;
+            t_mean += m * self.eos.temperature(rho, self.energy[j]);
+        }
+        (rho_mean / m_tot, t_mean / m_tot)
+    }
+
+    /// Swap the tube's EOS for `new_eos`, re-seeding every cell's specific internal energy at its
+    /// **current temperature**: `e_j → e_new(ρ_j, T_j)` with `T_j` inverted from the old EOS. This
+    /// is the sudden-freeze splice: temperature (and, to the accuracy of the shared freeze
+    /// composition, pressure) is continuous across the swap, and any chemical energy the new
+    /// table carries as a constant offset is inert thereafter. Cells whose temperature inversion
+    /// clamps at a grid edge (vacuum-cooled free-surface tail, including `e = 0` floored cells)
+    /// carry their out-of-table energy *deficit/excess* across the tables' zero-point shift at
+    /// that edge — they must not keep their raw energy, or a new table with a large chemical
+    /// offset would leave them far below its energy floor, where the pressure response is flat
+    /// (temperature clamped) and neighbouring cells crush them without limit (a `dt → 0`
+    /// collapse). Returns the total energy jump `Σ m_j (e_new − e_old)` as the consistency
+    /// diagnostic.
+    fn swap_eos_reseed_temperature(&mut self, new_eos: TableEos) -> f64 {
+        let t_grid = self.eos.table().t_grid();
+        let (t_lo, t_hi) = (t_grid[0], t_grid[t_grid.len() - 1]);
+        let mut jump = 0.0;
+        for j in 0..self.cells() {
+            let rho = self.density(j);
+            let e_old = self.energy[j];
+            let t = self.eos.temperature(rho, e_old);
+            let e_new = if t <= t_lo {
+                new_eos.table().energy(rho, t_lo) - (self.eos.table().energy(rho, t_lo) - e_old)
+            } else if t >= t_hi {
+                new_eos.table().energy(rho, t_hi) + (e_old - self.eos.table().energy(rho, t_hi))
+            } else {
+                new_eos.table().energy(rho, t)
+            };
+            jump += self.mass[j] * (e_new - e_old);
+            self.energy[j] = e_new;
+        }
+        self.eos = new_eos;
+        jump
+    }
+
+    /// [`Tube::run_bounce`] with a **sudden freeze at turnaround** — the frozen-recombination
+    /// bounding run (equilibrium in, frozen out; the classic nozzle-flow sudden-freeze
+    /// approximation applied at the instant of global stagnation, where the chemical store is
+    /// maximal).
+    ///
+    /// Compression runs on the tube's own (equilibrium) EOS. At the first instant the total gas
+    /// momentum crosses zero, the mass-weighted `(ρ*, T*)` is recorded and — if `frozen` is
+    /// `Some` — the EOS is swapped for the frozen-composition table via the temperature-continuous
+    /// re-seed, so the rebound returns **no** chemical (dissociation/ionization) energy. With
+    /// `frozen = None` this is a plain bounce that additionally reports `(ρ*, T*)` (the probe
+    /// mode that feeds the frozen-table generator).
+    pub fn run_bounce_frozen_rebound(&mut self, frozen: Option<TableEos>) -> FreezeBounceResult {
+        let p_initial = self.total_momentum();
+        let incident = p_initial.abs();
+        let mut frozen = frozen;
+        let mut wall_impulse = 0.0;
+        let mut peak: f64 = 0.0;
+        let mut peak_pressure: f64 = 0.0;
+        let mut past_peak = false;
+        let mut turned_around = false;
+        let mut rho_star = 0.0;
+        let mut t_star = 0.0;
+        let mut swap_energy_jump = 0.0;
+        let mut force_old = self.wall_force();
+        let mut p_old = p_initial;
+        let max_steps = 400 * self.cells() + 10_000;
+
+        for _ in 0..max_steps {
+            peak = peak.max(force_old);
+            peak_pressure = peak_pressure.max(self.wall_pressure());
+            if force_old < 0.5 * peak {
+                past_peak = true;
+            }
+            if past_peak && force_old < 1e-3 * peak {
+                break;
+            }
+            let dt = self.stable_dt();
+            self.step(dt);
+            let force_new = self.wall_force();
+            wall_impulse += 0.5 * dt * (force_old + force_new);
+            force_old = force_new;
+
+            let p_new = self.total_momentum();
+            if !turned_around && p_old < 0.0 && p_new >= 0.0 {
+                turned_around = true;
+                (rho_star, t_star) = self.mass_weighted_state();
+                if let Some(new_eos) = frozen.take() {
+                    swap_energy_jump = self.swap_eos_reseed_temperature(new_eos);
+                    // The wall force is (mildly) discontinuous across the swap; re-read it so the
+                    // next trapezoid uses the frozen-EOS pressure.
+                    force_old = self.wall_force();
+                }
+            }
+            p_old = p_new;
+        }
+
+        let residual = self.total_momentum();
+        FreezeBounceResult {
+            bounce: BounceResult {
+                wall_impulse,
+                incident_momentum: incident,
+                residual_momentum: residual,
+                e_eff: wall_impulse / incident - 1.0,
+                peak_wall_force: peak,
+                peak_wall_pressure: peak_pressure,
+            },
+            rho_star,
+            t_star,
+            swap_energy_jump,
+        }
+    }
+}
+
 /// Outcome of a coupled bounce: the [`BounceResult`] plus the three energy loss channels
 /// (per unit wall area) the rigid wall splits the deficit into (ADR-0016).
 #[derive(Debug, Clone, Copy)]
@@ -1907,6 +2049,133 @@ mod tests {
             cb.loss_conductive > 0.0 && cb.loss_conductive.is_finite(),
             "conduction must bleed a finite, positive amount: {}",
             cb.loss_conductive
+        );
+    }
+
+    // ---- Sudden-freeze splice (frozen-recombination bounding run) ------------------------------
+
+    /// An ideal-gas table with a tunable heat capacity and an inert energy offset:
+    /// `e = cv·T + off`, `p = (γ−1)ρT`, `c_s = √(γ(γ−1)T)`, on `n` log-spaced nodes per axis.
+    /// With `off = 0` every field is a power law in `(ρ, T)`, so the log-log interpolation is
+    /// exact; a nonzero `off` breaks that exactness, which is why the offset test uses a dense
+    /// grid. `cv` rescales the thermal energy pool at fixed pressure — the splice direction knob.
+    fn gas_table_cv_offset(cv: f64, off: f64, n: usize) -> TableEos {
+        let rho_grid: Vec<f64> = (0..n)
+            .map(|i| 0.01 * 1000f64.powf(i as f64 / (n - 1) as f64)) // 0.01 … 10
+            .collect();
+        let t_grid: Vec<f64> = (0..n)
+            .map(|j| 0.05 * 4000f64.powf(j as f64 / (n - 1) as f64)) // 0.05 … 200
+            .collect();
+        let (mut p, mut e, mut cs) = (Vec::new(), Vec::new(), Vec::new());
+        for &r in &rho_grid {
+            for &t in &t_grid {
+                p.push((GAMMA - 1.0) * r * t);
+                e.push(cv * t + off);
+                cs.push((GAMMA * (GAMMA - 1.0) * t).sqrt());
+            }
+        }
+        let one = vec![1e-10; n * n];
+        let json = serde_json::json!({
+            "rho_grid": rho_grid,
+            "T_grid": t_grid,
+            "shape": [n, n],
+            "fields": {
+                "p": p, "e": e, "c_s": cs,
+                "kappa_rosseland": one, "kappa_planck": one,
+            },
+        });
+        TableEos::new(Table::from_json(&json.to_string()).unwrap())
+    }
+
+    /// With `frozen = None` the sudden-freeze runner is a plain [`Tube::run_bounce`] that
+    /// additionally reports a physical turnaround state: same restitution, `ρ*` above the initial
+    /// density (the slug is shock-compressed at stagnation), `T*` above the cold inflow.
+    #[allow(clippy::float_cmp)] // exact: no swap happens, so the jump is the literal 0.0
+    #[test]
+    fn frozen_rebound_probe_matches_plain_bounce() {
+        let table = gas_table_cv_offset(1.0, 0.0, 8);
+        let mach = 5.0;
+        let t0 = 1.0 / (GAMMA * (GAMMA - 1.0) * mach * mach);
+        let plain = slug_with_table(200, mach, table.clone()).run_bounce();
+        let probe = slug_with_table(200, mach, table).run_bounce_frozen_rebound(None);
+
+        assert_relative_eq!(probe.bounce.e_eff, plain.e_eff, max_relative = 1e-12);
+        assert_relative_eq!(
+            probe.bounce.wall_impulse,
+            plain.wall_impulse,
+            max_relative = 1e-12
+        );
+        assert!(
+            probe.rho_star > 1.0,
+            "turnaround slug should be compressed above ρ₀ = 1: {}",
+            probe.rho_star
+        );
+        assert!(
+            probe.t_star > t0,
+            "turnaround slug should be shock-heated above T₀ = {t0}: {}",
+            probe.t_star
+        );
+        assert_eq!(probe.swap_energy_jump, 0.0);
+    }
+
+    /// Swapping in a clone of the *same* table at turnaround is a no-op: the temperature re-seed
+    /// round-trips `e → T → e` exactly (the inversion is the analytic inverse of the forward
+    /// interpolation), so the restitution is unchanged and the energy jump vanishes.
+    #[test]
+    fn frozen_rebound_swap_same_table_is_noop() {
+        let table = gas_table_cv_offset(1.0, 0.0, 8);
+        let plain = slug_with_table(200, 5.0, table.clone()).run_bounce();
+        let swapped =
+            slug_with_table(200, 5.0, table.clone()).run_bounce_frozen_rebound(Some(table));
+
+        assert_relative_eq!(swapped.bounce.e_eff, plain.e_eff, max_relative = 1e-9);
+        let e_scale = swapped.bounce.incident_momentum; // O(ρLv): a per-area energy/momentum scale
+        assert!(
+            swapped.swap_energy_jump.abs() < 1e-9 * e_scale,
+            "same-table re-seed should not move energy: {}",
+            swapped.swap_energy_jump
+        );
+    }
+
+    /// A constant energy offset in the frozen table (`e = T + C`) is **inert**: it shifts the
+    /// energy zero point but exchanges nothing with the thermal pool, so the bounce is unchanged.
+    /// This is the trust the splice puts in the frozen chemical energy `e_chem` — locked, carried,
+    /// never returned. Dense grid: the offset breaks the log-log power-law exactness, so agreement
+    /// is to interpolation error, not round-off.
+    #[test]
+    fn frozen_rebound_inert_offset_does_not_change_the_bounce() {
+        let n = 192;
+        let plain = slug_with_table(200, 5.0, gas_table_cv_offset(1.0, 0.0, n)).run_bounce();
+        let offset = slug_with_table(200, 5.0, gas_table_cv_offset(1.0, 0.0, n))
+            .run_bounce_frozen_rebound(Some(gas_table_cv_offset(1.0, 20.0, n)));
+
+        assert_relative_eq!(offset.bounce.e_eff, plain.e_eff, max_relative = 2e-3);
+        // The re-seed jump is exactly the added offset: C per unit mass, total mass = ρ₀L = 1.
+        assert_relative_eq!(offset.swap_energy_jump, 20.0, max_relative = 2e-2);
+    }
+
+    /// Splice direction: swapping to a table with a **larger** thermal pool at the same `(p, T)`
+    /// (`e = 2T`) strengthens the rebound, a **smaller** pool (`e = T/2`) weakens it — the
+    /// mechanics the frozen-composition bound relies on (the frozen EOS holds less *returnable*
+    /// energy than the equilibrium one).
+    #[test]
+    fn frozen_rebound_thermal_pool_sets_the_rebound_direction() {
+        let e_plain = slug_with_table(200, 5.0, gas_table_cv_offset(1.0, 0.0, 8))
+            .run_bounce()
+            .e_eff;
+        let e_rich = slug_with_table(200, 5.0, gas_table_cv_offset(1.0, 0.0, 8))
+            .run_bounce_frozen_rebound(Some(gas_table_cv_offset(2.0, 0.0, 8)))
+            .bounce
+            .e_eff;
+        let e_poor = slug_with_table(200, 5.0, gas_table_cv_offset(1.0, 0.0, 8))
+            .run_bounce_frozen_rebound(Some(gas_table_cv_offset(0.5, 0.0, 8)))
+            .bounce
+            .e_eff;
+
+        assert!(
+            e_rich > e_plain && e_plain > e_poor,
+            "rebound should order with the swapped-in thermal pool: rich {e_rich} vs plain \
+             {e_plain} vs poor {e_poor}"
         );
     }
 }

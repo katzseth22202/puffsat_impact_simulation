@@ -25,6 +25,7 @@ which interpolates `ln e` (ADR-0007).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -237,23 +238,109 @@ def pressure_energy(rho: float, temp: float) -> tuple[float, float]:
     return p, e
 
 
-def sound_speed(rho: float, temp: float) -> float:
-    """Equilibrium adiabatic sound speed `c_s = sqrt((dp/drho)_s)` [m/s], by central differences.
-
-    `c_s^2 = (dp/drho)_T + T (dp/dT)_rho^2 / (rho^2 c_v)`, with `c_v = (de/dT)_rho` -- the standard
-    decomposition that reuses the EOS evaluated at neighbouring states.
+def _sound_speed_fd(
+    pe: Callable[[float, float], tuple[float, float]], rho: float, temp: float
+) -> float:
+    """Adiabatic sound speed `c_s = sqrt((dp/drho)_s)` [m/s] for any `(p, e)(rho, T)` EOS, by
+    central differences: `c_s^2 = (dp/drho)_T + T (dp/dT)_rho^2 / (rho^2 c_v)`, with
+    `c_v = (de/dT)_rho` -- the standard decomposition that reuses the EOS at neighbouring states.
     """
     d = 1e-4
-    p_rp, _ = pressure_energy(rho * (1.0 + d), temp)
-    p_rm, _ = pressure_energy(rho * (1.0 - d), temp)
-    p_tp, e_tp = pressure_energy(rho, temp * (1.0 + d))
-    p_tm, e_tm = pressure_energy(rho, temp * (1.0 - d))
+    p_rp, _ = pe(rho * (1.0 + d), temp)
+    p_rm, _ = pe(rho * (1.0 - d), temp)
+    p_tp, e_tp = pe(rho, temp * (1.0 + d))
+    p_tm, e_tm = pe(rho, temp * (1.0 - d))
 
     dp_drho_t = (p_rp - p_rm) / (2.0 * d * rho)
     dp_dt_rho = (p_tp - p_tm) / (2.0 * d * temp)
     c_v = (e_tp - e_tm) / (2.0 * d * temp)
     cs2 = dp_drho_t + temp * dp_dt_rho**2 / (rho**2 * c_v)
     return float(np.sqrt(max(cs2, 0.0)))
+
+
+def sound_speed(rho: float, temp: float) -> float:
+    """Equilibrium adiabatic sound speed `c_s` [m/s] (see `_sound_speed_fd`)."""
+    return _sound_speed_fd(pressure_energy, rho, temp)
+
+
+# ---- Frozen-composition EOS (sudden-freeze bounding runs) --------------------------------------
+#
+# The equilibrium EOS above lets recombination return the dissociation/ionization energy during
+# re-expansion. If the chemistry *freezes* (the nozzle-flow effect: three-body recombination rates
+# collapse as the rebounding gas rarefies), the composition stops tracking equilibrium and that
+# chemical energy stays locked. This block is the EOS for that regime: the same species set held at
+# **fixed** per-formula-unit fractions `y_i = n_i / n_f`, so the mixture is a plain ideal gas with a
+# constant mean molecular weight and a constant (inert) chemical energy offset. Used by the
+# frozen-recombination bounding runs: frozen at the turnaround state (pessimistic, freeze *after*
+# the plate) and frozen pure H2O (optimistic, freeze *before* the plate — no sink at all).
+
+
+@dataclass(frozen=True)
+class FrozenComposition:
+    """Species fractions per H2O formula unit, `y_i = n_i / n_f`, held fixed (no chemistry)."""
+
+    y_h2o: float
+    y_h: float
+    y_o: float
+    y_hp: float
+    y_op: float
+    y_e: float
+
+
+PURE_H2O_FROZEN = FrozenComposition(1.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+"""Undissociated molecular water with the chemistry switched off (freeze-before-the-plate)."""
+
+
+def frozen_composition(rho_ref: float, t_ref: float) -> FrozenComposition:
+    """Freeze the equilibrium composition at the reference state `(rho_ref, t_ref)`."""
+    comp = composition(rho_ref, t_ref)
+    n_f = rho_ref / M_H2O
+    return FrozenComposition(
+        y_h2o=comp.n_h2o / n_f,
+        y_h=comp.n_h / n_f,
+        y_o=comp.n_o / n_f,
+        y_hp=comp.n_hp / n_f,
+        y_op=comp.n_op / n_f,
+        y_e=comp.n_e / n_f,
+    )
+
+
+def pressure_energy_frozen(rho: float, temp: float, y: FrozenComposition) -> tuple[float, float]:
+    """Frozen-composition `(p [Pa], e [J/kg])` at `(rho, temp)`.
+
+    Identical energetics to `pressure_energy` except the composition is `y` instead of the
+    equilibrium one — so the chemical term is a *constant* specific-energy offset (locked, never
+    exchanged with the thermal pool), and `p` is ideal with a fixed mean molecular weight.
+    At the freeze reference state the two EOS agree exactly (splice continuity).
+    """
+    n_f = rho / M_H2O
+    y_mono = y.y_h + y.y_o + y.y_hp + y.y_op + y.y_e
+    p = n_f * (y.y_h2o + y_mono) * K_B * temp
+
+    e_thermal = n_f * (1.5 * K_B * temp * y_mono + y.y_h2o * (3.0 * K_B * temp + _e_vib(temp)))
+    e_chem = n_f * (y.y_hp * IP_H + y.y_op * IP_O + (1.0 - y.y_h2o) * D_AT)
+    return p, (e_thermal + e_chem) / rho
+
+
+def sound_speed_frozen(rho: float, temp: float, y: FrozenComposition) -> float:
+    """Frozen adiabatic sound speed `c_s` [m/s] (see `_sound_speed_fd`)."""
+    return _sound_speed_fd(lambda r, t: pressure_energy_frozen(r, t, y), rho, temp)
+
+
+def eos_grid_frozen(rho_grid: Vec, t_grid: Vec, y: FrozenComposition) -> tuple[Vec, Vec, Vec]:
+    """Evaluate the frozen `(p, e, c_s)` on the full `(rho, T)` grid, row-major over `(rho, T)`.
+
+    Closed-form per node (no Newton solve), so this is cheap even on the production grid.
+    """
+    n_rho, n_t = len(rho_grid), len(t_grid)
+    p = np.empty((n_rho, n_t))
+    e = np.empty((n_rho, n_t))
+    cs = np.empty((n_rho, n_t))
+    for i, rho in enumerate(rho_grid):
+        for j, temp in enumerate(t_grid):
+            p[i, j], e[i, j] = pressure_energy_frozen(float(rho), float(temp), y)
+            cs[i, j] = sound_speed_frozen(float(rho), float(temp), y)
+    return p, e, cs
 
 
 def eos_grid(rho_grid: Vec, t_grid: Vec) -> tuple[Vec, Vec, Vec]:

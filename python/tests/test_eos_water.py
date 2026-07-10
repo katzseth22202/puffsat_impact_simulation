@@ -87,3 +87,88 @@ def test_sound_speed_cold_vapor_is_physical() -> None:
     cs = ew.sound_speed(0.32, 400.0)
     ideal = np.sqrt(1.3 * R_WATER * 400.0)
     assert 0.7 * ideal < cs < 1.3 * ideal
+
+
+# ---- Frozen-composition EOS (sudden-freeze bounding runs, frozen-recombination check) ----------
+
+
+def test_frozen_fractions_conserve_elements_and_charge() -> None:
+    """The frozen fractions inherit the equilibrium invariants: O nuclei sum to 1 per formula
+    unit, H:O stays 2:1, and the gas is electrically neutral."""
+    y = ew.frozen_composition(1.0, 12_000.0)
+    np.testing.assert_allclose(y.y_h2o + y.y_o + y.y_op, 1.0, rtol=1e-8)
+    np.testing.assert_allclose(2.0 * y.y_h2o + y.y_h + y.y_hp, 2.0, rtol=1e-8)
+    np.testing.assert_allclose(y.y_e, y.y_hp + y.y_op, rtol=1e-6)
+    # The reference state is chosen hot enough to be meaningfully dissociated.
+    assert y.y_h2o < 0.5
+
+
+def test_frozen_at_reference_state_matches_equilibrium() -> None:
+    """Freezing the composition at `(rho*, T*)` reproduces the equilibrium `p` and `e` *at that
+    state* exactly — the splice's continuity requirement at the freeze instant."""
+    rho, temp = 1.0, 12_000.0
+    y = ew.frozen_composition(rho, temp)
+    p_eq, e_eq = ew.pressure_energy(rho, temp)
+    p_fr, e_fr = ew.pressure_energy_frozen(rho, temp, y)
+    np.testing.assert_allclose(p_fr, p_eq, rtol=1e-8)
+    np.testing.assert_allclose(e_fr, e_eq, rtol=1e-8)
+
+
+def test_frozen_pure_h2o_has_no_chemical_sink() -> None:
+    """`PURE_H2O_FROZEN` (freeze *before* the plate) is chemistry-free water vapor: it matches
+    the equilibrium EOS cold, and stores far less energy hot (no dissociation/ionization sink)."""
+    p_fr, e_fr = ew.pressure_energy_frozen(0.32, 400.0, ew.PURE_H2O_FROZEN)
+    p_eq, e_eq = ew.pressure_energy(0.32, 400.0)
+    np.testing.assert_allclose(p_fr, p_eq, rtol=1e-3)
+    np.testing.assert_allclose(e_fr, e_eq, rtol=1e-3)
+
+    _, e_hot_fr = ew.pressure_energy_frozen(0.32, 30_000.0, ew.PURE_H2O_FROZEN)
+    _, e_hot_eq = ew.pressure_energy(0.32, 30_000.0)
+    assert e_hot_fr < 0.5 * e_hot_eq
+
+
+def test_frozen_composition_locks_chemical_energy_on_cooling() -> None:
+    """Cooling a frozen dissociated gas returns only its thermal energy; the equilibrium path
+    returns the chemical energy too — the whole point of the pessimistic bound."""
+    rho, t_hot, t_cold = 1.0, 12_000.0, 600.0
+    y = ew.frozen_composition(rho, t_hot)
+
+    _, e_hot_eq = ew.pressure_energy(rho, t_hot)
+    _, e_cold_eq = ew.pressure_energy(rho, t_cold)
+    _, e_hot_fr = ew.pressure_energy_frozen(rho, t_hot, y)
+    _, e_cold_fr = ew.pressure_energy_frozen(rho, t_cold, y)
+
+    released_eq = e_hot_eq - e_cold_eq
+    released_fr = e_hot_fr - e_cold_fr
+    assert released_fr > 0.0
+    # Equilibrium recovers the (large) chemical store on top of the thermal energy.
+    assert released_eq > 1.5 * released_fr
+    # The locked chemical energy survives in the cold frozen state.
+    e_chem = (y.y_hp * ew.IP_H + y.y_op * ew.IP_O + (1.0 - y.y_h2o) * ew.D_AT) / ew.M_H2O
+    assert e_chem > 0.0
+    assert e_cold_fr > e_chem
+
+
+def test_frozen_grid_positive_and_monotone() -> None:
+    """The frozen EOS obeys the same loader invariants as the equilibrium one (ADR-0007):
+    positive `p`, `e`, `c_s` and strictly increasing `e(T)` at fixed `rho`."""
+    y = ew.frozen_composition(1.0, 12_000.0)
+    rho_grid = np.array([0.16, 0.32, 0.64])
+    t_grid = np.geomspace(300.0, 50_000.0, 40)
+    p, e, cs = ew.eos_grid_frozen(rho_grid, t_grid, y)
+
+    assert np.all(p > 0.0)
+    assert np.all(e > 0.0)
+    assert np.all(cs > 0.0)
+    assert np.all(np.diff(e, axis=1) > 0.0)
+
+
+def test_frozen_sound_speed_is_ideal_mixture_like() -> None:
+    """At fixed composition the gas is an ideal mixture, so `c_s^2 = gamma p/rho` with
+    `1 < gamma <= 5/3` (monatomic ceiling)."""
+    y = ew.frozen_composition(1.0, 12_000.0)
+    for temp in (2_000.0, 12_000.0, 40_000.0):
+        p, _ = ew.pressure_energy_frozen(1.0, temp, y)
+        cs = ew.sound_speed_frozen(1.0, temp, y)
+        gamma = cs * cs * 1.0 / p
+        assert 1.0 < gamma <= 5.0 / 3.0 + 1e-6

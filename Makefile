@@ -3,7 +3,7 @@
 
 PY := uv run python
 
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen
 
 all: smoke
 
@@ -149,6 +149,36 @@ analysis-ablating: data/results/frontier_ablating.csv
 
 data/results/frontier_ablating.csv: data/results/sweep_ablating.jsonl data/results/sweep_geometry.jsonl data/results/sweep.jsonl python/puffsat/analysis.py
 	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis --axis ablating
+
+## sweep-frozen-probe: turnaround-state probe for the frozen-recombination check (audit finding 3)
+## -> data/results/frozen_probe.jsonl. EOS-only transitional grid; records each case's mass-weighted
+## (rho*, T*) at global momentum zero.
+sweep-frozen-probe: data/results/frozen_probe.jsonl
+
+data/results/frozen_probe.jsonl: data/tables/water.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --frozen-probe
+
+## tables-frozen: per-case frozen-composition tables (sudden-freeze rebound EOS) + the pure-H2O
+## no-chemistry bracket -> data/tables/frozen/. Depends on the probe.
+tables-frozen: data/tables/frozen/h2o.json
+
+data/tables/frozen/h2o.json: data/results/frozen_probe.jsonl python/puffsat/eos_water.py python/puffsat/tables.py
+	PYTHONPATH=python $(PY) -m puffsat.tables --frozen-from-probe data/results/frozen_probe.jsonl
+
+## sweep-frozen: the three-curve frozen-recombination bounding sweep (equilibrium vs
+## freeze-after-the-plate vs freeze-before-the-plate) -> data/results/sweep_frozen.jsonl
+sweep-frozen: data/results/sweep_frozen.jsonl
+
+data/results/sweep_frozen.jsonl: data/tables/frozen/h2o.json data/tables/water.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	cargo run --release -p sweep -- --frozen
+
+## analysis-frozen: e_eff(v) freeze-timing bracket overlay + dip impact on f ->
+## data/results/frontier_frozen.csv + figure; depends on sweep-frozen.
+analysis-frozen: data/results/frontier_frozen.csv
+
+data/results/frontier_frozen.csv: data/results/sweep_frozen.jsonl python/puffsat/analysis.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis --axis frozen
 
 ## sensitivity: opacity-insensitivity scan (rung B, B5d-3) — sweep at 0.1x/1x/10x opacity, show
 ## e_eff barely moves. Builds the release sweep first; writes data/results/opacity_scan/.

@@ -168,6 +168,125 @@ def build_table(
     }
 
 
+DEFAULT_TABLE_DIR_FROZEN = Path("data/tables/frozen")
+
+
+def frozen_table_name(v: float, rho_impact: float) -> str:
+    """Per-case frozen-table file name — the contract shared with the Rust `--frozen` sweep."""
+    return f"v{round(v):05d}_rho{rho_impact:.2f}.json"
+
+
+def _build_table_frozen_common(
+    y: ew.FrozenComposition,
+    eos_provenance: dict[str, object],
+    rho_range: tuple[float, float],
+    n_rho: int,
+    t_range: tuple[float, float],
+    n_t: int,
+) -> dict[str, object]:
+    """Shared frozen-table assembly: frozen EOS fields + the interim bracketing opacity (unused by
+    the EOS-only frozen bounces, kept for the loader contract) + provenance."""
+    rho_grid = np.geomspace(rho_range[0], rho_range[1], n_rho)
+    t_grid = np.geomspace(t_range[0], t_range[1], n_t)
+
+    p, e, cs = ew.eos_grid_frozen(rho_grid, t_grid, y)
+    kappa_r, kappa_p = opacity_grid(rho_grid, t_grid)
+
+    prov = _provenance(rho_range, n_rho, t_range, n_t, kappa_scale=1.0)
+    prov["generated_by"] = "puffsat.tables.build_table_frozen"
+    prov["eos"] = eos_provenance
+
+    return {
+        "rho_grid": [float(x) for x in rho_grid],
+        "T_grid": [float(x) for x in t_grid],
+        "shape": [n_rho, n_t],
+        "fields": {
+            "p": _flatten(p),
+            "e": _flatten(e),
+            "c_s": _flatten(cs),
+            "kappa_rosseland": _flatten(kappa_r),
+            "kappa_planck": _flatten(kappa_p),
+        },
+        "provenance": prov,
+    }
+
+
+def build_table_frozen(
+    rho_star: float,
+    t_star: float,
+    rho_range: tuple[float, float] = RHO_RANGE,
+    n_rho: int = N_RHO,
+    t_range: tuple[float, float] = T_RANGE,
+    n_t: int = N_T,
+) -> dict[str, object]:
+    """Build a **frozen-composition** ADR-0007 table: the equilibrium composition at the freeze
+    reference state `(rho_star, t_star)` (the bounce's mass-weighted turnaround state) held fixed
+    across the whole grid — the sudden-freeze rebound EOS of the frozen-recombination bounding run.
+    Agrees exactly with the equilibrium table at the reference state (splice continuity)."""
+    y = ew.frozen_composition(rho_star, t_star)
+    eos_prov: dict[str, object] = {
+        "model": "FROZEN-composition water: equilibrium composition at the freeze state held "
+        "fixed (no chemistry); constant chemical energy offset, ideal mixture pressure",
+        "species": ["H2O", "H", "O", "H+", "O+", "e-"],
+        "freeze_state": {"rho_star": rho_star, "T_star": t_star},
+        "fractions_per_formula_unit": {
+            "y_h2o": y.y_h2o,
+            "y_h": y.y_h,
+            "y_o": y.y_o,
+            "y_hp": y.y_hp,
+            "y_op": y.y_op,
+            "y_e": y.y_e,
+        },
+        "energy_reference": "bound molecular H2O at T->0 = 0 (all e > 0)",
+        "status": "sudden-freeze pessimistic bound (frozen-recombination check)",
+    }
+    return _build_table_frozen_common(y, eos_prov, rho_range, n_rho, t_range, n_t)
+
+
+def build_table_frozen_h2o(
+    rho_range: tuple[float, float] = RHO_RANGE,
+    n_rho: int = N_RHO,
+    t_range: tuple[float, float] = T_RANGE,
+    n_t: int = N_T,
+) -> dict[str, object]:
+    """Build the **chemistry-free** pure-H2O frozen table (freeze *before* the plate): molecular
+    water with dissociation/ionization switched off — the optimistic bracket of the
+    frozen-recombination check (no chemical sink at all)."""
+    eos_prov: dict[str, object] = {
+        "model": "FROZEN pure molecular H2O (no dissociation/ionization): thermal-only water "
+        "vapor — the no-chemical-sink bracket",
+        "species": ["H2O"],
+        "energy_reference": "bound molecular H2O at T->0 = 0 (all e > 0)",
+        "status": "freeze-before-the-plate optimistic bound (frozen-recombination check)",
+    }
+    return _build_table_frozen_common(ew.PURE_H2O_FROZEN, eos_prov, rho_range, n_rho, t_range, n_t)
+
+
+def build_frozen_tables_from_probe(probe_path: Path, outdir: Path) -> list[Path]:
+    """Read the Rust `--frozen-probe` JSONL (one `{v, rho_impact, rho_star, t_star}` row per case)
+    and emit one frozen-composition table per case into `outdir`, plus the shared pure-H2O
+    `h2o.json`. Returns the written paths (per-case tables in probe order, then `h2o.json`)."""
+    outdir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    with probe_path.open() as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            table = build_table_frozen(float(row["rho_star"]), float(row["t_star"]))
+            out = outdir / frozen_table_name(float(row["v"]), float(row["rho_impact"]))
+            with out.open("w") as out_fh:
+                json.dump(table, out_fh)
+            written.append(out)
+
+    h2o_out = outdir / "h2o.json"
+    with h2o_out.open("w") as out_fh:
+        json.dump(build_table_frozen_h2o(), out_fh)
+    written.append(h2o_out)
+    return written
+
+
 def build_table_lowv(
     rho_range: tuple[float, float] = RHO_RANGE_LOWV,
     n_rho: int = N_RHO_LOWV,
@@ -245,7 +364,26 @@ def main() -> None:
     parser.add_argument(
         "--lowv", action="store_true", help="build the low-v (Rung C) cool-gas two-phase table"
     )
+    parser.add_argument(
+        "--frozen-from-probe",
+        type=Path,
+        default=None,
+        metavar="PROBE_JSONL",
+        help="build the per-case frozen-composition tables (+ pure-H2O h2o.json) from the Rust "
+        "--frozen-probe output, into --outdir",
+    )
+    parser.add_argument(
+        "--outdir",
+        type=Path,
+        default=DEFAULT_TABLE_DIR_FROZEN,
+        help="output directory for --frozen-from-probe",
+    )
     args = parser.parse_args()
+
+    if args.frozen_from_probe is not None:
+        written = build_frozen_tables_from_probe(args.frozen_from_probe, args.outdir)
+        print(f"python: wrote {len(written)} frozen tables -> {args.outdir}")
+        return
 
     if args.lowv:
         table = build_table_lowv(k_gas_scale=args.k_gas_scale)

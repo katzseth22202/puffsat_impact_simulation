@@ -45,6 +45,9 @@ const RESULT_PATH_TRANS_EOS: &str = "data/results/sweep_transitional_eos.jsonl";
 const RESULT_PATH_TRANS_RAD: &str = "data/results/sweep_transitional_rad.jsonl";
 const RESULT_PATH_GEOMETRY: &str = "data/results/sweep_geometry.jsonl";
 const RESULT_PATH_ABLATING: &str = "data/results/sweep_ablating.jsonl";
+const RESULT_PATH_FROZEN_PROBE: &str = "data/results/frozen_probe.jsonl";
+const RESULT_PATH_FROZEN: &str = "data/results/sweep_frozen.jsonl";
+const TABLE_DIR_FROZEN: &str = "data/tables/frozen";
 
 /// The production `ρ_impact` grid [kg/m³] (design §3-4): the impact-density axis of `e_eff(ρ)`.
 const RHO_GRID: [f64; 4] = [0.16, 0.32, 0.48, 0.64];
@@ -316,6 +319,150 @@ fn run_sweep_transitional(
         .collect::<Vec<_>>()
         .into_iter()
         .unzip()
+}
+
+// ---- Frozen-recombination bounding sweep (audit finding 3) --------------------------------------
+//
+// The equilibrium EOS returns dissociation/ionization energy during the rebound; if recombination
+// *freezes* (three-body rates collapse as the rebounding gas rarefies) that energy stays locked and
+// `e_eff` drops below the equilibrium value — the one approximation the audit flagged as stacked
+// optimistically. Two EOS-only bounding runs per transitional case bracket the freeze timing:
+//
+// - **frozen-rebound** (freeze *after* the plate): equilibrium in, composition frozen at the
+//   mass-weighted turnaround state for the rebound (`Tube::run_bounce_frozen_rebound`, the
+//   sudden-freeze splice) — the pessimistic bound.
+// - **frozen-throughout** (freeze *before* the plate): pure molecular H2O, no chemical sink at all
+//   (`data/tables/frozen/h2o.json`) — the optimistic bound.
+//
+// Two-stage pipeline: `--frozen-probe` records each case's turnaround state `(ρ*, T*)`; the Python
+// table generator (`puffsat.tables --frozen-from-probe`) freezes the equilibrium composition there
+// and emits one table per case into `data/tables/frozen/`; `--frozen` then runs the three curves.
+
+/// One `--frozen-probe` row: the case axes plus the mass-weighted turnaround state the
+/// frozen-composition table is generated at (and the equilibrium EOS-only `e_eff` for reference).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct FrozenProbeRecord {
+    v: f64,
+    rho_impact: f64,
+    /// Mass-weighted mean density at global turnaround [kg/m³].
+    rho_star: f64,
+    /// Mass-weighted mean temperature at global turnaround [K].
+    t_star: f64,
+    /// Equilibrium EOS-only restitution (same run).
+    e_eff_eq: f64,
+}
+
+/// One `--frozen` row: the equilibrium EOS-only curve and its two freeze-timing brackets.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct FrozenRecord {
+    v: f64,
+    rho_impact: f64,
+    /// Equilibrium EOS-only restitution (chemistry returns its energy) — the study's curve.
+    e_eff_eq: f64,
+    /// Sudden-freeze-at-turnaround restitution (freeze *after* the plate) — pessimistic bound.
+    e_eff_frozen_rebound: f64,
+    /// Pure-H2O no-chemistry restitution (freeze *before* the plate) — optimistic bound.
+    e_eff_frozen_all: f64,
+    /// Freeze state the per-case table was generated at (echoed from this run's turnaround).
+    rho_star: f64,
+    t_star: f64,
+    /// EOS-swap re-seed energy jump as a fraction of the incident kinetic energy — the splice
+    /// consistency diagnostic (small ⇒ the single freeze composition represents the slug well).
+    swap_energy_jump_frac: f64,
+}
+
+/// The per-case frozen-table path — the naming contract shared with
+/// `puffsat.tables.frozen_table_name`.
+fn frozen_table_path(v: f64, rho_impact: f64) -> String {
+    // SAFE: v is a positive velocity grid value ≤ 16000, exactly representable and in range.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let v_int = v.round() as u64;
+    format!("{TABLE_DIR_FROZEN}/v{v_int:05}_rho{rho_impact:.2}.json")
+}
+
+/// Probe one EOS-only bounce for its turnaround state (no swap).
+fn run_one_frozen_probe(
+    v: f64,
+    rho_impact: f64,
+    table: &Table,
+    base: &Config,
+) -> FrozenProbeRecord {
+    let cfg = Config { v, ..*base };
+    let eos = TableEos::new(table.clone());
+    let mut tube = Tube::slug_si(
+        cfg.gas_cells,
+        rho_impact,
+        cfg.v,
+        cfg.length,
+        cfg.t0,
+        eos,
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    );
+    let r = tube.run_bounce_frozen_rebound(None);
+    FrozenProbeRecord {
+        v,
+        rho_impact,
+        rho_star: r.rho_star,
+        t_star: r.t_star,
+        e_eff_eq: r.bounce.e_eff,
+    }
+}
+
+/// Run one frozen-recombination case: the equilibrium EOS-only bounce, the sudden-freeze splice
+/// (per-case frozen table), and the pure-H2O no-chemistry bounce.
+fn run_one_frozen(
+    v: f64,
+    rho_impact: f64,
+    table: &Table,
+    frozen_tbl: &Table,
+    h2o_tbl: &Table,
+    base: &Config,
+) -> FrozenRecord {
+    let cfg = Config { v, ..*base };
+    let slug = |eos_tbl: &Table| {
+        Tube::slug_si(
+            cfg.gas_cells,
+            rho_impact,
+            cfg.v,
+            cfg.length,
+            cfg.t0,
+            TableEos::new(eos_tbl.clone()),
+            Viscosity::VON_NEUMANN_RICHTMYER,
+        )
+    };
+
+    let eq = slug(table).run_bounce();
+    let frozen = slug(table).run_bounce_frozen_rebound(Some(TableEos::new(frozen_tbl.clone())));
+    let all = slug(h2o_tbl).run_bounce();
+
+    // Incident kinetic energy per unit wall area: ½ p_in v (p_in = ρLv).
+    let ke_in = 0.5 * frozen.bounce.incident_momentum * cfg.v;
+    FrozenRecord {
+        v,
+        rho_impact,
+        e_eff_eq: eq.e_eff,
+        e_eff_frozen_rebound: frozen.bounce.e_eff,
+        e_eff_frozen_all: all.e_eff,
+        rho_star: frozen.rho_star,
+        t_star: frozen.t_star,
+        swap_energy_jump_frac: frozen.swap_energy_jump / ke_in,
+    }
+}
+
+/// Sweep the transitional `v × ρ` grid in parallel for the frozen-probe pass (input order).
+fn run_sweep_frozen_probe(
+    v_grid: &[f64],
+    rho_grid: &[f64],
+    table: &Table,
+    base: &Config,
+) -> Vec<FrozenProbeRecord> {
+    let grid: Vec<(f64, f64)> = v_grid
+        .iter()
+        .flat_map(|&v| rho_grid.iter().map(move |&rho| (v, rho)))
+        .collect();
+    grid.par_iter()
+        .map(|&(v, rho)| run_one_frozen_probe(v, rho, table, base))
+        .collect()
 }
 
 // ---- Geometry sweep (Rung D follow-on): eta_capture(curvature × L/D × r_foot/R) -----------------
@@ -628,6 +775,61 @@ fn write_rows<T: Serialize>(path: &str, records: &[T]) -> Result<(), Box<dyn std
     Ok(())
 }
 
+/// `--frozen-probe`: run the transitional grid EOS-only and record each case's mass-weighted
+/// turnaround state; the Python table generator freezes the composition there.
+fn frozen_probe_mode() -> Result<(), Box<dyn std::error::Error>> {
+    let table = Table::load(TABLE_PATH)?;
+    let rows = run_sweep_frozen_probe(&V_GRID, &RHO_GRID, &table, &Config::production());
+    write_rows(RESULT_PATH_FROZEN_PROBE, &rows)?;
+    for r in &rows {
+        println!(
+            "rust: v={:.0} rho={:.2} -> turnaround rho*={:.3} T*={:.0} K (e_eff_eq={:.4})",
+            r.v, r.rho_impact, r.rho_star, r.t_star, r.e_eff_eq,
+        );
+    }
+    println!(
+        "rust: wrote {} probe rows -> {RESULT_PATH_FROZEN_PROBE}",
+        rows.len()
+    );
+    Ok(())
+}
+
+/// `--frozen`: the three-curve frozen-recombination bounding sweep (equilibrium vs
+/// sudden-freeze-at-turnaround vs pure-H2O-no-chemistry). Per-case frozen tables are loaded
+/// serially up front (cheap next to the bounces themselves).
+fn frozen_sweep_mode() -> Result<(), Box<dyn std::error::Error>> {
+    let table = Table::load(TABLE_PATH)?;
+    let h2o_tbl = Table::load(format!("{TABLE_DIR_FROZEN}/h2o.json"))?;
+    let base = Config::production();
+    let mut cases = Vec::new();
+    for &v in &V_GRID {
+        for &rho in &RHO_GRID {
+            cases.push((v, rho, Table::load(frozen_table_path(v, rho))?));
+        }
+    }
+    let rows: Vec<FrozenRecord> = cases
+        .par_iter()
+        .map(|(v, rho, frozen_tbl)| run_one_frozen(*v, *rho, &table, frozen_tbl, &h2o_tbl, &base))
+        .collect();
+    write_rows(RESULT_PATH_FROZEN, &rows)?;
+    for r in &rows {
+        println!(
+            "rust: v={:.0} rho={:.2} -> e_eff eq={:.4} frozen-rebound={:.4} frozen-all={:.4} (jump {:.2e})",
+            r.v,
+            r.rho_impact,
+            r.e_eff_eq,
+            r.e_eff_frozen_rebound,
+            r.e_eff_frozen_all,
+            r.swap_energy_jump_frac,
+        );
+    }
+    println!(
+        "rust: wrote {} frozen rows -> {RESULT_PATH_FROZEN}",
+        rows.len()
+    );
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // `--lowv` selects the 3.2 km/s condensing anchor (Rung C); `--transitional` the ADR-0012 velocity
     // sweep (two files); otherwise the 16 km/s high-v pass. Optional positional `[table] [result]`
@@ -658,6 +860,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             rad.len(),
         );
         return Ok(());
+    }
+
+    // Frozen-recombination probe: record each transitional case's turnaround state, from which the
+    // Python side generates the per-case frozen-composition tables.
+    if args.iter().any(|a| a == "--frozen-probe") {
+        return frozen_probe_mode();
+    }
+
+    // Frozen-recombination bounding sweep: equilibrium vs sudden-freeze-at-turnaround vs
+    // pure-H2O-no-chemistry, per transitional case. Needs the per-case frozen tables (make
+    // tables-frozen).
+    if args.iter().any(|a| a == "--frozen") {
+        return frozen_sweep_mode();
     }
 
     // Ablating-wall recovery sweep (Rung E, ADR-0014): the rigid floor vs the shielding+injection
@@ -758,8 +973,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use super::{
         ABL_KAPPA_VAPOR, ABL_Q_STAR, AblatingRecord, Config, GeoConfig, GeoRecord, LowvConfig,
-        Record, run_ablating_case, run_eta_case, run_one, run_sweep, run_sweep_lowv,
-        run_sweep_transitional,
+        Record, frozen_table_path, run_ablating_case, run_eta_case, run_one, run_one_frozen,
+        run_sweep, run_sweep_frozen_probe, run_sweep_lowv, run_sweep_transitional,
     };
     use hydro1d::radiation::{Limiter, RadConstants};
     use tables::Table;
@@ -1016,6 +1231,58 @@ mod tests {
 
         // `v` actually varies across the grid (not a constant column).
         assert!(eos.iter().any(|r| r.v != eos[0].v));
+    }
+
+    /// The per-case frozen-table path matches the Python generator's naming contract
+    /// (`puffsat.tables.frozen_table_name`): zero-padded integer velocity, two-decimal density.
+    #[test]
+    fn frozen_table_path_matches_python_contract() {
+        assert_eq!(
+            frozen_table_path(5_000.0, 0.16),
+            "data/tables/frozen/v05000_rho0.16.json"
+        );
+        assert_eq!(
+            frozen_table_path(16_000.0, 0.64),
+            "data/tables/frozen/v16000_rho0.64.json"
+        );
+    }
+
+    /// The frozen-probe sweep covers the grid in input order with physical turnaround states
+    /// (compressed above ρ_impact, heated above T₀), and `run_one_frozen` degenerates correctly
+    /// when every role is played by the *same* table: the three curves coincide and the splice
+    /// diagnostic is ~0.
+    #[allow(clippy::float_cmp)] // verbatim pass-through of the case axes
+    #[test]
+    fn frozen_sweep_rows_well_formed_and_degenerate_correctly() {
+        let table = tiny_ideal_table();
+        let base = tiny_config();
+        let v_grid = [1.0, 1.2];
+        let rho_grid = [1.0, 2.0];
+
+        let probe = run_sweep_frozen_probe(&v_grid, &rho_grid, &table, &base);
+        assert_eq!(probe.len(), v_grid.len() * rho_grid.len());
+        for (idx, r) in probe.iter().enumerate() {
+            assert_eq!(r.v, v_grid[idx / rho_grid.len()]);
+            assert_eq!(r.rho_impact, rho_grid[idx % rho_grid.len()]);
+            assert!(
+                r.rho_star > r.rho_impact,
+                "turnaround should be compressed: rho*={} vs rho={}",
+                r.rho_star,
+                r.rho_impact
+            );
+            assert!(r.t_star > base.t0);
+            assert!(r.e_eff_eq > 0.0 && r.e_eff_eq < 1.0);
+        }
+
+        let rec = run_one_frozen(1.0, 1.0, &table, &table, &table, &base);
+        assert!(
+            (rec.e_eff_frozen_rebound - rec.e_eff_eq).abs() < 1e-9,
+            "same-table splice should be a no-op: {} vs {}",
+            rec.e_eff_frozen_rebound,
+            rec.e_eff_eq
+        );
+        assert_eq!(rec.e_eff_frozen_all, rec.e_eff_eq);
+        assert!(rec.swap_energy_jump_frac.abs() < 1e-9);
     }
 
     /// DIAGNOSTIC (ignored): load the real water table and isolate which loss channel breaks the
