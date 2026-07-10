@@ -23,6 +23,9 @@ target
 # Claude Code local configuration (not checked in)
 .claude/
 
+# macOS Finder metadata
+.DS_Store
+
 # Python (uv)
 .venv/
 __pycache__/
