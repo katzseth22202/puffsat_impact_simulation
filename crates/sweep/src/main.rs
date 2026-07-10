@@ -48,6 +48,9 @@ const RESULT_PATH_ABLATING: &str = "data/results/sweep_ablating.jsonl";
 const RESULT_PATH_FROZEN_PROBE: &str = "data/results/frozen_probe.jsonl";
 const RESULT_PATH_FROZEN: &str = "data/results/sweep_frozen.jsonl";
 const TABLE_DIR_FROZEN: &str = "data/tables/frozen";
+const TABLE_PATH_JUPITER: &str = "data/tables/water_jupiter.json";
+const RESULT_PATH_JUPITER: &str = "data/results/sweep_jupiter.jsonl";
+const RESULT_PATH_GEOMETRY_M40: &str = "data/results/sweep_geometry_m40.jsonl";
 
 /// The production `ρ_impact` grid [kg/m³] (design §3-4): the impact-density axis of `e_eff(ρ)`.
 const RHO_GRID: [f64; 4] = [0.16, 0.32, 0.48, 0.64];
@@ -761,6 +764,92 @@ fn run_ablating_sweep(base: &Config, base_tbl: &Table) -> Vec<AblatingRecord> {
         .collect()
 }
 
+// ---- Jupiter-retrograde 69 km/s scenario sweep (special scenario, 2026-07) ----------------------
+//
+// A 100 kg pulse at 69 km/s (Jupiter-retrograde encounter, "Sorry No ISRU" launch-capability
+// study) on a large plate (<= 100 t). The survivability ceiling `rho <= P_limit/(c_stag v²)`
+// lands at ~0.07 kg/m³ — dilute enough that the stagnated slab sits near tau ~ 1 instead of the
+// design's tau >> 1, so `e_eff` is *opacity-sensitive* here and the sweep brackets it over the
+// table's kappa scale. The extended-grid table (multi-stage O Saha ladder, T to 1.2e6 K) keeps
+// the ~1.5e5 K stagnation state on-grid. Slug length is swept too: the survivable cloud is
+// physically ~10 m long, and the radiative loss integrates over the (longer) bounce time.
+
+/// Impact speed [m/s] of the Jupiter-retrograde scenario.
+const JUP_V: f64 = 69_000.0;
+/// Impact-density grid [kg/m³] spanning the 400 MPa survivability ceiling (~0.07) both ways.
+const JUP_RHO: [f64; 5] = [0.02, 0.04, 0.07, 0.11, 0.16];
+/// Slug column lengths [m]: the 1 m production convention plus a realistic stretched cloud.
+const JUP_LENGTH: [f64; 2] = [1.0, 12.0];
+/// Opacity-scale bracket (tau ~ 1 regime: e_eff genuinely moves with opacity here).
+const JUP_OPACITY_SCALE: [f64; 3] = [0.1, 1.0, 10.0];
+
+/// One Jupiter-scenario row: the swept `(rho, length, opacity_scale)` case at 69 km/s with the
+/// restitution, the physical peak wall pressure (plate sizing), and the radiative loss split.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+struct JupiterRecord {
+    v: f64,
+    rho_impact: f64,
+    /// Slug column length [m] (production convention is 1 m; the survivable cloud is ~10 m).
+    length: f64,
+    /// Opacity scale applied to the table (tau ~ 1 bracket).
+    opacity_scale: f64,
+    e_eff: f64,
+    /// Peak physical wall pressure (EOS `p`, AV excluded) — the survivability load (ADR-0010).
+    peak_wall_pressure: f64,
+    incident_momentum: f64,
+    wall_impulse: f64,
+    loss_radiative_wall: f64,
+    loss_escape_space: f64,
+}
+
+/// Run one 69 km/s coupled bounce at `(rho, length)` on an opacity-scaled table.
+fn run_one_jupiter(rho_impact: f64, length: f64, scale: f64, base_tbl: &Table) -> JupiterRecord {
+    let table = base_tbl.with_opacity_scale(scale);
+    let cfg = Config {
+        v: JUP_V,
+        length,
+        ..Config::production()
+    };
+    let tube = Tube::slug_si(
+        cfg.gas_cells,
+        rho_impact,
+        cfg.v,
+        cfg.length,
+        cfg.t0,
+        TableEos::new(table),
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    );
+    let result = CoupledBounce::new(tube, None, cfg.consts, cfg.limiter).run();
+    JupiterRecord {
+        v: cfg.v,
+        rho_impact,
+        length,
+        opacity_scale: scale,
+        e_eff: result.bounce.e_eff,
+        peak_wall_pressure: result.bounce.peak_wall_pressure,
+        incident_momentum: result.bounce.incident_momentum,
+        wall_impulse: result.bounce.wall_impulse,
+        loss_radiative_wall: result.loss_radiative_wall,
+        loss_escape_space: result.loss_escape_space,
+    }
+}
+
+/// Sweep the Jupiter (rho × length × opacity-scale) grid in parallel (rayon), input order.
+fn run_jupiter_sweep(base_tbl: &Table) -> Vec<JupiterRecord> {
+    let cases: Vec<(f64, f64, f64)> = JUP_RHO
+        .iter()
+        .flat_map(|&rho| {
+            JUP_LENGTH
+                .iter()
+                .flat_map(move |&len| JUP_OPACITY_SCALE.iter().map(move |&s| (rho, len, s)))
+        })
+        .collect();
+    cases
+        .par_iter()
+        .map(|&(rho, len, s)| run_one_jupiter(rho, len, s, base_tbl))
+        .collect()
+}
+
 /// Write `records` as JSONL (one object per line, ADR-0019), creating the parent dir and replacing
 /// the file. Generic over the row type so the transitional (`Record`) and geometry (`GeoRecord`)
 /// sweeps share it.
@@ -900,6 +989,61 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         println!(
             "rust: wrote {} ablating rows -> {RESULT_PATH_ABLATING}",
+            rows.len()
+        );
+        return Ok(());
+    }
+
+    // Jupiter-retrograde 69 km/s scenario sweep: e_eff(rho × length × opacity-scale) with the
+    // extended-grid table (multi-stage O ladder). Needs `make tables-jupiter` first.
+    if args.iter().any(|a| a == "--jupiter") {
+        let table = Table::load(TABLE_PATH_JUPITER)?;
+        let rows = run_jupiter_sweep(&table);
+        write_rows(RESULT_PATH_JUPITER, &rows)?;
+        for r in &rows {
+            println!(
+                "rust: rho={:.3} L={:>4.1} scale={:>5.2} -> e_eff={:.4} peak_p={:.3e} (1a={:.3e} 1b={:.3e})",
+                r.rho_impact,
+                r.length,
+                r.opacity_scale,
+                r.e_eff,
+                r.peak_wall_pressure,
+                r.loss_radiative_wall,
+                r.loss_escape_space,
+            );
+        }
+        println!(
+            "rust: wrote {} jupiter rows -> {RESULT_PATH_JUPITER}",
+            rows.len()
+        );
+        return Ok(());
+    }
+
+    // High-Mach spot check for the Jupiter scenario: the full geometry grid at M = 40 (the
+    // strong-shock plateau check past the production anchors 10/20).
+    if args.iter().any(|a| a == "--geometry-m40") {
+        let cfg = GeoConfig::production();
+        let cases: Vec<(f64, f64, f64)> = GEO_RFOOT_OVER_R
+            .iter()
+            .flat_map(|&rf| {
+                GEO_L_OVER_D
+                    .iter()
+                    .flat_map(move |&ld| GEO_D_OVER_D.iter().map(move |&dd| (dd, ld, rf)))
+            })
+            .collect();
+        let rows: Vec<GeoRecord> = cases
+            .par_iter()
+            .map(|&(dd, ld, rf)| run_eta_case(dd, ld, rf, 40.0, &cfg))
+            .collect();
+        write_rows(RESULT_PATH_GEOMETRY_M40, &rows)?;
+        for r in &rows {
+            println!(
+                "rust: d/D={:.2} L/D={:.2} r_foot/R={:.2} M=40 -> eta_capture={:.4}",
+                r.d_over_d, r.l_over_d, r.r_foot_over_r, r.eta_capture,
+            );
+        }
+        println!(
+            "rust: wrote {} M=40 geometry rows -> {RESULT_PATH_GEOMETRY_M40}",
             rows.len()
         );
         return Ok(());

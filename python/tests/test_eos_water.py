@@ -57,12 +57,48 @@ def test_dissociation_grows_with_temperature() -> None:
 
 
 def test_ionization_and_charge_neutrality_at_high_temperature() -> None:
-    """At 30 kK the plasma is meaningfully ionized and electrically neutral."""
+    """At 30 kK the plasma is meaningfully ionized and electrically neutral (charge balance now
+    sums the full O ladder, charge-weighted)."""
     rho, temp = 0.32, 30_000.0
     comp = ew.composition(rho, temp)
     n_f = rho / ew.M_H2O
     assert comp.n_e / n_f > 0.1  # appreciable free-electron density
-    np.testing.assert_allclose(comp.n_hp + comp.n_op, comp.n_e, rtol=1e-6)
+    charge = comp.n_hp + sum((k + 1) * n for k, n in enumerate(comp.n_o_ions))
+    np.testing.assert_allclose(charge, comp.n_e, rtol=1e-6)
+
+
+def test_oxygen_ladder_climbs_and_banks_energy_at_very_high_temperature() -> None:
+    """Jupiter-retrograde regime (69 km/s stagnation): at 2e5 K and dilute density the dominant O
+    charge state is well past O+, charge neutrality holds across the ladder, and the specific
+    energy carries a multi-ionization chemical sink well above the single-stage model's ceiling."""
+    rho, temp = 0.1, 2.0e5
+    comp = ew.composition(rho, temp)
+    n_f = rho / ew.M_H2O
+    # H fully stripped; O climbed past the first stage.
+    assert comp.n_hp / (2.0 * n_f) > 0.99
+    stages = np.array(comp.n_o_ions)
+    assert stages.argmax() >= 2, f"expected dominant O charge >= 3, got {stages.argmax() + 1}"
+    charge = comp.n_hp + sum((k + 1) * n for k, n in enumerate(comp.n_o_ions))
+    np.testing.assert_allclose(charge, comp.n_e, rtol=1e-6)
+    # The energy at 2e5 K must exceed the single-stage ceiling: thermal (all 13 particles were it
+    # fully stripped would be ~1.6 GJ/kg) plus > 100 eV/molecule of ladder energy.
+    _, e = ew.pressure_energy(rho, temp)
+    e_single_stage_ceiling = (
+        1.5 * ew.K_B * temp * 6.0 + 2.0 * ew.IP_H + ew.IP_O + ew.D_AT
+    ) / ew.M_H2O
+    assert e > e_single_stage_ceiling
+
+
+def test_energy_monotone_to_megakelvin() -> None:
+    """`e(T)` stays strictly increasing (c_v > 0) through the extended Jupiter-table T range —
+    what the Rust loader's monotone inversion requires up to the new grid top."""
+    rho_grid = np.array([1e-3, 0.07, 2.0])
+    t_grid = np.geomspace(300.0, 1.2e6, 50)
+    p, e, cs = ew.eos_grid(rho_grid, t_grid)
+    assert np.all(p > 0.0)
+    assert np.all(e > 0.0)
+    assert np.all(cs > 0.0)
+    assert np.all(np.diff(e, axis=1) > 0.0)
 
 
 def test_energy_monotone_and_fields_positive() -> None:

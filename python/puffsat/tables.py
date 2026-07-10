@@ -46,6 +46,21 @@ TAU_BAND = (1.0e2, 1.0e5)
 
 DEFAULT_TABLE_PATH = Path("data/tables/water.json")
 
+# --- Jupiter-retrograde 69 km/s scenario table (special-scenario rung): the stagnated plasma sits
+#     at ~1.3-1.8e5 K with oxygen at Z_bar ~ 4-4.5 (multi-stage Saha ladder), so the T grid must
+#     reach well past it; the survivable impact densities are ~0.02-0.16 kg/m^3 and the rebound
+#     rarefies far below the impact density, so the rho grid extends much lower too. ---
+RHO_RANGE_JUPITER = (1.0e-4, 30.0)  # kg/m^3
+N_RHO_JUPITER = 48
+T_RANGE_JUPITER = (300.0, 1.2e6)  # K
+N_T_JUPITER = 88
+# Thomson electron-scattering floor on the Rosseland mean [m^2/kg]: sigma_T * (10 e-/molecule)
+# / m_H2O ~ 0.022 for fully-ionized water. The Kramers T^-3.5 shape underflows at 1e5+ K; free
+# electrons still scatter, so radiative *transport* never gets cheaper than Thomson. Applied to
+# kappa_R only (scattering does not emit -> kappa_P keeps the Kramers shape).
+KAPPA_THOMSON_FLOOR = 0.022
+DEFAULT_TABLE_PATH_JUPITER = Path("data/tables/water_jupiter.json")
+
 # --- Low-v (Rung C) cool-gas two-phase table: real-fluid water across the saturation dome
 #     (CoolProp), a generous (rho, T) box (log-spaced packs more points at low T, near the dome edge
 #     T_crit = 647 K). Radiation is off at 3.2 km/s (design §3), so the opacities are transparent.
@@ -165,6 +180,49 @@ def build_table(
             "kappa_planck": _flatten(kappa_p),
         },
         "provenance": _provenance(rho_range, n_rho, t_range, n_t, kappa_scale),
+    }
+
+
+def build_table_jupiter(kappa_scale: float = 1.0) -> dict[str, object]:
+    """Build the Jupiter-retrograde (69 km/s) scenario table: the same equilibrium EOS on the
+    extended `(rho, T)` grid (multi-stage O ladder engaged), with the interim Kramers opacity
+    floored at Thomson scattering on the Rosseland mean. The opacity remains a PROVISIONAL
+    bracket; at these dilutions the stagnated slab sits near tau ~ 1, so the scenario sweep
+    brackets `e_eff` over `kappa_scale` rather than trusting the point value."""
+    rho_grid = np.geomspace(RHO_RANGE_JUPITER[0], RHO_RANGE_JUPITER[1], N_RHO_JUPITER)
+    t_grid = np.geomspace(T_RANGE_JUPITER[0], T_RANGE_JUPITER[1], N_T_JUPITER)
+
+    p, e, cs = ew.eos_grid(rho_grid, t_grid)
+    kappa_r, kappa_p = opacity_grid(rho_grid, t_grid, kappa_scale)
+    kappa_r = np.maximum(kappa_r, kappa_scale * KAPPA_THOMSON_FLOOR)
+
+    prov = _provenance(RHO_RANGE_JUPITER, N_RHO_JUPITER, T_RANGE_JUPITER, N_T_JUPITER, kappa_scale)
+    eos_prov = prov["eos"]
+    assert isinstance(eos_prov, dict)
+    eos_prov["species"] = ["H2O", "H", "O", "H+"] + [f"O{k}+" for k in range(1, 9)] + ["e-"]
+    eos_prov["model"] = (
+        "chemical-equilibrium water (dissociation H2O<=>2H+O + full multi-stage O Saha ladder)"
+    )
+    opac_prov = prov["opacity"]
+    assert isinstance(opac_prov, dict)
+    opac_prov["thomson_floor_rosseland"] = KAPPA_THOMSON_FLOOR
+    prov["scenario"] = (
+        "Jupiter-retrograde 69 km/s special scenario (2026-07): extended T grid past the "
+        "~1.5e5 K stagnation, extended rho grid for the dilute survivable clouds"
+    )
+
+    return {
+        "rho_grid": [float(x) for x in rho_grid],
+        "T_grid": [float(x) for x in t_grid],
+        "shape": [N_RHO_JUPITER, N_T_JUPITER],
+        "fields": {
+            "p": _flatten(p),
+            "e": _flatten(e),
+            "c_s": _flatten(cs),
+            "kappa_rosseland": _flatten(kappa_r),
+            "kappa_planck": _flatten(kappa_p),
+        },
+        "provenance": prov,
     }
 
 
@@ -365,6 +423,11 @@ def main() -> None:
         "--lowv", action="store_true", help="build the low-v (Rung C) cool-gas two-phase table"
     )
     parser.add_argument(
+        "--jupiter",
+        action="store_true",
+        help="build the Jupiter-retrograde 69 km/s scenario table (extended rho/T grid)",
+    )
+    parser.add_argument(
         "--frozen-from-probe",
         type=Path,
         default=None,
@@ -391,6 +454,13 @@ def main() -> None:
         label = (
             f"cool-gas two-phase table -> {out} "
             f"({N_RHO_LOWV}x{N_T_LOWV} nodes, k_gas_scale={args.k_gas_scale})"
+        )
+    elif args.jupiter:
+        table = build_table_jupiter(kappa_scale=args.kappa_scale)
+        out = args.out or DEFAULT_TABLE_PATH_JUPITER
+        label = (
+            f"Jupiter 69 km/s scenario table -> {out} "
+            f"({N_RHO_JUPITER}x{N_T_JUPITER} nodes, kappa_scale={args.kappa_scale})"
         )
     else:
         table = build_table(kappa_scale=args.kappa_scale)
