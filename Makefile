@@ -3,7 +3,7 @@
 
 PY := uv run python
 
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter fetch-tops
 
 all: smoke
 
@@ -179,6 +179,36 @@ analysis-frozen: data/results/frontier_frozen.csv
 
 data/results/frontier_frozen.csv: data/results/sweep_frozen.jsonl python/puffsat/analysis.py
 	PYTHONPATH=python uv run --extra sci python -m puffsat.analysis --axis frozen
+
+## tables-jupiter: extended-grid table for the 69 km/s scenario (multi-stage O Saha ladder,
+## T to 1.2e6 K) -> data/tables/water_jupiter.json. Overlays the real TOPS/OPLIB opacity when
+## the pull (data/tables/tops/, see fetch-tops) is present; interim Kramers bracket otherwise.
+TOPS_PULL := data/tables/tops/tops_water_gray.html
+tables-jupiter: data/tables/water_jupiter.json
+
+data/tables/water_jupiter.json: python/puffsat/eos_water.py python/puffsat/tables.py python/puffsat/tops.py $(wildcard $(TOPS_PULL))
+	@mkdir -p data/tables
+	PYTHONPATH=python $(PY) -m puffsat.tables --jupiter $(if $(wildcard $(TOPS_PULL)),--tops $(TOPS_PULL),)
+
+## fetch-tops: re-pull the TOPS/OPLIB water gray opacities (network; two-stage web form) ->
+## data/tables/tops/tops_water_gray.html. The saved HTML is the citable provenance artifact.
+fetch-tops:
+	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops
+
+## sweep-jupiter: 69 km/s (rho x length x opacity-scale) coupled-bounce grid ->
+## data/results/sweep_jupiter.jsonl; depends on tables-jupiter
+sweep-jupiter: data/results/sweep_jupiter.jsonl
+
+data/results/sweep_jupiter.jsonl: data/tables/water_jupiter.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --jupiter
+
+## analysis-jupiter: plate sizing + survivable-f frontier for the 69 km/s scenario ->
+## data/results/frontier_jupiter.csv; depends on sweep-jupiter (+ the M=40 geometry sweep)
+analysis-jupiter: data/results/frontier_jupiter.csv
+
+data/results/frontier_jupiter.csv: data/results/sweep_jupiter.jsonl data/results/sweep_geometry_m40.jsonl python/puffsat/jupiter.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.jupiter
 
 ## sensitivity: opacity-insensitivity scan (rung B, B5d-3) — sweep at 0.1x/1x/10x opacity, show
 ## e_eff barely moves. Builds the release sweep first; writes data/results/opacity_scan/.

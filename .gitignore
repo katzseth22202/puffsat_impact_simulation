@@ -37,13 +37,18 @@ __pycache__/
 # are produced by `make tables` / `make sweep` and are NOT checked in.
 /data/*
 # ...EXCEPT the small deliverable artifacts that CONCLUSION.md cites as its evidence:
-# the frontier CSVs (the quoted numbers) and the result figures. The study is wrapped
-# and the real-opacity table is firewall-blocked, so these can't be regenerated on a
-# fresh clone — they are committed in place as the single source of truth. See ADR-0025.
+# the frontier CSVs (the quoted numbers) and the result figures. The study is wrapped,
+# so these can't be assumed regenerable on a fresh clone — they are committed in place
+# as the single source of truth. See ADR-0025.
 !/data/results/
 /data/results/*
 !/data/results/frontier*.csv
 !/data/results/*.png
+# ...and the raw TOPS/OPLIB opacity pull (ADR-0007 amendment): the citable provenance
+# artifact behind the 69 km/s table; needs a network allow to re-fetch (`make fetch-tops`).
+!/data/tables/
+/data/tables/*
+!/data/tables/tops/
 
 # Scratch space for temporary working files shared with Claude (e.g. checklists
 # for completing a single task). Disposable; never checked in.

@@ -101,9 +101,12 @@ fillable ([ADR-0014](docs/adr/0014-ablating-wall.md)).
   bracket rather than move the headline (ADR-0026). Named here because the pessimistic bound —
   unlike every other refinement — does cross the gate.
 
-- **Real opacity table.** Never pulled (data source firewall-blocked). The dip is EOS-sink-limited,
-  not opacity-limited, and `e_eff` was shown insensitive to opacity (≤ 1.6 % over a 100× sweep in
-  κ, Rung B). A real table refines the radiative channel; it does not move `f` across 0.8.
+- **Real opacity table.** Pulled 2026-07-11 for the **69 km/s Jupiter scenario only** (TOPS/OPLIB
+  gray means, ADR-0007 amendment) — there it mattered (~2000× the interim Kramers at stagnation,
+  `e_eff` 0.42 → 0.65, best survivable `f` 0.69 → 0.78). For **this envelope** the interim table
+  stands: the dip is EOS-sink-limited, not opacity-limited, and `e_eff` was shown insensitive to
+  opacity (≤ 1.6 % over a 100× sweep in κ, Rung B) because the slab here is already `τ ≫ 1`. The
+  molecular/low-v half of the seam (HITEMP/ExoMol) remains unpulled.
 - **High-velocity plasma gas conductivity (`k_gas`).** Deferred at the top of the envelope; a
   refinement to the conductive channel, which is already negligible on the pulse timescale.
 

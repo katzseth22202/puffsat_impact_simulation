@@ -23,6 +23,7 @@ from pathlib import Path
 import numpy as np
 
 from puffsat import eos_water as ew
+from puffsat import tops
 from puffsat.eos_water import Vec
 
 # --- (rho, T) grid (SI). rho spans the impact range plus strong-shock compression; T runs from
@@ -183,18 +184,33 @@ def build_table(
     }
 
 
-def build_table_jupiter(kappa_scale: float = 1.0) -> dict[str, object]:
+def build_table_jupiter(
+    kappa_scale: float = 1.0, tops_path: Path | None = None
+) -> dict[str, object]:
     """Build the Jupiter-retrograde (69 km/s) scenario table: the same equilibrium EOS on the
     extended `(rho, T)` grid (multi-stage O ladder engaged), with the interim Kramers opacity
-    floored at Thomson scattering on the Rosseland mean. The opacity remains a PROVISIONAL
-    bracket; at these dilutions the stagnated slab sits near tau ~ 1, so the scenario sweep
-    brackets `e_eff` over `kappa_scale` rather than trusting the point value."""
+    floored at Thomson scattering on the Rosseland mean.
+
+    With `tops_path` (a saved TOPS gray pull, `puffsat.fetch_tops`), the REAL ATOMIC/OPLIB water
+    means replace the interim opacity for `T >=` the OPLIB floor (~5802 K) — everywhere the 69 km/s
+    bounce is radiatively active; the interim shape survives only in the cold molecular tail below.
+    `kappa_scale` still multiplies the final field either way, so the sweep's 0.1x/10x bracket
+    turns into a sensitivity band *around the real table* instead of around the placeholder."""
     rho_grid = np.geomspace(RHO_RANGE_JUPITER[0], RHO_RANGE_JUPITER[1], N_RHO_JUPITER)
     t_grid = np.geomspace(T_RANGE_JUPITER[0], T_RANGE_JUPITER[1], N_T_JUPITER)
 
     p, e, cs = ew.eos_grid(rho_grid, t_grid)
     kappa_r, kappa_p = opacity_grid(rho_grid, t_grid, kappa_scale)
     kappa_r = np.maximum(kappa_r, kappa_scale * KAPPA_THOMSON_FLOOR)
+    if tops_path is not None:
+        tops_pull = tops.load_tops_gray(tops_path)
+        kappa_r_unscaled, kappa_p_unscaled = opacity_grid(rho_grid, t_grid, kappa_scale=1.0)
+        kappa_r_unscaled = np.maximum(kappa_r_unscaled, KAPPA_THOMSON_FLOOR)
+        kappa_r, kappa_p = tops.stitch_opacity(
+            rho_grid, t_grid, kappa_r_unscaled, kappa_p_unscaled, tops_pull
+        )
+        kappa_r = kappa_scale * kappa_r
+        kappa_p = kappa_scale * kappa_p
 
     prov = _provenance(RHO_RANGE_JUPITER, N_RHO_JUPITER, T_RANGE_JUPITER, N_T_JUPITER, kappa_scale)
     eos_prov = prov["eos"]
@@ -206,6 +222,15 @@ def build_table_jupiter(kappa_scale: float = 1.0) -> dict[str, object]:
     opac_prov = prov["opacity"]
     assert isinstance(opac_prov, dict)
     opac_prov["thomson_floor_rosseland"] = KAPPA_THOMSON_FLOOR
+    if tops_path is not None:
+        opac_prov["status"] = (
+            "REAL for T >= 5802 K (the OPLIB floor): TOPS gray Rosseland/Planck means for "
+            "water (2 H : 1 O atomic), LANL ATOMIC/OPLIB elemental opacities, "
+            "aphysics2.lanl.gov; interim Kramers+Thomson survives only below the floor "
+            "(cold molecular tail, radiatively inactive in this scenario)"
+        )
+        opac_prov["tops_pull"] = str(tops_path)
+        opac_prov["real_table_rung"] = "landed for this scenario (ADR-0007 amendment)"
     prov["scenario"] = (
         "Jupiter-retrograde 69 km/s special scenario (2026-07): extended T grid past the "
         "~1.5e5 K stagnation, extended rho grid for the dilute survivable clouds"
@@ -428,6 +453,14 @@ def main() -> None:
         help="build the Jupiter-retrograde 69 km/s scenario table (extended rho/T grid)",
     )
     parser.add_argument(
+        "--tops",
+        type=Path,
+        default=None,
+        metavar="TOPS_HTML",
+        help="with --jupiter: overlay the real TOPS/OPLIB gray means from this saved pull "
+        "(puffsat.fetch_tops) for T >= the OPLIB floor",
+    )
+    parser.add_argument(
         "--frozen-from-probe",
         type=Path,
         default=None,
@@ -456,11 +489,13 @@ def main() -> None:
             f"({N_RHO_LOWV}x{N_T_LOWV} nodes, k_gas_scale={args.k_gas_scale})"
         )
     elif args.jupiter:
-        table = build_table_jupiter(kappa_scale=args.kappa_scale)
+        table = build_table_jupiter(kappa_scale=args.kappa_scale, tops_path=args.tops)
         out = args.out or DEFAULT_TABLE_PATH_JUPITER
+        opacity_label = "TOPS/OPLIB real opacity" if args.tops else "interim opacity"
         label = (
             f"Jupiter 69 km/s scenario table -> {out} "
-            f"({N_RHO_JUPITER}x{N_T_JUPITER} nodes, kappa_scale={args.kappa_scale})"
+            f"({N_RHO_JUPITER}x{N_T_JUPITER} nodes, {opacity_label}, "
+            f"kappa_scale={args.kappa_scale})"
         )
     else:
         table = build_table(kappa_scale=args.kappa_scale)

@@ -76,6 +76,31 @@ both gate conditions:
 The loader hot-swaps the real table with no kernel change when the data becomes reachable (the
 original design intent), so this remains a drop-in refinement.
 
+**Amendment (Jupiter scenario, 2026-07-11): the real plasma opacity IS pulled — for the 69 km/s
+table only.** The firewall block was lifted for `aphysics2.lanl.gov` and the TOPS gray means for
+water (2 H : 1 O atomic; LANL ATOMIC/OPLIB elemental opacities) were fetched over the full scenario
+grid (48 ρ × 30 T, 5.8 kK–1.45 MK). Mechanics that cost a day to rediscover, recorded here:
+
+- The TOPS form is a **two-stage** submission (request form → confirmation page → results); a
+  direct POST to `/submit` always 500s, instantly. The flow (and its retry loop — the server also
+  500s transiently under load) mirrors pyTOPSScrape. `make fetch-tops` regenerates the pull
+  (`python/puffsat/fetch_tops.py`, `fetch` extra); the raw HTML is kept verbatim at
+  `data/tables/tops/tops_water_gray.html` as the citable provenance artifact, parsed and stitched
+  by `python/puffsat/tops.py` (log-log bilinear, `T >=` the 5802 K OPLIB floor; interim
+  Kramers+Thomson survives below, where the 69 km/s bounce is radiatively inactive).
+- **The interim Kramers bracket was wrong by ~2000× at the 69 km/s stagnation state** (~150 kK):
+  the `T^-3.5` tail cannot represent bound-bound/bound-free of the O charge states. The stagnated
+  slab is optically **thick** (`τ ≫ 1`), not the `τ ~ 1` the scenario had assumed — outside the
+  0.1–10× `kappa_scale` bracket, which is exactly why this scenario (unlike the 16 km/s
+  deliverable, whose `τ ≫ 1` insensitivity scan still licenses the interim table) needed the pull.
+  Result: the 69 km/s `e_eff` at the survivable operating point rose from ~0.42 [0.35, 0.58 over
+  the κ bracket] to ~0.65 (asymptote ~0.70, now EOS-limited), and best survivable `f` from
+  ≈0.69 to ≈0.78 [0.70, 0.82]. The `kappa_scale` bracket is retained, now as a sensitivity band
+  *around the real table*.
+- The **main-envelope tables are unchanged** (interim Kramers, still empirically licensed at
+  `τ ≫ 1` by B5d-3); the molecular/low-v half of the seam (HITEMP/ExoMol + soot) remains unpulled
+  and gated as before.
+
 ## Considered Options
 
 - **Single-source EOS or opacity across the whole range.** Rejected: none exists — CoolProp lacks

@@ -776,12 +776,15 @@ fn run_ablating_sweep(base: &Config, base_tbl: &Table) -> Vec<AblatingRecord> {
 
 /// Impact speed [m/s] of the Jupiter-retrograde scenario.
 const JUP_V: f64 = 69_000.0;
-/// Impact-density grid [kg/m³] spanning the 400 MPa survivability ceiling (~0.07) both ways.
-const JUP_RHO: [f64; 5] = [0.02, 0.04, 0.07, 0.11, 0.16];
-/// Slug column lengths [m]: the 1 m production convention plus a realistic stretched cloud.
-const JUP_LENGTH: [f64; 2] = [1.0, 12.0];
-/// Opacity-scale bracket (tau ~ 1 regime: e_eff genuinely moves with opacity here).
-const JUP_OPACITY_SCALE: [f64; 3] = [0.1, 1.0, 10.0];
+/// Impact-density grid [kg/m³] spanning the 400 MPa survivability ceiling (~0.07) both ways;
+/// 0.01 probes the dilute optically-thin corner where the coarse grid's e_eff was still rising.
+const JUP_RHO: [f64; 6] = [0.01, 0.02, 0.04, 0.07, 0.11, 0.16];
+/// Slug column lengths [m]: log-spaced from the 1 m production convention to the realistic
+/// stretched cloud (~10 m), filling the ridge between the coarse grid's two endpoints.
+const JUP_LENGTH: [f64; 5] = [1.0, 2.0, 4.0, 8.0, 12.0];
+/// Opacity-scale bracket (tau ~ 1 regime: e_eff genuinely moves with opacity here); log-spaced,
+/// keeping the 0.1/1/10 anchors the frontier's kappa bracket slices on.
+const JUP_OPACITY_SCALE: [f64; 5] = [0.1, 0.3, 1.0, 3.0, 10.0];
 
 /// One Jupiter-scenario row: the swept `(rho, length, opacity_scale)` case at 69 km/s with the
 /// restitution, the physical peak wall pressure (plate sizing), and the radiative loss split.

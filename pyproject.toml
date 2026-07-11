@@ -10,6 +10,8 @@ dependencies = [
 # Heavy scientific deps arrive at rung B (table pipeline); the smoke test is stdlib-only.
 [project.optional-dependencies]
 sci = ["numpy", "pandas", "matplotlib", "coolprop"]
+# One-off provenance pulls (TOPS web form) — not needed for build/lint/test.
+fetch = ["mechanize"]
 
 [dependency-groups]
 dev = [
@@ -44,5 +46,5 @@ explicit_package_bases = true
 # matplotlib lives in the `sci` extra (not installed for `make lint`); its calls are wrapped in
 # analysis.py so no `Any` leaks past the plotting boundary.
 [[tool.mypy.overrides]]
-module = ["CoolProp.*", "cantera.*", "rocketcea.*", "matplotlib.*"]
+module = ["CoolProp.*", "cantera.*", "rocketcea.*", "matplotlib.*", "mechanize.*"]
 ignore_missing_imports = true
