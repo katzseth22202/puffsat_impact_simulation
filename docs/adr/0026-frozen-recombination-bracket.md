@@ -68,11 +68,11 @@ near the equilibrium end of the bracket.
 
 ## Decision
 
-1. **The equilibrium curve remains the headline** (`f ≈ 0.78–0.83` across the envelope), on the
-   kinetics argument above.
+1. **The equilibrium curve remains the headline** (`f ≈ 0.77–0.82` across the envelope, as
+   corrected 2026-07-10 — ADR-0023), on the kinetics argument above.
 2. **The bracket is quoted as a named caveat wherever `f` is quoted** (CONCLUSION.md, white
    paper): "under a maximal sudden-freeze-at-turnaround bound, best survivable `f` drops to
-   ≈ 0.69 (dip) / 0.74 (16 km/s); recombination kinetics at the probed densities argue the
+   ≈ 0.68 (dip) / 0.74 (16 km/s); recombination kinetics at the probed densities argue the
    physical answer is near the equilibrium end."
 3. **The FLASH cross-check does not discharge this caveat** if run with an equilibrium EOS —
    it is flagged so the cross-check is not over-credited. The refinement that would close it is
