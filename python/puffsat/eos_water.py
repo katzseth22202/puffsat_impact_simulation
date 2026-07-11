@@ -382,17 +382,26 @@ def sound_speed(rho: float, temp: float) -> float:
 
 @dataclass(frozen=True)
 class FrozenComposition:
-    """Species fractions per H2O formula unit, `y_i = n_i / n_f`, held fixed (no chemistry)."""
+    """Species fractions per H2O formula unit, `y_i = n_i / n_f`, held fixed (no chemistry).
+
+    `y_o_ions[k]` is the O ion of charge `k+1` (O+ .. O8+), mirroring `Composition.n_o_ions` —
+    a 69 km/s-class turnaround state is multi-charged, so the whole ladder freezes, each stage
+    locking its *cumulative* ionization energy."""
 
     y_h2o: float
     y_h: float
     y_o: float
     y_hp: float
-    y_op: float
+    y_o_ions: tuple[float, ...]
     y_e: float
 
+    @property
+    def y_op(self) -> float:
+        """Singly-ionized oxygen fraction (the first rung of the ladder)."""
+        return self.y_o_ions[0]
 
-PURE_H2O_FROZEN = FrozenComposition(1.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+
+PURE_H2O_FROZEN = FrozenComposition(1.0, 0.0, 0.0, 0.0, (0.0,) * N_O_STAGES, 0.0)
 """Undissociated molecular water with the chemistry switched off (freeze-before-the-plate)."""
 
 
@@ -405,7 +414,7 @@ def frozen_composition(rho_ref: float, t_ref: float) -> FrozenComposition:
         y_h=comp.n_h / n_f,
         y_o=comp.n_o / n_f,
         y_hp=comp.n_hp / n_f,
-        y_op=comp.n_op / n_f,
+        y_o_ions=tuple(n / n_f for n in comp.n_o_ions),
         y_e=comp.n_e / n_f,
     )
 
@@ -419,11 +428,13 @@ def pressure_energy_frozen(rho: float, temp: float, y: FrozenComposition) -> tup
     At the freeze reference state the two EOS agree exactly (splice continuity).
     """
     n_f = rho / M_H2O
-    y_mono = y.y_h + y.y_o + y.y_hp + y.y_op + y.y_e
+    y_o_ions_total = sum(y.y_o_ions)
+    y_mono = y.y_h + y.y_o + y.y_hp + y_o_ions_total + y.y_e
     p = n_f * (y.y_h2o + y_mono) * K_B * temp
 
     e_thermal = n_f * (1.5 * K_B * temp * y_mono + y.y_h2o * (3.0 * K_B * temp + _e_vib(temp)))
-    e_chem = n_f * (y.y_hp * IP_H + y.y_op * IP_O + (1.0 - y.y_h2o) * D_AT)
+    e_ionization_o = sum(frac * E_O_CUM[k] for k, frac in enumerate(y.y_o_ions))
+    e_chem = n_f * (y.y_hp * IP_H + e_ionization_o + (1.0 - y.y_h2o) * D_AT)
     return p, (e_thermal + e_chem) / rho
 
 

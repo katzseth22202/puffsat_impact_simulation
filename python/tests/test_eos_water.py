@@ -185,6 +185,31 @@ def test_frozen_composition_locks_chemical_energy_on_cooling() -> None:
     assert e_cold_fr > e_chem
 
 
+def test_frozen_fractions_carry_the_full_o_ladder_when_hot() -> None:
+    """Freezing at a 69 km/s-class turnaround state (multi-charge O) must keep every ladder
+    stage: O nuclei sum to 1 per formula unit *including O2+ and up*, and neutrality counts
+    each ion's charge. The single-stage bookkeeping loses both."""
+    y = ew.frozen_composition(0.5, 60_000.0)
+    o_nuclei = y.y_h2o + y.y_o + sum(y.y_o_ions)
+    np.testing.assert_allclose(o_nuclei, 1.0, rtol=1e-6)
+    charge = y.y_hp + sum((k + 1) * frac for k, frac in enumerate(y.y_o_ions))
+    np.testing.assert_allclose(y.y_e, charge, rtol=1e-5)
+    # The state is chosen hot enough that O2+ (and beyond) actually holds population.
+    assert sum(y.y_o_ions[1:]) > 0.1
+
+
+def test_frozen_at_hot_reference_state_matches_equilibrium() -> None:
+    """Splice continuity must hold at a multi-charge freeze state (the 69 km/s bracket), not
+    just the transitional-grid ~12 kK states — every ladder stage's cumulative ionization
+    energy has to be carried frozen."""
+    rho, temp = 0.5, 60_000.0
+    y = ew.frozen_composition(rho, temp)
+    p_eq, e_eq = ew.pressure_energy(rho, temp)
+    p_fr, e_fr = ew.pressure_energy_frozen(rho, temp, y)
+    np.testing.assert_allclose(p_fr, p_eq, rtol=1e-8)
+    np.testing.assert_allclose(e_fr, e_eq, rtol=1e-8)
+
+
 def test_frozen_grid_positive_and_monotone() -> None:
     """The frozen EOS obeys the same loader invariants as the equilibrium one (ADR-0007):
     positive `p`, `e`, `c_s` and strictly increasing `e(T)` at fixed `rho`."""

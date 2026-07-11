@@ -99,7 +99,14 @@ fillable ([ADR-0014](docs/adr/0014-ablating-wall.md)).
   physical end is argued from the recombination timescale (~10²–10³× faster than the rebound at
   turnaround densities); a partial-equilibrium/freeze-out-density rung would interpolate the
   bracket rather than move the headline (ADR-0026). Named here because the pessimistic bound —
-  unlike every other refinement — does cross the gate.
+  unlike every other refinement — does cross the gate. The **69 km/s Jupiter special scenario**
+  now carries its own, wider bracket (`data/results/frontier_frozen_jupiter.csv`): the multi-charge
+  ~140–170 kK turnaround needed the extended-grid frozen pipeline with the full 8-stage O ionization
+  ladder, giving equilibrium headline `f = 0.78` → **sudden-freeze `f = 0.69`** (pure-H₂O 0.75).
+  There the recombination-tracks-equilibrium defence is *weaker* — the turnaround is dilute
+  (`n ~ 10¹⁹ cm⁻³`, ~10–100× below the dip) with an 8-stage ladder to unwind — so this caveat is
+  more load-bearing for that scenario ([ADR-0026](docs/adr/0026-frozen-recombination-bracket.md)
+  amendment).
 
 - **Real opacity table.** Pulled 2026-07-11 for the **69 km/s Jupiter scenario only** (TOPS/OPLIB
   gray means, ADR-0007 amendment) — there it mattered (~2000× the interim Kramers at stagnation,

@@ -50,6 +50,10 @@ const RESULT_PATH_FROZEN: &str = "data/results/sweep_frozen.jsonl";
 const TABLE_DIR_FROZEN: &str = "data/tables/frozen";
 const TABLE_PATH_JUPITER: &str = "data/tables/water_jupiter.json";
 const RESULT_PATH_JUPITER: &str = "data/results/sweep_jupiter.jsonl";
+// The 69 km/s freeze-timing bracket (ADR-0026 instrument at the realistic-cloud anchor).
+const RESULT_PATH_FROZEN_PROBE_JUPITER: &str = "data/results/frozen_probe_jupiter.jsonl";
+const RESULT_PATH_FROZEN_JUPITER: &str = "data/results/sweep_frozen_jupiter.jsonl";
+const TABLE_DIR_FROZEN_JUPITER: &str = "data/tables/frozen_jupiter";
 const RESULT_PATH_GEOMETRY_M40: &str = "data/results/sweep_geometry_m40.jsonl";
 
 /// The production `ρ_impact` grid [kg/m³] (design §3-4): the impact-density axis of `e_eff(ρ)`.
@@ -376,11 +380,11 @@ struct FrozenRecord {
 
 /// The per-case frozen-table path — the naming contract shared with
 /// `puffsat.tables.frozen_table_name`.
-fn frozen_table_path(v: f64, rho_impact: f64) -> String {
-    // SAFE: v is a positive velocity grid value ≤ 16000, exactly representable and in range.
+fn frozen_table_path(dir: &str, v: f64, rho_impact: f64) -> String {
+    // SAFE: v is a positive velocity grid value ≤ 69000, exactly representable and in range.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let v_int = v.round() as u64;
-    format!("{TABLE_DIR_FROZEN}/v{v_int:05}_rho{rho_impact:.2}.json")
+    format!("{dir}/v{v_int:05}_rho{rho_impact:.2}.json")
 }
 
 /// Probe one EOS-only bounce for its turnaround state (no swap).
@@ -782,6 +786,10 @@ const JUP_RHO: [f64; 6] = [0.01, 0.02, 0.04, 0.07, 0.11, 0.16];
 /// Slug column lengths [m]: log-spaced from the 1 m production convention to the realistic
 /// stretched cloud (~10 m), filling the ridge between the coarse grid's two endpoints.
 const JUP_LENGTH: [f64; 5] = [1.0, 2.0, 4.0, 8.0, 12.0];
+/// Slug length [m] the freeze-timing bracket is anchored at: the longest, most-realistic cloud
+/// (`JUP_LENGTH`'s top), where the coupled headline `e_eff` is quoted — so the EOS-only frozen
+/// delta translates directly onto it.
+const JUP_FROZEN_LENGTH: f64 = 12.0;
 /// Opacity-scale bracket (tau ~ 1 regime: e_eff genuinely moves with opacity here); log-spaced,
 /// keeping the 0.1/1/10 anchors the frontier's kappa bracket slices on.
 const JUP_OPACITY_SCALE: [f64; 5] = [0.1, 0.3, 1.0, 3.0, 10.0];
@@ -867,43 +875,54 @@ fn write_rows<T: Serialize>(path: &str, records: &[T]) -> Result<(), Box<dyn std
     Ok(())
 }
 
-/// `--frozen-probe`: run the transitional grid EOS-only and record each case's mass-weighted
-/// turnaround state; the Python table generator freezes the composition there.
-fn frozen_probe_mode() -> Result<(), Box<dyn std::error::Error>> {
-    let table = Table::load(TABLE_PATH)?;
-    let rows = run_sweep_frozen_probe(&V_GRID, &RHO_GRID, &table, &Config::production());
-    write_rows(RESULT_PATH_FROZEN_PROBE, &rows)?;
+/// `--frozen-probe`: run `v_grid × rho_grid` EOS-only on `table_path` and record each case's
+/// mass-weighted turnaround state; the Python table generator freezes the composition there.
+/// Parameterized so the transitional (ADR-0026) and 69 km/s Jupiter passes share it.
+fn frozen_probe_mode(
+    v_grid: &[f64],
+    rho_grid: &[f64],
+    table_path: &str,
+    base: &Config,
+    result_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let table = Table::load(table_path)?;
+    let rows = run_sweep_frozen_probe(v_grid, rho_grid, &table, base);
+    write_rows(result_path, &rows)?;
     for r in &rows {
         println!(
             "rust: v={:.0} rho={:.2} -> turnaround rho*={:.3} T*={:.0} K (e_eff_eq={:.4})",
             r.v, r.rho_impact, r.rho_star, r.t_star, r.e_eff_eq,
         );
     }
-    println!(
-        "rust: wrote {} probe rows -> {RESULT_PATH_FROZEN_PROBE}",
-        rows.len()
-    );
+    println!("rust: wrote {} probe rows -> {result_path}", rows.len());
     Ok(())
 }
 
 /// `--frozen`: the three-curve frozen-recombination bounding sweep (equilibrium vs
-/// sudden-freeze-at-turnaround vs pure-H2O-no-chemistry). Per-case frozen tables are loaded
-/// serially up front (cheap next to the bounces themselves).
-fn frozen_sweep_mode() -> Result<(), Box<dyn std::error::Error>> {
-    let table = Table::load(TABLE_PATH)?;
-    let h2o_tbl = Table::load(format!("{TABLE_DIR_FROZEN}/h2o.json"))?;
-    let base = Config::production();
+/// sudden-freeze-at-turnaround vs pure-H2O-no-chemistry). Per-case frozen tables (in `table_dir`)
+/// are loaded serially up front (cheap next to the bounces themselves). Parameterized so the
+/// transitional and 69 km/s Jupiter passes share it.
+fn frozen_sweep_mode(
+    v_grid: &[f64],
+    rho_grid: &[f64],
+    table_path: &str,
+    table_dir: &str,
+    base: &Config,
+    result_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let table = Table::load(table_path)?;
+    let h2o_tbl = Table::load(format!("{table_dir}/h2o.json"))?;
     let mut cases = Vec::new();
-    for &v in &V_GRID {
-        for &rho in &RHO_GRID {
-            cases.push((v, rho, Table::load(frozen_table_path(v, rho))?));
+    for &v in v_grid {
+        for &rho in rho_grid {
+            cases.push((v, rho, Table::load(frozen_table_path(table_dir, v, rho))?));
         }
     }
     let rows: Vec<FrozenRecord> = cases
         .par_iter()
-        .map(|(v, rho, frozen_tbl)| run_one_frozen(*v, *rho, &table, frozen_tbl, &h2o_tbl, &base))
+        .map(|(v, rho, frozen_tbl)| run_one_frozen(*v, *rho, &table, frozen_tbl, &h2o_tbl, base))
         .collect();
-    write_rows(RESULT_PATH_FROZEN, &rows)?;
+    write_rows(result_path, &rows)?;
     for r in &rows {
         println!(
             "rust: v={:.0} rho={:.2} -> e_eff eq={:.4} frozen-rebound={:.4} frozen-all={:.4} (jump {:.2e})",
@@ -915,10 +934,7 @@ fn frozen_sweep_mode() -> Result<(), Box<dyn std::error::Error>> {
             r.swap_energy_jump_frac,
         );
     }
-    println!(
-        "rust: wrote {} frozen rows -> {RESULT_PATH_FROZEN}",
-        rows.len()
-    );
+    println!("rust: wrote {} frozen rows -> {result_path}", rows.len());
     Ok(())
 }
 
@@ -954,17 +970,64 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    // Jupiter 69 km/s freeze-timing bracket (ADR-0026 instrument at the L=12 m realistic-cloud
+    // anchor, on the extended-grid table). Checked before the transitional variants (exact-match
+    // args, but keeps the 69 km/s pass self-contained). Needs `make tables-jupiter` /
+    // `tables-frozen-jupiter` first.
+    if args.iter().any(|a| a == "--frozen-probe-jupiter") {
+        let base = Config {
+            v: JUP_V,
+            length: JUP_FROZEN_LENGTH,
+            ..Config::production()
+        };
+        return frozen_probe_mode(
+            &[JUP_V],
+            &JUP_RHO,
+            TABLE_PATH_JUPITER,
+            &base,
+            RESULT_PATH_FROZEN_PROBE_JUPITER,
+        );
+    }
+    if args.iter().any(|a| a == "--frozen-jupiter") {
+        let base = Config {
+            v: JUP_V,
+            length: JUP_FROZEN_LENGTH,
+            ..Config::production()
+        };
+        return frozen_sweep_mode(
+            &[JUP_V],
+            &JUP_RHO,
+            TABLE_PATH_JUPITER,
+            TABLE_DIR_FROZEN_JUPITER,
+            &base,
+            RESULT_PATH_FROZEN_JUPITER,
+        );
+    }
+
     // Frozen-recombination probe: record each transitional case's turnaround state, from which the
     // Python side generates the per-case frozen-composition tables.
     if args.iter().any(|a| a == "--frozen-probe") {
-        return frozen_probe_mode();
+        return frozen_probe_mode(
+            &V_GRID,
+            &RHO_GRID,
+            TABLE_PATH,
+            &Config::production(),
+            RESULT_PATH_FROZEN_PROBE,
+        );
     }
 
     // Frozen-recombination bounding sweep: equilibrium vs sudden-freeze-at-turnaround vs
     // pure-H2O-no-chemistry, per transitional case. Needs the per-case frozen tables (make
     // tables-frozen).
     if args.iter().any(|a| a == "--frozen") {
-        return frozen_sweep_mode();
+        return frozen_sweep_mode(
+            &V_GRID,
+            &RHO_GRID,
+            TABLE_PATH,
+            TABLE_DIR_FROZEN,
+            &Config::production(),
+            RESULT_PATH_FROZEN,
+        );
     }
 
     // Ablating-wall recovery sweep (Rung E, ADR-0014): the rigid floor vs the shielding+injection
@@ -1120,8 +1183,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use super::{
         ABL_KAPPA_VAPOR, ABL_Q_STAR, AblatingRecord, Config, GeoConfig, GeoRecord, LowvConfig,
-        Record, frozen_table_path, run_ablating_case, run_eta_case, run_one, run_one_frozen,
-        run_sweep, run_sweep_frozen_probe, run_sweep_lowv, run_sweep_transitional,
+        Record, TABLE_DIR_FROZEN, TABLE_DIR_FROZEN_JUPITER, frozen_table_path, run_ablating_case,
+        run_eta_case, run_one, run_one_frozen, run_sweep, run_sweep_frozen_probe, run_sweep_lowv,
+        run_sweep_transitional,
     };
     use hydro1d::radiation::{Limiter, RadConstants};
     use tables::Table;
@@ -1385,12 +1449,17 @@ mod tests {
     #[test]
     fn frozen_table_path_matches_python_contract() {
         assert_eq!(
-            frozen_table_path(5_000.0, 0.16),
+            frozen_table_path(TABLE_DIR_FROZEN, 5_000.0, 0.16),
             "data/tables/frozen/v05000_rho0.16.json"
         );
         assert_eq!(
-            frozen_table_path(16_000.0, 0.64),
+            frozen_table_path(TABLE_DIR_FROZEN, 16_000.0, 0.64),
             "data/tables/frozen/v16000_rho0.64.json"
+        );
+        // The 69 km/s Jupiter freeze bracket shares the contract on its own directory.
+        assert_eq!(
+            frozen_table_path(TABLE_DIR_FROZEN_JUPITER, 69_000.0, 0.07),
+            "data/tables/frozen_jupiter/v69000_rho0.07.json"
         );
     }
 

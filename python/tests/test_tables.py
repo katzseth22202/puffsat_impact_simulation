@@ -10,7 +10,9 @@ round-trip is exercised by the B5d-1 sweep, which loads the generated file.)
 
 from __future__ import annotations
 
+import json
 from itertools import pairwise
+from pathlib import Path
 from typing import cast
 
 import numpy as np
@@ -120,6 +122,57 @@ def test_frozen_table_pure_h2o() -> None:
     p_ref, e_ref = ew.pressure_energy_frozen(rho_grid[1], t_grid[4], ew.PURE_H2O_FROZEN)
     np.testing.assert_allclose(fields["p"][1 * n_t + 4], p_ref, rtol=1e-12)
     np.testing.assert_allclose(fields["e"][1 * n_t + 4], e_ref, rtol=1e-12)
+
+
+def test_frozen_from_probe_jupiter_uses_the_extended_grid(tmp_path: Path) -> None:
+    """The 69 km/s freeze bracket needs its per-case tables on the Jupiter grid: a ~1.5e5 K,
+    multi-charge turnaround state must stay on-grid (the transitional grid tops out at 60 kK and
+    would clip it). `jupiter=True` selects `RHO/T_RANGE_JUPITER` for both the per-case tables and
+    the shared pure-H2O `h2o.json`; the default path stays on the transitional grid."""
+    from puffsat import eos_water as ew
+
+    probe = tmp_path / "frozen_probe_jupiter.jsonl"
+    # A dilute, hot turnaround state representative of the 69 km/s stagnation (multi-charge O).
+    probe.write_text(
+        json.dumps({"v": 69_000.0, "rho_impact": 0.07, "rho_star": 0.5, "t_star": 150_000.0}) + "\n"
+    )
+
+    jup_dir = tmp_path / "frozen_jupiter"
+    written = tables.build_frozen_tables_from_probe(probe, jup_dir, jupiter=True)
+    assert [p.name for p in written] == ["v69000_rho0.07.json", "h2o.json"]
+
+    for path in written:
+        with path.open() as fh:
+            table = cast("dict[str, object]", json.load(fh))
+        t_grid = cast("list[float]", table["T_grid"])
+        rho_grid = cast("list[float]", table["rho_grid"])
+        # The turnaround T* = 1.5e5 K sits strictly inside the extended grid (not clipped).
+        assert t_grid[-1] == pytest.approx(tables.T_RANGE_JUPITER[1])
+        assert t_grid[0] <= 150_000.0 <= t_grid[-1]
+        assert rho_grid[-1] == pytest.approx(tables.RHO_RANGE_JUPITER[1])
+        fields = cast("dict[str, list[float]]", table["fields"])
+        for name, vals in fields.items():
+            assert all(v > 0.0 for v in vals), name
+
+    # The per-case table tabulates the frozen EOS at the hot multi-charge freeze state.
+    with (jup_dir / "v69000_rho0.07.json").open() as fh:
+        case = cast("dict[str, object]", json.load(fh))
+    y = ew.frozen_composition(0.5, 150_000.0)
+    assert sum(y.y_o_ions[1:]) > 0.0  # O2+ and up actually hold population at 1.5e5 K
+    n_t = cast("list[int]", case["shape"])[1]
+    rg = cast("list[float]", case["rho_grid"])
+    tg = cast("list[float]", case["T_grid"])
+    p_ref, e_ref = ew.pressure_energy_frozen(rg[3], tg[5], y)
+    cf = cast("dict[str, list[float]]", case["fields"])
+    np.testing.assert_allclose(cf["p"][3 * n_t + 5], p_ref, rtol=1e-12)
+    np.testing.assert_allclose(cf["e"][3 * n_t + 5], e_ref, rtol=1e-12)
+
+    # Default (transitional) path is unchanged: grid tops out at 60 kK.
+    trans_dir = tmp_path / "frozen"
+    tables.build_frozen_tables_from_probe(probe, trans_dir, jupiter=False)
+    with (trans_dir / "h2o.json").open() as fh:
+        trans = cast("dict[str, object]", json.load(fh))
+    assert cast("list[float]", trans["T_grid"])[-1] == pytest.approx(tables.T_RANGE[1])
 
 
 def test_lowv_table_has_liquid_frac_and_loader_contract() -> None:

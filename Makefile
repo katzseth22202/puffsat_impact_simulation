@@ -3,7 +3,7 @@
 
 PY := uv run python
 
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter fetch-tops
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops
 
 all: smoke
 
@@ -209,6 +209,37 @@ analysis-jupiter: data/results/frontier_jupiter.csv
 
 data/results/frontier_jupiter.csv: data/results/sweep_jupiter.jsonl data/results/sweep_geometry_m40.jsonl python/puffsat/jupiter.py
 	PYTHONPATH=python uv run --extra sci python -m puffsat.jupiter
+
+## sweep-frozen-probe-jupiter: turnaround-state probe for the 69 km/s freeze-timing bracket
+## (ADR-0026 instrument at the L=12 m realistic-cloud anchor) -> data/results/frozen_probe_jupiter.jsonl.
+## EOS-only on the extended-grid Jupiter table; records each JUP_RHO case's (rho*, T*) at turnaround.
+sweep-frozen-probe-jupiter: data/results/frozen_probe_jupiter.jsonl
+
+data/results/frozen_probe_jupiter.jsonl: data/tables/water_jupiter.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --frozen-probe-jupiter
+
+## tables-frozen-jupiter: per-case frozen-composition tables (+ pure-H2O bracket) on the extended
+## Jupiter grid (T to 1.2e6 K) -> data/tables/frozen_jupiter/. Depends on the Jupiter probe.
+tables-frozen-jupiter: data/tables/frozen_jupiter/h2o.json
+
+data/tables/frozen_jupiter/h2o.json: data/results/frozen_probe_jupiter.jsonl python/puffsat/eos_water.py python/puffsat/tables.py
+	PYTHONPATH=python $(PY) -m puffsat.tables --frozen-from-probe data/results/frozen_probe_jupiter.jsonl --jupiter
+
+## sweep-frozen-jupiter: three-curve freeze-timing bracket at 69 km/s (equilibrium vs
+## freeze-after-the-plate vs freeze-before-the-plate) -> data/results/sweep_frozen_jupiter.jsonl
+sweep-frozen-jupiter: data/results/sweep_frozen_jupiter.jsonl
+
+data/results/sweep_frozen_jupiter.jsonl: data/tables/frozen_jupiter/h2o.json data/tables/water_jupiter.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	cargo run --release -p sweep -- --frozen-jupiter
+
+## analysis-frozen-jupiter: translate the 69 km/s EOS-only e_eff freeze bracket onto the survivable
+## f -> data/results/frontier_frozen_jupiter.csv; depends on sweep-frozen-jupiter (+ the coupled
+## sweep and M=40 geometry for the headline design point).
+analysis-frozen-jupiter: data/results/frontier_frozen_jupiter.csv
+
+data/results/frontier_frozen_jupiter.csv: data/results/sweep_frozen_jupiter.jsonl data/results/sweep_jupiter.jsonl data/results/sweep_geometry_m40.jsonl python/puffsat/jupiter.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.jupiter --frozen
 
 ## sensitivity: opacity-insensitivity scan (rung B, B5d-3) — sweep at 0.1x/1x/10x opacity, show
 ## e_eff barely moves. Builds the release sweep first; writes data/results/opacity_scan/.

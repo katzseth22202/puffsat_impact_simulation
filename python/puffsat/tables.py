@@ -252,6 +252,7 @@ def build_table_jupiter(
 
 
 DEFAULT_TABLE_DIR_FROZEN = Path("data/tables/frozen")
+DEFAULT_TABLE_DIR_FROZEN_JUPITER = Path("data/tables/frozen_jupiter")
 
 
 def frozen_table_name(v: float, rho_impact: float) -> str:
@@ -310,14 +311,14 @@ def build_table_frozen(
     eos_prov: dict[str, object] = {
         "model": "FROZEN-composition water: equilibrium composition at the freeze state held "
         "fixed (no chemistry); constant chemical energy offset, ideal mixture pressure",
-        "species": ["H2O", "H", "O", "H+", "O+", "e-"],
+        "species": ["H2O", "H", "O", "H+"] + [f"O{k}+" for k in range(1, 9)] + ["e-"],
         "freeze_state": {"rho_star": rho_star, "T_star": t_star},
         "fractions_per_formula_unit": {
             "y_h2o": y.y_h2o,
             "y_h": y.y_h,
             "y_o": y.y_o,
             "y_hp": y.y_hp,
-            "y_op": y.y_op,
+            "y_o_ions": list(y.y_o_ions),
             "y_e": y.y_e,
         },
         "energy_reference": "bound molecular H2O at T->0 = 0 (all e > 0)",
@@ -345,10 +346,21 @@ def build_table_frozen_h2o(
     return _build_table_frozen_common(ew.PURE_H2O_FROZEN, eos_prov, rho_range, n_rho, t_range, n_t)
 
 
-def build_frozen_tables_from_probe(probe_path: Path, outdir: Path) -> list[Path]:
+def build_frozen_tables_from_probe(
+    probe_path: Path, outdir: Path, *, jupiter: bool = False
+) -> list[Path]:
     """Read the Rust `--frozen-probe` JSONL (one `{v, rho_impact, rho_star, t_star}` row per case)
     and emit one frozen-composition table per case into `outdir`, plus the shared pure-H2O
-    `h2o.json`. Returns the written paths (per-case tables in probe order, then `h2o.json`)."""
+    `h2o.json`. Returns the written paths (per-case tables in probe order, then `h2o.json`).
+
+    `jupiter=True` builds on the extended Jupiter grid (`RHO/T_RANGE_JUPITER`, T to 1.2e6 K) so the
+    ~1.5e5 K, multi-charge turnaround states of the 69 km/s scenario stay on-grid; the default
+    transitional grid tops out at 60 kK and would clip them."""
+    grid = (
+        (RHO_RANGE_JUPITER, N_RHO_JUPITER, T_RANGE_JUPITER, N_T_JUPITER)
+        if jupiter
+        else (RHO_RANGE, N_RHO, T_RANGE, N_T)
+    )
     outdir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     with probe_path.open() as fh:
@@ -357,7 +369,7 @@ def build_frozen_tables_from_probe(probe_path: Path, outdir: Path) -> list[Path]
             if not line:
                 continue
             row = json.loads(line)
-            table = build_table_frozen(float(row["rho_star"]), float(row["t_star"]))
+            table = build_table_frozen(float(row["rho_star"]), float(row["t_star"]), *grid)
             out = outdir / frozen_table_name(float(row["v"]), float(row["rho_impact"]))
             with out.open("w") as out_fh:
                 json.dump(table, out_fh)
@@ -365,7 +377,7 @@ def build_frozen_tables_from_probe(probe_path: Path, outdir: Path) -> list[Path]
 
     h2o_out = outdir / "h2o.json"
     with h2o_out.open("w") as out_fh:
-        json.dump(build_table_frozen_h2o(), out_fh)
+        json.dump(build_table_frozen_h2o(*grid), out_fh)
     written.append(h2o_out)
     return written
 
@@ -471,14 +483,20 @@ def main() -> None:
     parser.add_argument(
         "--outdir",
         type=Path,
-        default=DEFAULT_TABLE_DIR_FROZEN,
-        help="output directory for --frozen-from-probe",
+        default=None,
+        help="output directory for --frozen-from-probe (default: data/tables/frozen, or "
+        "data/tables/frozen_jupiter with --jupiter)",
     )
     args = parser.parse_args()
 
     if args.frozen_from_probe is not None:
-        written = build_frozen_tables_from_probe(args.frozen_from_probe, args.outdir)
-        print(f"python: wrote {len(written)} frozen tables -> {args.outdir}")
+        outdir = args.outdir or (
+            DEFAULT_TABLE_DIR_FROZEN_JUPITER if args.jupiter else DEFAULT_TABLE_DIR_FROZEN
+        )
+        written = build_frozen_tables_from_probe(
+            args.frozen_from_probe, outdir, jupiter=args.jupiter
+        )
+        print(f"python: wrote {len(written)} frozen tables -> {outdir}")
         return
 
     if args.lowv:

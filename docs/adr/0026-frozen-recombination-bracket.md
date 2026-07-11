@@ -80,6 +80,44 @@ near the equilibrium end of the bracket.
    density where `τ_rec` first exceeds the local expansion time, instead of at turnaround.
    Non-blocking: it interpolates a bracket whose physical end is already argued.
 
+## Amendment (2026-07-11): the 69 km/s Jupiter scenario has its own, wider bracket — and the kinetics defence is weaker
+
+The Jupiter-retrograde 69 km/s special scenario (ADR-0007 Jupiter table, `sweep-jupiter`) needed
+its own freeze bracket: the turnaround is a **multi-charge oxygen plasma at ~140–170 kK**, which
+the transitional grid (T ≤ 60 kK, single O⁺ stage) cannot even represent. A parallel pipeline was
+built on the extended grid — `sweep-frozen-probe-jupiter → tables-frozen-jupiter →
+sweep-frozen-jupiter → analysis-frozen-jupiter` — with `FrozenComposition` carrying the **full
+8-stage O Saha ladder** (each stage freezing its cumulative ionization energy) so the splice stays
+exact at the hot reference state. Anchored at the realistic `L = 12 m` cloud over the survivable
+`JUP_RHO` grid (`data/results/frontier_frozen_jupiter.csv`):
+
+| ρ_impact (kg/m³) | frozen throughout (pure H₂O) | equilibrium (EOS-only) | sudden freeze |
+|---|---|---|---|
+| 0.01 | 0.647 | 0.695 | 0.502 |
+| 0.07 | 0.647 | 0.711 | 0.533 |
+| 0.16 | 0.647 | 0.716 | 0.548 |
+
+Two things differ from the baseline anchors:
+
+1. **The ordering inverts: pure-H₂O is *not* the upper bound here.** At this ionization the
+   chemistry-free and equilibrium tables are genuinely different EOS (not a sink on/off toggle),
+   so the transitional invariant *frozen-throughout ≥ equilibrium* fails — equilibrium sits above
+   both freeze timings. The load-bearing bracket is therefore **[sudden-freeze, equilibrium]**.
+   Translated through `f = eta·(1+e_eff)/2` onto the coupled headline at the `R = 22 m` concave
+   design point (`ρ ≈ 0.04`, `Δe_eff = 0.182 → Δf ≈ 0.089`): equilibrium headline **`f = 0.781`**
+   → **sudden freeze `f = 0.692`** (pure-H₂O bound `f = 0.752`). Splice energy-jump diagnostic
+   ≤ 3.5e-3 of incident KE. So the 69 km/s bracket on `f` is **[0.69, 0.78]**.
+2. **The kinetics argument that keeps equilibrium the headline is *weaker* at 69 km/s.** The
+   defence above rests on the turnaround being dense (`n ~ 10²⁰–10²¹ cm⁻³`) so three-body
+   recombination outruns the rebound. The 69 km/s turnaround is **dilute** — `ρ* ≈ 0.09–1.2 kg/m³`
+   (`n ~ 10¹⁹ cm⁻³`, ~10–100× below the dip) — **and** multi-charge, so there is an 8-stage
+   ionization ladder to unwind against a fast, low-density expansion. Equilibrium is still the
+   better central estimate (the dense stagnation phase, where the momentum is exchanged, does
+   track it), but the sudden-freeze end is **less firmly foreclosed** here than for the baseline
+   anchors. The `[0.69, 0.78]` bracket is correspondingly more load-bearing and must accompany any
+   quoted 69 km/s `f`. The named refinement (finite-rate / freeze-out-density chemistry) matters
+   *more* for this scenario than for the envelope.
+
 ## Considered Options
 
 - **Adopt the sudden-freeze curve as the new conservative floor.** Rejected: it is not a floor
