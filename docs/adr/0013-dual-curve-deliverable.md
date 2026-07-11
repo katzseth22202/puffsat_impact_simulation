@@ -32,7 +32,9 @@ logic. Landed, it adds: dip (11 km/s) `e_eff` floor 0.57 → ≤ 0.580 (≤ +0.0
 0.629 → [0.638, 0.678], best survivable `f` 0.784 → [0.788, 0.807] (straddling the gate, cleared only
 at the optimistic `Q*`/τ corner) *(2026-07 correction: with the physical `c_stag ≈ 1.24` and the
 converged geometry grid this becomes 0.805 → [0.809, 0.829] — the 16 km/s gate now clears across the
-whole bracket; the dip drops to ≈ 0.777 rigid / 0.782 ablating, just under — ADR-0010)*. So on the
+whole bracket; the dip drops to ≈ 0.777 rigid / 0.782 ablating, just under — ADR-0010)* *(2026-07-10,
+ADR-0023 kernel correction: 16 km/s 0.798 → [0.802, 0.821], still clearing across the bracket though
+barely at the conservative end; dip ≈ 0.768 rigid / 0.773 ablating)*. So on the
 dual-curve picture the best-estimate `e_eff` sits only marginally above the rigid floor, and **the
 geometry lever (concave `eta_capture`, Rung D), not the wall, is what carries `f` to the 0.8 line**
 at the dip. The recovery's error band is the **τ-bracket**

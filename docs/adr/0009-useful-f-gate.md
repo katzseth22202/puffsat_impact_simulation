@@ -52,6 +52,12 @@ baseline and **clears the gate robustly** (`0.809–0.829` across the full ablat
 the relaxed 900 MPa limit is no longer needed and adds almost nothing). The gate verdict as a
 family — best survivable `f ≈ 0.78–0.83`, centered on 0.8 — is unchanged; see CONCLUSION.md.
 
+*Second correction (2026-07-10, ADR-0023 correction — two 2D-kernel defects had left the concave
+`eta_capture` corners ~1 % high):* both anchors move down ~0.01 — dip `0.777 → 0.768` (≈ 0.773
+ablating), 16 km/s `0.805 → 0.798` at the 400 MPa baseline (on the line), with the ablating
+bracket `0.802–0.821` still clearing the gate. Family verdict unchanged: best survivable
+`f ≈ 0.77–0.82`, centered on 0.8.
+
 ## Amendment (2026-06, paper draft): a preliminary `f` is quotable in the white paper
 
 The original stance — "no `f` is quoted externally until the hydrocode cross-check lands"

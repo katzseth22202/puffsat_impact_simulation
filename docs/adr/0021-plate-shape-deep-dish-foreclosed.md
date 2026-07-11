@@ -53,6 +53,14 @@ at M = 20): the depth-monotone concave lift and the marginal over-collimation pa
 with smaller magnitude. The corresponding concave `f` maxima are ≈ 0.792 (dip) / 0.822 (16 km/s);
 the decision (shallow concave is the lever, deep dish foreclosed) is unchanged.
 
+*Second correction (2026-07-10, ADR-0023 kernel fix — the dish rim's side face was missing from the
+immersed boundary, inflating the M = 10 concave etas and depressing M = 20):* the same case now gives
+**0.915 → 0.977 → 0.994** at M = 10 and 0.92 → 0.97 → 0.99 at M = 20 — the two Mach anchors agree to
+< 1 % (the earlier M = 10/M = 20 gap was the bug), the depth-monotone concave lift stands, but the
+**over-collimation past 1 is gone** (sweep-wide max `eta_capture` = 0.994): the `eta > 1` readings
+were the rim-corner artifact, not physics. Concave `f` maxima become ≈ 0.780 (dip) / 0.810 (16 km/s);
+the decision is again unchanged.
+
 ## Amendment (2026-06): Orion's geometric loss is *interception* (collimation `C₀ ≈ 0.5`), not sideways rebound — a conditional PuffSat advantage to claim later
 
 Sanity-checking the §3.2 Orion comparison turned up a **distinct, larger geometric difference than the

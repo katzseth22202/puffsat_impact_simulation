@@ -287,7 +287,7 @@ impl Grid2D {
                     continue;
                 }
                 let dist = profile.signed_distance(z, r); // < 0 inside the solid
-                let (n_z, n_r) = profile.normal(r);
+                let (n_z, n_r) = profile.normal(z, r);
                 // Image point = the cell center reflected across the surface (into the fluid).
                 let z_img = z - 2.0 * dist * n_z;
                 let r_img = (r - 2.0 * dist * n_r).max(0.0);
@@ -372,7 +372,10 @@ impl Grid2D {
 
             // MUSCL slope reconstruction + Hancock half-step predictor for every padded index that
             // borders a physical face (1 ..= n+2). The predictor uses the plane flux (the geometric
-            // weighting enters only the corrector below).
+            // weighting enters only the corrector below). The predicted face states are validated
+            // against positivity and the stencil's signal-speed envelope, reverting to the
+            // piecewise-constant (first-order) state when the reconstruction is unphysical — see
+            // `face_states_valid`.
             let half = 0.5 * dt / dx;
             let mut face_l = vec![DirState::default(); n + 4];
             let mut face_r = vec![DirState::default(); n + 4];
@@ -385,8 +388,17 @@ impl Grid2D {
                 let fl = phys_flux(ql.to_state(gamma), gamma);
                 let fr = phys_flux(qr.to_state(gamma), gamma);
                 // q* = q ± ½ Δ + ½(dt/dx)(F(q_L) − F(q_R)).
-                face_l[j] = ql.add_flux(half, fl).add_flux(-half, fr).to_state(gamma);
-                face_r[j] = qr.add_flux(half, fl).add_flux(-half, fr).to_state(gamma);
+                let wl = ql.add_flux(half, fl).add_flux(-half, fr).to_state(gamma);
+                let wr = qr.add_flux(half, fl).add_flux(-half, fr).to_state(gamma);
+                let env = signal_envelope(&p[j - 1..=j + 1], gamma);
+                if face_states_valid(wl, wr, env) {
+                    face_l[j] = wl;
+                    face_r[j] = wr;
+                } else {
+                    let w0 = p[j].to_state(gamma);
+                    face_l[j] = w0;
+                    face_r[j] = w0;
+                }
             }
 
             // Face fluxes: face j (1 ..= n+1) sits between padded cells j and j+1.
@@ -523,6 +535,47 @@ fn fill_ghosts(p: &mut [DirCons], n: usize, bc_lo: Bc, bc_hi: Bc) {
             p[n + 3] = p[3];
         }
     }
+}
+
+/// Fastest signal speed reachable from a cell stencil: `max(|u_n|, |u_t|) + 2c/(γ−1)` maximized
+/// over the cells — the exact front speed of an expansion into vacuum, the fastest any physical
+/// wave in the local Riemann fan can move (Toro §4.6).
+fn signal_envelope(cells: &[DirCons], gamma: f64) -> f64 {
+    cells
+        .iter()
+        .map(|&c| {
+            let w = c.to_state(gamma);
+            let cs = (gamma * w.p.max(0.0) / w.rho).sqrt();
+            w.un.abs().max(w.ut.abs()) + 2.0 * cs / (gamma - 1.0)
+        })
+        .fold(0.0, f64::max)
+}
+
+/// Whether a pair of Hancock-predicted face states is physically admissible: finite, positive
+/// `ρ` and `p`, and velocities inside the stencil's signal-speed envelope (with a 1.5× margin for
+/// benign limiter overshoot).
+///
+/// The velocity bound is the load-bearing part (found by the 2026-07 M=40 audit): reconstruction
+/// is done on **conserved** components, so at a face bordering a floored near-vacuum cell the
+/// reconstructed `ρ` can approach zero while the momentum slope stays finite — `u = m/ρ` then
+/// explodes with `ρ` and `p` still positive, the garbage flux drives neighbors negative, and the
+/// vacuum floor's non-conservative reset turns that into runaway mass/energy creation. A face
+/// state faster than every signal the local stencil can launch is provably reconstruction
+/// garbage, so the face reverts to piecewise-constant (first order) — a guard that never fires on
+/// healthy flows.
+fn face_states_valid(wl: DirState, wr: DirState, envelope: f64) -> bool {
+    let bound = 1.5 * envelope;
+    let ok = |w: DirState| {
+        w.rho.is_finite()
+            && w.p.is_finite()
+            && w.un.is_finite()
+            && w.ut.is_finite()
+            && w.rho > 0.0
+            && w.p > 0.0
+            && w.un.abs() <= bound
+            && w.ut.abs() <= bound
+    };
+    ok(wl) && ok(wr)
 }
 
 /// The van Leer limited slope, per conserved component (zero where the differences disagree in

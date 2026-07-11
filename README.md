@@ -4,7 +4,7 @@ A physics simulation to compute the per-collision coefficient of restitution of 
 
 ## Bottom line
 
-**`f ≈ 0.8` is physically realistic across the 3.2–16 km/s envelope.** The best survivable `f` lands at `≈ 0.78–0.83` over the envelope: it clears the gate at 16 km/s (`≈ 0.81` at the reference plate, `0.81–0.83` with the ablating wall) and sits just under it at the worst case (the interior ~11 km/s transitional dip, `≈ 0.78`, within the study's ±0.03 numerics band of the line) — centered on the paper's `0.8`, not a knife-edge in either direction. This is a **single-code** result; an independent hydrocode cross-check is the one open validation gate. Full reasoning and numbers: [`CONCLUSION.md`](CONCLUSION.md).
+**`f ≈ 0.8` is physically realistic across the 3.2–16 km/s envelope.** The best survivable `f` lands at `≈ 0.77–0.82` over the envelope: it reaches the gate at 16 km/s (`≈ 0.80` at the reference plate, `0.80–0.82` with the ablating wall) and sits just under it at the worst case (the interior ~11 km/s transitional dip, `≈ 0.77`, within the study's ±0.03 numerics band of the line) — centered on the paper's `0.8`, not a knife-edge in either direction. This is a **single-code** result; an independent hydrocode cross-check is the one open validation gate. Full reasoning and numbers: [`CONCLUSION.md`](CONCLUSION.md).
 
 ## What This Computes
 

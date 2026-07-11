@@ -64,6 +64,9 @@ product is now formed in code (`analysis.py --axis geometry`):
   gate ties the IBM flat wall to the verified grid-aligned flat `eta_capture`, rel < 0.10). Shallow
   concave can push `eta_capture > 1` (over-collimation past the flat plane-wave limit, ADR-0021); the
   "1D ⇒ `eta_capture = 1`" identity above fixes the *flat* plane-wave denominator and is not a ceiling.
+  *(2026-07-10: the `> 1` readings actually measured turned out to be a rim-corner boundary artifact —
+  the corrected sweep tops out at 0.994 (ADR-0023 correction, ADR-0021). The ratio still has no
+  built-in ceiling; the sweep just doesn't reach past it.)*
 - **The `Σ = m_engaged/(π r_foot²)` contract reduces, for a uniform cylinder, to `Σ/ρ = L = 2·(L/D)·r_foot`** —
   the footprint `r_foot` cancels (mass scales with the same `π r_foot²`), so `r_foot/R` is purely the
   `eta_capture` lever and `L/D` alone sets the 1D column density that fixed `e_eff`. In the sweep's
@@ -77,8 +80,8 @@ product is now formed in code (`analysis.py --axis geometry`):
   *Superseded numbers (2026-07):* the bracket above was computed on the original 56×40 grid at
   Mach anchors 5/10, which the 2026-07 audit showed was not grid-converged for the deep-dish/tight-
   footprint corner. On the converged 112×80 grid with physical Mach anchors 10/20 the concave
-  maxima are `f ≈ 0.792` at the dip and `f ≈ 0.822` at 16 km/s (before survivability). The
-  factorization decision itself is unchanged.
+  maxima are `f ≈ 0.792` at the dip and `f ≈ 0.822` at 16 km/s (before survivability) *(2026-07-10,
+  ADR-0023 kernel correction: ≈ 0.780 / 0.810)*. The factorization decision itself is unchanged.
 
 ## Considered Options
 

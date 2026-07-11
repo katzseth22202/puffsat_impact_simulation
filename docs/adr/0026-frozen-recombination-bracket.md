@@ -49,6 +49,10 @@ Translated through `f = eta_capture·(1+e_eff)/2` at the survivable geometries:
 - **16 km/s:** `Δe_eff = 0.131` → `Δf ≈ 0.064`; `f` 0.805 → **≈ 0.74** (frozen-throughout:
   ≈ 0.81).
 
+*(2026-07-10, ADR-0023 kernel correction: the equilibrium anchors become 0.768 dip / 0.798 at
+16 km/s, so the bracket translates to ≈ 0.68 / ≈ 0.74 under sudden freeze and ≈ 0.81 at the
+frozen-throughout end — the conclusion below is unchanged.)*
+
 So the pessimistic end of the bracket **crosses the 0.8 gate** — this is ~3× the ±0.03
 numerics band, the largest single physics uncertainty surfaced by the study. It cannot be
 waved into the noise; it needs a physical argument, which exists:

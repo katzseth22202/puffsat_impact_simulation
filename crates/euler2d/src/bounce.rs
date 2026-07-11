@@ -198,3 +198,44 @@ pub fn run_slug_bounce(cfg: &SlugConfig) -> Bounce2D {
         steps,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{PlateShape, SlugConfig, run_slug_bounce};
+
+    /// Very-strong-shock dished bounce stays bounded and terminates (M=40 rim-corner regression).
+    ///
+    /// Before the dish rim's vertical side face entered the immersed-boundary geometry, solid
+    /// cells near the rim were mirrored across the faraway *top* surface; the resulting spurious
+    /// radial fluxes at the rim corner acted as an energy source — bounded at M ≲ 20 but
+    /// self-exciting at M = 40 (`J/p_in` → 12 at production resolution, → 10⁵² at this coarse
+    /// one). The physical restitution here is ~1.5; steps must stay well below the driver's cap
+    /// (the pathology also manifests as a never-decaying phantom force that runs the integration
+    /// to `max_steps`).
+    #[test]
+    fn strong_shock_dished_bounce_terminates_with_physical_restitution() {
+        let b = run_slug_bounce(&SlugConfig {
+            gamma: 1.4,
+            mach: 40.0,
+            r_foot: 1.0,
+            length: 0.6,
+            r_plate: 2.0,
+            r_max: 2.8,
+            z_max: 3.1,
+            nr: 56,
+            nz: 40,
+            confined: false,
+            shape: PlateShape::Dish { d_over_d: 0.10 },
+        });
+        let ratio = b.restitution_ratio();
+        assert!(
+            ratio > 1.0 && ratio < 2.5,
+            "unphysical restitution {ratio} (rim-corner blow-up?)"
+        );
+        assert!(
+            b.steps < 400 * 40 + 50_000,
+            "force never decayed: ran to the step cap ({} steps)",
+            b.steps
+        );
+    }
+}

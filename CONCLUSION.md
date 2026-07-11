@@ -2,8 +2,9 @@
 
 **Headline.** Within this study's models, a per-collision fudge factor of **`f ≈ 0.8` is
 physically realistic across the full 3.2–16 km/s impact envelope** — the best survivable `f`
-lands at `≈ 0.78–0.83` over the envelope, clearing the gate at the top (16 km/s) and sitting
-just under it (within the numerics band) at the ~11 km/s worst-case dip. This is a
+lands at `≈ 0.77–0.82` over the envelope, clearing the gate at the top (16 km/s, with the
+ablating wall) and sitting just under it (within the numerics band) at the ~11 km/s worst-case
+dip. This is a
 **single-code result**; an independent hydrocode cross-check is the one open validation gate
 (see *Status* below).
 
@@ -42,20 +43,24 @@ penalty applied; 2026-07 numbers — grid-converged 2D `eta_capture` at 112×80 
 anchors, and the physical stagnation coefficient `c_stag ≈ 1.2` in place of the earlier
 artificial-viscosity artifact `≈ 2.0`):
 
-- **At the ~11 km/s dip:** survivable `f ≈ 0.777` on a moderate-footprint shallow-concave disk
-  (`≈ 0.782` with the small ablating-wall recovery) — **just under 0.8**, within the study's
-  ±0.03 numerics band of the gate; the plate-radius/pulse-mass margin map reaches `≈ 0.792`.
-- **At 16 km/s:** survivable `f ≈ 0.805` at the *reference* plate (R = 5.0 m, m = 25 kg) under
-  the strict 400 MPa baseline — **clears 0.8** — and the ablating wall lifts it to
-  **`0.809–0.829`** across its full Q\*/τ bracket, so the top of the envelope clears the gate
-  robustly. With the corrected (lower) peak pressure, survivability is barely binding at 16 km/s:
-  relaxing to 900 MPa adds almost nothing (`0.806`), and the margin map plateaus at `≈ 0.822`.
+- **At the ~11 km/s dip:** survivable `f ≈ 0.768` on a moderate-footprint shallow-concave disk
+  (`≈ 0.773` with the small ablating-wall recovery) — **just under 0.8**, within the study's
+  ±0.03 numerics band of the gate; the plate-radius/pulse-mass margin map reaches `≈ 0.780`.
+- **At 16 km/s:** survivable `f ≈ 0.798` at the *reference* plate (R = 5.0 m, m = 25 kg) under
+  the strict 400 MPa baseline — on the line — and the ablating wall lifts it to **`0.802–0.821`**
+  across its full Q\*/τ bracket, so the top of the envelope clears the gate. With the corrected
+  (lower) peak pressure, survivability is barely binding at 16 km/s: relaxing to 900 MPa adds
+  nothing at the reference plate, and the margin map plateaus at `≈ 0.810`.
 
-**`0.8` is a realistic family, not a knife-edge either way.** The two 2026-07 corrections moved
-the two anchors in opposite directions (dip `0.804 → 0.777`, 16 km/s `0.784 → 0.805`) — both
-third-decimal shifts inside the ±0.03 numerics band. The honest statement is unchanged: the
-best survivable `f` lands at `≈ 0.78–0.83` across the envelope, centered on the paper's `0.8`,
-with the worst case (the dip) just under the line and the top of the envelope above it.
+**`0.8` is a realistic family, not a knife-edge either way.** The two 2026-07 audit corrections
+moved the two anchors in opposite directions (dip `0.804 → 0.777`, 16 km/s `0.784 → 0.805`), and
+a third correction (2026-07-10: two 2D-kernel defects found while chasing an M = 40 blow-up —
+[ADR-0023](docs/adr/0023-2d-axisymmetric-euler-kernel-numerics.md) correction — had left the
+concave `eta_capture` corners ~1 % high) lowered both by ~0.01 (dip `0.777 → 0.768`, 16 km/s
+`0.805 → 0.798`). All are third-decimal shifts inside the ±0.03 numerics band. The honest
+statement is unchanged: the best survivable `f` lands at `≈ 0.77–0.82` across the envelope,
+centered on the paper's `0.8`, with the worst case (the dip) just under the line and the top of
+the envelope reaching above it.
 
 **Freeze-timing bracket (frozen recombination) — the largest quantified physics uncertainty**
 ([ADR-0026](docs/adr/0026-frozen-recombination-bracket.md)). The equilibrium EOS *returns* the
@@ -63,7 +68,7 @@ banked dissociation/ionization energy during the rebound — the one assumption 
 optimistically, and one a FLASH cross-check with the same equilibrium EOS would silently share.
 Bounding the freeze timing both ways: freezing the composition at turnaround (maximal,
 "freeze-after-the-plate" bound) drops the dip `e_eff` 0.570 → 0.398 (best survivable `f`
-≈ 0.69 dip / ≈ 0.74 at 16 km/s — **below the gate**); chemistry-free pure H₂O
+≈ 0.68 dip / ≈ 0.74 at 16 km/s — **below the gate**); chemistry-free pure H₂O
 ("freeze-before-the-plate") raises it to 0.661 (`f` ≈ 0.81–0.82). The equilibrium curve stays
 the headline because three-body recombination at the probed turnaround densities
 (`n ~ 10²⁰–10²¹ cm⁻³`) is ~10²–10³× faster than the ~µs rebound, so the gas tracks equilibrium

@@ -78,13 +78,41 @@ impl PlateProfile {
         }
     }
 
-    /// Outward unit normal `(n_z, n_r)` pointing into the fluid (the `+z` side). For the surface
-    /// `F = z − z_s(r) = 0`, `∇F = (1, −z_s′)`, normalized.
+    /// Outward unit normal `(n_z, n_r)` pointing into the fluid, from the plate face **nearest**
+    /// the point. For the top surface `F = z − z_s(r) = 0`, `∇F = (1, −z_s′)`, normalized. The
+    /// dish's solid body also ends at its rim (`r = r_plate`): a point nearer that vertical side
+    /// face than the top surface takes the radial normal `(0, 1)` instead. Ignoring the side face
+    /// (the pre-fix behavior) mirrored rim-adjacent solid cells across the *top* surface, feeding
+    /// spurious radial fluxes into the fluid past the rim — a bounded error at M ≲ 20 that becomes
+    /// a self-exciting energy source at the rim corner for very strong shocks (found at M = 40).
     #[must_use]
-    pub fn normal(&self, r: f64) -> (f64, f64) {
+    pub fn normal(&self, z: f64, r: f64) -> (f64, f64) {
+        match *self {
+            Self::InclinedPlane { .. } => self.top_normal(r),
+            Self::Dish { r_plate, .. } => {
+                let (d_top, d_side) = (self.top_distance(z, r), r - r_plate);
+                if d_side > d_top {
+                    (0.0, 1.0)
+                } else {
+                    self.top_normal(r)
+                }
+            }
+        }
+    }
+
+    /// Unit normal of the top surface `z = z_s(r)` (pointing into the fluid above).
+    fn top_normal(&self, r: f64) -> (f64, f64) {
         let s = self.slope(r);
         let inv = 1.0 / (1.0 + s * s).sqrt();
         (inv, -s * inv)
+    }
+
+    /// Signed perpendicular distance to the top surface (linearized about the foot of the normal):
+    /// the vertical gap `z − z_s(r)` projected onto the normal, negative below the surface. Exact
+    /// for the plane and a shallow-curve approximation for the dish.
+    fn top_distance(&self, z: f64, r: f64) -> f64 {
+        let (nz, _) = self.top_normal(r);
+        (z - self.z_surface(r)) * nz
     }
 
     /// Whether the point `(z, r)` lies inside the solid plate.
@@ -93,13 +121,16 @@ impl PlateProfile {
         self.covers(r) && z < self.z_surface(r)
     }
 
-    /// Signed perpendicular distance to the surface (linearized about the foot of the normal):
-    /// the vertical gap `z − z_s(r)` projected onto the normal, negative inside the solid. Exact for
-    /// the plane and a shallow-curve approximation for the dish.
+    /// Signed distance to the solid's boundary, negative inside. The dish is the intersection of
+    /// two half-spaces — below the top surface *and* within the rim radius — so its signed distance
+    /// is the max of the two face distances (exact away from the rim corner). The plane has only
+    /// the top face.
     #[must_use]
     pub fn signed_distance(&self, z: f64, r: f64) -> f64 {
-        let (nz, _) = self.normal(r);
-        (z - self.z_surface(r)) * nz
+        match *self {
+            Self::InclinedPlane { .. } => self.top_distance(z, r),
+            Self::Dish { r_plate, .. } => self.top_distance(z, r).max(r - r_plate),
+        }
     }
 }
 
@@ -139,13 +170,38 @@ mod tests {
             z0: 0.0,
             depth: 0.6,
         };
-        let (nz, nr) = p.normal(1.5);
+        // A point just under the surface at mid-radius: the top face is nearest.
+        let z = p.z_surface(1.5) - 0.01;
+        let (nz, nr) = p.normal(z, 1.5);
         assert_relative_eq!(nz * nz + nr * nr, 1.0, epsilon = 1e-14);
         assert!(nz > 0.0, "normal points into the fluid (+z)");
         assert!(
             nr < 0.0,
             "a rising dish tilts its normal toward the axis (−r)"
         );
+    }
+
+    #[test]
+    fn rim_side_face_owns_nearby_solid_cells() {
+        // The dish body ends at its rim: a solid cell just inside `r_plate` but far below the top
+        // surface must mirror across the vertical side face (radial normal, side distance), not
+        // across the faraway top surface — the M=40 rim-corner blow-up was exactly this.
+        let p = PlateProfile::Dish {
+            r_plate: 2.0,
+            z0: 0.1,
+            depth: 0.6,
+        };
+        let (z, r) = (0.3, 1.95); // deep under the rim: top face ~0.32 away, side face 0.05 away
+        let (nz, nr) = p.normal(z, r);
+        assert_relative_eq!(nz, 0.0, epsilon = 1e-14);
+        assert_relative_eq!(nr, 1.0, epsilon = 1e-14);
+        assert_relative_eq!(p.signed_distance(z, r), -0.05, epsilon = 1e-12);
+
+        // On the axis the side face is 2.0 away and the floor 0.05 above: the top face owns it.
+        let (nz, nr) = p.normal(0.05, 0.0);
+        assert_relative_eq!(nz, 1.0, epsilon = 1e-14);
+        assert_relative_eq!(nr, 0.0, epsilon = 1e-14);
+        assert_relative_eq!(p.signed_distance(0.05, 0.0), -0.05, epsilon = 1e-12);
     }
 
     #[test]
@@ -156,7 +212,7 @@ mod tests {
             z0: 0.2,
             slope: 0.5,
         };
-        let (nz, _) = p.normal(0.0);
+        let (nz, _) = p.normal(0.0, 0.0);
         let zs = p.z_surface(1.0); // = 0.7
         assert_relative_eq!(p.signed_distance(zs + 0.3, 1.0), 0.3 * nz, epsilon = 1e-14);
         assert!(

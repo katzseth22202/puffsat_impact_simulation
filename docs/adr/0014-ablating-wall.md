@@ -100,3 +100,8 @@ per-regime opacity) was **not pulled**: the decision is `Q*`/EOS-limited, not τ
 sharpens only the ~38 % shielding sub-component and cannot fill an EOS sink), and the data
 (HITEMP/ExoMol/TOPS/OPLIB) is firewall-blocked by default-deny — see ADR-0007. The **RT-coherence
 caveat above still stands**: the shielding component of the recovery is an upper estimate.
+
+*Further correction (2026-07-10, ADR-0023 kernel fix — concave `eta_capture` corners were ~1 % high):*
+the 16 km/s rigid baseline becomes `f ≈ 0.798` and the ablating bracket **[0.802, 0.821]** — the gate
+still clears across the `Q*`/τ bracket, though only barely at the conservative `Q* = 10 MJ/kg` end.
+The physics conclusions are unchanged.

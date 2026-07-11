@@ -59,6 +59,31 @@ boundary (IBM) with a true-normal mirror**, not the cut-cell named below:
 The literal **cut-cell / body-fitted boundary stays the path only if a future rung needs higher
 boundary fidelity** than the IBM delivers; nothing measured here motivated it.
 
+## Correction (2026-07-10): rim side face added to the dish SDF; face states guarded by a signal-speed envelope
+
+Chasing an unphysical `eta_capture = 7.6` in the Jupiter sweep's M = 40 anchor
+(d/D = 0.10, L/D = 0.3, r_foot/R = 0.5) exposed **two kernel defects**, both fixed:
+
+1. **The dish rim's vertical side face was missing from the IBM geometry.** `PlateProfile::Dish`
+   modeled only the top surface `z_s(r)`, so solid cells just inboard of the rim were mirrored
+   across the faraway *top* instead of the nearby side face — spurious radial fluxes at the rim
+   corner acted as an energy source, bounded at M ≲ 20 but self-exciting at M = 40. Fix:
+   `normal(z, r)` returns the side-face normal `(0, 1)` where the side is nearest, and
+   `signed_distance` is the intersection SDF `max(top_distance, r − r_plate)`.
+2. **Unguarded MUSCL-Hancock face states at vacuum-floor-adjacent faces.** The reconstructed face
+   density can approach zero while the momentum slope stays finite, so `u = m/ρ` diverges even
+   though the ρ/p positivity fallback passes; the garbage fluxes plus the vacuum-floor reset then
+   create mass and energy non-conservatively. Fix: each Hancock face pair is validated against a
+   **signal-speed envelope** (1.5× the stencil's `max(|u_n|, |u_t|) + 2c/(γ−1)` vacuum-front bound,
+   Toro §4.6), falling back to first order at that face.
+
+A third symptom — a phantom plateau force that never decayed, running the impulse integration to
+the step cap — was downstream of these. Regression gates: a rim-side-face unit test (plate.rs) and
+an M = 40 dished-bounce termination/restitution test (bounce.rs). **Consequence:** the pre-fix
+M = 10 concave corner etas were ~1–1.6 % high and M = 20 systematically low; post-fix M = 10/20/40
+agree to < 1 % (Mach insensitivity restored). Best survivable `f` moves dip 0.777 → **0.768**,
+16 km/s 0.805 → **0.798** (pure `eta_capture` shift; the 1D `e_eff` anchors are untouched).
+
 ## Considered Options
 
 - **Ghost-cell IBM with a true-normal mirror (chosen for the concave boundary, amendment above).**

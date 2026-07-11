@@ -77,7 +77,9 @@ JSONL fails loudly). The impulse/`e_eff` bookkeeping is untouched (the AV term b
 grid-convergence fix (the geometry sweep's 56×40 grid was not converged for the deep-dish/tight-
 footprint corner; now 112×80 with physical Mach anchors 10/20), the best-survivable `f` moved
 `0.804 → 0.777` at the dip and `0.784 → 0.805` at 16 km/s — opposite-sign third-decimal shifts inside
-the study's ±0.03 numerics band. See CONCLUSION.md for the corrected headline numbers.
+the study's ±0.03 numerics band. See CONCLUSION.md for the corrected headline numbers. *(A further
+2026-07-10 correction — two 2D-kernel defects, ADR-0023 — lowered both by ~0.01 more: dip
+`0.777 → 0.768`, 16 km/s `0.805 → 0.798`.)*
 
 ## Amendment (2026-06): the closed-form `f`-margin map over plate radius `R` and pulse mass `m`
 
@@ -97,17 +99,18 @@ therefore only **relaxes the pressure ceiling** by a `headroom = (R/R₀)³·(m�
 denser, higher-`eta` shape that failed at the baseline, and buying `f` back. The margin map is a pure
 rescaling of the Rung-S frontier (`analysis.py --axis margin`, `margin_map`; `make analysis-margin`):
 
-(Numbers as corrected 2026-07 — physical `c_stag ≈ 1.2` and the converged 112×80 geometry grid:)
+(Numbers as corrected 2026-07 — physical `c_stag ≈ 1.2`, the converged 112×80 geometry grid, and
+the 2026-07-10 ADR-0023 kernel fix:)
 
 | 16 km/s, 400 MPa baseline | headroom | best survivable `f` |
 |---|---|---|
-| `R = 5 m, m = 25 kg` (pinned baseline) | 1.0× | **0.805** (already clears the gate) |
-| mid-grid (e.g. `R = 6 m, m = 25 kg`) | ~1.7× | **0.806** (flat — pressure barely binds) |
-| `R = 7 m, m = 15 kg` (grid corner) | 4.6× | **0.822** (plateaus) |
+| `R = 5 m, m = 25 kg` (pinned baseline) | 1.0× | **0.798** (on the line) |
+| mid-grid (e.g. `R = 6 m, m = 25 kg`) | ~1.7× | **0.798** (flat — pressure barely binds) |
+| `R = 7 m, m = 15 kg` (grid corner) | 4.6× | **0.810** (plateaus) |
 
-(The dip: `0.777 → 0.792` across the same grid.) Two honest bounds: with the corrected (lower) peak
+(The dip: `0.768 → 0.780` across the same grid.) Two honest bounds: with the corrected (lower) peak
 pressure the baseline already survives its best shapes, so the headroom gain is **small and stepped**
-(`~+0.02` in `f`, limited to the discrete sampled cloud shapes), and it **plateaus at ≈0.822** — the
+(`~+0.01` in `f`, limited to the discrete sampled cloud shapes), and it **plateaus at ≈0.810** — the
 absolute `f`-max corner is the densest case the frontier forecloses at any sampled headroom.
 
 **These are not levers the study pulls — they are pinned by *external* budgets, and this is only the
