@@ -55,6 +55,12 @@ const RESULT_PATH_FROZEN_PROBE_JUPITER: &str = "data/results/frozen_probe_jupite
 const RESULT_PATH_FROZEN_JUPITER: &str = "data/results/sweep_frozen_jupiter.jsonl";
 const TABLE_DIR_FROZEN_JUPITER: &str = "data/tables/frozen_jupiter";
 const RESULT_PATH_GEOMETRY_M40: &str = "data/results/sweep_geometry_m40.jsonl";
+// The heavy-plate 16–28 km/s special scenario (design §12.1, ADR-0027): reuses the Jupiter
+// extended-grid table; its own result files + freeze-bracket directory.
+const RESULT_PATH_HEAVYPLATE: &str = "data/results/sweep_heavyplate.jsonl";
+const RESULT_PATH_FROZEN_PROBE_HEAVYPLATE: &str = "data/results/frozen_probe_heavyplate.jsonl";
+const RESULT_PATH_FROZEN_HEAVYPLATE: &str = "data/results/sweep_frozen_heavyplate.jsonl";
+const TABLE_DIR_FROZEN_HEAVYPLATE: &str = "data/tables/frozen_heavyplate";
 
 /// The production `ρ_impact` grid [kg/m³] (design §3-4): the impact-density axis of `e_eff(ρ)`.
 const RHO_GRID: [f64; 4] = [0.16, 0.32, 0.48, 0.64];
@@ -861,6 +867,142 @@ fn run_jupiter_sweep(base_tbl: &Table) -> Vec<JupiterRecord> {
         .collect()
 }
 
+// ---- Heavy-plate 16–28 km/s scenario sweep (special scenario, design §12.1 / ADR-0027) ----------
+//
+// A 100 kg pulse on a tripled 30 m-diameter (`R = 15 m`) pusher plate of mass `≤ 40 t`, swept
+// 16–28 km/s at 0.5 km/s (25 anchors; 16 km/s overlaps the core study anchor as a consistency
+// check). It reuses the extended-grid Jupiter table (real TOPS/OPLIB opacity, `T` to 1.2×10⁶ K),
+// which already covers the 16–28 km/s stagnation window. Because `R` grows 3× while `m` grows 4×,
+// the Σ contract dilutes the column below the core baseline (`ρ ≈ 0.01–0.6`): survivability-easy on
+// the facesheet, but flirting with `τ ~ 1` at the wide-footprint corner — hence the opacity τ-check.
+//
+// `e_eff` is the equilibrium coupled bounce (`wall = None`) on the real-opacity table across all 25
+// velocities, at a fixed representative stretched-cloud length; the `L` axis is spot-checked at the
+// bracket anchors (`τ ≫ 1` makes `e_eff` `L`-insensitive). `eta_capture` is reused from the M = 40
+// geometry sweep (scale-invariant), and the whole-plate structural go/no-go is the closed-form
+// companion (ADR-0027, `puffsat.structure`), decoupled from `f(v)`.
+
+/// Velocity sweep floor [m/s] and step: 16–28 km/s at 0.5 km/s → [`HEAVY_N_V`] anchors (design
+/// §12.1). Built in code from these endpoints (see [`heavy_v_grid`]).
+const HEAVY_V_LO: f64 = 16_000.0;
+const HEAVY_V_STEP: f64 = 500.0;
+const HEAVY_N_V: usize = 25;
+/// The freeze-timing / `L`-sensitivity bracket anchors [m/s] (design §12.1: 16 / 22 / 28 km/s).
+const HEAVY_V_ANCHORS: [f64; 3] = [16_000.0, 22_000.0, 28_000.0];
+/// Impact-density grid [kg/m³], ~0.01–0.6 (design §12.1): the dilute wide-footprint corner up to the
+/// dense tight-disk corner the Σ contract reaches at `m = 100 kg`, `R = 15 m`.
+const HEAVY_RHO: [f64; 7] = [0.01, 0.02, 0.04, 0.08, 0.15, 0.3, 0.6];
+/// Fixed representative stretched-cloud length [m] the headline `e_eff(v, ρ)` grid runs at (design
+/// §12.1: `L ≈ 8–10 m`). The Python frontier reads this slice as its headline.
+const HEAVY_LENGTH: f64 = 10.0;
+/// `L`-sensitivity spot-check lengths [m] at the anchors; the headline `HEAVY_LENGTH` = 10 m is the
+/// reference from the main grid, so these bracket it below and above (`τ ≫ 1` ⇒ `e_eff` flat in `L`).
+const HEAVY_L_SPOT: [f64; 2] = [6.0, 14.0];
+/// Velocity [m/s] the one-shot opacity τ-check runs at: the dilute 28 km/s top (design §12.1).
+const HEAVY_TAU_V: f64 = 28_000.0;
+/// Opacity scales for the τ-check (scale 1.0 is the headline, already in the main grid). If `e_eff`
+/// does not move across these, `τ ≫ 1` is confirmed at the dilute top and the headline is robust.
+const HEAVY_TAU_SCALES: [f64; 4] = [0.1, 0.3, 3.0, 10.0];
+
+/// One heavy-plate row: the swept `(v, ρ, length, opacity_scale)` case with the restitution, the
+/// physical peak wall pressure (facesheet sizing), the incident/impulse pair (whole-plate structural
+/// companion, ADR-0027), and the radiative loss split. Same schema as [`JupiterRecord`] (a sibling
+/// special scenario), kept a distinct type so the arm stays self-contained.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+struct HeavyPlateRecord {
+    v: f64,
+    rho_impact: f64,
+    /// Slug column length [m] (headline `HEAVY_LENGTH`; the spot-check rows vary it).
+    length: f64,
+    /// Opacity scale applied to the table (τ-check bracket; headline 1.0).
+    opacity_scale: f64,
+    e_eff: f64,
+    /// Peak physical wall pressure (EOS `p`, AV excluded) — the survivability load (ADR-0010).
+    peak_wall_pressure: f64,
+    /// Incident momentum per unit wall area `ρLv` [Pa·s] (ADR-0027 areal-impulse input).
+    incident_momentum: f64,
+    /// Delivered wall impulse per unit area `≈ (1 + e_eff)·ρLv` [Pa·s] (ADR-0027 areal impulse).
+    wall_impulse: f64,
+    loss_radiative_wall: f64,
+    loss_escape_space: f64,
+}
+
+/// Run one heavy-plate coupled bounce at `(v, rho, length)` on an opacity-scaled table.
+fn run_one_heavyplate(
+    v: f64,
+    rho_impact: f64,
+    length: f64,
+    scale: f64,
+    base_tbl: &Table,
+) -> HeavyPlateRecord {
+    let table = base_tbl.with_opacity_scale(scale);
+    let cfg = Config {
+        v,
+        length,
+        ..Config::production()
+    };
+    let tube = Tube::slug_si(
+        cfg.gas_cells,
+        rho_impact,
+        cfg.v,
+        cfg.length,
+        cfg.t0,
+        TableEos::new(table),
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    );
+    let result = CoupledBounce::new(tube, None, cfg.consts, cfg.limiter).run();
+    HeavyPlateRecord {
+        v: cfg.v,
+        rho_impact,
+        length,
+        opacity_scale: scale,
+        e_eff: result.bounce.e_eff,
+        peak_wall_pressure: result.bounce.peak_wall_pressure,
+        incident_momentum: result.bounce.incident_momentum,
+        wall_impulse: result.bounce.wall_impulse,
+        loss_radiative_wall: result.loss_radiative_wall,
+        loss_escape_space: result.loss_escape_space,
+    }
+}
+
+/// The 25-anchor heavy-plate velocity grid [m/s]: 16–28 km/s at 0.5 km/s.
+fn heavy_v_grid() -> Vec<f64> {
+    (0..HEAVY_N_V)
+        .map(|i| HEAVY_V_LO + HEAVY_V_STEP * i as f64)
+        .collect()
+}
+
+/// Sweep the heavy-plate grid in parallel (rayon), input order: the headline `v(25) × ρ(7)` at fixed
+/// `L` and `κ = 1`, plus the `L`-sensitivity spot rows at the anchors and the opacity τ-check rows at
+/// the 28 km/s top.
+fn run_heavyplate_sweep(base_tbl: &Table) -> Vec<HeavyPlateRecord> {
+    let mut cases: Vec<(f64, f64, f64, f64)> = Vec::new(); // (v, rho, length, scale)
+    // Headline grid: all 25 velocities × ρ at the representative length, real opacity (κ = 1).
+    for &v in &heavy_v_grid() {
+        for &rho in &HEAVY_RHO {
+            cases.push((v, rho, HEAVY_LENGTH, 1.0));
+        }
+    }
+    // L-sensitivity spot-check at the anchors (the headline L = HEAVY_LENGTH comes from the grid).
+    for &v in &HEAVY_V_ANCHORS {
+        for &rho in &HEAVY_RHO {
+            for &l in &HEAVY_L_SPOT {
+                cases.push((v, rho, l, 1.0));
+            }
+        }
+    }
+    // Opacity τ-check at the dilute 28 km/s top (κ = 1 comes from the main grid).
+    for &rho in &HEAVY_RHO {
+        for &s in &HEAVY_TAU_SCALES {
+            cases.push((HEAVY_TAU_V, rho, HEAVY_LENGTH, s));
+        }
+    }
+    cases
+        .par_iter()
+        .map(|&(v, rho, l, s)| run_one_heavyplate(v, rho, l, s, base_tbl))
+        .collect()
+}
+
 /// Write `records` as JSONL (one object per line, ADR-0019), creating the parent dir and replacing
 /// the file. Generic over the row type so the transitional (`Record`) and geometry (`GeoRecord`)
 /// sweeps share it.
@@ -1004,6 +1146,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
+    // Heavy-plate 16–28 km/s freeze-timing bracket (ADR-0026 instrument at the 16 / 22 / 28 km/s
+    // anchors, on the reused Jupiter extended-grid table). Needs `make tables-jupiter` /
+    // `tables-frozen-heavyplate` first. (`base.v` is overridden per grid velocity inside the mode.)
+    if args.iter().any(|a| a == "--frozen-probe-heavyplate") {
+        let base = Config {
+            v: HEAVY_V_ANCHORS[0],
+            length: HEAVY_LENGTH,
+            ..Config::production()
+        };
+        return frozen_probe_mode(
+            &HEAVY_V_ANCHORS,
+            &HEAVY_RHO,
+            TABLE_PATH_JUPITER,
+            &base,
+            RESULT_PATH_FROZEN_PROBE_HEAVYPLATE,
+        );
+    }
+    if args.iter().any(|a| a == "--frozen-heavyplate") {
+        let base = Config {
+            v: HEAVY_V_ANCHORS[0],
+            length: HEAVY_LENGTH,
+            ..Config::production()
+        };
+        return frozen_sweep_mode(
+            &HEAVY_V_ANCHORS,
+            &HEAVY_RHO,
+            TABLE_PATH_JUPITER,
+            TABLE_DIR_FROZEN_HEAVYPLATE,
+            &base,
+            RESULT_PATH_FROZEN_HEAVYPLATE,
+        );
+    }
+
     // Frozen-recombination probe: record each transitional case's turnaround state, from which the
     // Python side generates the per-case frozen-composition tables.
     if args.iter().any(|a| a == "--frozen-probe") {
@@ -1080,6 +1255,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         println!(
             "rust: wrote {} jupiter rows -> {RESULT_PATH_JUPITER}",
+            rows.len()
+        );
+        return Ok(());
+    }
+
+    // Heavy-plate 16–28 km/s scenario sweep: the headline e_eff(v × ρ) grid + the L-sensitivity spot
+    // rows + the opacity τ-check, all on the reused Jupiter extended-grid table. Needs
+    // `make tables-jupiter` first.
+    if args.iter().any(|a| a == "--heavyplate") {
+        let table = Table::load(TABLE_PATH_JUPITER)?;
+        let rows = run_heavyplate_sweep(&table);
+        write_rows(RESULT_PATH_HEAVYPLATE, &rows)?;
+        for r in &rows {
+            println!(
+                "rust: v={:>5.0} rho={:.3} L={:>4.1} scale={:>5.2} -> e_eff={:.4} peak_p={:.3e} J={:.3e}",
+                r.v,
+                r.rho_impact,
+                r.length,
+                r.opacity_scale,
+                r.e_eff,
+                r.peak_wall_pressure,
+                r.wall_impulse,
+            );
+        }
+        println!(
+            "rust: wrote {} heavy-plate rows -> {RESULT_PATH_HEAVYPLATE}",
             rows.len()
         );
         return Ok(());
@@ -1182,10 +1383,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        ABL_KAPPA_VAPOR, ABL_Q_STAR, AblatingRecord, Config, GeoConfig, GeoRecord, LowvConfig,
-        Record, TABLE_DIR_FROZEN, TABLE_DIR_FROZEN_JUPITER, frozen_table_path, run_ablating_case,
-        run_eta_case, run_one, run_one_frozen, run_sweep, run_sweep_frozen_probe, run_sweep_lowv,
-        run_sweep_transitional,
+        ABL_KAPPA_VAPOR, ABL_Q_STAR, AblatingRecord, Config, GeoConfig, GeoRecord, HEAVY_N_V,
+        HEAVY_V_ANCHORS, HeavyPlateRecord, LowvConfig, Record, TABLE_DIR_FROZEN,
+        TABLE_DIR_FROZEN_HEAVYPLATE, TABLE_DIR_FROZEN_JUPITER, frozen_table_path, heavy_v_grid,
+        run_ablating_case, run_eta_case, run_one, run_one_frozen, run_sweep,
+        run_sweep_frozen_probe, run_sweep_lowv, run_sweep_transitional,
     };
     use hydro1d::radiation::{Limiter, RadConstants};
     use tables::Table;
@@ -1461,6 +1663,74 @@ mod tests {
             frozen_table_path(TABLE_DIR_FROZEN_JUPITER, 69_000.0, 0.07),
             "data/tables/frozen_jupiter/v69000_rho0.07.json"
         );
+        // The heavy-plate freeze bracket, likewise, on its own directory (per-anchor velocities).
+        assert_eq!(
+            frozen_table_path(TABLE_DIR_FROZEN_HEAVYPLATE, 22_000.0, 0.30),
+            "data/tables/frozen_heavyplate/v22000_rho0.30.json"
+        );
+    }
+
+    /// The heavy-plate velocity grid is the 25 anchors 16–28 km/s at 0.5 km/s (design §12.1): a
+    /// 16 km/s floor (the core-study overlap point), a 28 km/s ceiling, and a uniform 0.5 km/s step,
+    /// with the three bracket anchors (16 / 22 / 28 km/s) all landing on the grid.
+    #[test]
+    fn heavy_v_grid_is_25_anchors() {
+        let grid = heavy_v_grid();
+        assert_eq!(grid.len(), HEAVY_N_V);
+        assert_eq!(grid.len(), 25);
+        assert!((grid[0] - 16_000.0).abs() < 1e-9);
+        assert!((grid[grid.len() - 1] - 28_000.0).abs() < 1e-9);
+        for pair in grid.windows(2) {
+            assert!(
+                (pair[1] - pair[0] - 500.0).abs() < 1e-9,
+                "non-uniform 0.5 km/s step: {} -> {}",
+                pair[0],
+                pair[1]
+            );
+        }
+        for &a in &HEAVY_V_ANCHORS {
+            assert!(
+                grid.iter().any(|&v| (v - a).abs() < 1e-9),
+                "bracket anchor {a} not on the swept grid"
+            );
+        }
+    }
+
+    /// A `HeavyPlateRecord` round-trips through the JSONL boundary (ADR-0019): the Python heavyplate
+    /// reader sees exactly the fields written — the case axes, the restitution, the facesheet peak,
+    /// the areal-impulse pair (ADR-0027 structural companion), and the radiative loss split.
+    #[allow(clippy::float_cmp)] // round-number inputs survive the decimal text verbatim
+    #[test]
+    fn heavyplate_record_jsonl_roundtrip() {
+        let rec = HeavyPlateRecord {
+            v: 22_000.0,
+            rho_impact: 0.08,
+            length: 10.0,
+            opacity_scale: 1.0,
+            e_eff: 0.74,
+            peak_wall_pressure: 4.6e7,
+            incident_momentum: 1.76e4,
+            wall_impulse: 3.06e4,
+            loss_radiative_wall: 1.0e6,
+            loss_escape_space: 1.0e5,
+        };
+        let line = serde_json::to_string(&rec).unwrap();
+        let back: HeavyPlateRecord = serde_json::from_str(&line).unwrap();
+        assert_eq!(back, rec);
+        for key in [
+            "v",
+            "rho_impact",
+            "length",
+            "opacity_scale",
+            "e_eff",
+            "peak_wall_pressure",
+            "incident_momentum",
+            "wall_impulse",
+            "loss_radiative_wall",
+            "loss_escape_space",
+        ] {
+            assert!(line.contains(key), "missing field {key}");
+        }
     }
 
     /// The frozen-probe sweep covers the grid in input order with physical turnaround states

@@ -3,7 +3,7 @@
 
 PY := uv run python
 
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate
 
 all: smoke
 
@@ -240,6 +240,61 @@ analysis-frozen-jupiter: data/results/frontier_frozen_jupiter.csv
 
 data/results/frontier_frozen_jupiter.csv: data/results/sweep_frozen_jupiter.jsonl data/results/sweep_jupiter.jsonl data/results/sweep_geometry_m40.jsonl python/puffsat/jupiter.py
 	PYTHONPATH=python uv run --extra sci python -m puffsat.jupiter --frozen
+
+# --- Heavy-plate 16-28 km/s special scenario (design §12.1, ADR-0027): reuses the Jupiter table ---
+## sweep-heavyplate: heavy-plate coupled-bounce grid (v x rho headline at fixed L + L-sensitivity
+## spot rows + opacity tau-check) on the reused Jupiter extended-grid table ->
+## data/results/sweep_heavyplate.jsonl; depends on tables-jupiter.
+sweep-heavyplate: data/results/sweep_heavyplate.jsonl
+
+data/results/sweep_heavyplate.jsonl: data/tables/water_jupiter.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --heavyplate
+
+## analysis-heavyplate: f(v) + facesheet-survivability frontier at the pinned 30 m / <=40 t plate ->
+## data/results/frontier_heavyplate.csv + f(v) figure; depends on sweep-heavyplate (+ M=40 geometry).
+analysis-heavyplate: data/results/frontier_heavyplate.csv
+
+data/results/frontier_heavyplate.csv: data/results/sweep_heavyplate.jsonl data/results/sweep_geometry_m40.jsonl python/puffsat/heavyplate.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.heavyplate
+
+## analysis-structure-heavyplate: ADR-0027 closed-form whole-plate structural bound (rigid-during-
+## pulse / f-validity, areal-impulse membrane, SiC-Ti spall) at the survivable design points ->
+## data/results/frontier_structure_heavyplate.csv; depends on sweep-heavyplate (+ M=40 geometry).
+analysis-structure-heavyplate: data/results/frontier_structure_heavyplate.csv
+
+data/results/frontier_structure_heavyplate.csv: data/results/sweep_heavyplate.jsonl data/results/sweep_geometry_m40.jsonl python/puffsat/structure.py python/puffsat/heavyplate.py
+	PYTHONPATH=python $(PY) -m puffsat.structure
+
+## sweep-frozen-probe-heavyplate: turnaround-state probe for the heavy-plate freeze-timing bracket
+## (ADR-0026, at the 16/22/28 km/s anchors) -> data/results/frozen_probe_heavyplate.jsonl.
+sweep-frozen-probe-heavyplate: data/results/frozen_probe_heavyplate.jsonl
+
+data/results/frozen_probe_heavyplate.jsonl: data/tables/water_jupiter.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --frozen-probe-heavyplate
+
+## tables-frozen-heavyplate: per-case frozen-composition tables (+ pure-H2O bracket) on the extended
+## Jupiter grid -> data/tables/frozen_heavyplate/. Depends on the heavy-plate probe.
+tables-frozen-heavyplate: data/tables/frozen_heavyplate/h2o.json
+
+data/tables/frozen_heavyplate/h2o.json: data/results/frozen_probe_heavyplate.jsonl python/puffsat/eos_water.py python/puffsat/tables.py
+	PYTHONPATH=python $(PY) -m puffsat.tables --frozen-from-probe data/results/frozen_probe_heavyplate.jsonl --outdir data/tables/frozen_heavyplate --jupiter
+
+## sweep-frozen-heavyplate: three-curve freeze-timing bracket at 16/22/28 km/s (equilibrium vs
+## freeze-after-the-plate vs freeze-before-the-plate) -> data/results/sweep_frozen_heavyplate.jsonl
+sweep-frozen-heavyplate: data/results/sweep_frozen_heavyplate.jsonl
+
+data/results/sweep_frozen_heavyplate.jsonl: data/tables/frozen_heavyplate/h2o.json data/tables/water_jupiter.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	cargo run --release -p sweep -- --frozen-heavyplate
+
+## analysis-frozen-heavyplate: translate the 16-28 km/s EOS-only e_eff freeze bracket onto the
+## survivable f -> data/results/frontier_frozen_heavyplate.csv; depends on sweep-frozen-heavyplate
+## (+ the coupled sweep and M=40 geometry for the per-anchor design points).
+analysis-frozen-heavyplate: data/results/frontier_frozen_heavyplate.csv
+
+data/results/frontier_frozen_heavyplate.csv: data/results/sweep_frozen_heavyplate.jsonl data/results/sweep_heavyplate.jsonl data/results/sweep_geometry_m40.jsonl python/puffsat/heavyplate.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.heavyplate --frozen
 
 ## sensitivity: opacity-insensitivity scan (rung B, B5d-3) — sweep at 0.1x/1x/10x opacity, show
 ## e_eff barely moves. Builds the release sweep first; writes data/results/opacity_scan/.
