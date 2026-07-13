@@ -251,3 +251,72 @@ Two worries answered directly:
 - **Multi-pulse plate thermal accumulation between shots** (depends on cadence, which is a performance input).
 - **Atomic displacement / sputtering / penetration damage to the facesheet crystal.** Per-atom energy is eV-scale, at or below the SiC displacement threshold across the envelope (ADR-0010); the facesheet threats are chemical (oxidation) and thermal (shock), not atomic.
 - **Rayleigh–Taylor / Richtmyer–Meshkov mixing at the near-wall boundary layer** (the Orion follow-on concern). `e_eff` is a momentum ratio (ADR-0001), and RT corrugates the interface without creating or destroying axial momentum, so it cannot move the bulk impulse — only the conductive-to-plate loss channel, one-sidedly. It is unmodeled (the 1D track cannot represent it), gated on a channel-2 watchdog: if conductive-to-plate is ever a material slice of `(1−f)`, that anchor gets a bounding turbulent-conduction correction before `f` is quoted. RT also makes the ablating-wall vapor shield (ADR-0014) an upper estimate and the ablation-per-pulse requirement an underestimate. See ADR-0020.
+
+---
+
+## 12. Special scenarios
+
+The core study fixes `R = 5 m` and `m = 25 kg` and sweeps `v = 3.2–16 km/s` (§2). **Special
+scenarios** re-point those pinned knobs to answer a specific mission question, reusing the same
+kernels and (where the grid reaches) the same tables. They are documented here rather than in the
+`f(v)` deliverable because each re-runs the pipeline off-envelope for its own purpose. The prior
+one is **Jupiter-retrograde** (100 kg pulse at a single 69 km/s, dilute τ~1 plasma, `sweep-jupiter`
++ the ADR-0026 freeze bracket amendment). This section documents the second.
+
+### 12.1 Heavy-plate (16–28 km/s, 100 kg pulse, 30 m / ≤ 40 t plate)
+
+**Question.** Does the fudge factor stay in the ballpark of `f ≈ 0.8`, and does the plate survive,
+when the vehicle is scaled up — bigger pulses on a much larger, heavier plate at higher closing
+speeds than the core envelope's 16 km/s ceiling?
+
+**Pinned knobs (deviations from §2).**
+
+| Knob | Core study | Heavy-plate | Note |
+|---|---|---|---|
+| Pulse mass `m` | 25 kg | **100 kg** | gas per shot; the `m` in `ρ ∝ m/R²` |
+| Plate radius `R` | 5 m | **15 m** (30 m diameter) | radius *tripled*; canonical `R`, see CONTEXT |
+| Plate mass | 3–4 t | **≤ 40 t (ceiling)** | rigid-wall note: recoil `2m/M ≈ 0.5%`/pulse |
+| Velocity | 3.2–16 km/s | **16–28 km/s @ 0.5** | 25 anchors; 16 overlaps the core anchor (consistency check) |
+| Gas | water | water | unchanged |
+
+Because `R` grows 3× while `m` grows 4×, the Σ contract puts impact density **below** the core
+baseline for most shapes (`ρ ≈ 0.005–0.6 kg/m³`): spreading 100 kg over a 15 m-radius footprint
+dilutes the column, so this scenario is **survivability-easy on the facesheet** (peak `≈ 1.2ρv²`
+stays modest despite `v²`) but flirts with `τ ~ 1` at the wide-footprint corner — hence the
+opacity check below.
+
+**`f(v)` pipeline (reuses the core machinery).**
+
+- **Table: reuse `water_jupiter.json`** (ADR-0007 Jupiter table) — its extended grid (`T` to
+  1.2×10⁶ K, `ρ` to 10⁻⁴) covers the 16–28 km/s stagnation states (~5×10⁴–1.5×10⁵ K) and the deep
+  rebound rarefaction with margin, and it carries the **real TOPS/OPLIB opacity** the baseline
+  `water.json` (interim Kramers, `T ≤ 60 kK`) lacks. Jupiter established that real opacity is
+  decisive here (interim Kramers ran ~2000× low at stagnation and falsely predicted `τ ~ 1`).
+- **`e_eff`:** the coupled radiation bounce (`CoupledBounce`, `wall = None`, high-v config),
+  **equilibrium EOS + real opacity as the headline across all 25 velocities**. Grid: `v` (25) ×
+  `ρ` (~0.01–0.6, ~7 pts) at a fixed representative stretched-cloud length `L ≈ 8–10 m`, with an
+  `L`-sensitivity spot-check at anchors (`τ ≫ 1` makes `e_eff` `L`-insensitive, so a full `L` axis
+  is not swept).
+- **Brackets:** the ADR-0026 **frozen-recombination** bracket (probe + sudden-freeze bound) at
+  **16 / 22 / 28 km/s** as the named high-v caveat (it grows with `v`); a one-shot
+  **opacity-scale τ-check** at 28 km/s to confirm `τ ≫ 1` at the dilute top.
+- **`eta_capture`:** reuse the **M = 40 geometry sweep** (`sweep_geometry_m40.jsonl`). `eta_capture`
+  is set by the ratios `r_foot/R`, `L/D`, and curvature (scale-invariant), and is Mach-converged by
+  M = 40 (M = 10/20/40 agree < 1%), so the M ≈ 32–56 heavy-plate clouds need no new 2D runs. Flat +
+  shallow-concave, as always.
+- **Deliverable:** `f = eta_capture·(1 + e_eff)/2` as a dual curve (conservative floor as headline),
+  with the `f = 0.8` reference line marked (ADR-0009, a reference anchor, not a mission gate).
+- **Facesheet survivability:** peak `≈ 1.2ρv²` vs the SiC+Ti ladder (400 baseline / 700 / 900 MPa),
+  the Σ contract (`m = 100`, `R = 15`) resolving the survivable-optimal shape per velocity.
+
+**Whole-plate structural companion (new, ADR-0027).** At 30 m / ≤ 40 t a single pulse deposits
+`≈ 5×10⁶ N·s`, so "does the plate survive the impulse?" is now first-order rather than a Phase-2
+detail. Design §5/§11 and ADR-0011 keep whole-plate *structural sizing* out of this repo, so the
+scenario carries only a **closed-form first-cut bound, decoupled from `f(v)`** (ADR-0027): (1) a
+first-mode-period-vs-pulse-duration rigidity check — which is also the validity gate on the
+rigid-wall assumption `f` depends on at this span; (2) an areal-impulse → membrane/bending stress
+check for a candidate Ti-truss + tensioned back-face at the ≤ 40 t ceiling; (3) the ADR-0011 SiC-Ti
+spall reflection at the peak facesheet load. It reports a go/no-go with documented construction
+assumptions — **not** a validated design and **not** FEA. A full structural-dynamics track remains
+its named refinement and a separate effort.
+

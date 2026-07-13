@@ -46,3 +46,11 @@ _Avoid_: collection efficiency, catch fraction
 **Incident momentum (`p_in`)**:
 The axial momentum a pulse carries into the collision in the plate frame, `p_in = m_pulse · v`.
 The normalizing reference for both `e_eff` and `f`.
+
+**Plate radius (`R`)**:
+The radius of the circular pusher plate — always a *radius*, so the plate's width/diameter is
+`2R`. The canonical size variable: footprint coverage is the ratio `r_foot/R`, and impact density
+scales as `ρ ∝ m_pulse/R²` through the Σ contract. "A 15 m-wide plate" therefore means `2R = 15 m`
+(`R = 7.5 m`) — distinct from tripling `R` itself. State whether a plate dimension is `R` or `2R`
+whenever it is not a ratio.
+_Avoid_: "plate width/size" as a bare number (ambiguous between `R` and `2R`).
