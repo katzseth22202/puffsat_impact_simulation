@@ -75,6 +75,25 @@ the headline because three-body recombination at the probed turnaround densities
 through the dense phase where the momentum is exchanged — the sudden-freeze end is a bound,
 not an expectation. But any external quotation of `f` should carry this bracket.
 
+**Pulse-shape sensitivity — slight shape changes cost only slight impulse** (design §13,
+[ADR-0028](docs/adr/0028-shape-sensitivity-fixed-design-protocol.md);
+`data/results/shape_sensitivity.csv`/`.png`). Raw `f(shape)` at the fixed baseline design
+(`d/D = 0.1`, `L/D = 0.3`, `r_foot/R = 0.5`), perturbing only the arriving pulse over an
+**assumed** shape box (±20% footprint and aspect, edge taper to 30% of `r_foot`, radial
+divergence to `α = 0.1`): the normalized sensitivity `S = (Δf/f)/(Δx/x)` maxes at **0.26**
+(footprint, concave; ≈ 0.1 aspect, ≤ 0.02 taper/divergence per full box) — far under the
+"≲ a few" bound, so a 10% delivery-shape error costs ≲ 2.6% of `f`, linearly correctable by the
+pushed vehicle's guidance. No cliff survives grid refinement, the taper Σ-profile bound is small
+(Δf ≤ 0.003), and a three-point frozen-chemistry spot-check at the dip shows the same gentle
+slope (Δe_eff across the box: equilibrium +0.010, sudden-freeze +0.018) — the smoothness is not
+an equilibrium-chemistry artifact. Off-axis modes (offset, tilt, drift) are bounded analytically
+as linear with a `0.5·R` rim-clip margin (§13). The separate **survivability margin check**:
+comfortable at the dip (+28% under 400 MPa over the whole box), but at 16 km/s the nominal
+already sits near the line, so footprint *concentration* beyond ~−5% exceeds the 400 MPa
+baseline (peak `∝ 1/r_foot³`); the whole box clears the relaxed 900 MPa limit. The shape box is
+an **assumption standing in for undetermined delivery dispersion** (the deferred cloud-schedule
+study owns the real numbers) — every quote of these `S` values must carry that caveat.
+
 **Loss budget at 16 km/s** (`data/results/frontier.csv`): of the momentum *not* returned,
 ≈ 76–80 % is lost to the radiative wall flux and the remaining ≈ 20–24 % escapes to space;
 conductive loss is negligible on the pulse timescale (Rung C). The ablating wall recovers a real
@@ -116,6 +135,17 @@ fillable ([ADR-0014](docs/adr/0014-ablating-wall.md)).
   molecular/low-v half of the seam (HITEMP/ExoMol) remains unpulled.
 - **High-velocity plasma gas conductivity (`k_gas`).** Deferred at the top of the envelope; a
   refinement to the conductive channel, which is already negligible on the pulse timescale.
+- **Coupled-radiation stability window (found 2026-07-16, shape study).** The 1D coupled
+  radiation operator has a **resolution-onset radiative collapse**: past a critical grid
+  refinement that coarsens with `ρv²`, the thin wall cell's radiative drain zeroes its energy,
+  the slab loses pressure support, and the run dies mid-infall with unphysical `e_eff` (the
+  radiative sibling of the documented conductive over-drain). At 16 km/s the onset is 1200 cells
+  at the production ρ = 0.64 and ~200–300 cells by ρ ≈ 1.2–1.7. All quoted numbers sit on the
+  verified **stable plateau** (flat to < 0.002 in `e_eff` across a 4× cell range, and the
+  EOS-only curve is smooth everywhere, so the collapse is numerics, not physics); the shape
+  study's few affected samples use a two-resolution validity protocol (300/150 cells, flagged in
+  `shape_sensitivity.csv`). The named fix is an implicit matter–radiation exchange at the wall —
+  a kernel robustness refinement, not a result change.
 
 ## Pointers
 

@@ -196,6 +196,17 @@ impl Grid2D {
             .sum()
     }
 
+    /// Total radial momentum `Σ ρu_r dV` (same `2π`-dropped volume convention as
+    /// [`Self::axial_momentum`]). At `t = 0` it measures the initialized radial-divergence
+    /// momentum of a §13 diverging slug (zero for a purely axial cloud).
+    #[must_use]
+    pub fn radial_momentum(&self) -> f64 {
+        (0..self.nz)
+            .flat_map(|iz| (0..self.nr).map(move |ir| (iz, ir)))
+            .map(|(iz, ir)| self.cons(iz, ir).mr * self.r_center(ir) * self.dr * self.dz)
+            .sum()
+    }
+
     #[inline]
     fn idx(&self, iz: usize, ir: usize) -> usize {
         iz * self.nr + ir

@@ -43,6 +43,8 @@ __pycache__/
 !/data/results/
 /data/results/*
 !/data/results/frontier*.csv
+!/data/results/shape_sensitivity.csv
+!/data/results/shape_frozen_spotcheck.csv
 !/data/results/*.png
 # ...and the raw TOPS/OPLIB opacity pull (ADR-0007 amendment): the citable provenance
 # artifact behind the 69 km/s table; needs a network allow to re-fetch (`make fetch-tops`).

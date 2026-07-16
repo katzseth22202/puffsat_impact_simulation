@@ -24,11 +24,12 @@
 //! `loss_conductive = 0` pending that high-v transport data. (The low-v `CoolProp` table *does* carry
 //! `k_gas`, so the low-v path activates the operator.)
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write as _;
 use std::path::Path;
 
-use euler2d::bounce::{PlateShape, SlugConfig, eta_capture, run_slug_bounce};
+use euler2d::bounce::{PlateShape, SlugConfig, eta_capture, run_slug_bounce, taper_sigma_stats};
 use hydro1d::conduction::Solid;
 use hydro1d::eos::TableEos;
 use hydro1d::kernel::{AblatingBounce, Ablation, CondensingBounce, CoupledBounce, Tube, Viscosity};
@@ -574,6 +575,8 @@ fn run_eta_case(
         nz: cfg.nz,
         confined: false,
         shape: PlateShape::Dish { d_over_d },
+        taper_frac: 0.0,
+        alpha_div: 0.0,
     });
     // The plane-wave denominator: same column (L, ρ, Mach), cloud fills the radius, flat plate.
     let confined = run_slug_bounce(&SlugConfig {
@@ -588,6 +591,8 @@ fn run_eta_case(
         nz: cfg.nz,
         confined: true,
         shape: PlateShape::FlatGridAligned,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
     });
     GeoRecord {
         d_over_d,
@@ -1003,6 +1008,436 @@ fn run_heavyplate_sweep(base_tbl: &Table) -> Vec<HeavyPlateRecord> {
         .collect()
 }
 
+// ---- Pulse-shape sensitivity sweep (design §13, ADR-0028) ---------------------------------------
+//
+// Raw `f(shape)` at the FIXED best-survivable baseline design (`d/D = 0.1` headline with a flat
+// cross-check, `L/D = 0.3`, `r_foot/R = 0.5`, M = 20): the pulse varies over the assumed shape box
+// while the plate, domain, and grid stay frozen — ADR-0028 decision 3 deliberately inverts the
+// geometry sweep's size-the-domain-to-the-cloud convention, so IBM stair-step jitter cannot land
+// at the `Δf ~ 0.005–0.02` differences being resolved. Two output files:
+//
+// - 2D (`sweep_shape_geometry.jsonl`): `eta_capture` per shape sample on the fixed grid, plus
+//   refined-resolution repeats of a noise-floor subset (`σ_noise`; a flagged cliff must survive
+//   these before it is called physical).
+// - 1D (`sweep_shape_sigma.jsonl`): fresh equilibrium `e_eff` at each sample's physical `(ρ, L)`
+//   via the Σ contract at fixed pulse mass and plate radius — never interpolated from frontier
+//   data (ADR-0028 decision 2). The taper axis runs at the mass-weighted mean Σ with Σ-hi/lo90
+//   bound rows (the named halt condition); divergence leaves Σ untouched (no 1D rows — the
+//   Python assembly reuses the nominal `e_eff`).
+
+const RESULT_PATH_SHAPE_2D: &str = "data/results/sweep_shape_geometry.jsonl";
+const RESULT_PATH_SHAPE_1D: &str = "data/results/sweep_shape_sigma.jsonl";
+
+/// The fixed plate curvatures: the shallow-concave headline and the flat cross-check (design §13).
+const SHAPE_D_OVER_D: [f64; 2] = [0.10, 0.0];
+/// The geometry track's strong-shock Mach anchor (the nominal design point was pinned at M = 20).
+const SHAPE_MACH: f64 = 20.0;
+/// The nominal pulse shape (the best-survivable baseline, design §13).
+const SHAPE_NOM_RFOOT_OVER_R: f64 = 0.5;
+const SHAPE_NOM_L_OVER_D: f64 = 0.3;
+/// Two-sided box sampling for the `r_foot/R` and `L/D` axes: ±5/10/20% around nominal.
+const SHAPE_REL: [f64; 7] = [0.80, 0.90, 0.95, 1.0, 1.05, 1.10, 1.20];
+/// One-sided edge-taper axis (ramp width as a fraction of `r_foot`; 0 = the top-hat nominal).
+const SHAPE_TAPER: [f64; 4] = [0.0, 0.10, 0.20, 0.30];
+/// One-sided radial-divergence axis (`α` in `v_r = α·v·r/r_foot`).
+const SHAPE_ALPHA: [f64; 4] = [0.0, 0.033, 0.067, 0.10];
+/// The frozen plate/domain (ADR-0028 decision 3): nominal footprint `r_foot = 1` (`r_plate = 2`,
+/// as in the geometry sweep's `r_foot/R = 0.5` case), domain sized once to the largest box sample
+/// (`r_foot ≤ 1.2`, `L ≤ 0.72` above the 0.4-deep dish).
+const SHAPE_R_PLATE: f64 = 2.0;
+const SHAPE_R_MAX: f64 = 2.8;
+const SHAPE_Z_MAX: f64 = 3.4;
+/// `(resolution_scale, nr, nz)`: the base grid (the converged geometry-sweep cell size on the
+/// fixed domain) plus the 1.5×/2× refinements the noise-floor subset re-runs (≥ 3 repeats,
+/// ADR-0028).
+const SHAPE_RES: [(f64, usize, usize); 3] = [(1.0, 112, 88), (1.5, 168, 132), (2.0, 224, 176)];
+/// Physical Σ-contract anchors for the 1D arm (design §2: 25 kg pulse on the R = 5 m plate) at
+/// the two quoted velocity anchors (the ~11 km/s dip and 16 km/s).
+const SHAPE_PULSE_MASS_KG: f64 = 25.0;
+const SHAPE_PLATE_RADIUS_M: f64 = 5.0;
+const SHAPE_V: [f64; 2] = [11_000.0, 16_000.0];
+
+/// One pulse-shape sample: the axis it perturbs (the Python `S_x` extraction key) and the four
+/// §13 shape coordinates. One-factor-at-a-time — `S` is a per-axis derivative, not a response
+/// surface.
+#[derive(Debug, Clone, Copy)]
+struct ShapeSample {
+    axis: &'static str,
+    r_foot_over_r: f64,
+    l_over_d: f64,
+    taper_frac: f64,
+    alpha_div: f64,
+}
+
+/// The nominal sample (the fixed design point; `axis = "nominal"`).
+fn shape_nominal() -> ShapeSample {
+    ShapeSample {
+        axis: "nominal",
+        r_foot_over_r: SHAPE_NOM_RFOOT_OVER_R,
+        l_over_d: SHAPE_NOM_L_OVER_D,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    }
+}
+
+/// The shape-box samples: the nominal once, then each axis perturbed alone.
+fn shape_samples() -> Vec<ShapeSample> {
+    let mut v = vec![shape_nominal()];
+    for &rel in &SHAPE_REL {
+        if (rel - 1.0).abs() > 1e-12 {
+            v.push(ShapeSample {
+                axis: "r_foot_over_r",
+                r_foot_over_r: SHAPE_NOM_RFOOT_OVER_R * rel,
+                ..shape_nominal()
+            });
+            v.push(ShapeSample {
+                axis: "l_over_d",
+                l_over_d: SHAPE_NOM_L_OVER_D * rel,
+                ..shape_nominal()
+            });
+        }
+    }
+    for &taper in &SHAPE_TAPER[1..] {
+        v.push(ShapeSample {
+            axis: "taper_frac",
+            taper_frac: taper,
+            ..shape_nominal()
+        });
+    }
+    for &alpha in &SHAPE_ALPHA[1..] {
+        v.push(ShapeSample {
+            axis: "alpha_div",
+            alpha_div: alpha,
+            ..shape_nominal()
+        });
+    }
+    v
+}
+
+/// The noise-floor subset re-run at the refined resolutions: the nominal, the two samples that
+/// stress the grid hardest (the widest footprint — most rim cells — and the widest taper — the
+/// shallowest density gradient across cells), plus the two samples the first base-resolution
+/// pass flagged as cliff candidates (`L/D` −10%, taper 20%) — the §13 rule is that a flag must
+/// survive refinement before it is called physical, so the flagged samples need refined repeats.
+fn shape_noise_subset() -> Vec<ShapeSample> {
+    vec![
+        shape_nominal(),
+        ShapeSample {
+            axis: "r_foot_over_r",
+            r_foot_over_r: SHAPE_NOM_RFOOT_OVER_R * 1.20,
+            ..shape_nominal()
+        },
+        ShapeSample {
+            axis: "taper_frac",
+            taper_frac: SHAPE_TAPER[3],
+            ..shape_nominal()
+        },
+        ShapeSample {
+            axis: "l_over_d",
+            l_over_d: SHAPE_NOM_L_OVER_D * 0.90,
+            ..shape_nominal()
+        },
+        ShapeSample {
+            axis: "taper_frac",
+            taper_frac: SHAPE_TAPER[2],
+            ..shape_nominal()
+        },
+    ]
+}
+
+/// One 2D shape-sweep row: the sample, the plate/resolution it ran on, and the `eta_capture`
+/// pieces (with the *measured* initialized `p_in` — the §13 normalization, never the analytic
+/// value).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct ShapeRecord {
+    axis: String,
+    d_over_d: f64,
+    r_foot_over_r: f64,
+    l_over_d: f64,
+    taper_frac: f64,
+    alpha_div: f64,
+    mach: f64,
+    resolution_scale: f64,
+    eta_capture: f64,
+    restitution_free: f64,
+    restitution_confined: f64,
+    /// Measured initialized `p_in` of the free run.
+    incident_momentum: f64,
+    /// Peak local facesheet pressure of the free run (the survivability focusing input, Rung S).
+    peak_local_pressure: f64,
+}
+
+/// Cloud geometry of a sample on the frozen grid: `r_foot = (r_foot/R)·r_plate`,
+/// `L = 2·(L/D)·r_foot`.
+fn shape_cloud(sample: &ShapeSample) -> (f64, f64) {
+    let r_foot = sample.r_foot_over_r * SHAPE_R_PLATE;
+    (r_foot, 2.0 * sample.l_over_d * r_foot)
+}
+
+/// Run one free shape bounce on the frozen plate/domain at resolution `(nr, nz)`.
+fn run_shape_free(
+    sample: &ShapeSample,
+    d_over_d: f64,
+    nr: usize,
+    nz: usize,
+) -> euler2d::bounce::Bounce2D {
+    let (r_foot, length) = shape_cloud(sample);
+    run_slug_bounce(&SlugConfig {
+        gamma: 1.4,
+        mach: SHAPE_MACH,
+        r_foot,
+        length,
+        r_plate: SHAPE_R_PLATE,
+        r_max: SHAPE_R_MAX,
+        z_max: SHAPE_Z_MAX,
+        nr,
+        nz,
+        confined: false,
+        shape: PlateShape::Dish { d_over_d },
+        taper_frac: sample.taper_frac,
+        alpha_div: sample.alpha_div,
+    })
+}
+
+/// The plane-wave confined denominator for a column of `length` — always the top-hat 1D-limit
+/// reference (taper/divergence are free-run shape perturbations, not 1D-limit properties).
+fn run_shape_confined(length: f64, nz: usize) -> euler2d::bounce::Bounce2D {
+    run_slug_bounce(&SlugConfig {
+        gamma: 1.4,
+        mach: SHAPE_MACH,
+        r_foot: SHAPE_R_MAX,
+        length,
+        r_plate: SHAPE_R_MAX,
+        r_max: SHAPE_R_MAX,
+        z_max: SHAPE_Z_MAX,
+        nr: 8,
+        nz,
+        confined: true,
+        shape: PlateShape::FlatGridAligned,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    })
+}
+
+/// The `(sample, d/D, resolution index)` 2D case list: the full box × both plates at the base
+/// resolution, plus the noise-floor subset × both plates at the refinements.
+fn shape_2d_cases() -> Vec<(ShapeSample, f64, usize)> {
+    let mut cases = Vec::new();
+    for s in shape_samples() {
+        for &dd in &SHAPE_D_OVER_D {
+            cases.push((s, dd, 0));
+        }
+    }
+    for s in shape_noise_subset() {
+        for &dd in &SHAPE_D_OVER_D {
+            for res in [1, 2] {
+                cases.push((s, dd, res));
+            }
+        }
+    }
+    cases
+}
+
+/// Run the full 2D shape sweep in parallel (rayon): confined denominators once per unique
+/// `(length, resolution)` (the `r_foot/R` and `L/D` axes share the length set `L = 0.6·rel`),
+/// then every free case against its denominator.
+fn run_shape_2d_sweep() -> Vec<ShapeRecord> {
+    let cases = shape_2d_cases();
+    let mut keys: Vec<(u64, usize)> = cases
+        .iter()
+        .map(|(s, _, res)| (shape_cloud(s).1.to_bits(), *res))
+        .collect();
+    keys.sort_unstable();
+    keys.dedup();
+    let confined: HashMap<(u64, usize), f64> = keys
+        .par_iter()
+        .map(|&(len_bits, res)| {
+            let b = run_shape_confined(f64::from_bits(len_bits), SHAPE_RES[res].2);
+            ((len_bits, res), b.restitution_ratio())
+        })
+        .collect();
+    cases
+        .par_iter()
+        .map(|&(s, dd, res)| {
+            let (scale, nr, nz) = SHAPE_RES[res];
+            let free = run_shape_free(&s, dd, nr, nz);
+            let rc = confined[&(shape_cloud(&s).1.to_bits(), res)];
+            ShapeRecord {
+                axis: s.axis.to_string(),
+                d_over_d: dd,
+                r_foot_over_r: s.r_foot_over_r,
+                l_over_d: s.l_over_d,
+                taper_frac: s.taper_frac,
+                alpha_div: s.alpha_div,
+                mach: SHAPE_MACH,
+                resolution_scale: scale,
+                eta_capture: free.restitution_ratio() / rc,
+                restitution_free: free.restitution_ratio(),
+                restitution_confined: rc,
+                incident_momentum: free.incident_momentum,
+                peak_local_pressure: free.peak_local_pressure,
+            }
+        })
+        .collect()
+}
+
+/// One 1D Σ-contract row of the shape study: the shape sample it serves, the Σ role (`"sample"`
+/// for the headline runs, `"taper_mean"`/`"sigma_hi"`/`"sigma_lo90"` for the taper bookkeeping),
+/// and the equilibrium coupled-bounce result at the physical `(ρ, L)`.
+///
+/// Each row carries a **two-resolution validity protocol** (2026-07-16 finding): the coupled
+/// radiation operator has a resolution-onset radiative-collapse instability — the thin wall
+/// cell's radiative drain zeroes its energy, the slab loses pressure support, and the run
+/// terminates mid-infall with an unphysical `e_eff` (the radiative sibling of the documented
+/// conductive over-drain). Its onset `dx` *coarsens* as `ρv²` rises, so the production 300-cell
+/// convention leaves the stable plateau above `ρ ≈ 1` at 16 km/s (and even ρ = 0.64 collapses at
+/// 1200 cells). Where stable, `e_eff` is plateau-flat (< 0.002 across 150–600 cells), so the row
+/// records the 300-cell headline, a 150-cell coarse cross-check (deeper inside the stable
+/// window), and the EOS-only reference; the Python assembly accepts the headline only when the
+/// two coupled runs agree, falls back to the coarse value when the fine one collapsed, and
+/// flags the row.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct Shape1DRecord {
+    v: f64,
+    axis: String,
+    sigma_role: String,
+    r_foot_over_r: f64,
+    l_over_d: f64,
+    taper_frac: f64,
+    /// Areal density `Σ = ρ·L` [kg/m²] the row runs at (the taper roles scale it off nominal).
+    sigma: f64,
+    rho_impact: f64,
+    length: f64,
+    /// Coupled `e_eff` at the production 300-cell convention (the headline when valid).
+    e_eff: f64,
+    /// Coupled `e_eff` at 150 cells — the stable-window cross-check/fallback.
+    e_eff_coarse: f64,
+    /// EOS-only `e_eff` (no radiation) at 300 cells — the smoothness reference the validity
+    /// check anchors to (the gas dynamics is verified smooth across the whole Σ box).
+    e_eff_eos: f64,
+    peak_wall_pressure: f64,
+    /// Peak physical wall pressure of the 150-cell coupled run (used when the fine run is
+    /// rejected).
+    peak_wall_pressure_coarse: f64,
+    incident_momentum: f64,
+    wall_impulse: f64,
+}
+
+/// The Σ contract at the fixed 25 kg / `R = 5 m` design, matching `puffsat.analysis.
+/// impact_density` (the cross-language contract): `ρ = m/(2π·(L/D)·r_foot³)` with
+/// `r_foot = (r_foot/R)·R`, and `L = 2·(L/D)·r_foot`.
+fn shape_rho_length(r_foot_over_r: f64, l_over_d: f64) -> (f64, f64) {
+    let r_foot = r_foot_over_r * SHAPE_PLATE_RADIUS_M;
+    let length = 2.0 * l_over_d * r_foot;
+    let rho = SHAPE_PULSE_MASS_KG / (2.0 * std::f64::consts::PI * l_over_d * r_foot.powi(3));
+    (rho, length)
+}
+
+/// The 1D case list `(v, sample, sigma_role, Σ factor)`: every footprint/aspect sample fresh at
+/// its own `(ρ, L)`; each taper sample at its mass-weighted mean Σ, with the Σ-hi/lo90 bound rows
+/// at the widest taper (the ADR-0028 halt-condition check); divergence emits no 1D rows.
+fn shape_1d_cases() -> Vec<(f64, ShapeSample, &'static str, f64)> {
+    let mut cases = Vec::new();
+    for &v in &SHAPE_V {
+        for s in shape_samples() {
+            match s.axis {
+                "alpha_div" => {}
+                "taper_frac" => {
+                    let st = taper_sigma_stats(s.taper_frac);
+                    cases.push((v, s, "taper_mean", st.mean));
+                    if (s.taper_frac - SHAPE_TAPER[3]).abs() < 1e-12 {
+                        cases.push((v, s, "sigma_hi", st.hi));
+                        cases.push((v, s, "sigma_lo90", st.lo90));
+                    }
+                }
+                _ => cases.push((v, s, "sample", 1.0)),
+            }
+        }
+    }
+    cases
+}
+
+// The §13 three-point frozen-chemistry spot-check at the dip anchor: Σ-nominal and the footprint
+// box endpoints, through the standard ADR-0026 two-stage frozen pipeline on their own directory.
+const RESULT_PATH_FROZEN_PROBE_SHAPE: &str = "data/results/frozen_probe_shape.jsonl";
+const RESULT_PATH_FROZEN_SHAPE: &str = "data/results/sweep_frozen_shape.jsonl";
+const TABLE_DIR_FROZEN_SHAPE: &str = "data/tables/frozen_shape";
+
+/// The three dip-anchor spot-check densities (design §13): the Σ box endpoints and Σ-nominal as
+/// Σ-equivalent densities at the *fixed nominal length* (`Σ = ρ·L` is the 1D knob at `τ ≫ 1`, so
+/// fixing `L` and moving `ρ` probes the same axis the footprint box moves — and keeps the frozen
+/// pipeline's fixed-`length` `Config` contract). Descending Σ: tightest footprint, nominal,
+/// widest.
+fn shape_frozen_rho_grid() -> [f64; 3] {
+    let (_, l_nom) = shape_rho_length(SHAPE_NOM_RFOOT_OVER_R, SHAPE_NOM_L_OVER_D);
+    let sigma = |rf_over_r: f64| {
+        let r_foot = rf_over_r * SHAPE_PLATE_RADIUS_M;
+        SHAPE_PULSE_MASS_KG / (std::f64::consts::PI * r_foot * r_foot)
+    };
+    [
+        sigma(SHAPE_NOM_RFOOT_OVER_R * SHAPE_REL[0]) / l_nom,
+        sigma(SHAPE_NOM_RFOOT_OVER_R) / l_nom,
+        sigma(SHAPE_NOM_RFOOT_OVER_R * SHAPE_REL[SHAPE_REL.len() - 1]) / l_nom,
+    ]
+}
+
+/// The 150-cell coarse cross-check resolution (deeper inside the radiative-collapse stable
+/// window; see the [`Shape1DRecord`] docs).
+const SHAPE_1D_COARSE_CELLS: usize = 150;
+
+/// Run one 1D shape row: the equilibrium coupled bounce (production config, `wall = None`) at the
+/// sample's Σ-contract `(ρ, L)`, with the taper roles scaling `ρ` at fixed `L` (Σ moves through
+/// the density, exactly as the radius-dependent profile does) — at both validity-protocol
+/// resolutions, plus the EOS-only smoothness reference.
+fn run_shape_1d_case(
+    v: f64,
+    sample: &ShapeSample,
+    role: &str,
+    sigma_factor: f64,
+    table: &Table,
+) -> Shape1DRecord {
+    let (rho0, length) = shape_rho_length(sample.r_foot_over_r, sample.l_over_d);
+    let rho = rho0 * sigma_factor;
+    let cfg = Config {
+        v,
+        length,
+        ..Config::production()
+    };
+    let slug = |cells: usize| {
+        Tube::slug_si(
+            cells,
+            rho,
+            cfg.v,
+            cfg.length,
+            cfg.t0,
+            TableEos::new(table.clone()),
+            Viscosity::VON_NEUMANN_RICHTMYER,
+        )
+    };
+    let fine = CoupledBounce::new(slug(cfg.gas_cells), None, cfg.consts, cfg.limiter).run();
+    let coarse =
+        CoupledBounce::new(slug(SHAPE_1D_COARSE_CELLS), None, cfg.consts, cfg.limiter).run();
+    let eos_only = slug(cfg.gas_cells).run_bounce();
+    Shape1DRecord {
+        v,
+        axis: sample.axis.to_string(),
+        sigma_role: role.to_string(),
+        r_foot_over_r: sample.r_foot_over_r,
+        l_over_d: sample.l_over_d,
+        taper_frac: sample.taper_frac,
+        sigma: rho * length,
+        rho_impact: rho,
+        length,
+        e_eff: fine.bounce.e_eff,
+        e_eff_coarse: coarse.bounce.e_eff,
+        e_eff_eos: eos_only.e_eff,
+        peak_wall_pressure: fine.bounce.peak_wall_pressure,
+        peak_wall_pressure_coarse: coarse.bounce.peak_wall_pressure,
+        incident_momentum: fine.bounce.incident_momentum,
+        wall_impulse: fine.bounce.wall_impulse,
+    }
+}
+
 /// Write `records` as JSONL (one object per line, ADR-0019), creating the parent dir and replacing
 /// the file. Generic over the row type so the transitional (`Record`) and geometry (`GeoRecord`)
 /// sweeps share it.
@@ -1179,6 +1614,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
+    // Pulse-shape frozen spot-check (design §13): the three dip-anchor Σ points through the
+    // standard two-stage frozen pipeline (probe -> Python tables -> three-curve run), at the
+    // nominal Σ-contract length. Needs `make tables` / `tables-frozen-shape` first.
+    if args.iter().any(|a| a == "--frozen-probe-shape") {
+        let (_, l_nom) = shape_rho_length(SHAPE_NOM_RFOOT_OVER_R, SHAPE_NOM_L_OVER_D);
+        let base = Config {
+            v: SHAPE_V[0],
+            length: l_nom,
+            ..Config::production()
+        };
+        return frozen_probe_mode(
+            &[SHAPE_V[0]],
+            &shape_frozen_rho_grid(),
+            TABLE_PATH,
+            &base,
+            RESULT_PATH_FROZEN_PROBE_SHAPE,
+        );
+    }
+    if args.iter().any(|a| a == "--frozen-shape") {
+        let (_, l_nom) = shape_rho_length(SHAPE_NOM_RFOOT_OVER_R, SHAPE_NOM_L_OVER_D);
+        let base = Config {
+            v: SHAPE_V[0],
+            length: l_nom,
+            ..Config::production()
+        };
+        return frozen_sweep_mode(
+            &[SHAPE_V[0]],
+            &shape_frozen_rho_grid(),
+            TABLE_PATH,
+            TABLE_DIR_FROZEN_SHAPE,
+            &base,
+            RESULT_PATH_FROZEN_SHAPE,
+        );
+    }
+
     // Frozen-recombination probe: record each transitional case's turnaround state, from which the
     // Python side generates the per-case frozen-composition tables.
     if args.iter().any(|a| a == "--frozen-probe") {
@@ -1286,6 +1756,60 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    // Pulse-shape sensitivity sweep (design §13, ADR-0028): the fixed-grid 2D box + the fresh
+    // Σ-contract 1D runs, into two JSONL files. Needs `make tables` first (the 1D arm).
+    // `--1d-only` skips the (slow, unchanged) 2D box — a dev shortcut for 1D-schema re-runs.
+    if args.iter().any(|a| a == "--shape") {
+        let table = Table::load(TABLE_PATH)?;
+        if !args.iter().any(|a| a == "--1d-only") {
+            let rows2d = run_shape_2d_sweep();
+            write_rows(RESULT_PATH_SHAPE_2D, &rows2d)?;
+            for r in &rows2d {
+                println!(
+                    "rust: [{}] d/D={:.2} rf/R={:.2} L/D={:.3} taper={:.2} alpha={:.3} res={:.1} -> eta={:.4}",
+                    r.axis,
+                    r.d_over_d,
+                    r.r_foot_over_r,
+                    r.l_over_d,
+                    r.taper_frac,
+                    r.alpha_div,
+                    r.resolution_scale,
+                    r.eta_capture,
+                );
+            }
+            println!(
+                "rust: wrote {} 2D rows -> {RESULT_PATH_SHAPE_2D}",
+                rows2d.len()
+            );
+        }
+        let cases = shape_1d_cases();
+        let rows1d: Vec<Shape1DRecord> = cases
+            .par_iter()
+            .map(|(v, s, role, fac)| run_shape_1d_case(*v, s, role, *fac, &table))
+            .collect();
+        write_rows(RESULT_PATH_SHAPE_1D, &rows1d)?;
+        for r in &rows1d {
+            println!(
+                "rust: [{}/{}] v={:.0} Sigma={:.3} rho={:.3} L={:.2} -> e_eff={:.4} (coarse {:.4}, eos {:.4}) peak_p={:.3e}",
+                r.axis,
+                r.sigma_role,
+                r.v,
+                r.sigma,
+                r.rho_impact,
+                r.length,
+                r.e_eff,
+                r.e_eff_coarse,
+                r.e_eff_eos,
+                r.peak_wall_pressure,
+            );
+        }
+        println!(
+            "rust: wrote {} 1D rows -> {RESULT_PATH_SHAPE_1D}",
+            rows1d.len()
+        );
+        return Ok(());
+    }
+
     // High-Mach spot check for the Jupiter scenario: the full geometry grid at M = 40 (the
     // strong-shock plateau check past the production anchors 10/20).
     if args.iter().any(|a| a == "--geometry-m40") {
@@ -1384,10 +1908,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use super::{
         ABL_KAPPA_VAPOR, ABL_Q_STAR, AblatingRecord, Config, GeoConfig, GeoRecord, HEAVY_N_V,
-        HEAVY_V_ANCHORS, HeavyPlateRecord, LowvConfig, Record, TABLE_DIR_FROZEN,
-        TABLE_DIR_FROZEN_HEAVYPLATE, TABLE_DIR_FROZEN_JUPITER, frozen_table_path, heavy_v_grid,
-        run_ablating_case, run_eta_case, run_one, run_one_frozen, run_sweep,
-        run_sweep_frozen_probe, run_sweep_lowv, run_sweep_transitional,
+        HEAVY_V_ANCHORS, HeavyPlateRecord, LowvConfig, Record, SHAPE_ALPHA, SHAPE_NOM_L_OVER_D,
+        SHAPE_NOM_RFOOT_OVER_R, SHAPE_REL, SHAPE_TAPER, SHAPE_V, Shape1DRecord, ShapeRecord,
+        TABLE_DIR_FROZEN, TABLE_DIR_FROZEN_HEAVYPLATE, TABLE_DIR_FROZEN_JUPITER, frozen_table_path,
+        heavy_v_grid, run_ablating_case, run_eta_case, run_one, run_one_frozen, run_sweep,
+        run_sweep_frozen_probe, run_sweep_lowv, run_sweep_transitional, shape_1d_cases,
+        shape_2d_cases, shape_frozen_rho_grid, shape_nominal, shape_rho_length, shape_samples,
     };
     use hydro1d::radiation::{Limiter, RadConstants};
     use tables::Table;
@@ -1771,6 +2297,193 @@ mod tests {
         assert!(rec.swap_energy_jump_frac.abs() < 1e-9);
     }
 
+    /// The shape-box sample list (design §13): exactly one nominal, one-factor-at-a-time on every
+    /// other sample (S is a per-axis derivative), and the expected per-axis counts (6 two-sided
+    /// footprint/aspect samples each, 3 one-sided taper/divergence samples each).
+    #[test]
+    fn shape_samples_are_one_factor_at_a_time() {
+        let samples = shape_samples();
+        assert_eq!(samples.len(), 19);
+        let nom = shape_nominal();
+        let count = |axis: &str| samples.iter().filter(|s| s.axis == axis).count();
+        assert_eq!(count("nominal"), 1);
+        assert_eq!(count("r_foot_over_r"), 6);
+        assert_eq!(count("l_over_d"), 6);
+        assert_eq!(count("taper_frac"), 3);
+        assert_eq!(count("alpha_div"), 3);
+        for s in &samples {
+            let moved = [
+                (s.r_foot_over_r - nom.r_foot_over_r).abs() > 1e-12,
+                (s.l_over_d - nom.l_over_d).abs() > 1e-12,
+                (s.taper_frac - nom.taper_frac).abs() > 1e-12,
+                (s.alpha_div - nom.alpha_div).abs() > 1e-12,
+            ]
+            .iter()
+            .filter(|&&m| m)
+            .count();
+            assert_eq!(
+                moved,
+                usize::from(s.axis != "nominal"),
+                "sample [{}] must perturb exactly its own axis",
+                s.axis
+            );
+        }
+    }
+
+    /// The Rust Σ contract matches `puffsat.analysis.impact_density` (the cross-language contract
+    /// the 1D arm's densities come from): `ρ = m/(2π·(L/D)·r_foot³)`, `L = 2·(L/D)·r_foot` at
+    /// m = 25 kg, R = 5 m.
+    #[test]
+    fn shape_sigma_contract_matches_python_impact_density() {
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-12 * b.abs();
+        let (rho, l) = shape_rho_length(0.5, 0.3);
+        assert!(close(rho, 0.848_826_363_156_775_2), "nominal rho {rho}");
+        assert!(close(l, 1.5), "nominal length {l}");
+        let (rho, l) = shape_rho_length(0.4, 0.3);
+        assert!(close(rho, 1.657_863_990_540_576_5), "endpoint rho {rho}");
+        assert!(close(l, 1.2), "endpoint length {l}");
+    }
+
+    /// The 2D case list: the full 19-sample box × both plates at base resolution, plus the
+    /// 5-sample noise-floor/flag-refinement subset × both plates × the two refinements (≥ 3
+    /// repeats, ADR-0028) — and only 7 unique column lengths (the footprint and aspect axes
+    /// share `L = 0.6·rel`).
+    #[test]
+    fn shape_2d_case_list_covers_box_and_noise_subset() {
+        let cases = shape_2d_cases();
+        assert_eq!(cases.len(), 19 * 2 + 5 * 2 * 2);
+        assert_eq!(cases.iter().filter(|(_, _, res)| *res == 0).count(), 38);
+        let mut lengths: Vec<u64> = cases
+            .iter()
+            .map(|(s, _, _)| super::shape_cloud(s).1.to_bits())
+            .collect();
+        lengths.sort_unstable();
+        lengths.dedup();
+        assert_eq!(
+            lengths.len(),
+            7,
+            "footprint and aspect axes share the length set"
+        );
+    }
+
+    /// The 1D case list (per anchor): fresh Σ runs for the 13 footprint/aspect samples (incl.
+    /// nominal), a mean-Σ run per taper sample, the Σ-hi/lo90 bound rows at the widest taper only,
+    /// and *no* divergence rows (Σ untouched).
+    #[test]
+    fn shape_1d_case_list_covers_sigma_bookkeeping() {
+        let cases = shape_1d_cases();
+        assert_eq!(cases.len(), SHAPE_V.len() * (13 + 3 + 2));
+        assert!(cases.iter().all(|(_, s, _, _)| s.axis != "alpha_div"));
+        for &v in &SHAPE_V {
+            #[allow(clippy::float_cmp)] // v passes through the case builder verbatim
+            let at_v: Vec<_> = cases.iter().filter(|(cv, ..)| *cv == v).collect();
+            assert_eq!(
+                at_v.iter()
+                    .filter(|(_, _, role, _)| *role == "taper_mean")
+                    .count(),
+                SHAPE_TAPER.len() - 1
+            );
+            for role in ["sigma_hi", "sigma_lo90"] {
+                let bound: Vec<_> = at_v.iter().filter(|(_, _, r, _)| *r == role).collect();
+                assert_eq!(bound.len(), 1, "{role} only at the widest taper");
+                assert!((bound[0].1.taper_frac - SHAPE_TAPER[3]).abs() < 1e-12);
+            }
+        }
+        // The Σ factors bracket the mean for the bound rows.
+        let factor = |role: &str| {
+            cases
+                .iter()
+                .find(|(_, _, r, _)| *r == role)
+                .map(|(_, _, _, f)| *f)
+                .unwrap()
+        };
+        assert!(factor("sigma_lo90") < factor("sigma_hi"));
+    }
+
+    /// A `ShapeRecord` and a `Shape1DRecord` round-trip through the JSONL boundary (ADR-0019):
+    /// the Python shape reader sees exactly the fields written.
+    #[allow(clippy::float_cmp)] // round-number inputs survive the decimal text verbatim
+    #[test]
+    fn shape_records_jsonl_roundtrip() {
+        let rec2d = ShapeRecord {
+            axis: "r_foot_over_r".to_string(),
+            d_over_d: 0.10,
+            r_foot_over_r: 0.55,
+            l_over_d: 0.3,
+            taper_frac: 0.0,
+            alpha_div: 0.0,
+            mach: 20.0,
+            resolution_scale: 1.0,
+            eta_capture: 0.98,
+            restitution_free: 1.42,
+            restitution_confined: 1.45,
+            incident_momentum: 0.61,
+            peak_local_pressure: 620.0,
+        };
+        let line = serde_json::to_string(&rec2d).unwrap();
+        let back: ShapeRecord = serde_json::from_str(&line).unwrap();
+        assert_eq!(back, rec2d);
+        for key in [
+            "axis",
+            "resolution_scale",
+            "eta_capture",
+            "incident_momentum",
+        ] {
+            assert!(line.contains(key), "missing field {key}");
+        }
+        let rec1d = Shape1DRecord {
+            v: 11_000.0,
+            axis: "taper_frac".to_string(),
+            sigma_role: "taper_mean".to_string(),
+            r_foot_over_r: 0.5,
+            l_over_d: 0.3,
+            taper_frac: 0.3,
+            sigma: 1.54,
+            rho_impact: 1.027,
+            length: 1.5,
+            e_eff: 0.57,
+            e_eff_coarse: 0.569,
+            e_eff_eos: 0.576,
+            peak_wall_pressure: 1.2e8,
+            peak_wall_pressure_coarse: 1.19e8,
+            incident_momentum: 1.7e4,
+            wall_impulse: 2.7e4,
+        };
+        let line = serde_json::to_string(&rec1d).unwrap();
+        let back: Shape1DRecord = serde_json::from_str(&line).unwrap();
+        assert_eq!(back, rec1d);
+        for key in [
+            "sigma_role",
+            "sigma",
+            "rho_impact",
+            "e_eff",
+            "e_eff_coarse",
+            "e_eff_eos",
+        ] {
+            assert!(line.contains(key), "missing field {key}");
+        }
+    }
+
+    /// The frozen spot-check densities: three distinct Σ-equivalent points in descending order
+    /// (tightest footprint, nominal, widest), the middle one the nominal Σ-contract density, and
+    /// all distinct under the two-decimal frozen-table naming contract.
+    #[test]
+    fn shape_frozen_grid_is_three_distinct_descending_sigma_points() {
+        let grid = shape_frozen_rho_grid();
+        assert!(grid[0] > grid[1] && grid[1] > grid[2]);
+        let (rho_nom, _) = shape_rho_length(SHAPE_NOM_RFOOT_OVER_R, SHAPE_NOM_L_OVER_D);
+        assert!((grid[1] - rho_nom).abs() < 1e-12);
+        let names: Vec<String> = grid.iter().map(|r| format!("{r:.2}")).collect();
+        assert_eq!(names.len(), 3);
+        assert!(names[0] != names[1] && names[1] != names[2]);
+        // The endpoints follow Σ ∝ 1/r_foot²: (0.5/0.4)² and (0.5/0.6)² of nominal.
+        assert!((grid[0] / grid[1] - 1.5625).abs() < 1e-9);
+        assert!((grid[2] / grid[1] - (0.5f64 / 0.6).powi(2)).abs() < 1e-9);
+        // Guard the one-sided axes' sampling extents the case builders rely on.
+        assert!((SHAPE_REL[0] - 0.8).abs() < 1e-12 && (SHAPE_REL[6] - 1.2).abs() < 1e-12);
+        assert!((SHAPE_ALPHA[3] - 0.1).abs() < 1e-12 && (SHAPE_NOM_L_OVER_D - 0.3).abs() < 1e-12);
+    }
+
     /// DIAGNOSTIC (ignored): load the real water table and isolate which loss channel breaks the
     /// high-Mach bounce. Run with `cargo test -p sweep -- --ignored --nocapture diag`.
     #[test]
@@ -1816,6 +2529,58 @@ mod tests {
                 r.bounce.peak_wall_force,
                 r.loss_conductive,
             );
+        }
+    }
+
+    /// DIAGNOSTIC (ignored): map the coupled radiation operator's **resolution-onset radiative
+    /// collapse** at 16 km/s (2026-07-16 finding; see the [`Shape1DRecord`] docs). Measured onset:
+    /// EOS-only is smooth and stable everywhere (`e_eff` 0.638-0.647 over rho 0.32-1.66 at every
+    /// resolution); the coupled solve collapses (`e_eff` unphysical, escape loss -> 0, run ends
+    /// mid-infall) past a critical refinement that coarsens with `rho`: rho 0.32 stable through
+    /// 1200 cells, 0.64 collapses at 1200, 0.849/0.99 at 600, 1.164 at 300, 1.658 at 200. Where
+    /// stable, the plateau is flat (< 0.002 across a 4x cell range) — hence the two-resolution
+    /// (300/150) validity protocol in the shape rows. Run with
+    /// `cargo test -p sweep --release -- --ignored --nocapture diag_shape`.
+    #[test]
+    #[ignore = "diagnostic; needs data/tables/water.json"]
+    fn diag_shape_high_sigma() {
+        use hydro1d::eos::TableEos;
+        use hydro1d::kernel::{CoupledBounce, Tube, Viscosity};
+        let table = Table::load(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../data/tables/water.json"
+        ))
+        .unwrap();
+        let consts = RadConstants {
+            c: 2.997_924_58e8,
+            a: 7.565_733e-16,
+        };
+        for (rho, length) in [(1.164, 1.35), (1.658, 1.2)] {
+            for cells in [100usize, 150, 200] {
+                let mk = || {
+                    Tube::slug_si(
+                        cells,
+                        rho,
+                        16_000.0,
+                        length,
+                        400.0,
+                        TableEos::new(table.clone()),
+                        Viscosity::VON_NEUMANN_RICHTMYER,
+                    )
+                };
+                let eos_only = mk().run_bounce();
+                let coupled =
+                    CoupledBounce::new(mk(), None, consts, Limiter::LevermorePomraning).run();
+                println!(
+                    "rho={rho:.3} L={length:.2} cells={cells}: eos-only e_eff={:+.4} | coupled \
+                     e_eff={:+.4} resid/inc={:+.3} loss1a={:.3e} loss1b={:.3e}",
+                    eos_only.e_eff,
+                    coupled.bounce.e_eff,
+                    coupled.bounce.residual_momentum / coupled.bounce.incident_momentum,
+                    coupled.loss_radiative_wall,
+                    coupled.loss_escape_space,
+                );
+            }
         }
     }
 

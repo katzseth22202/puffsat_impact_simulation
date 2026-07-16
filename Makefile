@@ -3,7 +3,7 @@
 
 PY := uv run python
 
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -295,6 +295,53 @@ analysis-frozen-heavyplate: data/results/frontier_frozen_heavyplate.csv
 
 data/results/frontier_frozen_heavyplate.csv: data/results/sweep_frozen_heavyplate.jsonl data/results/sweep_heavyplate.jsonl data/results/sweep_geometry_m40.jsonl python/puffsat/heavyplate.py
 	PYTHONPATH=python uv run --extra sci python -m puffsat.heavyplate --frozen
+
+# --- Pulse-shape sensitivity study (design §13, ADR-0028) ---
+## sweep-shape: raw f(shape) inputs at the fixed baseline design — the fixed-grid 2D shape box
+## (+ refined noise-floor repeats) and the fresh Sigma-contract 1D e_eff runs -> two JSONLs;
+## depends on tables.
+sweep-shape: data/results/sweep_shape_geometry.jsonl
+
+data/results/sweep_shape_geometry.jsonl: data/tables/water.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/euler2d/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --shape
+
+## analysis-shape: assemble f over the shape box, compute S per axis, run the cliff detector, the
+## Sigma-profile bound, and the survivability margin -> data/results/shape_sensitivity.csv + .png;
+## depends on sweep-shape.
+analysis-shape: data/results/shape_sensitivity.csv
+
+data/results/shape_sensitivity.csv: data/results/sweep_shape_geometry.jsonl python/puffsat/shape.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.shape
+
+## sweep-frozen-probe-shape: turnaround-state probe for the three-point dip-anchor frozen
+## spot-check (design §13, ADR-0026 instrument) -> data/results/frozen_probe_shape.jsonl.
+sweep-frozen-probe-shape: data/results/frozen_probe_shape.jsonl
+
+data/results/frozen_probe_shape.jsonl: data/tables/water.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --frozen-probe-shape
+
+## tables-frozen-shape: per-case frozen-composition tables (+ pure-H2O bracket) for the shape
+## spot-check -> data/tables/frozen_shape/. Depends on the shape probe.
+tables-frozen-shape: data/tables/frozen_shape/h2o.json
+
+data/tables/frozen_shape/h2o.json: data/results/frozen_probe_shape.jsonl python/puffsat/eos_water.py python/puffsat/tables.py
+	PYTHONPATH=python $(PY) -m puffsat.tables --frozen-from-probe data/results/frozen_probe_shape.jsonl --outdir data/tables/frozen_shape
+
+## sweep-frozen-shape: three-curve freeze-timing spot-check at the dip anchor's three Sigma points
+## -> data/results/sweep_frozen_shape.jsonl
+sweep-frozen-shape: data/results/sweep_frozen_shape.jsonl
+
+data/results/sweep_frozen_shape.jsonl: data/tables/frozen_shape/h2o.json data/tables/water.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	cargo run --release -p sweep -- --frozen-shape
+
+## analysis-frozen-shape: the frozen-vs-equilibrium slope comparison across the Sigma box
+## (design §13 exit criterion) -> data/results/shape_frozen_spotcheck.csv
+analysis-frozen-shape: data/results/shape_frozen_spotcheck.csv
+
+data/results/shape_frozen_spotcheck.csv: data/results/sweep_frozen_shape.jsonl python/puffsat/shape.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.shape --frozen
 
 ## sensitivity: opacity-insensitivity scan (rung B, B5d-3) — sweep at 0.1x/1x/10x opacity, show
 ## e_eff barely moves. Builds the release sweep first; writes data/results/opacity_scan/.

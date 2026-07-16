@@ -30,6 +30,8 @@ fn confined(nz: usize) -> Bounce2D {
         nz,
         confined: true,
         shape: PlateShape::FlatGridAligned,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
     })
 }
 
@@ -47,6 +49,8 @@ fn free(r_foot: f64, nr: usize, nz: usize) -> Bounce2D {
         nz,
         confined: false,
         shape: PlateShape::FlatGridAligned,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
     })
 }
 
@@ -66,6 +70,8 @@ fn free_shape(shape: PlateShape, r_foot: f64, nr: usize, nz: usize) -> Bounce2D 
         nz,
         confined: false,
         shape,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
     })
 }
 
@@ -131,6 +137,8 @@ fn immersed_flat_matches_grid_aligned_flat() {
             nz,
             confined: false,
             shape: PlateShape::FlatGridAligned,
+            taper_frac: 0.0,
+            alpha_div: 0.0,
         }),
         &denom,
     );
