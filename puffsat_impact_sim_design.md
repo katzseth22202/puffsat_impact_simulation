@@ -320,3 +320,93 @@ spall reflection at the peak facesheet load. It reports a go/no-go with document
 assumptions — **not** a validated design and **not** FEA. A full structural-dynamics track remains
 its named refinement and a separate effort.
 
+---
+
+## 13. Pulse-shape sensitivity (baseline anchors)
+
+**Question.** Do slight changes in **pulse shape** (CONTEXT) produce only slight changes in `f`
+and the per-pulse impulse `J_wall`? The mission argument this feeds: shape dispersion in delivery
+is easy for the pushed vehicle's guidance to absorb **iff** the impulse response is smooth —
+errors that propagate linearly can be corrected; a cliff cannot. Protocol decisions are recorded
+in ADR-0028.
+
+**What is (and is not) being measured.** Raw `f(shape)` and `J_wall(shape)` at a **fixed design
+point** — the plate geometry, pulse mass, and speed frozen at the best-survivable baseline nominal
+(`d/D = 0.1`, `L/D = 0.3`, `r_foot/R = 0.5`, M = 20), at the two quoted anchors (the ~11 km/s dip
+and 16 km/s), concave headline with a flat-plate cross-check. **Not** the sensitivity of the
+survivability-constrained frontier: that argmax is intrinsically discontinuous (a shape change can
+knock a corner out of the feasible set) and says nothing about guidance, where the plate is already
+built. Survivability enters only as a separate **margin check**: `peak_wall_pressure` over the
+whole shape box must stay under the gate, so dispersion cannot flip a surviving design.
+
+**Perturbation axes (computed, axisymmetric)** — at **fixed pulse mass and speed**, so `p_in` is
+pinned and shape moves `f` through both ADR-0003 factors (`eta_capture` from the 2D track, `e_eff`
+through the areal density `Σ` from the 1D track):
+
+| Axis | Nominal | Box | Note |
+|---|---|---|---|
+| Footprint `r_foot/R` | 0.5 | ±20% (±5, ±10, ±20% samples) | couples hardest into `Σ ∝ 1/r_foot²` |
+| Aspect `L/D` | 0.3 | ±20% (same sampling) | arrival-timing stretch |
+| Edge taper width | 0 (top-hat) | 0 → 30% of `r_foot`, equal mass | one-sided; taper is *closer* to a real cloud than the top-hat |
+| Radial divergence `α` | 0 | 0 → 0.1 (`v_r = α·v·r/r_foot`) | one-sided; puffed cloud is expanding at impact |
+
+The **shape box is an assumption, not derived dispersion** — the deferred cloud-schedule study
+owns the real delivery numbers; every quoted result carries this caveat. Axial density profile is
+excluded (axial redistribution at fixed `Σ` is second-order for `eta_capture`, and the 1D track
+showed internal-structure insensitivity in Rung B).
+
+**Σ bookkeeping.** `r_foot`/`L/D` moves change `Σ` globally: `e_eff` is re-run fresh at each
+sample's `Σ` (equilibrium chemistry, the headline convention), **not** interpolated from frontier
+data. The taper makes `Σ` radius-dependent: `e_eff` is evaluated at the **mass-weighted mean `Σ`**,
+with the profile effect *bounded* by also evaluating `e_eff` at the profile's `Σ`-min/max — if
+that spread is not small, the deferred `Σ`-resolved `e_eff(ρ)` work has become load-bearing and
+the study stops rather than papering over it. A three-point **frozen-chemistry spot-check** at the
+dip anchor (`Σ`-nominal and box endpoints) confirms the ADR-0026 caveat's slope `∂e_eff/∂Σ` is
+comparably gentle — the smoothness claim must not silently inherit an equilibrium-only assumption.
+
+**Metric and noise discipline.** The deliverable is the **normalized shape sensitivity**
+`S_x = (Δf/f)/(Δx/x)` (CONTEXT) per axis, max over the box, plus the raw `f(x)` curves and a
+**cliff detector** (second-difference outliers vs. the local slope). All 2D samples run on **one
+fixed grid** (plate representation frozen; the cloud varies on top) — the existing geometry sweep's
+size-the-domain-to-the-cloud convention is deliberately inverted here, because re-gridding the
+immersed plate between samples would inject stair-step jitter at exactly the differences being
+resolved (ADR-0028). The noise floor `σ_noise` is established from ≥ 3 refined-grid repeats;
+structure below `2σ_noise` is reported as "below noise floor" (itself a pass — indistinguishable
+from flat), and any flagged cliff must survive grid refinement before it is called physical. The
+`f` assembly normalizes by the *measured* initialized `p_in`, never the analytic value, so
+cell-boundary initialization jitter cancels.
+
+**Symmetry-breaking modes (bounded, not computed).** Lateral offset, tilt, and sideways drift
+break axisymmetry and are out of the 2D kernel's reach; §11 keeps spatially-resolved off-center
+`f` out of scope. They are covered by an **analytic linear bound** — consistent with §11, not a
+partial reversal of it:
+
+- **Lateral offset `δ`, flat plate:** while the footprint stays on the plate (`δ < R − r_foot`),
+  axial impulse is unchanged to first order (the bounce is local); the induced effect is a torque
+  `~ J_wall·δ` — linear.
+- **Offset on the concave dish:** curvature adds a lateral impulse component set by the dish
+  surface-slope difference across `δ`; for shallow `d/D` (ADR-0021) the slope is small and the
+  response linear, with the constant computable from `d/D` and `R`.
+- **Tilt `θ`:** axial impulse degrades as `cos θ` — *second order* (5° costs ~0.4%); lateral
+  impulse and torque grow as `sin θ ≈ θ` — linear.
+- **Sideways bulk drift `v_lat`:** lateral impulse `≈ m·v_lat`, linear; axial unchanged to first
+  order.
+- **The one real threshold** is the footprint clipping the plate rim at `δ = R − r_foot` — and
+  even that is C¹ (spilled mass grows continuously from zero via circle-overlap geometry), not a
+  step. At nominal `r_foot/R = 0.5` the margin is `0.5·R` of pure offset before *any* gas misses
+  the plate.
+
+So every symmetry-breaking mode is linear (or better) in its perturbation, with explicit slope
+constants and one margin number — the "slight → slight" property holds by construction there; the
+computed study only needs to establish it on the axisymmetric axes.
+
+**Pipeline & deliverables.** Two `SlugConfig` fields (edge taper width, divergence `α`), both
+defaulting to the current behavior with identity-regression tests; a `--shape` sweep mode
+(`make sweep-shape` → `make analysis-shape`); `python/puffsat/shape.py` assembles `f`, computes
+`S`, runs the cliff detector, the `Σ`-min/max bound, and the survivability margin. Committed
+artifacts (ADR-0025): `data/results/shape_sensitivity.csv` + `shape_sensitivity.png`; a
+CONCLUSION.md subsection quoting max `|S|` per axis, the offset/tilt/drift bounds, and the
+rim-clip margin, each carrying the shape-box caveat. Exit criteria: bounded `S` (`|S| ≲` a few)
+on every axis, zero cliff flags surviving refinement, positive survivability margin over the box,
+frozen spot-check slope comparable to equilibrium.
+

@@ -47,6 +47,24 @@ _Avoid_: collection efficiency, catch fraction
 The axial momentum a pulse carries into the collision in the plate frame, `p_in = m_pulse · v`.
 The normalizing reference for both `e_eff` and `f`.
 
+**Pulse shape**:
+The geometry of the gas pulse at the moment of impact, at fixed pulse mass and speed: footprint
+coverage `r_foot/R`, aspect ratio `L/D`, edge taper, and radial divergence. Shape changes at fixed
+mass move `f` through both factors — `eta_capture` (2D geometry) and `e_eff` via the areal density
+`Σ` (1D thermophysics).
+_Avoid_: plume, cloud shape ("plume" suggests an engine exhaust; this is a delivered pulse)
+
+**Shape box**:
+The assumed dispersion region around the nominal pulse shape over which shape sensitivity is
+assessed. An *assumption* standing in for real delivery dispersion, which is unquantified until
+the deferred cloud-schedule study; claims made over the shape box must say so.
+
+**Normalized shape sensitivity (`S`)**:
+Per shape axis `x`, the relative response of the fudge factor: `S_x = (Δf/f)/(Δx/x)`, reported as
+a max over the shape box. The quotable form of "slight shape change → slight impulse change";
+`|S| ≲ 1` means a 1% shape error costs ≲ 1% impulse. The claim requires bounded `S` *and* no
+cliff (no second-difference outlier surviving grid refinement).
+
 **Plate radius (`R`)**:
 The radius of the circular pusher plate — always a *radius*, so the plate's width/diameter is
 `2R`. The canonical size variable: footprint coverage is the ratio `r_foot/R`, and impact density
