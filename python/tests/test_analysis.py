@@ -77,6 +77,35 @@ def test_read_sweep_parses_jsonl(tmp_path: Path) -> None:
     assert rows[0].loss_condensation == 0.0
 
 
+@pytest.mark.parametrize(
+    ("default_path", "field"),
+    [
+        (an.DEFAULT_SWEEP_PATH, "peak_wall_force"),
+        (an.DEFAULT_SWEEP_PATH, "peak_wall_pressure"),
+        (an.DEFAULT_SWEEP_PATH, "loss_condensation"),
+        (an.DEFAULT_GEOMETRY_PATH, "peak_local_pressure"),
+    ],
+)
+def test_defaulted_fields_are_actually_present_in_real_jsonl(
+    default_path: Path, field: str
+) -> None:
+    """`read_sweep`/`read_geometry`'s `defaults={...}` exist for pre-ADR-0010 back-compat, not to
+    tolerate a renamed field — `read_jsonl_rows` would otherwise silently return `0.0` forever if
+    Rust ever renamed one of these, with no test noticing. Guard that: if a real sweep JSONL is on
+    disk (`make sweep` / `make sweep-geometry`), assert the field is actually still there.
+
+    Skipped when no real sweep output exists yet (nothing to check against, and the repo doesn't
+    commit the raw JSONL, ADR-0025)."""
+    if not default_path.exists():
+        pytest.skip(f"no {default_path} on disk to check (run the matching `make sweep*` first)")
+    line = next(line for line in default_path.read_text().splitlines() if line.strip())
+    row = json.loads(line)
+    assert field in row, (
+        f"{field!r} is missing from real {default_path} — the read_jsonl_rows default is now "
+        "silently masking a Rust-side rename/removal, not providing back-compat"
+    )
+
+
 def test_frontier_sorts_and_normalizes(tmp_path: Path) -> None:
     """Frontier is ascending in rho; loss fractions sum to 1 with loss, and are 0 without."""
     path = tmp_path / "sweep.jsonl"
