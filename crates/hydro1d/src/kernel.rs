@@ -112,6 +112,65 @@ pub struct Tube<E: Eos> {
     energy: Vec<f64>,
 }
 
+/// Shared wall-impulse integration loop for a bounce (ADR-0001): peak-detect the wall force, then
+/// integrate `J_wall` trapezoidally until it decays to `10⁻³` of its peak. [`Tube::run_bounce`],
+/// [`CoupledBounce::run`], [`CondensingBounce::run`], and [`AblatingBounce::run`] each wrap
+/// [`Self::run_bounce_loop`] — they differ only in what one `step` does (bare hydro vs.
+/// radiation/conduction/condensation/ablation substeps), not in how the impulse is accumulated or
+/// the run is terminated. [`Tube::run_stick_bounce`] and [`Tube::run_bounce_frozen_rebound`] keep
+/// their own loops: their termination is a stagnation crossing, not this tail guard.
+trait BounceStepper {
+    /// Axial force the gas exerts on the wall this instant (includes artificial viscosity).
+    fn wall_force(&self) -> f64;
+    /// Physical wall pressure this instant (excludes artificial viscosity).
+    fn wall_pressure(&self) -> f64;
+    /// CFL-stable timestep for the current state.
+    fn stable_dt(&self) -> f64;
+    /// Total gas momentum (signed).
+    fn total_momentum(&self) -> f64;
+    /// Cell count, for the `max_steps` safety cap.
+    fn cells(&self) -> usize;
+    /// Advance the state by one step of `dt` — the part that varies per bounce variant.
+    fn step(&mut self, dt: f64);
+
+    /// Fire the slug at the wall and integrate to the `10⁻³`-of-peak tail guard, returning the
+    /// wall impulse and the restitution it implies.
+    fn run_bounce_loop(&mut self) -> BounceResult {
+        let incident = self.total_momentum().abs();
+        let mut wall_impulse = 0.0;
+        let mut peak: f64 = 0.0;
+        let mut peak_pressure: f64 = 0.0;
+        let mut past_peak = false;
+        let mut force_old = self.wall_force();
+        let max_steps = 400 * self.cells() + 10_000;
+
+        for _ in 0..max_steps {
+            peak = peak.max(force_old);
+            peak_pressure = peak_pressure.max(self.wall_pressure());
+            if force_old < 0.5 * peak {
+                past_peak = true;
+            }
+            if past_peak && force_old < 1e-3 * peak {
+                break;
+            }
+            let dt = self.stable_dt();
+            self.step(dt);
+            let force_new = self.wall_force();
+            wall_impulse += 0.5 * dt * (force_old + force_new);
+            force_old = force_new;
+        }
+
+        BounceResult {
+            wall_impulse,
+            incident_momentum: incident,
+            residual_momentum: self.total_momentum(),
+            e_eff: wall_impulse / incident - 1.0,
+            peak_wall_force: peak,
+            peak_wall_pressure: peak_pressure,
+        }
+    }
+}
+
 impl Tube<IdealGas> {
     /// Build an **ideal-gas** tube from cell-centered primitive initial conditions on the node
     /// grid `x` (length `cells + 1`). Convenience wrapper over [`Tube::with_eos`] for rung A's
@@ -468,40 +527,7 @@ impl<E: Eos> Tube<E> {
     /// cells, not round-off: `J_wall` samples the wall-pressure history independently of the
     /// momentum bookkeeping). This is the elastic bookkeeping check (ADR-0001).
     pub fn run_bounce(&mut self) -> BounceResult {
-        let p_initial = self.total_momentum();
-        let incident = p_initial.abs();
-        let mut wall_impulse = 0.0;
-        let mut peak: f64 = 0.0;
-        let mut peak_pressure: f64 = 0.0;
-        let mut past_peak = false;
-        let mut force_old = self.wall_force();
-        let max_steps = 400 * self.cells() + 10_000;
-
-        for _ in 0..max_steps {
-            peak = peak.max(force_old);
-            peak_pressure = peak_pressure.max(self.wall_pressure());
-            if force_old < 0.5 * peak {
-                past_peak = true;
-            }
-            if past_peak && force_old < 1e-3 * peak {
-                break;
-            }
-            let dt = self.stable_dt();
-            self.step(dt);
-            let force_new = self.wall_force();
-            wall_impulse += 0.5 * dt * (force_old + force_new);
-            force_old = force_new;
-        }
-
-        let residual = self.total_momentum();
-        BounceResult {
-            wall_impulse,
-            incident_momentum: incident,
-            residual_momentum: residual,
-            e_eff: wall_impulse / incident - 1.0,
-            peak_wall_force: peak,
-            peak_wall_pressure: peak_pressure,
-        }
+        self.run_bounce_loop()
     }
 
     /// Fire the slug at an **idealized absorbing wall** — ADR-0001's dead-stick (`f → 0.5`) limit.
@@ -568,6 +594,27 @@ impl<E: Eos> Tube<E> {
             peak_wall_force: peak,
             peak_wall_pressure: peak_pressure,
         }
+    }
+}
+
+impl<E: Eos> BounceStepper for Tube<E> {
+    fn wall_force(&self) -> f64 {
+        Tube::wall_force(self)
+    }
+    fn wall_pressure(&self) -> f64 {
+        Tube::wall_pressure(self)
+    }
+    fn stable_dt(&self) -> f64 {
+        Tube::stable_dt(self)
+    }
+    fn total_momentum(&self) -> f64 {
+        Tube::total_momentum(self)
+    }
+    fn cells(&self) -> usize {
+        Tube::cells(self)
+    }
+    fn step(&mut self, dt: f64) {
+        Tube::step(self, dt);
     }
 }
 
@@ -1042,43 +1089,34 @@ impl CoupledBounce {
     /// Fire the coupled slug at the wall, integrating to the same `10⁻³`-of-peak tail guard as
     /// [`Tube::run_bounce`], and return the restitution plus the loss-channel decomposition.
     pub fn run(&mut self) -> CoupledBounceResult {
-        let incident = self.tube.total_momentum().abs();
-        let mut wall_impulse = 0.0;
-        let mut peak: f64 = 0.0;
-        let mut peak_pressure: f64 = 0.0;
-        let mut past_peak = false;
-        let mut force_old = self.tube.wall_force();
-        let max_steps = 400 * self.tube.cells() + 10_000;
-
-        for _ in 0..max_steps {
-            peak = peak.max(force_old);
-            peak_pressure = peak_pressure.max(self.tube.wall_pressure());
-            if force_old < 0.5 * peak {
-                past_peak = true;
-            }
-            if past_peak && force_old < 1e-3 * peak {
-                break;
-            }
-            let dt = self.tube.stable_dt();
-            self.coupled_step(dt);
-            let force_new = self.tube.wall_force();
-            wall_impulse += 0.5 * dt * (force_old + force_new);
-            force_old = force_new;
-        }
-
+        let bounce = self.run_bounce_loop();
         CoupledBounceResult {
-            bounce: BounceResult {
-                wall_impulse,
-                incident_momentum: incident,
-                residual_momentum: self.tube.total_momentum(),
-                e_eff: wall_impulse / incident - 1.0,
-                peak_wall_force: peak,
-                peak_wall_pressure: peak_pressure,
-            },
+            bounce,
             loss_radiative_wall: self.loss_radiative_wall,
             loss_escape_space: self.loss_escape_space,
             loss_conductive: self.loss_conductive,
         }
+    }
+}
+
+impl BounceStepper for CoupledBounce {
+    fn wall_force(&self) -> f64 {
+        self.tube.wall_force()
+    }
+    fn wall_pressure(&self) -> f64 {
+        self.tube.wall_pressure()
+    }
+    fn stable_dt(&self) -> f64 {
+        self.tube.stable_dt()
+    }
+    fn total_momentum(&self) -> f64 {
+        self.tube.total_momentum()
+    }
+    fn cells(&self) -> usize {
+        self.tube.cells()
+    }
+    fn step(&mut self, dt: f64) {
+        self.coupled_step(dt);
     }
 }
 
@@ -1193,50 +1231,46 @@ impl CondensingBounce {
         self.m_liq_prev = Self::wall_liquid_mass(&self.tube);
     }
 
+    /// One condensing step: hydro, then conduction (channel 2), then wall deposition (channel 3).
+    /// Conduction first: the cold wall cools the near-wall gas below `T_sat`, raising
+    /// `liquid_frac`, which the deposition sink then sticks (the two channels are sequenced).
+    fn condensing_step(&mut self, dt: f64) {
+        self.tube.step(dt);
+        self.conduction_substep(dt);
+        self.condensation_substep();
+    }
+
     /// Fire the condensing slug at the wall, integrating to the same `10⁻³`-of-peak tail guard as
     /// [`Tube::run_bounce`], and return the restitution plus the condensation loss.
     pub fn run(&mut self) -> CondensingBounceResult {
-        let incident = self.tube.total_momentum().abs();
-        let mut wall_impulse = 0.0;
-        let mut peak: f64 = 0.0;
-        let mut peak_pressure: f64 = 0.0;
-        let mut past_peak = false;
-        let mut force_old = self.tube.wall_force();
-        let max_steps = 400 * self.tube.cells() + 10_000;
-
-        for _ in 0..max_steps {
-            peak = peak.max(force_old);
-            peak_pressure = peak_pressure.max(self.tube.wall_pressure());
-            if force_old < 0.5 * peak {
-                past_peak = true;
-            }
-            if past_peak && force_old < 1e-3 * peak {
-                break;
-            }
-            let dt = self.tube.stable_dt();
-            self.tube.step(dt);
-            // Conduction first: the cold wall cools the near-wall gas below T_sat, raising
-            // liquid_frac, which the deposition sink then sticks (the two channels are sequenced).
-            self.conduction_substep(dt);
-            self.condensation_substep();
-            let force_new = self.tube.wall_force();
-            wall_impulse += 0.5 * dt * (force_old + force_new);
-            force_old = force_new;
-        }
-
+        let bounce = self.run_bounce_loop();
         CondensingBounceResult {
-            bounce: BounceResult {
-                wall_impulse,
-                incident_momentum: incident,
-                residual_momentum: self.tube.total_momentum(),
-                e_eff: wall_impulse / incident - 1.0,
-                peak_wall_force: peak,
-                peak_wall_pressure: peak_pressure,
-            },
+            bounce,
             loss_condensation: self.loss_condensation,
             loss_conductive: self.loss_conductive,
             stuck_mass: self.stuck_mass,
         }
+    }
+}
+
+impl BounceStepper for CondensingBounce {
+    fn wall_force(&self) -> f64 {
+        self.tube.wall_force()
+    }
+    fn wall_pressure(&self) -> f64 {
+        self.tube.wall_pressure()
+    }
+    fn stable_dt(&self) -> f64 {
+        self.tube.stable_dt()
+    }
+    fn total_momentum(&self) -> f64 {
+        self.tube.total_momentum()
+    }
+    fn cells(&self) -> usize {
+        self.tube.cells()
+    }
+    fn step(&mut self, dt: f64) {
+        self.condensing_step(dt);
     }
 }
 
@@ -1514,45 +1548,36 @@ impl AblatingBounce {
     /// Fire the ablating slug at the wall, integrating to the same `10⁻³`-of-peak tail guard as
     /// [`CoupledBounce::run`], and return the restitution, loss decomposition, and ablation tally.
     pub fn run(&mut self) -> AblatingBounceResult {
-        let incident = self.tube.total_momentum().abs();
-        let mut wall_impulse = 0.0;
-        let mut peak: f64 = 0.0;
-        let mut peak_pressure: f64 = 0.0;
-        let mut past_peak = false;
-        let mut force_old = self.tube.wall_force();
-        let max_steps = 400 * self.tube.cells() + 10_000;
-
-        for _ in 0..max_steps {
-            peak = peak.max(force_old);
-            peak_pressure = peak_pressure.max(self.tube.wall_pressure());
-            if force_old < 0.5 * peak {
-                past_peak = true;
-            }
-            if past_peak && force_old < 1e-3 * peak {
-                break;
-            }
-            let dt = self.tube.stable_dt();
-            self.ablating_step(dt);
-            let force_new = self.tube.wall_force();
-            wall_impulse += 0.5 * dt * (force_old + force_new);
-            force_old = force_new;
-        }
-
+        let bounce = self.run_bounce_loop();
         AblatingBounceResult {
-            bounce: BounceResult {
-                wall_impulse,
-                incident_momentum: incident,
-                residual_momentum: self.tube.total_momentum(),
-                e_eff: wall_impulse / incident - 1.0,
-                peak_wall_force: peak,
-                peak_wall_pressure: peak_pressure,
-            },
+            bounce,
             loss_radiative_wall: self.loss_radiative_wall,
             loss_escape_space: self.loss_escape_space,
             loss_conductive: self.loss_conductive,
             ablated_mass: self.ablated_mass,
             loss_ablation: self.loss_ablation,
         }
+    }
+}
+
+impl BounceStepper for AblatingBounce {
+    fn wall_force(&self) -> f64 {
+        self.tube.wall_force()
+    }
+    fn wall_pressure(&self) -> f64 {
+        self.tube.wall_pressure()
+    }
+    fn stable_dt(&self) -> f64 {
+        self.tube.stable_dt()
+    }
+    fn total_momentum(&self) -> f64 {
+        self.tube.total_momentum()
+    }
+    fn cells(&self) -> usize {
+        self.tube.cells()
+    }
+    fn step(&mut self, dt: f64) {
+        self.ablating_step(dt);
     }
 }
 
