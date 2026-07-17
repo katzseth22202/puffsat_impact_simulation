@@ -1453,6 +1453,23 @@ fn write_rows<T: Serialize>(path: &str, records: &[T]) -> Result<(), Box<dyn std
     Ok(())
 }
 
+/// Write `rows` to `result_path` (ADR-0019 JSONL), echo each row with `echo`, then print the
+/// "wrote N rows" trailer — the write + per-row echo + summary shape every scenario command
+/// shares; only `echo`'s row format differs, since each scenario's JSONL schema differs.
+fn emit_scenario<T: Serialize>(
+    result_path: &str,
+    label: &str,
+    rows: &[T],
+    mut echo: impl FnMut(&T),
+) -> Result<(), Box<dyn std::error::Error>> {
+    write_rows(result_path, rows)?;
+    for r in rows {
+        echo(r);
+    }
+    println!("rust: wrote {} {label} rows -> {result_path}", rows.len());
+    Ok(())
+}
+
 /// `--frozen-probe`: run `v_grid × rho_grid` EOS-only on `table_path` and record each case's
 /// mass-weighted turnaround state; the Python table generator freezes the composition there.
 /// Parameterized so the transitional (ADR-0026) and 69 km/s Jupiter passes share it.
@@ -1516,356 +1533,314 @@ fn frozen_sweep_mode(
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // `--lowv` selects the 3.2 km/s condensing anchor (Rung C); `--transitional` the ADR-0012 velocity
-    // sweep (two files); otherwise the 16 km/s high-v pass. Optional positional `[table] [result]`
-    // override the high-v/low-v defaults (the B5d-3 opacity scan sweeps each scaled table into its own
-    // JSONL).
-    let args: Vec<String> = std::env::args().skip(1).collect();
-
-    // Transitional anchor (ADR-0012): sweep V_GRID × RHO_GRID with the high-v table, emitting the
-    // EOS-only curve and the radiation-on comparison curve into two fixed files.
-    if args.iter().any(|a| a == "--transitional") {
-        let table = Table::load(TABLE_PATH)?;
-        let (eos, rad) = run_sweep_transitional(&V_GRID, &RHO_GRID, &table, &Config::production());
-        write_rows(RESULT_PATH_TRANS_EOS, &eos)?;
-        write_rows(RESULT_PATH_TRANS_RAD, &rad)?;
-        for (e, r) in eos.iter().zip(rad.iter()) {
-            println!(
-                "rust: v={:.0} rho={:.2} -> e_eff_eos={:.4} e_eff_rad={:.4} (rad band {:.4})",
-                e.v,
-                e.rho_impact,
-                e.e_eff,
-                r.e_eff,
-                e.e_eff - r.e_eff,
-            );
-        }
+// Transitional anchor (ADR-0012): sweep V_GRID × RHO_GRID with the high-v table, emitting the
+// EOS-only curve and the radiation-on comparison curve into two fixed files.
+fn cmd_transitional(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let table = Table::load(TABLE_PATH)?;
+    let (eos, rad) = run_sweep_transitional(&V_GRID, &RHO_GRID, &table, &Config::production());
+    write_rows(RESULT_PATH_TRANS_EOS, &eos)?;
+    write_rows(RESULT_PATH_TRANS_RAD, &rad)?;
+    for (e, r) in eos.iter().zip(rad.iter()) {
         println!(
-            "rust: wrote {} eos + {} rad rows -> {RESULT_PATH_TRANS_EOS} , {RESULT_PATH_TRANS_RAD}",
-            eos.len(),
-            rad.len(),
+            "rust: v={:.0} rho={:.2} -> e_eff_eos={:.4} e_eff_rad={:.4} (rad band {:.4})",
+            e.v,
+            e.rho_impact,
+            e.e_eff,
+            r.e_eff,
+            e.e_eff - r.e_eff,
         );
-        return Ok(());
     }
+    println!(
+        "rust: wrote {} eos + {} rad rows -> {RESULT_PATH_TRANS_EOS} , {RESULT_PATH_TRANS_RAD}",
+        eos.len(),
+        rad.len(),
+    );
+    Ok(())
+}
 
-    // Jupiter 69 km/s freeze-timing bracket (ADR-0026 instrument at the L=12 m realistic-cloud
-    // anchor, on the extended-grid table). Checked before the transitional variants (exact-match
-    // args, but keeps the 69 km/s pass self-contained). Needs `make tables-jupiter` /
-    // `tables-frozen-jupiter` first.
-    if args.iter().any(|a| a == "--frozen-probe-jupiter") {
-        let base = Config {
-            v: JUP_V,
-            length: JUP_FROZEN_LENGTH,
-            ..Config::production()
-        };
-        return frozen_probe_mode(
-            &[JUP_V],
-            &JUP_RHO,
-            TABLE_PATH_JUPITER,
-            &base,
-            RESULT_PATH_FROZEN_PROBE_JUPITER,
-        );
-    }
-    if args.iter().any(|a| a == "--frozen-jupiter") {
-        let base = Config {
-            v: JUP_V,
-            length: JUP_FROZEN_LENGTH,
-            ..Config::production()
-        };
-        return frozen_sweep_mode(
-            &[JUP_V],
-            &JUP_RHO,
-            TABLE_PATH_JUPITER,
-            TABLE_DIR_FROZEN_JUPITER,
-            &base,
-            RESULT_PATH_FROZEN_JUPITER,
-        );
-    }
+// Jupiter 69 km/s freeze-timing bracket (ADR-0026 instrument at the L=12 m realistic-cloud
+// anchor, on the extended-grid table). Needs `make tables-jupiter` / `tables-frozen-jupiter`
+// first. (`--frozen-probe-jupiter` / `--frozen-jupiter`.)
+fn cmd_frozen_probe_jupiter(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let base = Config {
+        v: JUP_V,
+        length: JUP_FROZEN_LENGTH,
+        ..Config::production()
+    };
+    frozen_probe_mode(
+        &[JUP_V],
+        &JUP_RHO,
+        TABLE_PATH_JUPITER,
+        &base,
+        RESULT_PATH_FROZEN_PROBE_JUPITER,
+    )
+}
 
-    // Heavy-plate 16–28 km/s freeze-timing bracket (ADR-0026 instrument at the 16 / 22 / 28 km/s
-    // anchors, on the reused Jupiter extended-grid table). Needs `make tables-jupiter` /
-    // `tables-frozen-heavyplate` first. (`base.v` is overridden per grid velocity inside the mode.)
-    if args.iter().any(|a| a == "--frozen-probe-heavyplate") {
-        let base = Config {
-            v: HEAVY_V_ANCHORS[0],
-            length: HEAVY_LENGTH,
-            ..Config::production()
-        };
-        return frozen_probe_mode(
-            &HEAVY_V_ANCHORS,
-            &HEAVY_RHO,
-            TABLE_PATH_JUPITER,
-            &base,
-            RESULT_PATH_FROZEN_PROBE_HEAVYPLATE,
-        );
-    }
-    if args.iter().any(|a| a == "--frozen-heavyplate") {
-        let base = Config {
-            v: HEAVY_V_ANCHORS[0],
-            length: HEAVY_LENGTH,
-            ..Config::production()
-        };
-        return frozen_sweep_mode(
-            &HEAVY_V_ANCHORS,
-            &HEAVY_RHO,
-            TABLE_PATH_JUPITER,
-            TABLE_DIR_FROZEN_HEAVYPLATE,
-            &base,
-            RESULT_PATH_FROZEN_HEAVYPLATE,
-        );
-    }
+fn cmd_frozen_jupiter(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let base = Config {
+        v: JUP_V,
+        length: JUP_FROZEN_LENGTH,
+        ..Config::production()
+    };
+    frozen_sweep_mode(
+        &[JUP_V],
+        &JUP_RHO,
+        TABLE_PATH_JUPITER,
+        TABLE_DIR_FROZEN_JUPITER,
+        &base,
+        RESULT_PATH_FROZEN_JUPITER,
+    )
+}
 
-    // Pulse-shape frozen spot-check (design §13): the three dip-anchor Σ points through the
-    // standard two-stage frozen pipeline (probe -> Python tables -> three-curve run), at the
-    // nominal Σ-contract length. Needs `make tables` / `tables-frozen-shape` first.
-    if args.iter().any(|a| a == "--frozen-probe-shape") {
-        let (_, l_nom) = shape_rho_length(SHAPE_NOM_RFOOT_OVER_R, SHAPE_NOM_L_OVER_D);
-        let base = Config {
-            v: SHAPE_V[0],
-            length: l_nom,
-            ..Config::production()
-        };
-        return frozen_probe_mode(
-            &[SHAPE_V[0]],
-            &shape_frozen_rho_grid(),
-            TABLE_PATH,
-            &base,
-            RESULT_PATH_FROZEN_PROBE_SHAPE,
-        );
-    }
-    if args.iter().any(|a| a == "--frozen-shape") {
-        let (_, l_nom) = shape_rho_length(SHAPE_NOM_RFOOT_OVER_R, SHAPE_NOM_L_OVER_D);
-        let base = Config {
-            v: SHAPE_V[0],
-            length: l_nom,
-            ..Config::production()
-        };
-        return frozen_sweep_mode(
-            &[SHAPE_V[0]],
-            &shape_frozen_rho_grid(),
-            TABLE_PATH,
-            TABLE_DIR_FROZEN_SHAPE,
-            &base,
-            RESULT_PATH_FROZEN_SHAPE,
-        );
-    }
+// Heavy-plate 16–28 km/s freeze-timing bracket (ADR-0026 instrument at the 16 / 22 / 28 km/s
+// anchors, on the reused Jupiter extended-grid table). Needs `make tables-jupiter` /
+// `tables-frozen-heavyplate` first. (`base.v` is overridden per grid velocity inside the mode.)
+fn cmd_frozen_probe_heavyplate(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let base = Config {
+        v: HEAVY_V_ANCHORS[0],
+        length: HEAVY_LENGTH,
+        ..Config::production()
+    };
+    frozen_probe_mode(
+        &HEAVY_V_ANCHORS,
+        &HEAVY_RHO,
+        TABLE_PATH_JUPITER,
+        &base,
+        RESULT_PATH_FROZEN_PROBE_HEAVYPLATE,
+    )
+}
 
-    // Frozen-recombination probe: record each transitional case's turnaround state, from which the
-    // Python side generates the per-case frozen-composition tables.
-    if args.iter().any(|a| a == "--frozen-probe") {
-        return frozen_probe_mode(
-            &V_GRID,
-            &RHO_GRID,
-            TABLE_PATH,
-            &Config::production(),
-            RESULT_PATH_FROZEN_PROBE,
-        );
-    }
+fn cmd_frozen_heavyplate(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let base = Config {
+        v: HEAVY_V_ANCHORS[0],
+        length: HEAVY_LENGTH,
+        ..Config::production()
+    };
+    frozen_sweep_mode(
+        &HEAVY_V_ANCHORS,
+        &HEAVY_RHO,
+        TABLE_PATH_JUPITER,
+        TABLE_DIR_FROZEN_HEAVYPLATE,
+        &base,
+        RESULT_PATH_FROZEN_HEAVYPLATE,
+    )
+}
 
-    // Frozen-recombination bounding sweep: equilibrium vs sudden-freeze-at-turnaround vs
-    // pure-H2O-no-chemistry, per transitional case. Needs the per-case frozen tables (make
-    // tables-frozen).
-    if args.iter().any(|a| a == "--frozen") {
-        return frozen_sweep_mode(
-            &V_GRID,
-            &RHO_GRID,
-            TABLE_PATH,
-            TABLE_DIR_FROZEN,
-            &Config::production(),
-            RESULT_PATH_FROZEN,
-        );
-    }
+// Pulse-shape frozen spot-check (design §13): the three dip-anchor Σ points through the standard
+// two-stage frozen pipeline (probe -> Python tables -> three-curve run), at the nominal
+// Σ-contract length. Needs `make tables` / `tables-frozen-shape` first.
+fn cmd_frozen_probe_shape(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let (_, l_nom) = shape_rho_length(SHAPE_NOM_RFOOT_OVER_R, SHAPE_NOM_L_OVER_D);
+    let base = Config {
+        v: SHAPE_V[0],
+        length: l_nom,
+        ..Config::production()
+    };
+    frozen_probe_mode(
+        &[SHAPE_V[0]],
+        &shape_frozen_rho_grid(),
+        TABLE_PATH,
+        &base,
+        RESULT_PATH_FROZEN_PROBE_SHAPE,
+    )
+}
 
-    // Ablating-wall recovery sweep (Rung E, ADR-0014): the rigid floor vs the shielding+injection
-    // ablating wall over (v × ρ × opacity-scale × Q*), reporting recovery as a τ-bracket.
-    if args.iter().any(|a| a == "--ablating") {
-        let base_tbl = base_table();
-        let cfg = Config {
-            gas_cells: ABL_GAS_CELLS,
-            ..Config::production()
-        };
-        let rows = run_ablating_sweep(&cfg, &base_tbl);
-        write_rows(RESULT_PATH_ABLATING, &rows)?;
-        for r in &rows {
-            println!(
-                "rust: v={:.0} rho={:.2} scale={:.2} Q*={:.1e} -> e_eff rigid={:.4} abl={:.4} (recovery {:+.4}, ablated {:.2}%)",
-                r.v,
-                r.rho_impact,
-                r.opacity_scale,
-                r.q_star,
-                r.e_eff_rigid,
-                r.e_eff_ablating,
-                r.recovery,
-                100.0 * r.ablated_fraction,
-            );
-        }
+fn cmd_frozen_shape(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let (_, l_nom) = shape_rho_length(SHAPE_NOM_RFOOT_OVER_R, SHAPE_NOM_L_OVER_D);
+    let base = Config {
+        v: SHAPE_V[0],
+        length: l_nom,
+        ..Config::production()
+    };
+    frozen_sweep_mode(
+        &[SHAPE_V[0]],
+        &shape_frozen_rho_grid(),
+        TABLE_PATH,
+        TABLE_DIR_FROZEN_SHAPE,
+        &base,
+        RESULT_PATH_FROZEN_SHAPE,
+    )
+}
+
+// Frozen-recombination probe: record each transitional case's turnaround state, from which the
+// Python side generates the per-case frozen-composition tables.
+fn cmd_frozen_probe(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    frozen_probe_mode(
+        &V_GRID,
+        &RHO_GRID,
+        TABLE_PATH,
+        &Config::production(),
+        RESULT_PATH_FROZEN_PROBE,
+    )
+}
+
+// Frozen-recombination bounding sweep: equilibrium vs sudden-freeze-at-turnaround vs
+// pure-H2O-no-chemistry, per transitional case. Needs the per-case frozen tables (make
+// tables-frozen).
+fn cmd_frozen(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    frozen_sweep_mode(
+        &V_GRID,
+        &RHO_GRID,
+        TABLE_PATH,
+        TABLE_DIR_FROZEN,
+        &Config::production(),
+        RESULT_PATH_FROZEN,
+    )
+}
+
+// Ablating-wall recovery sweep (Rung E, ADR-0014): the rigid floor vs the shielding+injection
+// ablating wall over (v × ρ × opacity-scale × Q*), reporting recovery as a τ-bracket.
+fn cmd_ablating(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let base_tbl = base_table();
+    let cfg = Config {
+        gas_cells: ABL_GAS_CELLS,
+        ..Config::production()
+    };
+    let rows = run_ablating_sweep(&cfg, &base_tbl);
+    emit_scenario(RESULT_PATH_ABLATING, "ablating", &rows, |r| {
         println!(
-            "rust: wrote {} ablating rows -> {RESULT_PATH_ABLATING}",
-            rows.len()
+            "rust: v={:.0} rho={:.2} scale={:.2} Q*={:.1e} -> e_eff rigid={:.4} abl={:.4} (recovery {:+.4}, ablated {:.2}%)",
+            r.v,
+            r.rho_impact,
+            r.opacity_scale,
+            r.q_star,
+            r.e_eff_rigid,
+            r.e_eff_ablating,
+            r.recovery,
+            100.0 * r.ablated_fraction,
         );
-        return Ok(());
-    }
+    })
+}
 
-    // Jupiter-retrograde 69 km/s scenario sweep: e_eff(rho × length × opacity-scale) with the
-    // extended-grid table (multi-stage O ladder). Needs `make tables-jupiter` first.
-    if args.iter().any(|a| a == "--jupiter") {
-        let table = Table::load(TABLE_PATH_JUPITER)?;
-        let rows = run_jupiter_sweep(&table);
-        write_rows(RESULT_PATH_JUPITER, &rows)?;
-        for r in &rows {
-            println!(
-                "rust: rho={:.3} L={:>4.1} scale={:>5.2} -> e_eff={:.4} peak_p={:.3e} (1a={:.3e} 1b={:.3e})",
-                r.rho_impact,
-                r.length,
-                r.opacity_scale,
-                r.e_eff,
-                r.peak_wall_pressure,
-                r.loss_radiative_wall,
-                r.loss_escape_space,
-            );
-        }
+// Jupiter-retrograde 69 km/s scenario sweep: e_eff(rho × length × opacity-scale) with the
+// extended-grid table (multi-stage O ladder). Needs `make tables-jupiter` first.
+fn cmd_jupiter(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let table = Table::load(TABLE_PATH_JUPITER)?;
+    let rows = run_jupiter_sweep(&table);
+    emit_scenario(RESULT_PATH_JUPITER, "jupiter", &rows, |r| {
         println!(
-            "rust: wrote {} jupiter rows -> {RESULT_PATH_JUPITER}",
-            rows.len()
+            "rust: rho={:.3} L={:>4.1} scale={:>5.2} -> e_eff={:.4} peak_p={:.3e} (1a={:.3e} 1b={:.3e})",
+            r.rho_impact,
+            r.length,
+            r.opacity_scale,
+            r.e_eff,
+            r.peak_wall_pressure,
+            r.loss_radiative_wall,
+            r.loss_escape_space,
         );
-        return Ok(());
-    }
+    })
+}
 
-    // Heavy-plate 16–28 km/s scenario sweep: the headline e_eff(v × ρ) grid + the L-sensitivity spot
-    // rows + the opacity τ-check, all on the reused Jupiter extended-grid table. Needs
-    // `make tables-jupiter` first.
-    if args.iter().any(|a| a == "--heavyplate") {
-        let table = Table::load(TABLE_PATH_JUPITER)?;
-        let rows = run_heavyplate_sweep(&table);
-        write_rows(RESULT_PATH_HEAVYPLATE, &rows)?;
-        for r in &rows {
-            println!(
-                "rust: v={:>5.0} rho={:.3} L={:>4.1} scale={:>5.2} -> e_eff={:.4} peak_p={:.3e} J={:.3e}",
-                r.v,
-                r.rho_impact,
-                r.length,
-                r.opacity_scale,
-                r.e_eff,
-                r.peak_wall_pressure,
-                r.wall_impulse,
-            );
-        }
+// Heavy-plate 16–28 km/s scenario sweep: the headline e_eff(v × ρ) grid + the L-sensitivity spot
+// rows + the opacity τ-check, all on the reused Jupiter extended-grid table. Needs
+// `make tables-jupiter` first.
+fn cmd_heavyplate(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let table = Table::load(TABLE_PATH_JUPITER)?;
+    let rows = run_heavyplate_sweep(&table);
+    emit_scenario(RESULT_PATH_HEAVYPLATE, "heavy-plate", &rows, |r| {
         println!(
-            "rust: wrote {} heavy-plate rows -> {RESULT_PATH_HEAVYPLATE}",
-            rows.len()
+            "rust: v={:>5.0} rho={:.3} L={:>4.1} scale={:>5.2} -> e_eff={:.4} peak_p={:.3e} J={:.3e}",
+            r.v,
+            r.rho_impact,
+            r.length,
+            r.opacity_scale,
+            r.e_eff,
+            r.peak_wall_pressure,
+            r.wall_impulse,
         );
-        return Ok(());
-    }
+    })
+}
 
-    // Pulse-shape sensitivity sweep (design §13, ADR-0028): the fixed-grid 2D box + the fresh
-    // Σ-contract 1D runs, into two JSONL files. Needs `make tables` first (the 1D arm).
-    // `--1d-only` skips the (slow, unchanged) 2D box — a dev shortcut for 1D-schema re-runs.
-    if args.iter().any(|a| a == "--shape") {
-        let table = Table::load(TABLE_PATH)?;
-        if !args.iter().any(|a| a == "--1d-only") {
-            let rows2d = run_shape_2d_sweep();
-            write_rows(RESULT_PATH_SHAPE_2D, &rows2d)?;
-            for r in &rows2d {
-                println!(
-                    "rust: [{}] d/D={:.2} rf/R={:.2} L/D={:.3} taper={:.2} alpha={:.3} res={:.1} -> eta={:.4}",
-                    r.axis,
-                    r.d_over_d,
-                    r.r_foot_over_r,
-                    r.l_over_d,
-                    r.taper_frac,
-                    r.alpha_div,
-                    r.resolution_scale,
-                    r.eta_capture,
-                );
-            }
+// Pulse-shape sensitivity sweep (design §13, ADR-0028): the fixed-grid 2D box + the fresh
+// Σ-contract 1D runs, into two JSONL files. Needs `make tables` first (the 1D arm). `--1d-only`
+// skips the (slow, unchanged) 2D box — a dev shortcut for 1D-schema re-runs.
+fn cmd_shape(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let table = Table::load(TABLE_PATH)?;
+    if !args.iter().any(|a| a == "--1d-only") {
+        let rows2d = run_shape_2d_sweep();
+        emit_scenario(RESULT_PATH_SHAPE_2D, "2D", &rows2d, |r| {
             println!(
-                "rust: wrote {} 2D rows -> {RESULT_PATH_SHAPE_2D}",
-                rows2d.len()
-            );
-        }
-        let cases = shape_1d_cases();
-        let rows1d: Vec<Shape1DRecord> = cases
-            .par_iter()
-            .map(|(v, s, role, fac)| run_shape_1d_case(*v, s, role, *fac, &table))
-            .collect();
-        write_rows(RESULT_PATH_SHAPE_1D, &rows1d)?;
-        for r in &rows1d {
-            println!(
-                "rust: [{}/{}] v={:.0} Sigma={:.3} rho={:.3} L={:.2} -> e_eff={:.4} (coarse {:.4}, eos {:.4}) peak_p={:.3e}",
+                "rust: [{}] d/D={:.2} rf/R={:.2} L/D={:.3} taper={:.2} alpha={:.3} res={:.1} -> eta={:.4}",
                 r.axis,
-                r.sigma_role,
-                r.v,
-                r.sigma,
-                r.rho_impact,
-                r.length,
-                r.e_eff,
-                r.e_eff_coarse,
-                r.e_eff_eos,
-                r.peak_wall_pressure,
-            );
-        }
-        println!(
-            "rust: wrote {} 1D rows -> {RESULT_PATH_SHAPE_1D}",
-            rows1d.len()
-        );
-        return Ok(());
-    }
-
-    // High-Mach spot check for the Jupiter scenario: the full geometry grid at M = 40 (the
-    // strong-shock plateau check past the production anchors 10/20).
-    if args.iter().any(|a| a == "--geometry-m40") {
-        let cfg = GeoConfig::production();
-        let cases: Vec<(f64, f64, f64)> = GEO_RFOOT_OVER_R
-            .iter()
-            .flat_map(|&rf| {
-                GEO_L_OVER_D
-                    .iter()
-                    .flat_map(move |&ld| GEO_D_OVER_D.iter().map(move |&dd| (dd, ld, rf)))
-            })
-            .collect();
-        let rows: Vec<GeoRecord> = cases
-            .par_iter()
-            .map(|&(dd, ld, rf)| run_eta_case(dd, ld, rf, 40.0, &cfg))
-            .collect();
-        write_rows(RESULT_PATH_GEOMETRY_M40, &rows)?;
-        for r in &rows {
-            println!(
-                "rust: d/D={:.2} L/D={:.2} r_foot/R={:.2} M=40 -> eta_capture={:.4}",
-                r.d_over_d, r.l_over_d, r.r_foot_over_r, r.eta_capture,
-            );
-        }
-        println!(
-            "rust: wrote {} M=40 geometry rows -> {RESULT_PATH_GEOMETRY_M40}",
-            rows.len()
-        );
-        return Ok(());
-    }
-
-    // Geometry sweep (Rung D follow-on): eta_capture(curvature × L/D × r_foot/R) from the euler2d
-    // kernel; no EOS/opacity table needed (radiation-free, effective-γ, ADR-0008).
-    if args.iter().any(|a| a == "--geometry") {
-        let rows = run_geometry_sweep(&GeoConfig::production());
-        write_rows(RESULT_PATH_GEOMETRY, &rows)?;
-        for r in &rows {
-            println!(
-                "rust: d/D={:.2} L/D={:.2} r_foot/R={:.2} M={:.0} -> eta_capture={:.4} (free {:.4} / confined {:.4}, peak F={:.3e})",
                 r.d_over_d,
-                r.l_over_d,
                 r.r_foot_over_r,
-                r.mach,
+                r.l_over_d,
+                r.taper_frac,
+                r.alpha_div,
+                r.resolution_scale,
                 r.eta_capture,
-                r.restitution_free,
-                r.restitution_confined,
-                r.peak_force,
             );
-        }
-        println!(
-            "rust: wrote {} geometry rows -> {RESULT_PATH_GEOMETRY}",
-            rows.len()
-        );
-        return Ok(());
+        })?;
     }
+    let cases = shape_1d_cases();
+    let rows1d: Vec<Shape1DRecord> = cases
+        .par_iter()
+        .map(|(v, s, role, fac)| run_shape_1d_case(*v, s, role, *fac, &table))
+        .collect();
+    emit_scenario(RESULT_PATH_SHAPE_1D, "1D", &rows1d, |r| {
+        println!(
+            "rust: [{}/{}] v={:.0} Sigma={:.3} rho={:.3} L={:.2} -> e_eff={:.4} (coarse {:.4}, eos {:.4}) peak_p={:.3e}",
+            r.axis,
+            r.sigma_role,
+            r.v,
+            r.sigma,
+            r.rho_impact,
+            r.length,
+            r.e_eff,
+            r.e_eff_coarse,
+            r.e_eff_eos,
+            r.peak_wall_pressure,
+        );
+    })
+}
 
+// High-Mach spot check for the Jupiter scenario: the full geometry grid at M = 40 (the
+// strong-shock plateau check past the production anchors 10/20).
+fn cmd_geometry_m40(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let cfg = GeoConfig::production();
+    let cases: Vec<(f64, f64, f64)> = GEO_RFOOT_OVER_R
+        .iter()
+        .flat_map(|&rf| {
+            GEO_L_OVER_D
+                .iter()
+                .flat_map(move |&ld| GEO_D_OVER_D.iter().map(move |&dd| (dd, ld, rf)))
+        })
+        .collect();
+    let rows: Vec<GeoRecord> = cases
+        .par_iter()
+        .map(|&(dd, ld, rf)| run_eta_case(dd, ld, rf, 40.0, &cfg))
+        .collect();
+    emit_scenario(RESULT_PATH_GEOMETRY_M40, "M=40 geometry", &rows, |r| {
+        println!(
+            "rust: d/D={:.2} L/D={:.2} r_foot/R={:.2} M=40 -> eta_capture={:.4}",
+            r.d_over_d, r.l_over_d, r.r_foot_over_r, r.eta_capture,
+        );
+    })
+}
+
+// Geometry sweep (Rung D follow-on): eta_capture(curvature × L/D × r_foot/R) from the euler2d
+// kernel; no EOS/opacity table needed (radiation-free, effective-γ, ADR-0008).
+fn cmd_geometry(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let rows = run_geometry_sweep(&GeoConfig::production());
+    emit_scenario(RESULT_PATH_GEOMETRY, "geometry", &rows, |r| {
+        println!(
+            "rust: d/D={:.2} L/D={:.2} r_foot/R={:.2} M={:.0} -> eta_capture={:.4} (free {:.4} / confined {:.4}, peak F={:.3e})",
+            r.d_over_d,
+            r.l_over_d,
+            r.r_foot_over_r,
+            r.mach,
+            r.eta_capture,
+            r.restitution_free,
+            r.restitution_confined,
+            r.peak_force,
+        );
+    })
+}
+
+// The default scenario: `--lowv` selects the 3.2 km/s condensing anchor (Rung C); otherwise the
+// 16 km/s high-v pass. Optional positional `[table] [result]` override the high-v/low-v defaults
+// (the B5d-3 opacity scan sweeps each scaled table into its own JSONL).
+fn cmd_baseline(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let lowv = args.iter().any(|a| a == "--lowv");
     let positional: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
     let (def_table, def_result) = if lowv {
@@ -1883,13 +1858,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         run_sweep(&RHO_GRID, &table, &Config::production())
     };
 
-    if let Some(parent) = Path::new(result_path).parent() {
-        fs::create_dir_all(parent)?;
-    }
-    // A fresh sweep replaces the file; one JSON object per line (ADR-0019).
-    let mut out = fs::File::create(result_path)?;
-    for r in &records {
-        writeln!(out, "{}", serde_json::to_string(r)?)?;
+    let label = if lowv { "low-v" } else { "baseline" };
+    emit_scenario(result_path, label, &records, |r| {
         println!(
             "rust: rho={:.3} -> e_eff={:.4}  (peak F={:.3e}, losses 1a={:.3e} 1b={:.3e} 2={:.3e} 3={:.3e})",
             r.rho_impact,
@@ -1900,9 +1870,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             r.loss_conductive,
             r.loss_condensation,
         );
+    })
+}
+
+/// A scenario command: parse whatever it needs from `args`, run its sweep, and write its JSONL.
+type CmdFn = fn(&[String]) -> Result<(), Box<dyn std::error::Error>>;
+
+/// Flag → handler. `main` looks up the first matching flag and dispatches to it (the exact-string
+/// flags are mutually exclusive in practice, so table order does not affect behavior); anything
+/// unmatched falls through to [`cmd_baseline`] (the `--lowv` / positional-override default).
+const SCENARIOS: &[(&str, CmdFn)] = &[
+    ("--transitional", cmd_transitional),
+    ("--frozen-probe-jupiter", cmd_frozen_probe_jupiter),
+    ("--frozen-jupiter", cmd_frozen_jupiter),
+    ("--frozen-probe-heavyplate", cmd_frozen_probe_heavyplate),
+    ("--frozen-heavyplate", cmd_frozen_heavyplate),
+    ("--frozen-probe-shape", cmd_frozen_probe_shape),
+    ("--frozen-shape", cmd_frozen_shape),
+    ("--frozen-probe", cmd_frozen_probe),
+    ("--frozen", cmd_frozen),
+    ("--ablating", cmd_ablating),
+    ("--jupiter", cmd_jupiter),
+    ("--heavyplate", cmd_heavyplate),
+    ("--shape", cmd_shape),
+    ("--geometry-m40", cmd_geometry_m40),
+    ("--geometry", cmd_geometry),
+];
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    for &(flag, handler) in SCENARIOS {
+        if args.iter().any(|a| a == flag) {
+            return handler(&args);
+        }
     }
-    println!("rust: wrote {} rows -> {result_path}", records.len());
-    Ok(())
+    cmd_baseline(&args)
 }
 
 #[cfg(test)]
