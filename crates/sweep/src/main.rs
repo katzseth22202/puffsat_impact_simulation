@@ -1285,17 +1285,18 @@ fn run_shape_2d_sweep() -> Vec<ShapeRecord> {
 /// for the headline runs, `"taper_mean"`/`"sigma_hi"`/`"sigma_lo90"` for the taper bookkeeping),
 /// and the equilibrium coupled-bounce result at the physical `(ρ, L)`.
 ///
-/// Each row carries a **two-resolution validity protocol** (2026-07-16 finding): the coupled
-/// radiation operator has a resolution-onset radiative-collapse instability — the thin wall
-/// cell's radiative drain zeroes its energy, the slab loses pressure support, and the run
-/// terminates mid-infall with an unphysical `e_eff` (the radiative sibling of the documented
-/// conductive over-drain). Its onset `dx` *coarsens* as `ρv²` rises, so the production 300-cell
-/// convention leaves the stable plateau above `ρ ≈ 1` at 16 km/s (and even ρ = 0.64 collapses at
-/// 1200 cells). Where stable, `e_eff` is plateau-flat (< 0.002 across 150–600 cells), so the row
-/// records the 300-cell headline, a 150-cell coarse cross-check (deeper inside the stable
-/// window), and the EOS-only reference; the Python assembly accepts the headline only when the
-/// two coupled runs agree, falls back to the coarse value when the fine one collapsed, and
-/// flags the row.
+/// Each row carries a **two-resolution validity protocol** (2026-07-16 finding, root-caused and
+/// fixed 2026-07-17): with the old ρ ≤ 20 kg/m³ table the coupled runs had a resolution-onset
+/// radiative collapse — the radiatively-cooled wall cell was compressed past the table's density
+/// ceiling, where the *clamped* `p(ρ)` no longer arrests the Lagrangian compression, so the cell
+/// width → 0, `dt` → 0, and the run stalled mid-infall with an unphysical `e_eff`. The onset `dx`
+/// coarsened as `ρv²` rose (ρ = 0.64 collapsed at 1200 cells, ρ ≈ 1.2–1.7 by 200–300). The fix is
+/// the node-preserving ρ-grid extension to 1000 kg/m³ in `tables.py` (plus the Newton-iterated
+/// backward-Euler exchange hardening in `hydro1d::radiation`); `diag_shape_high_sigma` verifies
+/// the plateau now extends past every measured old onset. The protocol is retained as a cheap
+/// regression guard: the row records the 300-cell headline, a 150-cell coarse cross-check, and
+/// the EOS-only reference; the Python assembly accepts the headline only when the two coupled
+/// runs agree, falls back to the coarse value otherwise, and flags the row.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Shape1DRecord {
     v: f64,
@@ -2532,15 +2533,17 @@ mod tests {
         }
     }
 
-    /// DIAGNOSTIC (ignored): map the coupled radiation operator's **resolution-onset radiative
-    /// collapse** at 16 km/s (2026-07-16 finding; see the [`Shape1DRecord`] docs). Measured onset:
-    /// EOS-only is smooth and stable everywhere (`e_eff` 0.638-0.647 over rho 0.32-1.66 at every
-    /// resolution); the coupled solve collapses (`e_eff` unphysical, escape loss -> 0, run ends
-    /// mid-infall) past a critical refinement that coarsens with `rho`: rho 0.32 stable through
-    /// 1200 cells, 0.64 collapses at 1200, 0.849/0.99 at 600, 1.164 at 300, 1.658 at 200. Where
-    /// stable, the plateau is flat (< 0.002 across a 4x cell range) — hence the two-resolution
-    /// (300/150) validity protocol in the shape rows. Run with
-    /// `cargo test -p sweep --release -- --ignored --nocapture diag_shape`.
+    /// DIAGNOSTIC (ignored): verify the **radiative collapse fix** across the measured onset
+    /// ladder at 16 km/s (2026-07-16 finding; see the [`Shape1DRecord`] docs). With the old
+    /// ρ ≤ 20 kg/m³ table the coupled solve collapsed (run stalls mid-infall, unphysical `e_eff`)
+    /// past a critical refinement that coarsened with `ρ`: ρ = 0.64 at 1200 cells, 0.849/0.99 at
+    /// 600, 1.164 at 300, 1.658 at 200 — the radiatively-cooled wall cell compressed past the
+    /// table ceiling, where the clamped `p(ρ)` no longer arrests the Lagrangian compression.
+    /// With the node-preservingly extended table (ceiling 1000 kg/m³) the compression
+    /// self-arrests, so every case below must complete on the same flat plateau as its coarse
+    /// siblings (< ~0.002 spread per ρ; EOS-only reference `e_eff` 0.638–0.647 throughout).
+    /// The `(ρ, L)` pairs are the shape box's Σ contract: `ρ = 0.849·rel⁻³`, `L = 1.5·rel`.
+    /// Run with `cargo test -p sweep --release -- --ignored --nocapture diag_shape`.
     #[test]
     #[ignore = "diagnostic; needs data/tables/water.json"]
     fn diag_shape_high_sigma() {
@@ -2555,8 +2558,17 @@ mod tests {
             c: 2.997_924_58e8,
             a: 7.565_733e-16,
         };
-        for (rho, length) in [(1.164, 1.35), (1.658, 1.2)] {
-            for cells in [100usize, 150, 200] {
+        // (rho, L, cell ladder): each ladder spans the old collapse onset and one refinement past
+        // it (2x), plus a coarse in-plateau anchor.
+        let cases: [(f64, f64, &[usize]); 5] = [
+            (0.638, 1.65, &[300, 600, 1200]),  // old onset 1200
+            (0.849, 1.50, &[300, 600, 1200]),  // old onset 600
+            (0.990, 1.425, &[300, 600, 1200]), // old onset 600
+            (1.164, 1.35, &[150, 300, 600]),   // old onset 300
+            (1.658, 1.20, &[100, 200, 400]),   // old onset 200
+        ];
+        for (rho, length, ladder) in cases {
+            for &cells in ladder {
                 let mk = || {
                     Tube::slug_si(
                         cells,
@@ -2572,7 +2584,7 @@ mod tests {
                 let coupled =
                     CoupledBounce::new(mk(), None, consts, Limiter::LevermorePomraning).run();
                 println!(
-                    "rho={rho:.3} L={length:.2} cells={cells}: eos-only e_eff={:+.4} | coupled \
+                    "rho={rho:.3} L={length:.3} cells={cells}: eos-only e_eff={:+.4} | coupled \
                      e_eff={:+.4} resid/inc={:+.3} loss1a={:.3e} loss1b={:.3e}",
                     eos_only.e_eff,
                     coupled.bounce.e_eff,

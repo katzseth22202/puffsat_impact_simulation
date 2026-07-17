@@ -164,31 +164,48 @@ fn face_diffusion(limiter: Limiter, c: f64, chi_r: f64, e_lo: f64, e_hi: f64, sp
     c * lambda / chi_r
 }
 
-/// One **linearized-implicit** gray flux-limited-diffusion substep over `dt` on the frozen mesh
-/// `medium`. Updates the radiation energy density `e_rad` in place and returns the per-cell matter
+/// Newton-iteration controls for the coupled backward-Euler exchange (see [`fld_substep`]).
+/// `MAX_NEWTON` bounds the work per substep (gentle cells converge in 1–2 iterations; a stiff
+/// drained wall cell in a handful); `NEWTON_RTOL` is the per-cell relative `δT` convergence
+/// threshold. Conservation holds **exactly at every iterate** (the linearized elimination is
+/// self-consistent), so an early bail-out degrades accuracy only, never the energy books.
+const MAX_NEWTON: usize = 50;
+const NEWTON_RTOL: f64 = 1e-9;
+
+/// One **implicit** gray flux-limited-diffusion substep over `dt` on the frozen mesh `medium`.
+/// Updates the radiation energy density `e_rad` in place and returns the per-cell matter
 /// **internal-energy change** `Δe` (energy / volume) for the caller to deposit in the gas and
 /// re-invert the EOS for the new temperature.
 ///
 /// # Method
 ///
-/// Per cell, linearize the emission `a T⁴ ≈ a T_n⁴ + β δT` (`β = 4 a T_n³`) and eliminate the
-/// local matter response analytically, which folds a factor `f = C_v / (C_v + dt c χ_P β)` into the
-/// exchange coefficient `k = f c χ_P`. The radiation update is then the **linear** system
+/// The coupled backward-Euler pair per cell,
 ///
 /// ```text
-/// E_j/dt − ∇·(D ∇E)_j + k_j E_j = E_j^n/dt + k_j a T_j⁴ + S_j
+/// (E − Eₙ)/dt = ∇·(D ∇E) + c χ_P (a T⁴ − E) + S
+/// C_v (T − Tₙ)/dt = c χ_P (E − a T⁴),
 /// ```
 ///
-/// — tridiagonal in `E^{n+1}` (Rosseland-mean flux-limited `D` at faces, lagged in the limiter),
-/// solved with [`thomas_solve`]. The matter then takes `Δe_j = dt k_j (E^{n+1}_j − a T_j⁴)`, which
-/// is *exactly* the energy the radiation lost to the local coupling, so matter + radiation energy is
-/// conserved to round-off (diffusion is conservative by construction; the only sinks are the
-/// boundary faces and `S`).
+/// is solved by **Newton iteration**: linearize the emission about the current temperature
+/// iterate `Tᵏ` (`a T⁴ ≈ a (Tᵏ)⁴ + βᵏ δT`, `βᵏ = 4a(Tᵏ)³`), eliminate the matter response
+/// analytically (folding `fᵏ = C_v / (C_v + dt c χ_P βᵏ)` into the exchange coefficient
+/// `kᵏ = fᵏ c χ_P`, plus the accumulated-residual term `kᵏ βᵏ (Tᵏ − Tₙ)` on the rhs), solve the
+/// resulting tridiagonal for `E`, update `Tᵏ⁺¹`, and repeat until `δT` converges. The first
+/// iteration is *exactly* the original single-linearization scheme, so gentle regimes are
+/// reproduced; iterating matters in the **stiff drained-wall regime** (2026-07-16 finding),
+/// where one linearization overshoots the self-consistent LTE state. At convergence the pair is
+/// the true backward-Euler solution — positivity-preserving by its M-matrix structure.
 ///
-/// Returning **energy** rather than `δT = Δe / C_v` keeps the step robust where the heat capacity is
-/// small or steeply varying (e.g. the `C_v = α T³` Su–Olson cold front, or ionization in the
-/// production water table): the caller advances `e` and inverts the EOS for `T`, instead of dividing
-/// a finite absorbed energy by a vanishing `C_v`.
+/// The matter takes `Δe_j = C_v (T_final − Tₙ)`, which equals the energy the radiation lost to
+/// the local coupling **exactly at any iteration count** (the elimination identity
+/// `C_v (Tᵏ⁺¹ − Tₙ) = dt kᵏ (E − a(Tᵏ)⁴) + dt kᵏ βᵏ (Tᵏ − Tₙ)` is the same expression the
+/// radiation update subtracts), so matter + radiation energy is conserved to round-off
+/// (diffusion is conservative by construction; the only sinks are the boundary faces and `S`).
+///
+/// Returning **energy** rather than `δT = Δe / C_v` keeps the step robust where the heat capacity
+/// is small or steeply varying (e.g. the `C_v = α T³` Su–Olson cold front, or ionization in the
+/// production water table): the caller advances `e` and inverts the EOS for `T`, instead of
+/// dividing a finite absorbed energy by a vanishing `C_v`.
 ///
 /// # Panics
 /// Panics unless the `medium` slice lengths are consistent (`N` cells, `N−1` interior faces) and
@@ -215,66 +232,97 @@ pub fn fld_substep(
         "inconsistent medium/e_rad lengths"
     );
     let RadConstants { c, a } = consts;
+    let last = n - 1;
+
+    let e_old: Vec<f64> = e_rad.to_vec();
+    let mut t_iter: Vec<f64> = medium.temp.to_vec();
+    let mut e_new = e_old.clone();
 
     let mut sub = vec![0.0; n];
     let mut diag = vec![0.0; n];
     let mut sup = vec![0.0; n];
     let mut rhs = vec![0.0; n];
-
-    // Local emission/absorption coupling, with the matter back-reaction folded into `k`.
-    let mut beta = vec![0.0; n];
     let mut k = vec![0.0; n];
-    for j in 0..n {
-        beta[j] = 4.0 * a * medium.temp[j].powi(3);
-        let denom = medium.cv_vol[j] + dt * c * medium.chi_planck[j] * beta[j];
-        let f = if denom > 0.0 {
-            medium.cv_vol[j] / denom
-        } else {
-            0.0
-        };
-        k[j] = f * c * medium.chi_planck[j];
-        diag[j] = 1.0 / dt + k[j];
-        rhs[j] = e_rad[j] / dt + k[j] * a * medium.temp[j].powi(4);
-        if let Some(s) = medium.source {
-            rhs[j] += s[j];
+
+    for _ in 0..MAX_NEWTON {
+        // Local emission/absorption coupling, linearized about the current iterate `t_iter`, with
+        // the matter back-reaction folded into `k` and the accumulated matter residual
+        // `C_v (Tᵏ − Tₙ)` carried on the rhs (zero on the first iteration — the original scheme).
+        for j in 0..n {
+            let beta = 4.0 * a * t_iter[j].powi(3);
+            let denom = medium.cv_vol[j] + dt * c * medium.chi_planck[j] * beta;
+            let f = if denom > 0.0 {
+                medium.cv_vol[j] / denom
+            } else {
+                0.0
+            };
+            k[j] = f * c * medium.chi_planck[j];
+            sub[j] = 0.0;
+            sup[j] = 0.0;
+            diag[j] = 1.0 / dt + k[j];
+            rhs[j] = e_old[j] / dt + k[j] * a * t_iter[j].powi(4)
+                - k[j] * beta * (t_iter[j] - medium.temp[j]);
+            if let Some(s) = medium.source {
+                rhs[j] += s[j];
+            }
+        }
+
+        // Interior-face flux-limited diffusion (conservative: one face feeds both its cells),
+        // with the limiter lagged on the current radiation iterate.
+        for i in 0..n - 1 {
+            let chi_r = 0.5 * (medium.chi_ross[i] + medium.chi_ross[i + 1]);
+            let d = face_diffusion(
+                limiter,
+                c,
+                chi_r,
+                e_new[i],
+                e_new[i + 1],
+                medium.center_spacing[i],
+            );
+            let flux = d / medium.center_spacing[i];
+            let w_lo = flux / medium.dx[i];
+            let w_hi = flux / medium.dx[i + 1];
+            diag[i] += w_lo;
+            sup[i] -= w_lo;
+            diag[i + 1] += w_hi;
+            sub[i + 1] -= w_hi;
+        }
+
+        // Boundary faces: Dirichlet contributes a diffusive half-cell flux; Marshak contributes
+        // the incident-current surface flux F = (c/2)(e_inc − E_edge); Reflecting nothing.
+        let bctx = BoundaryCtx { limiter, c, medium };
+        add_boundary(&bctx, bc_left, 0, e_new[0], &mut diag, &mut rhs);
+        add_boundary(&bctx, bc_right, last, e_new[last], &mut diag, &mut rhs);
+
+        e_new = thomas_solve(&sub, &diag, &sup, &rhs);
+
+        // Newton update of the matter iterate: δT from the eliminated (linearized) matter
+        // equation. Non-negative guard: β(0) = 0, so an over-corrected cell relaxes back on the
+        // next iteration rather than propagating a negative temperature into the opacities.
+        let mut max_rel = 0.0_f64;
+        for j in 0..n {
+            if medium.cv_vol[j] <= 0.0 {
+                continue;
+            }
+            let beta = 4.0 * a * t_iter[j].powi(3);
+            let denom = medium.cv_vol[j] + dt * c * medium.chi_planck[j] * beta;
+            let f = medium.cv_vol[j] / denom;
+            let delta_t = dt * k[j] * (e_new[j] - a * t_iter[j].powi(4)) / medium.cv_vol[j]
+                - f * (t_iter[j] - medium.temp[j]);
+            let t_next = (t_iter[j] + delta_t).max(0.0);
+            max_rel = max_rel.max((t_next - t_iter[j]).abs() / t_iter[j].abs().max(1e-300));
+            t_iter[j] = t_next;
+        }
+        if max_rel < NEWTON_RTOL {
+            break;
         }
     }
 
-    // Interior-face flux-limited diffusion (conservative: one face feeds both its cells).
-    for i in 0..n - 1 {
-        let chi_r = 0.5 * (medium.chi_ross[i] + medium.chi_ross[i + 1]);
-        let d = face_diffusion(
-            limiter,
-            c,
-            chi_r,
-            e_rad[i],
-            e_rad[i + 1],
-            medium.center_spacing[i],
-        );
-        let flux = d / medium.center_spacing[i];
-        let w_lo = flux / medium.dx[i];
-        let w_hi = flux / medium.dx[i + 1];
-        diag[i] += w_lo;
-        sup[i] -= w_lo;
-        diag[i + 1] += w_hi;
-        sub[i + 1] -= w_hi;
-    }
-
-    // Boundary faces: Dirichlet contributes a diffusive half-cell flux; Marshak contributes the
-    // incident-current surface flux F = (c/2)(e_inc − E_edge); Reflecting contributes nothing.
-    let last = n - 1;
-    let bctx = BoundaryCtx { limiter, c, medium };
-    add_boundary(&bctx, bc_left, 0, e_rad[0], &mut diag, &mut rhs);
-    add_boundary(&bctx, bc_right, last, e_rad[last], &mut diag, &mut rhs);
-
-    let e_new = thomas_solve(&sub, &diag, &sup, &rhs);
-
-    // Matter response: exactly the energy the radiation lost to the local coupling. Returned as an
-    // internal-energy change `Δe` (not `δT`); `k` already carries the implicit factor `f`, so this
-    // is conservative against the radiation update and stays finite as `C_v → 0`.
+    // Matter response: exactly the energy the radiation lost to the local coupling (conservative
+    // at any iteration count — see the docstring identity), finite as `C_v → 0`.
     let mut delta_e = vec![0.0; n];
     for j in 0..n {
-        delta_e[j] = dt * k[j] * (e_new[j] - a * medium.temp[j].powi(4));
+        delta_e[j] = medium.cv_vol[j] * (t_iter[j] - medium.temp[j]);
     }
     e_rad.copy_from_slice(&e_new);
     delta_e
@@ -532,6 +580,149 @@ mod tests {
             assert_relative_eq!(temp[j], t_eq, max_relative = 1e-6);
             assert_relative_eq!(e_rad[j], e_eq, max_relative = 1e-6);
         }
+    }
+
+    /// A one-cell closed medium for the exchange tests: matter at `Tₙ`, radiation at `Eₙ`, no
+    /// transport (reflecting ends), so the substep is the pure local matter–radiation exchange.
+    fn one_cell_exchange(
+        t_n: f64,
+        e_n: f64,
+        chi_p: f64,
+        dt: f64,
+        consts: RadConstants,
+    ) -> (f64, f64) {
+        let (dx, spacing) = (vec![1.0], vec![]);
+        let (temp, cv_vol) = (vec![t_n], vec![1.0]);
+        let (chi_planck, chi_ross) = (vec![chi_p], vec![chi_p]);
+        let mut e_rad = vec![e_n];
+        let medium = Medium {
+            dx: &dx,
+            center_spacing: &spacing,
+            temp: &temp,
+            cv_vol: &cv_vol,
+            chi_planck: &chi_planck,
+            chi_ross: &chi_ross,
+            source: None,
+        };
+        let delta_e = fld_substep(
+            &medium,
+            &mut e_rad,
+            RadBc::Reflecting,
+            RadBc::Reflecting,
+            dt,
+            consts,
+            Limiter::LevermorePomraning,
+        );
+        (e_rad[0], delta_e[0])
+    }
+
+    /// **Stiff exchange solves the coupled backward-Euler pair, not one linearization of it**
+    /// (the 2026-07-16 radiative-collapse fix). At stiffness `dt·c·χ_P·β/C_v ≫ 1` the implicit
+    /// step must land on the self-consistent LTE state — `E⁺ ≈ a(T⁺)⁴` with energy conserved —
+    /// not on the single-Newton-iterate overshoot (which lands at `T = 0.8` here instead of the
+    /// true `T⁺ ≈ 0.7245` solving `T⁴ + T = 1`). One un-iterated linearization per hydro step is
+    /// exactly the ratchet that froze the wall cell and collapsed the fine-grid coupled bounce.
+    #[test]
+    fn stiff_exchange_converges_to_the_backward_euler_pair() {
+        let consts = RadConstants { c: 1.0, a: 1.0 };
+        // C_v = 1, Tₙ = 1, Eₙ = 0, dt·c·χ_P = 1000 (stiff).
+        let (e_new, delta_e) = one_cell_exchange(1.0, 0.0, 1.0e6, 1.0e-3, consts);
+        let t_new = 1.0 + delta_e; // C_v = 1
+        // Conservation is exact at any iteration count.
+        assert_relative_eq!(e_new + t_new, 1.0, max_relative = 1e-12);
+        // The BE fixed point: conservation E⁺ = 1 − T⁺ and LTE E⁺ = (T⁺)⁴ ⇒ T⁴ + T = 1.
+        let t_be = equilibrium_temperature(1.0, 1.0, 1.0);
+        assert_relative_eq!(t_new, t_be, max_relative = 2e-3);
+        assert_relative_eq!(e_new, t_be.powi(4), max_relative = 1e-2);
+        // Within-step LTE consistency — the property the single linearization misses by 2×.
+        assert!(
+            (e_new - t_new.powi(4)).abs() < 5e-3,
+            "stiff step must land near LTE: E={e_new:.4} vs aT⁴={:.4}",
+            t_new.powi(4)
+        );
+    }
+
+    /// **The gentle regime is unchanged**: at small stiffness the converged exchange agrees with
+    /// the original single linearization to high order, so every verified result on the healthy
+    /// plateau is reproduced.
+    #[test]
+    fn gentle_exchange_matches_the_single_linearization() {
+        let consts = RadConstants { c: 1.0, a: 1.0 };
+        let (t_n, e_n, chi_p, dt) = (1.0_f64, 0.0, 0.1, 1.0e-2);
+        // The original scheme's closed form (one linearization about Tₙ).
+        let beta = 4.0 * consts.a * t_n.powi(3);
+        let k = (1.0 / (1.0 + dt * consts.c * chi_p * beta)) * consts.c * chi_p;
+        let e_lin = (e_n / dt + k * consts.a * t_n.powi(4)) / (1.0 / dt + k);
+        let de_lin = dt * k * (e_lin - consts.a * t_n.powi(4));
+        let (e_new, delta_e) = one_cell_exchange(t_n, e_n, chi_p, dt, consts);
+        assert_relative_eq!(delta_e, de_lin, max_relative = 1e-2);
+        assert_relative_eq!(e_new, e_lin, max_relative = 1e-4);
+    }
+
+    /// **A stiff Marshak-drained wall cell cools smoothly and stays positive**: the coupled-BE
+    /// exchange is self-limiting (emission ∝ T⁴ falls as the cell cools), so repeated substeps
+    /// drive the wall cell's matter temperature down monotonically without ever reaching zero —
+    /// and the matter+radiation total drops *only* through the wall face's exact `(c/2)E₀⁺` drain.
+    #[test]
+    fn stiff_drained_wall_cell_cools_smoothly_and_stays_positive() {
+        let n = 3;
+        let consts = RadConstants { c: 1.0, a: 1.0 };
+        let dx = vec![0.01; n];
+        let center_spacing = vec![0.01; n - 1];
+        let cv_vol = vec![1.0; n];
+        let chi_planck = vec![1.0e6; n];
+        let chi_ross = vec![1.0e6; n];
+        let mut temp = vec![1.0; n];
+        let mut e_rad = vec![1.0; n]; // LTE with a = 1
+        let dt = 1.0e-3;
+        let total = |t: &[f64], e: &[f64]| -> f64 {
+            (0..n).map(|j| dx[j] * (cv_vol[j] * t[j] + e[j])).sum()
+        };
+        let mut t_wall_prev = temp[0];
+        for _ in 0..500 {
+            let before = total(&temp, &e_rad);
+            let medium = Medium {
+                dx: &dx,
+                center_spacing: &center_spacing,
+                temp: &temp,
+                cv_vol: &cv_vol,
+                chi_planck: &chi_planck,
+                chi_ross: &chi_ross,
+                source: None,
+            };
+            let delta_e = fld_substep(
+                &medium,
+                &mut e_rad,
+                RadBc::Marshak(0.0), // the cold black wall
+                RadBc::Reflecting,
+                dt,
+                consts,
+                Limiter::LevermorePomraning,
+            );
+            for (t, de) in temp.iter_mut().zip(delta_e.iter()) {
+                *t += de; // C_v = 1
+            }
+            let after = total(&temp, &e_rad);
+            // The only sink is the wall face: exact implicit accounting, coupled case included.
+            assert_relative_eq!(
+                before - after,
+                dt * 0.5 * consts.c * e_rad[0] * 1.0, // per unit area; dx already folded in totals
+                max_relative = 1e-8,
+                epsilon = 1e-14
+            );
+            assert!(
+                temp[0] > 0.0 && temp[0] <= t_wall_prev + 1e-12,
+                "wall matter must cool smoothly and stay positive: {} -> {}",
+                t_wall_prev,
+                temp[0]
+            );
+            t_wall_prev = temp[0];
+        }
+        assert!(
+            temp[0] < 0.9 && temp[0] > 0.0,
+            "wall cell should have cooled substantially yet stayed positive: {}",
+            temp[0]
+        );
     }
 
     /// With a spatially non-uniform radiation field and reflecting ends, the flux-limited diffusion

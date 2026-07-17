@@ -1567,6 +1567,86 @@ mod tests {
 
     const GAMMA: f64 = 1.4;
 
+    /// DIAGNOSTIC (ignored): trace the wall cell through the coupled bounce that used to collapse
+    /// (the 2026-07-16 resolution-onset finding — rho = 0.849, 16 km/s, 600 cells collapsed while
+    /// 300 was healthy). Prints the wall cell's `(e, T, rho, p, E_rad, aT⁴)` trajectory and counts
+    /// energy-floor hits. This trace *disproved* the "radiative over-drain to the energy floor"
+    /// hypothesis (zero floor hits; the exchange tracks LTE cleanly) and pinned the real cause:
+    /// the radiatively-cooled wall cell was compressed past the old table's ρ = 20 kg/m³ ceiling,
+    /// where the clamped `p(ρ)` no longer arrests the Lagrangian compression (ρ ran to ~2.8e4,
+    /// cell width → 0, dt → 0, run stalled mid-infall). With the extended table (ceiling
+    /// 1000 kg/m³) the compression self-arrests near ρ ≈ 27 and the bounce completes on the
+    /// plateau (`e_eff ≈ 0.638`, zero floor hits). Run with
+    /// `cargo test -p hydro1d --release -- --ignored --nocapture diag_radiative`.
+    #[test]
+    #[ignore = "diagnostic; needs data/tables/water.json"]
+    fn diag_radiative_collapse_wall_cell_trace() {
+        use crate::eos::Eos as _;
+        let table = Table::load(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../data/tables/water.json"
+        ))
+        .unwrap();
+        let consts = RadConstants {
+            c: 2.997_924_58e8,
+            a: 7.565_733e-16,
+        };
+        let tube = Tube::slug_si(
+            600,
+            0.849,
+            16_000.0,
+            1.5,
+            400.0,
+            TableEos::new(table),
+            Viscosity::VON_NEUMANN_RICHTMYER,
+        );
+        let mut cb = CoupledBounce::new(tube, None, consts, Limiter::LevermorePomraning);
+        let incident = cb.tube.total_momentum().abs();
+        let mut peak: f64 = 0.0;
+        let mut past_peak = false;
+        let mut force_old = cb.tube.wall_force();
+        let mut wall_impulse = 0.0;
+        let mut floor_hits = 0usize;
+        let mut t_sim = 0.0;
+        let max_steps = 400 * cb.tube.cells() + 10_000;
+        for step in 0..max_steps {
+            peak = peak.max(force_old);
+            if force_old < 0.5 * peak {
+                past_peak = true;
+            }
+            if past_peak && force_old < 1e-3 * peak {
+                println!("terminated by tail guard at step {step}");
+                break;
+            }
+            let dt = cb.tube.stable_dt();
+            t_sim += dt;
+            cb.coupled_step(dt);
+            if cb.tube.energy[0] <= 0.0 {
+                floor_hits += 1;
+            }
+            let force_new = cb.tube.wall_force();
+            wall_impulse += 0.5 * dt * (force_old + force_new);
+            force_old = force_new;
+            if step % 2_000 == 0 || (step < 200 && step % 20 == 0) {
+                let e0 = cb.tube.energy[0];
+                let rho0 = cb.tube.density(0);
+                let t0 = cb.tube.eos.temperature(rho0, e0.max(0.0));
+                let at4 = consts.a * t0.powi(4);
+                println!(
+                    "step {step:>6} t={t_sim:.3e}: wall e={e0:.3e} T={t0:.0} rho={rho0:.2} \
+                     p={:.3e} E_rad={:.3e} aT4={at4:.3e} mom/inc={:+.3} floor_hits={floor_hits}",
+                    cb.tube.pressure(0),
+                    cb.e_rad[0],
+                    cb.tube.total_momentum() / incident,
+                );
+            }
+        }
+        println!(
+            "final: e_eff={:.4} floor_hits={floor_hits} (of wall cell)",
+            wall_impulse / incident - 1.0
+        );
+    }
+
     /// An ideal-gas EOS table (`e = T`, so `c_v = 1`) with opacity power laws scaled by the
     /// coefficients `(kr, kp)`: `κ_R = kr·ρ²·T^-3.5`, `κ_P = kp·ρ·T^-2`. Tiny coefficients make
     /// the gas effectively **transparent** (`κ → 0`: no emission/absorption, the radiation-off

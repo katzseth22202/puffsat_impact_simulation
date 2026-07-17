@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 
@@ -32,6 +33,19 @@ RHO_RANGE = (0.01, 20.0)  # kg/m^3
 N_RHO = 40
 T_RANGE = (300.0, 60_000.0)  # K
 N_T = 60
+# Ceiling the equilibrium grid is EXTENDED to, node-preservingly (2026-07-16 radiative wall-layer
+# finding): the coupled bounce's wall cell is radiatively cooled to low entropy and then
+# compressed by the interior toward its pressure-equilibrium density — which lies well ABOVE the
+# original 20 kg/m^3 ceiling (p ~ 2.4e8 Pa at T ~ 2000-9000 K => rho ~ 40-350, ideal mixture).
+# With the table clamped at the old ceiling the pressure stops rising with density, nothing
+# arrests the Lagrangian compression, the wall cell's width -> 0, dt -> 0, and the coupled bounce
+# stalls mid-infall (the resolution-onset "radiative collapse"; onset dx coarsens with rho*v^2).
+# 1000 kg/m^3 covers the coldest layer the ~us bounce can radiate down to, with margin. The
+# extension region uses the same ideal-mixture EOS (non-ideality ignored — it would only STIFFEN
+# p(rho) and arrest the compression sooner); its mass fraction is a single wall cell, so e_eff is
+# insensitive to its quantitative fidelity. See `extended_rho_grid` for the node-preservation
+# contract.
+RHO_EXTEND_TO = 1000.0  # kg/m^3
 
 # --- Interim bracketing opacity (PROVISIONAL). Kramers free-free/bound-free *shape* only:
 #     kappa_R = KAPPA0_R (rho/rho_ref) (T/T_ref)^-3.5. The coefficient is fixed by requiring the
@@ -152,27 +166,60 @@ def _provenance(
     }
 
 
+def extended_rho_grid(rho_range: tuple[float, float], n_rho: int, extend_to: float) -> Vec:
+    """The `geomspace(*rho_range, n_rho)` grid continued upward on its **own log step** until the
+    last node reaches `extend_to`. Node-preserving by construction: the first `n_rho` nodes *are*
+    the original grid's array elements, so every result whose queries stayed at or below the old
+    ceiling interpolates bit-identically — the extension can only change runs that previously hit
+    the (clamped) edge, which were the broken ones (the 2026-07-16 radiative wall-layer
+    finding)."""
+    base = np.geomspace(rho_range[0], rho_range[1], n_rho)
+    step = (rho_range[1] / rho_range[0]) ** (1.0 / (n_rho - 1))
+    ext = [float(base[-1])]
+    while ext[-1] < extend_to:
+        ext.append(ext[-1] * step)
+    return np.concatenate([base[:-1], np.asarray(ext)])
+
+
 def build_table(
     rho_range: tuple[float, float] = RHO_RANGE,
     n_rho: int = N_RHO,
     t_range: tuple[float, float] = T_RANGE,
     n_t: int = N_T,
     kappa_scale: float = 1.0,
+    extend_to: float | None = RHO_EXTEND_TO,
 ) -> dict[str, object]:
     """Build the ADR-0007 table dict: log-spaced grids, the equilibrium EOS fields, the bracketing
     opacity (scaled by `kappa_scale`), and nested provenance. Fields are flattened row-major over
     `(rho, T)`. `kappa_scale != 1` rescales only the opacity (the EOS fields are untouched) — the
-    knob the B5d-3 insensitivity scan turns."""
-    rho_grid = np.geomspace(rho_range[0], rho_range[1], n_rho)
+    knob the B5d-3 insensitivity scan turns. `extend_to` continues the density grid upward
+    node-preservingly (`extended_rho_grid`) so the radiatively-cooled wall layer finds a rising
+    `p(rho)` and its compression self-arrests; `None` builds the unextended historical grid."""
+    if extend_to is None:
+        rho_grid = np.geomspace(rho_range[0], rho_range[1], n_rho)
+    else:
+        rho_grid = extended_rho_grid(rho_range, n_rho, extend_to)
     t_grid = np.geomspace(t_range[0], t_range[1], n_t)
 
     p, e, cs = ew.eos_grid(rho_grid, t_grid)
     kappa_r, kappa_p = opacity_grid(rho_grid, t_grid, kappa_scale)
 
+    prov = _provenance(rho_range, n_rho, t_range, n_t, kappa_scale)
+    if extend_to is not None:
+        prov["rho_grid_extension"] = {
+            "extend_to": extend_to,
+            "n_rho_total": len(rho_grid),
+            "why": (
+                "node-preserving upward continuation on the same log step: gives the "
+                "radiatively-cooled wall layer a rising p(rho) past the old 20 kg/m^3 ceiling "
+                "so its compression self-arrests (2026-07-16 radiative-collapse fix); "
+                "ideal-mixture EOS in the extension (non-ideality would only stiffen p)"
+            ),
+        }
     return {
         "rho_grid": [float(x) for x in rho_grid],
         "T_grid": [float(x) for x in t_grid],
-        "shape": [n_rho, n_t],
+        "shape": [len(rho_grid), n_t],
         "fields": {
             "p": _flatten(p),
             "e": _flatten(e),
@@ -180,7 +227,7 @@ def build_table(
             "kappa_rosseland": _flatten(kappa_r),
             "kappa_planck": _flatten(kappa_p),
         },
-        "provenance": _provenance(rho_range, n_rho, t_range, n_t, kappa_scale),
+        "provenance": prov,
     }
 
 
@@ -518,7 +565,11 @@ def main() -> None:
     else:
         table = build_table(kappa_scale=args.kappa_scale)
         out = args.out or DEFAULT_TABLE_PATH
-        label = f"EOS/opacity table -> {out} ({N_RHO}x{N_T} nodes, kappa_scale={args.kappa_scale})"
+        n_rho_written, n_t_written = cast("list[int]", table["shape"])
+        label = (
+            f"EOS/opacity table -> {out} ({n_rho_written}x{n_t_written} nodes, "
+            f"rho extended to {RHO_EXTEND_TO:g}, kappa_scale={args.kappa_scale})"
+        )
 
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w") as fh:

@@ -22,7 +22,9 @@ from puffsat import tables
 
 
 def test_table_satisfies_loader_contract() -> None:
-    """The emitted dict obeys the Rust loader's structural + positivity invariants (ADR-0007)."""
+    """The emitted dict obeys the Rust loader's structural + positivity invariants (ADR-0007) —
+    including over the rho-extension region the default build now appends (the 2026-07-16
+    radiative-collapse fix), where the EOS Newton solve runs far off the original grid."""
     # Small grid: the EOS is a per-node Newton solve, so keep the test fast.
     table = tables.build_table(rho_range=(0.05, 5.0), n_rho=6, t_range=(300.0, 50_000.0), n_t=8)
 
@@ -32,11 +34,13 @@ def test_table_satisfies_loader_contract() -> None:
     t_grid = cast("list[float]", table["T_grid"])
     fields = cast("dict[str, list[float]]", table["fields"])
 
-    # shape agrees with the grids, and the grids are strictly ascending and positive.
-    assert (n_rho, n_t) == (6, 8)
-    assert len(rho_grid) == n_rho
+    # shape agrees with the (extended) grids, the grids are strictly ascending and positive, and
+    # the density grid actually reaches the wall-layer ceiling.
+    assert n_t == 8
+    assert n_rho == len(rho_grid) > 6
     assert len(t_grid) == n_t
     assert rho_grid[0] > 0.0
+    assert rho_grid[-1] >= tables.RHO_EXTEND_TO
     assert t_grid[0] > 0.0
     assert all(b > a for a, b in pairwise(rho_grid))
     assert all(b > a for a, b in pairwise(t_grid))
@@ -46,6 +50,49 @@ def test_table_satisfies_loader_contract() -> None:
     for name, vals in fields.items():
         assert len(vals) == n_rho * n_t, name
         assert all(v > 0.0 for v in vals), name
+
+
+def test_extended_rho_grid_is_node_preserving() -> None:
+    """`extended_rho_grid` continues the base grid on its own log step: the first `n_rho` nodes
+    are *bit-identical* to `geomspace`, the step is constant across the seam, and the last node
+    reaches the ceiling. This is the contract that makes the extension safe: interpolation at or
+    below the old ceiling cannot change."""
+    rho_range, n_rho, extend_to = (0.01, 20.0), 40, 1000.0
+    grid = tables.extended_rho_grid(rho_range, n_rho, extend_to)
+    base = np.geomspace(rho_range[0], rho_range[1], n_rho)
+
+    np.testing.assert_array_equal(grid[:n_rho], base)  # bit-identical, not just close
+    assert grid[-1] >= extend_to
+    assert grid[-2] < extend_to  # minimal: exactly one node at/past the ceiling
+    step = (rho_range[1] / rho_range[0]) ** (1.0 / (n_rho - 1))
+    np.testing.assert_allclose(np.diff(np.log(grid)), np.log(step), rtol=1e-9)
+
+
+def test_build_table_extension_preserves_unextended_fields() -> None:
+    """The extended table's first `n_rho` density rows are bit-identical to the historical
+    (`extend_to=None`) build — grids *and* fields — so every committed result whose queries stayed
+    at or below the old ceiling reproduces exactly. Provenance records the extension."""
+    g = ((0.05, 5.0), 5, (300.0, 50_000.0), 6)  # rho_range, n_rho, t_range, n_t
+    old = tables.build_table(g[0], g[1], g[2], g[3], extend_to=None)
+    new = tables.build_table(g[0], g[1], g[2], g[3], extend_to=1000.0)
+
+    assert cast("list[int]", old["shape"]) == [g[1], g[3]]
+    n_rho_new = cast("list[int]", new["shape"])[0]
+    assert n_rho_new > g[1]
+    assert cast("list[float]", new["rho_grid"])[: g[1]] == cast("list[float]", old["rho_grid"])
+    assert cast("list[float]", new["T_grid"]) == cast("list[float]", old["T_grid"])
+
+    old_fields = cast("dict[str, list[float]]", old["fields"])
+    new_fields = cast("dict[str, list[float]]", new["fields"])
+    n_old = g[1] * g[3]  # row-major over (rho, T): the preserved nodes are the leading block
+    for name, vals in old_fields.items():
+        assert new_fields[name][:n_old] == vals, name
+
+    prov = cast("dict[str, object]", new["provenance"])
+    ext = cast("dict[str, object]", prov["rho_grid_extension"])
+    assert ext["extend_to"] == 1000.0
+    assert ext["n_rho_total"] == n_rho_new
+    assert "rho_grid_extension" not in cast("dict[str, object]", old["provenance"])
 
 
 def test_interim_opacity_tau_in_design_band() -> None:
