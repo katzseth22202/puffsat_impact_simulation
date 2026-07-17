@@ -28,14 +28,19 @@ numbers, and every quoted result carries that caveat.
 from __future__ import annotations
 
 import argparse
-import json
 import math
 from dataclasses import dataclass, fields, replace
 from itertools import pairwise
 from pathlib import Path
 from statistics import median, pstdev
 
-from puffsat.analysis import P_LIMIT_BASELINE, P_LIMIT_HIGHV, _write_csv, reconcile_f
+from puffsat.analysis import (
+    P_LIMIT_BASELINE,
+    P_LIMIT_HIGHV,
+    _write_csv,
+    read_jsonl_rows,
+    reconcile_f,
+)
 
 DEFAULT_SHAPE_2D_PATH = Path("data/results/sweep_shape_geometry.jsonl")
 DEFAULT_SHAPE_1D_PATH = Path("data/results/sweep_shape_sigma.jsonl")
@@ -167,38 +172,12 @@ class ShapePoint:
 
 def read_shape_2d(path: Path = DEFAULT_SHAPE_2D_PATH) -> list[Shape2DRow]:
     """Parse the 2D shape sweep JSONL (one JSON object per line; blank lines tolerated)."""
-    rows: list[Shape2DRow] = []
-    for line in Path(path).read_text().splitlines():
-        if not line.strip():
-            continue
-        d = json.loads(line)
-        rows.append(
-            Shape2DRow(
-                axis=str(d["axis"]),
-                **{f.name: float(d[f.name]) for f in fields(Shape2DRow) if f.name != "axis"},
-            )
-        )
-    return rows
+    return read_jsonl_rows(Shape2DRow, path, str_fields=("axis",))
 
 
 def read_shape_1d(path: Path = DEFAULT_SHAPE_1D_PATH) -> list[Shape1DRow]:
     """Parse the 1D Σ-contract shape sweep JSONL (one JSON object per line; blanks tolerated)."""
-    rows: list[Shape1DRow] = []
-    str_fields = ("axis", "sigma_role")
-    for line in Path(path).read_text().splitlines():
-        if not line.strip():
-            continue
-        d = json.loads(line)
-        rows.append(
-            Shape1DRow(
-                axis=str(d["axis"]),
-                sigma_role=str(d["sigma_role"]),
-                **{
-                    f.name: float(d[f.name]) for f in fields(Shape1DRow) if f.name not in str_fields
-                },
-            )
-        )
-    return rows
+    return read_jsonl_rows(Shape1DRow, path, str_fields=("axis", "sigma_role"))
 
 
 def _sample_key(
@@ -487,13 +466,7 @@ class FrozenShapeRow:
 
 def read_frozen_shape(path: Path = DEFAULT_FROZEN_SWEEP_PATH) -> list[FrozenShapeRow]:
     """Parse the `--frozen-shape` sweep JSONL (one JSON object per line; blanks tolerated)."""
-    rows: list[FrozenShapeRow] = []
-    for line in Path(path).read_text().splitlines():
-        if not line.strip():
-            continue
-        d = json.loads(line)
-        rows.append(FrozenShapeRow(**{f.name: float(d[f.name]) for f in fields(FrozenShapeRow)}))
-    return rows
+    return read_jsonl_rows(FrozenShapeRow, path)
 
 
 def frozen_slope_check(rows: list[FrozenShapeRow]) -> tuple[float, float, bool]:

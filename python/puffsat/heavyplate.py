@@ -33,12 +33,11 @@ companion in `puffsat.structure` (ADR-0027), decoupled from this `f(v)` frontier
 from __future__ import annotations
 
 import argparse
-import json
-import math
 from dataclasses import dataclass, fields
 from pathlib import Path
 
 from puffsat.analysis import (
+    ETA_PHYSICAL_MAX,
     P_LIMIT_BASELINE,
     P_LIMIT_HIGHV,
     SIC_SPALL_LO,
@@ -47,9 +46,12 @@ from puffsat.analysis import (
     classify_survivability,
     impact_density,
     peak_facesheet_pressure,
+    plate_mass,
     read_geometry,
+    read_jsonl_rows,
     reconcile_f,
 )
+from puffsat.analysis import _LogInterp as _LogInterp  # re-exported: structure.py imports it
 
 DEFAULT_HEAVYPLATE_SWEEP_PATH = Path("data/results/sweep_heavyplate.jsonl")
 DEFAULT_GEOMETRY_M40_PATH = Path("data/results/sweep_geometry_m40.jsonl")
@@ -79,10 +81,6 @@ V_TAU_CHECK = 28_000.0
 AREAL_DENSITY = 45.0
 AREAL_DENSITY_BAND = (38.0, 51.0)
 
-# Physical ceiling for eta_capture: shallow-concave over-collimation reaches ~1.01 (Rung D-cc), so
-# anything past this is a solver blow-up, not physics (a stray M = 40 case once returned 7.6).
-ETA_PHYSICAL_MAX = 1.2
-
 FLOAT_TOL = 1e-6  # grid-value match tolerance (the sweep writes exact round grid values)
 
 
@@ -104,35 +102,7 @@ class HeavyPlateRow:
 
 def read_heavyplate_sweep(path: Path = DEFAULT_HEAVYPLATE_SWEEP_PATH) -> list[HeavyPlateRow]:
     """Parse the `--heavyplate` sweep JSONL (one JSON object per line; blank lines tolerated)."""
-    rows: list[HeavyPlateRow] = []
-    for line in Path(path).read_text().splitlines():
-        if not line.strip():
-            continue
-        d = json.loads(line)
-        rows.append(HeavyPlateRow(**{f.name: float(d[f.name]) for f in fields(HeavyPlateRow)}))
-    return rows
-
-
-class _LogInterp:
-    """Piecewise-linear interpolation in `ln x`, clamped at the ends (small, typed, stdlib)."""
-
-    def __init__(self, xs: list[float], ys: list[float]) -> None:
-        if len(xs) != len(ys) or len(xs) < 2:
-            raise ValueError("need >= 2 matching points")
-        self._lx = [math.log(x) for x in xs]
-        self._ys = ys
-
-    def __call__(self, x: float) -> float:
-        lx = math.log(x)
-        if lx <= self._lx[0]:
-            return self._ys[0]
-        if lx >= self._lx[-1]:
-            return self._ys[-1]
-        for i in range(1, len(self._lx)):
-            if lx <= self._lx[i]:
-                t = (lx - self._lx[i - 1]) / (self._lx[i] - self._lx[i - 1])
-                return self._ys[i - 1] * (1.0 - t) + self._ys[i] * t
-        return self._ys[-1]
+    return read_jsonl_rows(HeavyPlateRow, path)
 
 
 def headline_rows(rows: list[HeavyPlateRow]) -> list[HeavyPlateRow]:
@@ -175,12 +145,6 @@ def stagnation_coefficient_at_v(rows: list[HeavyPlateRow], v: float) -> float:
     if c <= 0.0:
         raise ValueError("non-positive c_stag — stale or empty sweep JSONL?")
     return c
-
-
-def plate_mass(radius: float, d_over_d: float, areal_density: float = AREAL_DENSITY) -> float:
-    """Plate mass [kg]: areal density x disk area, with the shallow dish's extra-area factor
-    `1 + (2 d/D)²` (spherical-cap area `π(a² + d²)`, `d = (d/D)·2R`)."""
-    return areal_density * math.pi * radius * radius * (1.0 + (2.0 * d_over_d) ** 2)
 
 
 @dataclass(frozen=True)
@@ -234,7 +198,7 @@ def heavyplate_frontier(
             peak = peak_facesheet_pressure(rho, v, c_stag) * focusing
             base = classify_survivability(peak, P_LIMIT_BASELINE, SIC_SPALL_LO)
             relaxed = classify_survivability(peak, relaxed_limit, SIC_SPALL_LO)
-            mass_kg = plate_mass(plate_radius, r.d_over_d)
+            mass_kg = plate_mass(plate_radius, r.d_over_d, areal_density=AREAL_DENSITY)
             e_eff = e_of_rho(rho)
             points.append(
                 HeavyPlatePoint(
@@ -386,13 +350,7 @@ class FrozenHeavyRow:
 
 def read_frozen_heavyplate(path: Path = DEFAULT_FROZEN_SWEEP_PATH) -> list[FrozenHeavyRow]:
     """Parse the `--frozen-heavyplate` sweep JSONL (one JSON object per line; blanks tolerated)."""
-    rows: list[FrozenHeavyRow] = []
-    for line in Path(path).read_text().splitlines():
-        if not line.strip():
-            continue
-        d = json.loads(line)
-        rows.append(FrozenHeavyRow(**{f.name: float(d[f.name]) for f in fields(FrozenHeavyRow)}))
-    return rows
+    return read_jsonl_rows(FrozenHeavyRow, path)
 
 
 @dataclass(frozen=True)

@@ -29,12 +29,11 @@ with that band, and a concave dish pays its small extra-area factor `1 + (2·d/D
 from __future__ import annotations
 
 import argparse
-import json
-import math
 from dataclasses import dataclass, fields
 from pathlib import Path
 
 from puffsat.analysis import (
+    ETA_PHYSICAL_MAX,
     P_LIMIT_BASELINE,
     P_LIMIT_HIGHV,
     SIC_SPALL_LO,
@@ -43,9 +42,12 @@ from puffsat.analysis import (
     classify_survivability,
     impact_density,
     peak_facesheet_pressure,
+    plate_mass,
     read_geometry,
+    read_jsonl_rows,
     reconcile_f,
 )
+from puffsat.analysis import _LogInterp as _LogInterp  # re-exported: test_jupiter.py uses it
 
 DEFAULT_JUPITER_SWEEP_PATH = Path("data/results/sweep_jupiter.jsonl")
 DEFAULT_GEOMETRY_M40_PATH = Path("data/results/sweep_geometry_m40.jsonl")
@@ -71,10 +73,6 @@ RADII = [8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0]
 AREAL_DENSITY = 45.0
 AREAL_DENSITY_BAND = (38.0, 51.0)
 
-# Physical ceiling for eta_capture: shallow-concave over-collimation reaches ~1.01 (Rung D-cc),
-# so anything past this is a solver blow-up (one M=40 case returned 7.6), not physics.
-ETA_PHYSICAL_MAX = 1.2
-
 
 @dataclass(frozen=True)
 class JupiterRow:
@@ -91,23 +89,7 @@ class JupiterRow:
 
 def read_jupiter_sweep(path: Path = DEFAULT_JUPITER_SWEEP_PATH) -> list[JupiterRow]:
     """Parse the `--jupiter` sweep JSONL (one JSON object per line; blank lines tolerated)."""
-    rows: list[JupiterRow] = []
-    for line in Path(path).read_text().splitlines():
-        if not line.strip():
-            continue
-        d = json.loads(line)
-        rows.append(
-            JupiterRow(
-                rho_impact=float(d["rho_impact"]),
-                length=float(d["length"]),
-                opacity_scale=float(d["opacity_scale"]),
-                e_eff=float(d["e_eff"]),
-                peak_wall_pressure=float(d["peak_wall_pressure"]),
-                loss_radiative_wall=float(d["loss_radiative_wall"]),
-                loss_escape_space=float(d["loss_escape_space"]),
-            )
-        )
-    return rows
+    return read_jsonl_rows(JupiterRow, path)
 
 
 def e_eff_interpolator(rows: list[JupiterRow], length: float, opacity_scale: float) -> _LogInterp:
@@ -124,28 +106,6 @@ def e_eff_interpolator(rows: list[JupiterRow], length: float, opacity_scale: flo
     )
 
 
-class _LogInterp:
-    """Piecewise-linear interpolation in `ln x`, clamped at the ends (small, typed, stdlib)."""
-
-    def __init__(self, xs: list[float], ys: list[float]) -> None:
-        if len(xs) != len(ys) or len(xs) < 2:
-            raise ValueError("need >= 2 matching points")
-        self._lx = [math.log(x) for x in xs]
-        self._ys = ys
-
-    def __call__(self, x: float) -> float:
-        lx = math.log(x)
-        if lx <= self._lx[0]:
-            return self._ys[0]
-        if lx >= self._lx[-1]:
-            return self._ys[-1]
-        for i in range(1, len(self._lx)):
-            if lx <= self._lx[i]:
-                t = (lx - self._lx[i - 1]) / (self._lx[i] - self._lx[i - 1])
-                return self._ys[i - 1] * (1.0 - t) + self._ys[i] * t
-        return self._ys[-1]
-
-
 def stagnation_coefficient_jupiter(rows: list[JupiterRow]) -> float:
     """`c_stag = peak_wall_pressure/(rho v²)` averaged over the sweep (ADR-0010: physical EOS
     peak, AV excluded). Opacity/length move it only weakly; the mean is the sizing anchor."""
@@ -154,12 +114,6 @@ def stagnation_coefficient_jupiter(rows: list[JupiterRow]) -> float:
     if c <= 0.0:
         raise ValueError("non-positive c_stag — stale or empty sweep JSONL?")
     return c
-
-
-def plate_mass(radius: float, d_over_d: float, areal_density: float = AREAL_DENSITY) -> float:
-    """Plate mass [kg]: areal density x disk area, with the shallow dish's extra-area factor
-    `1 + (2 d/D)²` (spherical-cap area `π(a² + d²)`, `d = (d/D)·2R`)."""
-    return areal_density * math.pi * radius * radius * (1.0 + (2.0 * d_over_d) ** 2)
 
 
 @dataclass(frozen=True)
@@ -223,7 +177,8 @@ def jupiter_frontier(
             points.append(
                 JupiterPoint(
                     plate_radius=radius,
-                    plate_mass_t=plate_mass(radius, r.d_over_d) / 1000.0,
+                    plate_mass_t=plate_mass(radius, r.d_over_d, areal_density=AREAL_DENSITY)
+                    / 1000.0,
                     d_over_d=r.d_over_d,
                     l_over_d=r.l_over_d,
                     r_foot_over_r=r.r_foot_over_r,
@@ -289,15 +244,7 @@ class FrozenJupiterRow:
 
 def read_frozen_jupiter(path: Path = DEFAULT_FROZEN_JUPITER_SWEEP_PATH) -> list[FrozenJupiterRow]:
     """Parse the `--frozen-jupiter` sweep JSONL (one JSON object per line; blanks tolerated)."""
-    rows: list[FrozenJupiterRow] = []
-    for line in Path(path).read_text().splitlines():
-        if not line.strip():
-            continue
-        d = json.loads(line)
-        rows.append(
-            FrozenJupiterRow(**{f.name: float(d[f.name]) for f in fields(FrozenJupiterRow)})
-        )
-    return rows
+    return read_jsonl_rows(FrozenJupiterRow, path)
 
 
 @dataclass(frozen=True)

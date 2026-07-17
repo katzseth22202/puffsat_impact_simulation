@@ -29,6 +29,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass, fields
 from itertools import pairwise
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
 
 DEFAULT_SWEEP_PATH = Path("data/results/sweep.jsonl")
 DEFAULT_SUMMARY_PATH = Path("data/results/frontier.csv")
@@ -87,6 +91,11 @@ REFLECT_FRAC = 0.15  # |R| at the SiC-Ti impedance step -> reflected tensile fra
 SIC_SPALL_LO = 0.3e9  # SiC dynamic spall strength, conservative end (ADR-0011)
 SIC_SPALL_HI = 1.0e9  # SiC dynamic spall strength, upper end
 
+# Physical ceiling for eta_capture: shallow-concave over-collimation reaches ~1.01 (Rung D-cc), so
+# anything past this is a solver blow-up (one M=40 case once returned 7.6), not physics. Shared by
+# the jupiter/heavyplate special-scenario geometry gates.
+ETA_PHYSICAL_MAX = 1.2
+
 # --- closed-form `f`-margin exploration (design §7, ADR-0010 amendment) ---
 # Peak facesheet pressure `c_stag·rho·v²` is intensive (set by the gas at the wall); via the Σ
 # contract `rho = m/(2π·(L/D)·(r_foot/R)³·R³)` it scales analytically as `rho ∝ m/R³`, while
@@ -129,27 +138,48 @@ class FrontierPoint:
     frac_condensation: float
 
 
-def read_sweep(path: Path = DEFAULT_SWEEP_PATH) -> list[SweepRow]:
-    """Parse the JSONL sweep results (one JSON object per line; blank lines tolerated)."""
-    rows: list[SweepRow] = []
+def read_jsonl_rows[T: DataclassInstance](
+    cls: type[T],
+    path: Path,
+    *,
+    str_fields: tuple[str, ...] = (),
+    defaults: dict[str, float] | None = None,
+) -> list[T]:
+    """Parse a sweep-result JSONL into instances of the frozen dataclass `cls` (one JSON object
+    per line; blank lines tolerated) — the read + skip-blank + `json.loads` + per-field cast shape
+    every `read_*_sweep` in this codebase shares.
+
+    Every field is read by name and cast to `float`, except those named in `str_fields` (cast to
+    `str` — the shape sweeps' `axis`/`sigma_role` columns). `defaults` supplies a fallback for
+    fields that may be absent from older JSONL (back-compat, e.g. `peak_wall_pressure` before
+    ADR-0010); a field with neither a value in the row nor a listed default raises `KeyError`, so
+    genuine schema drift still fails loudly rather than silently defaulting.
+    """
+    defaults = defaults or {}
+    rows: list[T] = []
     for line in Path(path).read_text().splitlines():
         if not line.strip():
             continue
         d = json.loads(line)
-        rows.append(
-            SweepRow(
-                rho_impact=float(d["rho_impact"]),
-                v=float(d["v"]),
-                e_eff=float(d["e_eff"]),
-                peak_wall_force=float(d.get("peak_wall_force", 0.0)),
-                peak_wall_pressure=float(d.get("peak_wall_pressure", 0.0)),
-                loss_radiative_wall=float(d["loss_radiative_wall"]),
-                loss_escape_space=float(d["loss_escape_space"]),
-                loss_conductive=float(d["loss_conductive"]),
-                loss_condensation=float(d.get("loss_condensation", 0.0)),
-            )
-        )
+        kwargs: dict[str, object] = {}
+        for f in fields(cls):
+            raw = d.get(f.name, defaults[f.name]) if f.name in defaults else d[f.name]
+            kwargs[f.name] = str(raw) if f.name in str_fields else float(raw)
+        rows.append(cls(**kwargs))
     return rows
+
+
+def read_sweep(path: Path = DEFAULT_SWEEP_PATH) -> list[SweepRow]:
+    """Parse the JSONL sweep results (one JSON object per line; blank lines tolerated)."""
+    return read_jsonl_rows(
+        SweepRow,
+        path,
+        defaults={
+            "peak_wall_force": 0.0,
+            "peak_wall_pressure": 0.0,
+            "loss_condensation": 0.0,
+        },
+    )
 
 
 def frontier(rows: list[SweepRow]) -> list[FrontierPoint]:
@@ -447,25 +477,7 @@ class GeometryPoint:
 
 def read_geometry(path: Path = DEFAULT_GEOMETRY_PATH) -> list[GeoRow]:
     """Parse the geometry sweep JSONL (one JSON object per line; blank lines tolerated)."""
-    rows: list[GeoRow] = []
-    for line in Path(path).read_text().splitlines():
-        if not line.strip():
-            continue
-        d = json.loads(line)
-        rows.append(
-            GeoRow(
-                d_over_d=float(d["d_over_d"]),
-                l_over_d=float(d["l_over_d"]),
-                r_foot_over_r=float(d["r_foot_over_r"]),
-                mach=float(d["mach"]),
-                eta_capture=float(d["eta_capture"]),
-                restitution_free=float(d["restitution_free"]),
-                restitution_confined=float(d["restitution_confined"]),
-                peak_force=float(d["peak_force"]),
-                peak_local_pressure=float(d.get("peak_local_pressure", 0.0)),
-            )
-        )
-    return rows
+    return read_jsonl_rows(GeoRow, path, defaults={"peak_local_pressure": 0.0})
 
 
 def reconcile_f(eta_capture: float, e_eff: float) -> float:
@@ -624,6 +636,37 @@ def impact_density(
     (∝ 1/(r_foot/R)³)."""
     r_foot = r_foot_over_r * plate_radius
     return mass / (2.0 * math.pi * l_over_d * r_foot * r_foot * r_foot)
+
+
+def plate_mass(radius: float, d_over_d: float, areal_density: float = 45.0) -> float:
+    """Plate mass [kg]: areal density x disk area, with the shallow dish's extra-area factor
+    `1 + (2 d/D)²` (spherical-cap area `π(a² + d²)`, `d = (d/D)·2R`). `areal_density` defaults to
+    45 kg/m² — the baseline stack's central estimate (3-4 t at R = 5 m, design §2), shared by the
+    jupiter/heavyplate special-scenario plate sizing."""
+    return areal_density * math.pi * radius * radius * (1.0 + (2.0 * d_over_d) ** 2)
+
+
+class _LogInterp:
+    """Piecewise-linear interpolation in `ln x`, clamped at the ends (small, typed, stdlib) — the
+    `e_eff(rho)` / `e_eff(v)` slice interpolator shared by the jupiter/heavyplate frontiers."""
+
+    def __init__(self, xs: list[float], ys: list[float]) -> None:
+        if len(xs) != len(ys) or len(xs) < 2:
+            raise ValueError("need >= 2 matching points")
+        self._lx = [math.log(x) for x in xs]
+        self._ys = ys
+
+    def __call__(self, x: float) -> float:
+        lx = math.log(x)
+        if lx <= self._lx[0]:
+            return self._ys[0]
+        if lx >= self._lx[-1]:
+            return self._ys[-1]
+        for i in range(1, len(self._lx)):
+            if lx <= self._lx[i]:
+                t = (lx - self._lx[i - 1]) / (self._lx[i] - self._lx[i - 1])
+                return self._ys[i - 1] * (1.0 - t) + self._ys[i] * t
+        return self._ys[-1]
 
 
 def density_ceiling(v: float, c_stag: float, p_limit: float) -> float:
@@ -969,30 +1012,7 @@ class AblatingRow:
 
 def read_ablating(path: Path = DEFAULT_ABLATING_PATH) -> list[AblatingRow]:
     """Parse the ablating sweep JSONL (one JSON object per line; blank lines tolerated)."""
-    rows: list[AblatingRow] = []
-    for line in Path(path).read_text().splitlines():
-        if not line.strip():
-            continue
-        d = json.loads(line)
-        rows.append(
-            AblatingRow(
-                v=float(d["v"]),
-                rho_impact=float(d["rho_impact"]),
-                opacity_scale=float(d["opacity_scale"]),
-                q_star=float(d["q_star"]),
-                kappa_vapor=float(d["kappa_vapor"]),
-                e_eff_rigid=float(d["e_eff_rigid"]),
-                e_eff_ablating=float(d["e_eff_ablating"]),
-                recovery=float(d["recovery"]),
-                ablated_mass=float(d["ablated_mass"]),
-                ablated_fraction=float(d["ablated_fraction"]),
-                loss_radiative_wall=float(d["loss_radiative_wall"]),
-                loss_escape_space=float(d["loss_escape_space"]),
-                loss_ablation=float(d["loss_ablation"]),
-                peak_wall_force=float(d["peak_wall_force"]),
-            )
-        )
-    return rows
+    return read_jsonl_rows(AblatingRow, path)
 
 
 @dataclass(frozen=True)
@@ -1218,13 +1238,7 @@ class FrozenDipImpact:
 
 def read_frozen(path: Path = DEFAULT_FROZEN_PATH) -> list[FrozenRow]:
     """Parse the frozen-sweep JSONL (one JSON object per line; blank lines tolerated)."""
-    rows: list[FrozenRow] = []
-    for line in Path(path).read_text().splitlines():
-        if not line.strip():
-            continue
-        d = json.loads(line)
-        rows.append(FrozenRow(**{f.name: float(d[f.name]) for f in fields(FrozenRow)}))
-    return rows
+    return read_jsonl_rows(FrozenRow, path)
 
 
 def frozen_frontier(rows: list[FrozenRow]) -> list[FrozenPoint]:
