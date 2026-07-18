@@ -24,7 +24,10 @@ facesheet frontier selects):
    the honest "closed-form does not establish survival -> FEA refinement" finding ADR-0027 names.
 3. **SiC-Ti spall reflection (ADR-0011).** The peak facesheet compressive load reflects at the
    lower-impedance Ti backing as tension (`|R| ~ 0.15`); confirm it stays sub-spall, reusing the
-   ADR-0011 model.
+   ADR-0011 model. Its companion (3b) is the **Ti back-face free-surface spall**: the compression
+   transmitted through the SiC-Ti step (`~0.85` of the peak) reflects off the solid Ti layer's back
+   surface as tension, checked against Ti's (much higher, ductile) dynamic spall strength. Both are
+   sub-dominant at these loads; the brittle SiC-interface check binds before the Ti back face.
 
 **What it is not** (ADR-0027): not FEA, not a validated design. Buckling, dynamic amplification
 beyond the first mode, joint/fatigue detail, and thermal-structural coupling are out of scope. It
@@ -40,7 +43,13 @@ import math
 from dataclasses import dataclass, fields
 from pathlib import Path
 
-from puffsat.analysis import SIC_SPALL_LO, _write_csv, reflected_tensile
+from puffsat.analysis import (
+    SIC_SPALL_LO,
+    TI_SPALL_LO,
+    _write_csv,
+    back_face_tensile,
+    reflected_tensile,
+)
 from puffsat.heavyplate import (
     PLATE_MASS_CEILING_KG,
     PLATE_RADIUS_M,
@@ -141,9 +150,11 @@ class StructurePoint:
     back_thickness_req: float  # implied minimum fiber back-face thickness [m]
     implied_plate_mass_t: float  # BASE stack + implied back-face, over pi R^2, in tonnes
     mass_ok: bool  # implied total <= 40 t ceiling
-    # Check 3 — SiC-Ti spall reflection (ADR-0011).
+    # Check 3 — SiC-Ti spall reflection (ADR-0011) + Ti back-face free-surface spall (3b).
     reflected_tensile: float
     spall_ok: bool
+    back_face_tensile: float  # Ti back-face free-surface tension (~0.85*peak)
+    back_spall_ok: bool
     # Overall.
     verdict_ok: bool
 
@@ -188,9 +199,12 @@ def structure_point(design: HeavyPlatePoint, rows: list[HeavyPlateRow]) -> Struc
     implied_mass_t = implied_areal * PLATE_AREA_M2 / 1000.0
     mass_ok = implied_mass_t <= PLATE_MASS_CEILING_KG / 1000.0
 
-    # Check 3 — SiC-Ti spall reflection (ADR-0011), on the focused facesheet peak.
+    # Check 3 — SiC-Ti spall reflection (ADR-0011), on the focused facesheet peak, plus (3b) the
+    # Ti back-face free-surface spall (the ~0.85*peak transmitted compression reflected as tension).
     refl = reflected_tensile(design.peak_compressive)
     spall_ok = refl < SIC_SPALL_LO
+    refl_back = back_face_tensile(design.peak_compressive)
+    back_spall_ok = refl_back < TI_SPALL_LO
 
     return StructurePoint(
         v=design.v,
@@ -210,7 +224,9 @@ def structure_point(design: HeavyPlatePoint, rows: list[HeavyPlateRow]) -> Struc
         mass_ok=mass_ok,
         reflected_tensile=refl,
         spall_ok=spall_ok,
-        verdict_ok=rigid_ok and mass_ok and spall_ok,
+        back_face_tensile=refl_back,
+        back_spall_ok=back_spall_ok,
+        verdict_ok=rigid_ok and mass_ok and spall_ok and back_spall_ok,
     )
 
 
@@ -266,11 +282,12 @@ def main() -> None:
     )
     print(
         "Checks: (1) rigid-during-pulse / f-validity  (2) areal-impulse membrane (implied mass)  "
-        "(3) SiC-Ti spall"
+        "(3a) SiC-Ti interface spall  (3b) Ti back-face spall"
     )
     print(
         f"\n{'v [km/s]':>8} {'shape (d/D,L/D,rf/R)':>22} {'tau[ms]':>8} {'T1/tau':>7} "
-        f"{'(1)':>5} {'impl.mass[t]':>12} {'(2)':>5} {'refl[MPa]':>10} {'(3)':>5} {'verdict':>8}"
+        f"{'(1)':>5} {'impl.mass[t]':>12} {'(2)':>5} {'refl[MPa]':>10} {'(3a)':>5} "
+        f"{'bface[MPa]':>10} {'(3b)':>5} {'verdict':>8}"
     )
     for p in points:
         shape = f"({p.d_over_d:.2f},{p.l_over_d:.1f},{p.r_foot_over_r:.1f})"
@@ -278,17 +295,20 @@ def main() -> None:
             f"{p.v / 1000:8.1f} {shape:>22} {p.pulse_duration * 1e3:8.2f} {p.rigidity_ratio:7.0f} "
             f"{_fmt_flag(p.rigid_ok):>5} {p.implied_plate_mass_t:12.0f} {_fmt_flag(p.mass_ok):>5} "
             f"{p.reflected_tensile / 1e6:10.1f} {_fmt_flag(p.spall_ok):>5} "
+            f"{p.back_face_tensile / 1e6:10.1f} {_fmt_flag(p.back_spall_ok):>5} "
             f"{_fmt_flag(p.verdict_ok):>8}"
         )
 
     n_ok = sum(1 for p in points if p.verdict_ok)
     rigid_all = all(p.rigid_ok for p in points)
     spall_all = all(p.spall_ok for p in points)
+    back_spall_all = all(p.back_spall_ok for p in points)
     mass_worst = max(p.implied_plate_mass_t for p in points)
     ceiling_t = PLATE_MASS_CEILING_KG / 1000
     print(
         f"\nSUMMARY: rigidity/f-validity gate {'PASS at all anchors' if rigid_all else 'FAILS'}; "
-        f"SiC-Ti spall {'PASS at all anchors' if spall_all else 'FAILS'}; "
+        f"SiC-Ti interface spall {'PASS at all anchors' if spall_all else 'FAILS'}; "
+        f"Ti back-face spall {'PASS at all anchors' if back_spall_all else 'FAILS'}; "
         f"membrane implied plate mass up to {mass_worst:.0f} t vs the {ceiling_t:.0f} t ceiling."
     )
     if n_ok == len(points):

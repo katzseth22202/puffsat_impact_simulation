@@ -97,10 +97,13 @@ def test_structure_point_membrane_and_gates() -> None:
         implied_areal * math.pi * PLATE_RADIUS_M**2 / 1000.0
     )
 
-    # Check 3 — spall: reflected 0.15*3e7 = 4.5 MPa << 0.3 GPa SiC spall.
+    # Check 3 — spall: SiC interface 0.15*3e7 = 4.5 MPa << 0.3 GPa SiC spall; Ti back-face
+    # 0.85*3e7 = 25.5 MPa << 2.5 GPa Ti spall. Both clear.
     assert sp.reflected_tensile == pytest.approx(0.15 * 3.0e7)
     assert sp.spall_ok
-    assert sp.verdict_ok == (sp.rigid_ok and sp.mass_ok and sp.spall_ok)
+    assert sp.back_face_tensile == pytest.approx(0.85 * 3.0e7)
+    assert sp.back_spall_ok
+    assert sp.verdict_ok == (sp.rigid_ok and sp.mass_ok and sp.spall_ok and sp.back_spall_ok)
 
 
 def test_flat_design_uses_minimum_builtin_dish() -> None:
@@ -135,8 +138,13 @@ def test_structure_frontier_end_to_end(tmp_path: Path) -> None:
     structure.write_summary(pts, out)
     assert out.exists()
     header = out.read_text().splitlines()[0].split(",")
-    assert {"rigidity_ratio", "rigid_ok", "implied_plate_mass_t", "spall_ok", "verdict_ok"} <= set(
-        header
-    )
+    assert {
+        "rigidity_ratio",
+        "rigid_ok",
+        "implied_plate_mass_t",
+        "spall_ok",
+        "back_spall_ok",
+        "verdict_ok",
+    } <= set(header)
     # The rigid-during-pulse / f-validity gate should clear at every surviving anchor.
     assert all(p.rigid_ok for p in pts)

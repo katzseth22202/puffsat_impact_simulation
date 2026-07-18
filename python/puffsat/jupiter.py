@@ -192,8 +192,12 @@ def jupiter_frontier(
                     f=reconcile_f(r.eta_capture, brackets[1]),
                     f_lo=reconcile_f(r.eta_capture, brackets[0]),
                     f_hi=reconcile_f(r.eta_capture, brackets[2]),
-                    survives_baseline=base.survives_compressive and base.survives_spall,
-                    survives_relaxed=relaxed.survives_compressive and relaxed.survives_spall,
+                    survives_baseline=base.survives_compressive
+                    and base.survives_spall
+                    and base.survives_back_spall,
+                    survives_relaxed=relaxed.survives_compressive
+                    and relaxed.survives_spall
+                    and relaxed.survives_back_spall,
                 )
             )
     return points

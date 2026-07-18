@@ -213,8 +213,12 @@ def heavyplate_frontier(
                     plate_mass_t=mass_kg / 1000.0,
                     peak_compressive=peak,
                     f=reconcile_f(r.eta_capture, e_eff),
-                    survives_baseline=base.survives_compressive and base.survives_spall,
-                    survives_relaxed=relaxed.survives_compressive and relaxed.survives_spall,
+                    survives_baseline=base.survives_compressive
+                    and base.survives_spall
+                    and base.survives_back_spall,
+                    survives_relaxed=relaxed.survives_compressive
+                    and relaxed.survives_spall
+                    and relaxed.survives_back_spall,
                     within_mass_budget=mass_kg <= PLATE_MASS_CEILING_KG,
                 )
             )

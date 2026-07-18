@@ -43,6 +43,33 @@ the swept shapes. The reflected-tensile check is carried in `classify_survivabil
 gate but never controls the frontier at these loads; it would only bind if incident stress reached
 ~2 GPa (which the foreclosed `f`-max corner does reach, but that corner already fails on compression).
 
+## Amendment (2026-07, Rung S): the Ti back-face free-surface spall check, added explicitly
+
+The interface check above covers the *brittle SiC*. It does not cover the *Ti layer itself*, whose
+back face is a second spall site: the compression **transmitted** through the SiC–Ti step travels
+through the solid Ti and reflects off its back surface as tension. That back surface is free (or, per
+the corollary below, terminated by a low-impedance truss / tensioned-fiber back-face — a *near*-free
+surface), so `R ≈ −1` and the full transmitted amplitude returns as tension.
+
+Using the same impedance step, the transmitted stress fraction is `T = 1 + R = 1 − |R| ≈ 0.85` (stress
+convention), so the peak Ti back-face tension is `≈ 0.85·peak` — much larger than the SiC interface's
+`0.15·peak`. But Ti is **ductile**, with dynamic spall strength ~2.5–4.5 GPa (Ti-6Al-4V / CP-Ti),
+~8× the SiC's 0.3–1 GPa. Comparing tension-to-strength ratios, the SiC interface is closer to failure
+at every load — `0.15/0.3 GPa⁻¹ > 0.85/2.5 GPa⁻¹` — so **the brittle SiC interface spalls first and the
+Ti back-face check never controls** (it would only bind if Ti spall strength fell below ~1.7 GPa, far
+under any titanium). At the foreclosed `f`-max corner (~2 GPa incident) the SiC interface reaches its
+0.3 GPa limit while the Ti back-face tension (~1.7 GPa) is still under Ti spall.
+
+**Operationalized.** `classify_survivability` now carries a third gate (`survives_back_spall`, via
+`back_face_tensile = 0.85·peak` against `TI_SPALL_LO = 2.5 GPa`), ANDed into the baseline/relaxed
+survivability verdicts across the Rung S, Jupiter, and heavy-plate frontiers; `structure.py` reports
+it as sub-check (3b) alongside the SiC interface (3a). It is confirmatory — a defensible, explicit
+guard that the ductile Ti backing does not itself spall — and passes at every swept load with margin,
+consistent with this ADR's "the ductile backing keeps the ceramic from spalling" narrative now applied
+to the backing's own back face. Conservatism is doubled in: full `R = −1` free-surface reflection
+(a solid-terminated back face reflects less) and the low end of the Ti spall band. The same
+multi-pulse-fatigue caveat (§11, out of scope) applies to the Ti back face as to the SiC interface.
+
 ## Considered Options
 
 - **Delegate spall mitigation to the shock absorber.** Rejected: timescale mismatch ~10³× — the

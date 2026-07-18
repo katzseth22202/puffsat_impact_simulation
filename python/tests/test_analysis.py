@@ -396,6 +396,39 @@ def test_classify_survivability_disk_fails_cylinder_passes() -> None:
     assert an.classify_survivability(peak_disk, 900.0e6, an.SIC_SPALL_LO).survives_compressive
 
 
+def test_back_face_spall_is_the_looser_gate_and_sic_binds_first() -> None:
+    """The Ti back-face sees the transmitted compression (`T = 1 + R = 1 - |R| ~ 0.85` of the peak)
+    reflected as tension at its free back surface, checked against Ti dynamic spall strength. At the
+    foreclosed f-max corner peak (~2 GPa) the brittle SiC interface reaches its 0.3 GPa spall limit
+    while the ductile Ti back-face tension (~1.7 GPa) stays under Ti's ~2.5 GPa — so the SiC always
+    spalls first, and the Ti back-face check is confirmatory, never controlling."""
+    peak = 2.0e9  # the foreclosed f-max corner incident stress (ADR-0011)
+    # The transmitted-into-Ti and reflected-into-SiC fractions split the peak: T + |R| = 1.
+    assert an.back_face_tensile(peak) + an.reflected_tensile(peak) == pytest.approx(peak)
+    assert an.back_face_tensile(peak) == pytest.approx(an.TI_TRANSMIT_FRAC * peak)
+    v = an.classify_survivability(peak, an.P_LIMIT_BASELINE)
+    assert v.back_face_tensile == pytest.approx(0.85 * peak)
+    assert not v.survives_spall  # 0.15*2e9 = 0.3 GPa reaches SIC_SPALL_LO
+    assert v.survives_back_spall  # 0.85*2e9 = 1.7 GPa < 2.5 GPa TI_SPALL_LO
+    # The SiC tension/strength ratio exceeds the Ti back-face's at every peak, so SiC binds first.
+    assert an.REFLECT_FRAC / an.SIC_SPALL_LO > an.TI_TRANSMIT_FRAC / an.TI_SPALL_LO
+
+
+def test_survivability_frontier_gates_ti_back_face_spall(tmp_path: Path) -> None:
+    """Ti back-face spall is a third survivability gate. A dilute cylinder that clears compression
+    and SiC spall at 16 km/s baseline still fails when the Ti spall strength is set stringently low,
+    proving the gate is wired into the baseline/relaxed verdicts."""
+    path = tmp_path / "geom.jsonl"
+    _write_jsonl(path, [_grow(0.0, 1.0, 0.5, 0.73)])
+    default = an.survivability_frontier(an.read_geometry(path), [(16_000.0, 0.63, 2.0)])[0]
+    assert default.survives_baseline  # clears compression, SiC spall, and (loose) Ti back-face
+    strict = an.survivability_frontier(
+        an.read_geometry(path), [(16_000.0, 0.63, 2.0)], ti_spall_strength=1.0e6
+    )[0]
+    assert not strict.survives_baseline and not strict.survives_relaxed  # failed on Ti back-face
+    assert strict.back_face_tensile == pytest.approx(an.TI_TRANSMIT_FRAC * strict.peak_compressive)
+
+
 def test_survivability_frontier_maps_sigma_and_classifies(tmp_path: Path) -> None:
     """Each geometry case is resolved to physical (rho, peak) via the Σ bridge at a velocity anchor
     and classified. At 16 km/s the disk (L/D=0.3) fails the 400 MPa baseline but clears the relaxed

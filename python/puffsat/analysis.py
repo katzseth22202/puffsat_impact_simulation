@@ -80,8 +80,10 @@ USEFUL_F_GATE = 0.8  # the useful-`f` gate (ADR-0009), marked on the figure
 # AV excluded — ADR-0010 correction: the earlier peak_wall_force-based ≈2.0 was the artificial-
 # viscosity spike) so the frontier inherits the kernel's measured number, not an assumed ideal.
 # The structural limits are the SiC+Ti facesheet's: a compressive `P_limit`
-# (the §5 band) and a reflected-tensile spall limit at the SiC-Ti interface (ADR-0011), where
-# `|R| ~ 0.15` of the incident compressive returns as tension.
+# (the §5 band), a reflected-tensile spall limit at the SiC-Ti interface (ADR-0011), where
+# `|R| ~ 0.15` of the incident compressive returns as tension, and a Ti back-face free-surface
+# spall limit (ADR-0011 amendment), where the compression transmitted through the SiC-Ti step
+# reflects off the solid Ti layer's back surface as tension.
 PULSE_MASS_KG = 25.0  # gas delivered per PuffSat (design §2)
 PLATE_RADIUS_M = 5.0  # plate radius R, fixed (design §2/§7)
 V_DIP = 11_000.0  # transitional worst-case velocity (~11 km/s, ADR-0012), paired with EEFF_DIP
@@ -90,6 +92,16 @@ P_LIMIT_HIGHV = (700.0e6, 900.0e6)  # relaxed limits swept at the 16 km/s anchor
 REFLECT_FRAC = 0.15  # |R| at the SiC-Ti impedance step -> reflected tensile fraction (ADR-0011)
 SIC_SPALL_LO = 0.3e9  # SiC dynamic spall strength, conservative end (ADR-0011)
 SIC_SPALL_HI = 1.0e9  # SiC dynamic spall strength, upper end
+# Ti back-face free-surface spall (ADR-0011 amendment). The compression transmitted through the
+# SiC-Ti step (stress convention `T = 1 + R = 1 - |R| ~ 0.85` of the incident) reaches the solid Ti
+# layer's back face and reflects there as tension (`R ~ -1`: a free — or, per ADR-0011's "no voids
+# behind the SiC" corollary, low-impedance-terminated — back surface), so the peak Ti back-face
+# tension is `~0.85*peak`. Checked against Ti dynamic spall strength (~2.5-4.5 GPa; ductile, ~8x the
+# brittle SiC), this gate is looser than the SiC-interface one and never controls the frontier — the
+# SiC spalls first despite seeing far less tension (0.15 vs 0.85 of the peak).
+TI_TRANSMIT_FRAC = 1.0 - REFLECT_FRAC  # compressive fraction transmitted into Ti (T = 1 + R)
+TI_SPALL_LO = 2.5e9  # Ti-6Al-4V / CP-Ti dynamic spall strength, conservative end
+TI_SPALL_HI = 4.5e9  # Ti dynamic spall strength, upper end
 
 # Physical ceiling for eta_capture: shallow-concave over-collimation reaches ~1.01 (Rung D-cc), so
 # anything past this is a solver blow-up (one M=40 case once returned 7.6), not physics. Shared by
@@ -592,8 +604,10 @@ class SurvivabilityVerdict:
 
     peak_compressive: float  # peak facesheet pressure (Pa)
     reflected_tensile: float  # reflected tension at the SiC-Ti interface (Pa)
+    back_face_tensile: float  # tension at the solid Ti layer's back face (Pa)
     survives_compressive: bool
-    survives_spall: bool
+    survives_spall: bool  # SiC-interface reflected-tensile spall (brittle, binds first)
+    survives_back_spall: bool  # Ti back-face free-surface spall (ductile, looser gate)
 
 
 def peak_facesheet_pressure(rho: float, v: float, c_stag: float) -> float:
@@ -681,17 +695,32 @@ def reflected_tensile(peak_compressive: float) -> float:
     return REFLECT_FRAC * peak_compressive
 
 
+def back_face_tensile(peak_compressive: float) -> float:
+    """The tension at the solid Ti layer's back face (ADR-0011 amendment): the compression
+    transmitted through the SiC-Ti step (`(1-|R|)·peak`, stress convention `T = 1 + R`) reflects at
+    the free / low-impedance-terminated back surface as tension of the same amplitude (`R ~ -1`)."""
+    return TI_TRANSMIT_FRAC * peak_compressive
+
+
 def classify_survivability(
-    peak_compressive: float, p_limit: float, spall_strength: float = SIC_SPALL_LO
+    peak_compressive: float,
+    p_limit: float,
+    spall_strength: float = SIC_SPALL_LO,
+    ti_spall_strength: float = TI_SPALL_LO,
 ) -> SurvivabilityVerdict:
-    """Classify a peak facesheet load against the two structural limits (ADR-0010/0011): the
-    compressive `p_limit` and the reflected-tensile SiC spall strength."""
+    """Classify a peak facesheet load against the structural limits (ADR-0010/0011): the compressive
+    `p_limit`, the reflected-tensile SiC spall strength at the SiC-Ti interface, and the Ti
+    back-face free-surface spall strength. The brittle SiC-interface spall binds first (low
+    strength); the ductile Ti back-face check is the looser confirmatory gate."""
     tensile = reflected_tensile(peak_compressive)
+    back_tensile = back_face_tensile(peak_compressive)
     return SurvivabilityVerdict(
         peak_compressive=peak_compressive,
         reflected_tensile=tensile,
+        back_face_tensile=back_tensile,
         survives_compressive=peak_compressive < p_limit,
         survives_spall=tensile < spall_strength,
+        survives_back_spall=back_tensile < ti_spall_strength,
     )
 
 
@@ -711,10 +740,11 @@ class SurvivabilityPoint:
     rho_impact: float
     focusing_factor: float  # concave local-peak concentration over the flat reference (Rung S)
     peak_compressive: float  # the plane-wave stagnation peak scaled by focusing_factor
-    reflected_tensile: float
+    reflected_tensile: float  # SiC-Ti interface reflected tension
+    back_face_tensile: float  # Ti back-face free-surface tension
     f: float
-    survives_baseline: bool  # peak < P_LIMIT_BASELINE (400 MPa) and spall OK
-    survives_relaxed: bool  # peak < max(P_LIMIT_HIGHV) (900 MPa) and spall OK
+    survives_baseline: bool  # peak < P_LIMIT_BASELINE (400 MPa) and both spall checks OK
+    survives_relaxed: bool  # peak < max(P_LIMIT_HIGHV) (900 MPa) and both spall checks OK
 
 
 def survivability_frontier(
@@ -724,6 +754,7 @@ def survivability_frontier(
     mass: float = PULSE_MASS_KG,
     plate_radius: float = PLATE_RADIUS_M,
     spall_strength: float = SIC_SPALL_LO,
+    ti_spall_strength: float = TI_SPALL_LO,
 ) -> list[SurvivabilityPoint]:
     """Resolve each geometry case to physical survivability at each `(v, e_eff, c_stag)` anchor: the
     Σ contract gives `rho`, the stagnation law the plane-wave peak, the concave focusing factor (the
@@ -743,8 +774,8 @@ def survivability_frontier(
             ref = flat_local.get((r.l_over_d, r.r_foot_over_r, r.mach))
             focusing = r.peak_local_pressure / ref if ref else 1.0
             peak = peak_facesheet_pressure(rho, v, c_stag) * focusing
-            base = classify_survivability(peak, P_LIMIT_BASELINE, spall_strength)
-            relaxed = classify_survivability(peak, relaxed_limit, spall_strength)
+            base = classify_survivability(peak, P_LIMIT_BASELINE, spall_strength, ti_spall_strength)
+            relaxed = classify_survivability(peak, relaxed_limit, spall_strength, ti_spall_strength)
             points.append(
                 SurvivabilityPoint(
                     d_over_d=r.d_over_d,
@@ -758,9 +789,14 @@ def survivability_frontier(
                     focusing_factor=focusing,
                     peak_compressive=peak,
                     reflected_tensile=base.reflected_tensile,
+                    back_face_tensile=base.back_face_tensile,
                     f=reconcile_f(r.eta_capture, e_eff),
-                    survives_baseline=base.survives_compressive and base.survives_spall,
-                    survives_relaxed=relaxed.survives_compressive and relaxed.survives_spall,
+                    survives_baseline=base.survives_compressive
+                    and base.survives_spall
+                    and base.survives_back_spall,
+                    survives_relaxed=relaxed.survives_compressive
+                    and relaxed.survives_spall
+                    and relaxed.survives_back_spall,
                 )
             )
     return points
