@@ -91,3 +91,9 @@ efficient in bending than solid Ti — may begin only *behind* that solid layer.
 does not change `f(v)` provided the body's first vibrational-mode period stays ≫ the pulse duration
 (rigid-wall). Vectran is thermally limited (polymer; keep cool, far from the hot face) and needs a
 cyclic-fatigue check over the mission pulse count.
+
+A higher-fidelity variant of this — interspersing the solid Ti with titanium-matrix-composite layers
+to scatter the pulse's high-frequency content and mitigate spall — is evaluated and **deferred** in
+ADR-0029: the scattering mechanism is sound, but the binding tension is at the SiC interface (not the
+Ti back face, which the amendment above shows has ample margin), and the make-or-break is multi-pulse
+durability, the same deferred cyclic-fatigue axis.
