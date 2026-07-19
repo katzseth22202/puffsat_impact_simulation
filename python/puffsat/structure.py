@@ -44,6 +44,7 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 
 from puffsat.analysis import (
+    AREAL_DENSITY,
     SIC_SPALL_LO,
     TI_SPALL_LO,
     _write_csv,
@@ -86,8 +87,8 @@ SIGMA_FIBER_ULT = 1.1e9  # Vectran ultimate tensile [Pa]
 SAFETY_FACTOR_FIBER = 2.0  # working allowable = ult / SF
 SIGMA_FIBER_WORKING = SIGMA_FIBER_ULT / SAFETY_FACTOR_FIBER
 
-# Plate areal mass [kg/m^2] for the dynamics (check 1): the design's baseline stack (design §2).
-AREAL_DENSITY = 45.0
+# Plate areal mass [kg/m^2] for the dynamics (check 1): the design's baseline stack (design §2),
+# imported from `puffsat.analysis` as the single source of truth (shared with the plate sizing).
 # Baseline areal mass WITHOUT the tensioned back-face (Ti faces + truss core + SiC facesheet), so
 # check 2 can add the *implied* back-face on top and compare the total to the <= 40 t ceiling.
 BASE_AREAL_NO_BACK = 2.0 * FACE_THICKNESS_M * RHO_TI + 8.0 + 4.0  # faces + truss core + SiC ~ 30

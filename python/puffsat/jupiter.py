@@ -33,6 +33,7 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 
 from puffsat.analysis import (
+    AREAL_DENSITY,
     ETA_PHYSICAL_MAX,
     P_LIMIT_BASELINE,
     P_LIMIT_HIGHV,
@@ -69,8 +70,8 @@ LENGTH_ANCHOR = 12.0
 # Plate radii [m] the frontier is resolved over (shared by the headline and freeze-bracket paths).
 RADII = [8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0]
 
-# Plate areal density [kg/m²]: baseline stack 3-4 t at R = 5 m (design §2) => 38-51; 45 central.
-AREAL_DENSITY = 45.0
+# Plate areal density [kg/m²]: baseline stack 3-4 t at R = 5 m (design §2) => 38-51 band; the
+# 45-central `AREAL_DENSITY` is imported from `puffsat.analysis` (single source of truth).
 AREAL_DENSITY_BAND = (38.0, 51.0)
 
 
@@ -414,7 +415,7 @@ def main() -> None:
                 f"(L/D={p.l_over_d:.1f}, rf/R={p.r_foot_over_r:.1f}, d/D={p.d_over_d:.2f})"
             )
 
-        mass_t = plate_mass(radius, 0.0) / 1000.0
+        mass_t = plate_mass(radius, 0.0, areal_density=AREAL_DENSITY) / 1000.0
         print(f"{radius:6.1f} {mass_t:9.1f} | {fmt(flat)} | {fmt(conc)}")
 
 

@@ -37,6 +37,7 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 
 from puffsat.analysis import (
+    AREAL_DENSITY,
     ETA_PHYSICAL_MAX,
     P_LIMIT_BASELINE,
     P_LIMIT_HIGHV,
@@ -76,9 +77,9 @@ V_ANCHORS = (16_000.0, 22_000.0, 28_000.0)
 # The opacity τ-check velocity [m/s] (design §12.1) — must match the Rust `HEAVY_TAU_V`.
 V_TAU_CHECK = 28_000.0
 
-# Plate areal density [kg/m²]: baseline stack 3-4 t at R = 5 m (design §2) ⇒ 38-51; 45 central. At
-# R = 15 m this is ~32 t flat (`45·π·15²`), inside the ≤ 40 t ceiling with margin.
-AREAL_DENSITY = 45.0
+# Plate areal density [kg/m²]: baseline stack 3-4 t at R = 5 m (design §2) ⇒ 38-51 band. At
+# R = 15 m the 45-central value is ~32 t flat (`45·π·15²`), inside the ≤ 40 t ceiling with margin.
+# The `AREAL_DENSITY` central value is imported from `puffsat.analysis` (single source of truth).
 AREAL_DENSITY_BAND = (38.0, 51.0)
 
 FLOAT_TOL = 1e-6  # grid-value match tolerance (the sweep writes exact round grid values)

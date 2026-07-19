@@ -86,6 +86,11 @@ USEFUL_F_GATE = 0.8  # the useful-`f` gate (ADR-0009), marked on the figure
 # reflects off the solid Ti layer's back surface as tension.
 PULSE_MASS_KG = 25.0  # gas delivered per PuffSat (design §2)
 PLATE_RADIUS_M = 5.0  # plate radius R, fixed (design §2/§7)
+# Baseline plate areal mass [kg/m²] — the design's central stack estimate (3-4 t at R = 5 m,
+# design §2). Single source of truth for `plate_mass`'s default and the
+# jupiter/heavyplate/structure special-scenario plate sizing (each imports this rather than
+# re-declaring 45.0).
+AREAL_DENSITY = 45.0
 V_DIP = 11_000.0  # transitional worst-case velocity (~11 km/s, ADR-0012), paired with EEFF_DIP
 P_LIMIT_BASELINE = 400.0e6  # conservative floor of the §5 SiC+Ti band (Pa)
 P_LIMIT_HIGHV = (700.0e6, 900.0e6)  # relaxed limits swept at the 16 km/s anchor (design §7)
@@ -652,11 +657,11 @@ def impact_density(
     return mass / (2.0 * math.pi * l_over_d * r_foot * r_foot * r_foot)
 
 
-def plate_mass(radius: float, d_over_d: float, areal_density: float = 45.0) -> float:
+def plate_mass(radius: float, d_over_d: float, areal_density: float = AREAL_DENSITY) -> float:
     """Plate mass [kg]: areal density x disk area, with the shallow dish's extra-area factor
     `1 + (2 d/D)²` (spherical-cap area `π(a² + d²)`, `d = (d/D)·2R`). `areal_density` defaults to
-    45 kg/m² — the baseline stack's central estimate (3-4 t at R = 5 m, design §2), shared by the
-    jupiter/heavyplate special-scenario plate sizing."""
+    [`AREAL_DENSITY`] (45 kg/m² — the baseline stack's central estimate, 3-4 t at R = 5 m,
+    design §2), shared by the jupiter/heavyplate special-scenario plate sizing."""
     return areal_density * math.pi * radius * radius * (1.0 + (2.0 * d_over_d) ** 2)
 
 
