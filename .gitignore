@@ -24,6 +24,14 @@ target
 .claude/skills/
 .claude/settings.local.json
 
+# Codex: keep shared project config checked in; ignore per-user/runtime state
+.codex/.env
+.codex/*.local.toml
+.codex/log/
+.codex/logs/
+.codex/sessions/
+.codex/tmp/
+
 # macOS Finder metadata
 .DS_Store
 
