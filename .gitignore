@@ -20,8 +20,9 @@ target
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# Claude Code local configuration (not checked in)
-.claude/
+# Claude Code: ignore only per-user / vendored bits; shared config is checked in
+.claude/skills/
+.claude/settings.local.json
 
 # macOS Finder metadata
 .DS_Store
