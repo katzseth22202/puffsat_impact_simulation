@@ -93,6 +93,14 @@ pub struct BounceResult {
     /// stagnation pressure `≈ (γ_eff+1)/2 · ρv²` (≈1.1·ρv² for the water EOS at 11–16 km/s) —
     /// the correct facesheet survivability load (ADR-0010 correction).
     pub peak_wall_pressure: f64,
+    /// Peak temperature of the wall-adjacent gas cell over the bounce [K] — the plate-facing
+    /// reflected-shock stagnation temperature that sets the ablation/thermal load on the facesheet.
+    /// Read as the EOS state `T(ρ₀, e₀)` of the wall cell (the same inversion the radiation coupling
+    /// uses), so — like [`Self::peak_wall_pressure`] — it excludes the artificial-viscosity stress
+    /// term and converges under grid refinement. Runs hotter than the mass-weighted mean-freeze
+    /// temperature, since the wall cell is doubly shocked. `0` on the stick and frozen-rebound paths
+    /// (not tracked there).
+    pub peak_wall_temperature: f64,
 }
 
 /// A 1D Lagrangian gas column on a staggered mesh, carrying its equation of state `E`.
@@ -124,6 +132,8 @@ trait BounceStepper {
     fn wall_force(&self) -> f64;
     /// Physical wall pressure this instant (excludes artificial viscosity).
     fn wall_pressure(&self) -> f64;
+    /// Temperature of the wall-adjacent gas cell this instant [K] (the plate-facing gas).
+    fn wall_temperature(&self) -> f64;
     /// CFL-stable timestep for the current state.
     fn stable_dt(&self) -> f64;
     /// Total gas momentum (signed).
@@ -140,6 +150,7 @@ trait BounceStepper {
         let mut wall_impulse = 0.0;
         let mut peak: f64 = 0.0;
         let mut peak_pressure: f64 = 0.0;
+        let mut peak_temperature: f64 = 0.0;
         let mut past_peak = false;
         let mut force_old = self.wall_force();
         let max_steps = 400 * self.cells() + 10_000;
@@ -147,6 +158,7 @@ trait BounceStepper {
         for _ in 0..max_steps {
             peak = peak.max(force_old);
             peak_pressure = peak_pressure.max(self.wall_pressure());
+            peak_temperature = peak_temperature.max(self.wall_temperature());
             if force_old < 0.5 * peak {
                 past_peak = true;
             }
@@ -167,6 +179,7 @@ trait BounceStepper {
             e_eff: wall_impulse / incident - 1.0,
             peak_wall_force: peak,
             peak_wall_pressure: peak_pressure,
+            peak_wall_temperature: peak_temperature,
         }
     }
 }
@@ -324,6 +337,14 @@ impl<E: Eos> Tube<E> {
         } else {
             0.0
         }
+    }
+
+    /// Temperature of the wall-adjacent gas cell (cell 0) [K] — the gas in contact with the plate.
+    /// This is the plate-facing stagnation temperature the facesheet sees; its peak over the bounce
+    /// is the ablation-relevant thermal load (survivability companion to [`Self::wall_pressure`]).
+    #[must_use]
+    pub fn wall_temperature(&self) -> f64 {
+        self.eos.temperature(self.density(0), self.energy[0])
     }
 
     /// Cell-centered velocity (average of the two bounding node velocities).
@@ -576,6 +597,7 @@ impl<E: Eos> Tube<E> {
                     e_eff: wall_impulse / incident - 1.0,
                     peak_wall_force: peak,
                     peak_wall_pressure: peak_pressure,
+                    peak_wall_temperature: 0.0, // not tracked on the stick path
                 };
             }
 
@@ -593,6 +615,7 @@ impl<E: Eos> Tube<E> {
             e_eff: wall_impulse / incident - 1.0,
             peak_wall_force: peak,
             peak_wall_pressure: peak_pressure,
+            peak_wall_temperature: 0.0, // not tracked on the stick path
         }
     }
 }
@@ -603,6 +626,9 @@ impl<E: Eos> BounceStepper for Tube<E> {
     }
     fn wall_pressure(&self) -> f64 {
         Tube::wall_pressure(self)
+    }
+    fn wall_temperature(&self) -> f64 {
+        Tube::wall_temperature(self)
     }
     fn stable_dt(&self) -> f64 {
         Tube::stable_dt(self)
@@ -945,6 +971,7 @@ impl Tube<TableEos> {
                 e_eff: wall_impulse / incident - 1.0,
                 peak_wall_force: peak,
                 peak_wall_pressure: peak_pressure,
+                peak_wall_temperature: 0.0, // not tracked on the frozen-rebound path
             },
             rho_star,
             t_star,
@@ -1106,6 +1133,9 @@ impl BounceStepper for CoupledBounce {
     fn wall_pressure(&self) -> f64 {
         self.tube.wall_pressure()
     }
+    fn wall_temperature(&self) -> f64 {
+        self.tube.wall_temperature()
+    }
     fn stable_dt(&self) -> f64 {
         self.tube.stable_dt()
     }
@@ -1259,6 +1289,9 @@ impl BounceStepper for CondensingBounce {
     }
     fn wall_pressure(&self) -> f64 {
         self.tube.wall_pressure()
+    }
+    fn wall_temperature(&self) -> f64 {
+        self.tube.wall_temperature()
     }
     fn stable_dt(&self) -> f64 {
         self.tube.stable_dt()
@@ -1566,6 +1599,9 @@ impl BounceStepper for AblatingBounce {
     }
     fn wall_pressure(&self) -> f64 {
         self.tube.wall_pressure()
+    }
+    fn wall_temperature(&self) -> f64 {
+        self.tube.wall_temperature()
     }
     fn stable_dt(&self) -> f64 {
         self.tube.stable_dt()
