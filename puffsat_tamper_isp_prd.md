@@ -31,9 +31,11 @@ glossary of named concepts, and [`CONTEXT.md`](CONTEXT.md) holds the canonical p
 debit, and useful ejecta also leaves travelling `−z`; impulse `J` is counted positive in `+z`.
 This is the origin of the `−1` in every impulse law (§2.1).
 
-**Normalisation.** `J`, `β`, `k`, `K` and the ceiling are *per projectile kg* unless stated;
-`m_charged`, `E` and the per-pulse figures in §4 are *per pulse*. The two are interchangeable
-for Isp, since numerator and denominator both scale with `m_i`.
+**Normalisation.** `β`, `k`, and `K` are dimensionless. When `J` or the ceiling is written
+*per projectile kg*, that means `J/m_i`, with units `N·s/kg = m/s`; recover the per-pulse
+impulse by multiplying by `m_i`. `m_charged`, `E`, and the figures in §4 are per pulse unless
+stated otherwise. The two normalisations are interchangeable for Isp, since its numerator and
+denominator both scale with `m_i`.
 
 ### 0.1 Masses, mass ratios, and the deliverables
 
@@ -63,12 +65,12 @@ for Isp, since numerator and denominator both scale with `m_i`.
 | `c_s` | sound speed | ≈9.8 km/s in the fireball |
 | `M` | Mach number | ≈2.5 terminal, at the transport hand-off (§7.1) |
 | `Δv` | velocity increment — the vehicle's per pulse (§4.1); the *tamper's* in the recoil clock `σ_t·Δv/P` (§6.3) | 1.69 m/s per pulse |
-| `J` | **axial impulse delivered to the vehicle**, positive in `+z`, `J = β·m_i·w` | 1.69×10⁶ N·s per 200 kg pulse |
+| `J` | **net axial impulse delivered to the vehicle**, positive in `+z` and including the incoming projectile's `−m_i·w` momentum debit; `J = β·m_i·w` | 1.69×10⁶ N·s per 200 kg pulse |
 | `P_ejecta`, `M_ej = m_i(1+K)` | total axial momentum and total mass of the ejecta (§3.2) | — |
 | `J_max = w(√(1+K) − 1)` | **the ceiling** — Cauchy–Schwarz bound on `J` per projectile kg (§3.2) | — |
 | `v_e,max = J_max/K` | exhaust velocity at the ceiling | — |
-| `β` | **axial impulse per projectile kg in units of `w`.** `β_bare`, `β_tamp` are the ballistic closed forms; `β_ideal = √(1+k) − 1` | `β_bare(7.06)` = 0.9087, `β_bare(14.12)` = 1.6835 |
-| **projectile economy** | `β·w` — impulse per projectile kg, the second reported metric (§3.1) | — |
+| `β = J/(m_i·w)` | **dimensionless net-vehicle-impulse coefficient**: net vehicle impulse divided by the magnitude of the incoming projectile momentum. It includes the projectile momentum debit. `β·w = J/m_i` has velocity units but is not the speed or velocity increment of any material or body. `β_bare`, `β_tamp` are the ballistic closed forms; `β_ideal = √(1+k) − 1` | `β_bare(7.06)` = 0.9087, `β_bare(14.12)` = 1.6835 |
+| **projectile economy** | `β·w = J/m_i` — net vehicle impulse per projectile mass, the second reported metric (§3.1); a velocity-equivalent impulse normalisation, not a physical velocity | — |
 | `E` | pulse kinetic energy `½m_i w²`; `E/J = w/(2β)` is energy per unit impulse (§3.5) | 69.8 GJ (`τ` = 0) / 37.2 GJ (`τ` = 1) |
 
 ### 0.3 Geometry
@@ -303,9 +305,11 @@ constructed. Both are reported as curves:
 | metric | definition | meaning |
 |---|---|---|
 | **Effective Isp** | `J / (g₀ · m_charged)` | carried-mass economy — the rocket-equation currency |
-| **Projectile economy** | `β · w`, i.e. `J / m_projectile` | infrastructure throughput per unit impulse |
+| **Projectile economy** | `β · w = J / m_projectile` | net vehicle impulse per projectile mass; a velocity-equivalent metric, not a physical velocity |
 
-`β` already appears throughout §3.4; naming it as the second metric is the only change.
+Here `β = J/(m_projectile·w)` is dimensionless and `J` is the net vehicle impulse after
+subtracting the incoming projectile momentum debit. Naming `β·w` as the second metric is the
+only change.
 
 **What stays out of scope is only the exchange rate** between projectile consumption and
 delivered payload — that needs program economics this study does not have. The mass ratio
@@ -359,7 +363,9 @@ entropy/thermal budget and its centre-of-mass momentum, not its reflected-speed 
 
 ### 3.4 The number to beat
 
-At `w = 75 km/s`, `k = 7.06`. `β` is axial impulse per projectile kg in units of `w`;
+At `w = 75 km/s`, `k = 7.06`. `β = J/(m_i·w)` is the dimensionless net-vehicle-impulse
+coefficient, including the incoming projectile momentum debit. Thus `β·w = J/m_i` is a
+velocity-equivalent impulse per projectile mass, **not a physical axial velocity**;
 `β_bare` and `β_tamp` are the ballistic closed forms from prior work, re-verified here
 (`β_bare(7.06) = 0.90871`, `β_bare(14.12) = 1.68353`):
 
@@ -1389,9 +1395,10 @@ here are the load-bearing ones, quoted so this table stands alone.
 | **`τ`** | Tamper mass per slug kg. |
 | **`K = k(1+τ)`** | Total *carried* mass per projectile kg — the only quantity the ceiling depends on. |
 | **`w`** | Closing speed, 75 km/s. |
+| **`β = J/(m_i·w)`** | Dimensionless net-vehicle-impulse coefficient, including the incoming projectile momentum debit. `β·w` has velocity units but is not a physical velocity. |
 | **Capture fraction** | `(1 − 1/√k)/2` — share of an isotropic fireball that outruns its own recoil. Zero at `k ≤ 1`. |
 | **Realization fraction** | Delivered impulse / `w(√(1+K) − 1)`. **The deliverable.** Must exceed 62.9% at τ = 1 for the tamper to pay. |
-| **Projectile economy** | Impulse per projectile kg, `β·w`. The second reported metric, alongside effective Isp. Not combined with it — see §3.1. |
+| **Projectile economy** | Net vehicle impulse per projectile mass, `β·w = J/m_i`. A velocity-equivalent metric, not a physical velocity. Reported alongside effective Isp and not combined with it — see §3.1. |
 | **Arm D / Arm B** | Filled-interlayer configuration (the design) / vacuum-gap configuration (provisionally foreclosed, retained as a control). |
 | **Transit ratio `Θ`** | Slug disassembly time / tamper shock-transit time. Must exceed ~3 for the tamper to function. |
 | **Arrival window** | Duration over which fireball material reaches the plate, set by its velocity dispersion. ~750 µs here. |

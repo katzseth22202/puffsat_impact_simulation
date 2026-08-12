@@ -122,8 +122,11 @@ _Avoid_: tamper multiplier, `Λ` (a ratio of two realized numbers, which hides t
 miscounts recoil as loss — ADR-0030)
 
 **Projectile economy**:
-Axial impulse per **projectile** kg, `β·w` — the infrastructure-throughput counterpart to
-effective Isp's carried-mass economy. Reported beside Isp, never combined with it: converting
-projectiles to payload-equivalent needs program economics this repository does not model.
+Net axial vehicle impulse per **projectile** kg, `β·w = J/m_i`, where
+`β = J/(m_i·w)` is dimensionless and `J` includes the incoming projectile momentum debit.
+`β·w` has velocity units but is an impulse-per-mass normalisation, not the velocity of any
+material or body. It is the infrastructure-throughput counterpart to effective Isp's
+carried-mass economy. Reported beside Isp, never combined with it: converting projectiles to
+payload-equivalent needs program economics this repository does not model.
 _Avoid_: two-currency ledger (jargon, and it implied a combined figure of merit that is not
 constructed)
