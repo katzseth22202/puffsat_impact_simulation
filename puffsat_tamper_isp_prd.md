@@ -172,7 +172,10 @@ because they are conventional, but this table makes their scopes explicit:
 
 | symbol | meanings | how to tell them apart |
 |---|---|---|
-| `τ_t`, `τ_opt` | tamper ratio / optical depth | always keep the subscript |
+| `τ_t`, `τ_opt`, `τ_line` | tamper ratio / gray optical depth at the plate / alkali resonance-line optical depth | always keep the subscript |
+| `β`, `β_plasma` | net-vehicle-impulse coefficient / plasma-to-magnetic pressure ratio | **bare `β` is always the impulse coefficient**; the plasma ratio is never abbreviated |
+| `μ`, `μ₀` | interlayer ratio / permeability of free space | the constant always carries its zero |
+| `σ`, `σ_e`, `σ_SB` | areal density / electrical conductivity / Stefan–Boltzmann constant | conductivity always carries its `e` |
 | `k`, `k_cond`, `k_RT` | slug ratio / thermal conductivity / RT wavenumber | always keep the subscript outside the slug ratio |
 | `α_abl`, `α_th`, `α_mix`, `α` in P-α | ablation exponent / thermal diffusivity / RT mix coefficient / porous distension | the compaction-model name retains its literature notation |
 | `σ`, `σ_SB` | areal density / Stefan–Boltzmann constant | always keep `SB` on the constant |
@@ -186,6 +189,28 @@ because they are conventional, but this table makes their scopes explicit:
 
 For example, §6.5.2 writes the heat-balance expression unambiguously as
 `k_cond·ΔT·√(t/(π α_th))` against `2σ_SB T⁴`.
+
+### 0.9 Magnetic-nozzle symbols
+
+These belong to the magnetic arms (§4.2, §6.9, Rung 1A) and appear nowhere else in this
+document. Three of them collide with load-bearing symbols above and are listed in §0.8.
+
+| symbol | meaning | reference |
+|---|---|---|
+| `B` | magnetic flux density | 0.8–9 T, depending on interaction radius (§6.9) |
+| `μ₀` | permeability of free space, 4π×10⁻⁷ H/m. *Not the interlayer ratio `μ`* | — |
+| `β_plasma = p/(B²/2μ₀)` | **plasma beta** — plasma pressure over magnetic pressure. The field controls the flow only where `β_plasma ≲ 1`. **Never written bare `β`**, which is the impulse coefficient of §0.2 | screening gate at 1 |
+| `σ_e` | electrical conductivity. *Not the areal density `σ`* | 10⁰–10³ S/m seeded (§6.9) |
+| `n_e` | electron number density | 10¹⁸–10²¹ m⁻³ |
+| `Rm = μ₀·σ_e·L·v` | **magnetic Reynolds number** — the field is frozen into the flow where `Rm ≫ 1` | screening gate at 1 |
+| `L` | characteristic interaction length in `Rm` | ~10 m |
+| `r_L` | ion Larmor radius | 3.3 mm for O⁺ at 20 km/s in 1 T — never binding |
+| `E_mag` | stored magnetic-field energy; `E_mag = M_ej·u²` exactly (§6.9). Distinct from projectile energy `E` | 138 GJ at `k` = 6, 200 kg encounter |
+| `m_coil` | coil, structure, and radiation-shield mass. **Permanent dry structure, so not charged in Isp** (§0.1, §3.1) — but paid through the vehicle mass ratio | — |
+| `χ_i` | first ionisation potential of the seed | 4.34 eV (K) / 5.14 eV (Na) vs 13.6 eV (H, O) |
+| `y_seed` | alkali seed mass fraction of carried mass. Expended, so it **is** charged in Isp | swept 1–2 wt% = 0.5–1.6 mol% |
+| `r_β`, `r_σ` | the inner radius beyond which `β_plasma < 1`, and the outer radius within which `Rm > 1`. **The nozzle exists only if `r_β < r_σ`** | the Rung 1A gate (§6.9) |
+| `τ_line = n_neutral·σ₀·r` | alkali resonance-line optical depth, with `n_neutral` the ground-state neutral seed density (`n_Na`, `n_K`) and `σ₀` the line-centre absorption cross-section. Distinct from `τ_opt` and `τ_t` | `τ_line` 10⁶–10⁹, `σ₀` ≈ 4×10⁻¹⁶ m² (§6.9) |
 
 ---
 
@@ -326,6 +351,16 @@ Pass 1 preserves the no-ablator convention used by prior work. Its bare and no-i
 reference cases are therefore directly comparable; filled Arm D additionally charges its
 interlayer. **No Pass-1 Isp may be quoted without the upper-bound label**, since the ablator's
 share is currently unbounded between ~2% and ~60%.
+
+**The magnetic arms split the denominator differently** (§4.2, §6.9, Rung 1A). The alkali seed is
+expended carried mass and **is** charged, at `y_seed` = 1–2 wt% of carried mass. The coil, its
+structure, and its radiation shield are permanent dry structure and are **not** charged — but
+they are not free either: they are paid through the vehicle mass ratio rather than through Isp.
+Those arms are therefore reported as **Isp plus an explicit dry-mass penalty**, because a coil
+that doubles vehicle dry mass can lose the mission while winning on Isp, and an Isp figure alone
+would hide that. A pure magnetic arm provisionally carries no ablator at all, which would make
+Pass 1 and Pass 2 coincide for it; whether a *hybrid* still needs one for the unmagnetised
+neutral flux is a Rung 1A-ii output, not an assumption.
 
 The distinction between `K`, `K_ej`, and `C` matters only when the interlayer or ablator is
 present: `K` inventories the mass in the near-field hydrodynamics, `K_ej` inventories the
@@ -694,6 +729,28 @@ survives only as a control case.
   against the §3.3 design objective); and Rayleigh–Taylor **disrupts its tamper completely**
   before the tamper finishes its job (§6.7). It is retained as a control — a code that does
   not reproduce that disruption is not to be trusted on Arm D either.
+
+**Two further arms replace the plate with a magnetic nozzle** (§6.9, Rung 1A). Both are
+alkali-seeded at `y_seed` = 1–2 wt%, carry no tamper and no interlayer, and provisionally carry
+no ablator. They exist because §3.6 shows the dominant loss — 70% of the fireball never reaching
+the plate — is a limit of the *plate*, not of the physics.
+
+- **Arm M1 — magnetic, ice only.** A solid seeded ice slug, thermalised by the projectile and
+  expanded straight into the field. Projectile and slug are one material at one density, so
+  **initial mixing is the least uncertain of any arm** — but the initial volume is the smallest,
+  so the plasma starts densest and `r_β` sits furthest out.
+- **Arm M2 — magnetic, snow-backed.** A dense ice anvil sized to stop the projectile (§6.2),
+  backed by seeded snow. The larger initial volume moves `r_β` inward, and the anvil resolves the
+  standing §6.1/§6.2 conflict — dense enough to stop the projectile, low enough in *mean* density
+  for a long disassembly time. Its cost is that the anvil drives a strong shock into the snow,
+  the largest entropy source available (§3.3), and whether the snow is swept into a coherent
+  shell or left as a cold spectator is exactly the mixing question Arm M1 avoids.
+
+Both are analysed **without a backstop first (Rung 1A-i) and only then in hybrid with a physical
+plate (Rung 1A-ii)** — the pure case produces the unmagnetised fraction that is the hybrid's
+whole premise, so it comes first (§6.9). The anvil geometry is not automatic: a `κ = 1` ice anvil
+is only ~0.15 m in radius, ~280 kg/m² of column against a 0.2 m rod's 421 kg/m², so it must be
+pancaked rather than spherical to stop the projectile at all (§6.2).
 
 ---
 
@@ -1176,6 +1233,147 @@ the uncertainty budget (§13.1), where this is the top-ranked Pass-1 contributor
 - **Vertex hole leakage.** 0.03% of plate area. Aiming tolerance is a separate problem and
   is out of scope here.
 
+### 6.9 The magnetic nozzle — two criteria that fight, and the window between them
+
+§3.6 shows the dominant loss is that ~70% of the fireball never reaches the plate. **That is a
+*plate* limit, not a physics limit** — a plate can only act on what flies into it, while a field
+can act on the whole expansion. This is the obvious question to ask of this architecture, so it
+gets an explicit screen rather than an assumption (Rung 1A).
+
+**It cannot beat the ceiling.** `v_e,max = w(√(1+K_ej)−1)/K_ej` is mechanism-independent, so at
+`k` = 6 a perfect magnetic nozzle buys 979 → 2098 s and no more, ~2.1×.
+
+**The larger prize is low `k`, which a plate cannot use at all.** Ballistic capture is *zero*
+below `k` = 1 (§0.1), while the ceiling *rises* as `k` falls — 3168 s at `k` = 1, with supremum
+`w/2` = 37.5 km/s, 3824 s. Against that, `β_ideal` collapses, so projectile consumption and
+plate heat load per unit impulse rise together (§3.5). This is the trade the study reports
+rather than prices, and the magnetic arms sit at the opposite end of it from the plate arms.
+
+**Two criteria, opposite in radius.**
+
+- **Control** — `β_plasma ≲ 1`, i.e. `B²/2μ₀ ≳ ρu²`. Free expansion gives `ρ ∝ r⁻³`, so this
+  gets *easier* outward, defining an inner radius `r_β`.
+- **Coupling** — `Rm = μ₀σ_e L v ≫ 1`. The plasma cools and recombines as it expands, so this
+  gets *harder* outward, defining an outer radius `r_σ`.
+
+**The nozzle exists only where `r_β < r_σ`.** Neither bound is currently known, and that single
+inequality is what Rung 1A is for. Screening field strengths, free expansion at `k` = 6:
+
+| `r` | `ρ` | `p = ρu²` | `B` required |
+|---|---|---|---|
+| 3 m | 1.8 kg/m³ | 1.2 GPa | 55 T |
+| 10 m | 4.8×10⁻² | 33 MPa | 9.1 T |
+| 30 m | 1.8×10⁻³ | 1.2 MPa | 1.8 T |
+| 50 m | 3.8×10⁻⁴ | 0.26 MPa | 0.8 T |
+
+**The stored-energy law is exact and scale-free.** Since `E_mag = (B²/2μ₀)·(4/3)πr³` and
+`B²/2μ₀ = ρu²` with `ρ = M_ej/V`:
+
+```
+E_mag = M_ej·u²                    independent of r
+E_mag / E        = 2k/(1+k)         E = incoming projectile energy, §0.2
+E_mag = m_enc·w²·k/(1+k)²          linear in encounter mass
+```
+
+| `k` | `E_mag/E` | `E_mag` (200 kg) | virial coil mass @1 MJ/kg / @0.3 MJ/kg | ceiling Isp |
+|---|---|---|---|---|
+| 1 | 1.00 | 84 GJ | 84 t / 281 t | 3168 s |
+| 2 | 1.33 | 250 GJ | 250 t / 833 t | 2799 s |
+| 6 | 1.71 | 138 GJ | 138 t / 459 t | 2098 s |
+| 7.06 | 1.75 | 122 GJ | 122 t / 408 t | 1992 s |
+
+Three consequences, and two of them reverse decisions taken for the plate:
+
+1. **Full-solid-angle confinement is probably unaffordable.** 138 GJ at the reference point is
+   a 138–459 t coil against a 1000 t vehicle. So Rung 1A's real question is not "does a nozzle
+   work" but **how much less than `β_plasma < 1` everywhere buys how much of the prize.**
+2. **Lower `k` is doubly favoured** — cheaper field *and* higher ceiling. The magnetic arms'
+   optimum should therefore sit *below* the ballistic 7.06, and `k` = 6 is a starting point to
+   sweep downward from, not a design point.
+3. **It inverts the encounter-mass optimum.** `E_mag` is linear in `m_enc` (138 GJ at 200 kg,
+   34 GJ at 50 kg), so **smaller, more frequent encounters cut coil mass proportionally**.
+   §6.5.1 concludes the opposite — larger, rarer encounters — but that rests entirely on
+   sub-linear *ablation*, which a magnetic nozzle does not have. The two architectures want
+   opposite ends of the §4.1 cadence trade, which is now a real design fork rather than a free one.
+
+**Magnetisation is never the issue.** The O⁺ Larmor radius at 20 km/s in 1 T is 3.3 mm against a
+10 m system. What fails is conductivity, not gyration.
+
+**Alkali seeding is what holds the outer edge open, and it is standard practice** — MHD
+generators seed K or Cs at ~1 mol% for exactly this reason. At `y_seed` = 1–2 wt% of carried
+mass that is 0.5–1.6 mol%, in the same band. With `χ_i` = 4.34 eV (K) / 5.14 eV (Na) against
+13.6 eV for H and O, the seed stays ionised through the range where water has recombined
+(`ρ` = 10⁻² kg/m³, `L` = 10 m, `v` = 20 km/s, 1 wt%):
+
+| `T` | Na ionised | K ionised | `n_e` (K) | `σ_e` (K) | `Rm` (K) |
+|---|---|---|---|---|---|
+| 2000 K | 1.0×10⁻⁴ | 1.3×10⁻³ | 2.0×10¹⁸ | 2 S/m | **0.5 — dead** |
+| 2500 K | 2.3×10⁻³ | 1.9×10⁻² | 2.9×10¹⁹ | 26 S/m | 6.5 |
+| 3000 K | 1.9×10⁻² | 1.1×10⁻¹ | 1.7×10²⁰ | 138 S/m | 35 |
+| 4000 K | 2.4×10⁻¹ | 6.7×10⁻¹ | 1.0×10²¹ | 736 S/m | 185 |
+
+The window closes hard below ~2500 K, and **potassium is ~40× more ionised than sodium there**,
+so K buys a materially colder outer edge. Sodium is easier to handle. The choice is a Rung 1A
+output, not a prior.
+
+**Frozen recombination flips sign here.** §13.1 ranks it the #2 uncertainty because the frozen
+branch *loses* the ~40 eV/molecule locked in ionisation, lowering realised impulse. For a
+magnetic nozzle that same branch **keeps the plasma conducting** and holds `r_σ` open; the
+equilibrium branch instead returns the energy and holds a warm plateau, which also helps but by
+the opposite mechanism. Both ends of the existing bracket must be run, and **neither end is
+obviously the pessimistic one** — a rare case in this document.
+
+**Alkali radiation: thick on this screen, but it must be computed.** The property that makes an
+alkali a good seed — a loosely bound valence electron — is the property that makes it a strong
+resonance radiator (Na D at 589 nm, K at 766/770 nm). Line-centre optical depth
+`τ_line = n_neutral·σ₀·r` — `n_neutral` the ground-state neutral seed density, `σ₀` the
+line-centre absorption cross-section, oscillator strength 0.65, Doppler core:
+
+| `r` | `n_Na` | `σ₀` | `τ_line` |
+|---|---|---|---|
+| 3 m | 4.6×10²³ m⁻³ | 3.9×10⁻¹⁶ m² | 5×10⁸ |
+| 10 m | 1.3×10²² | 3.9×10⁻¹⁶ | 5×10⁷ |
+| 30 m | 4.6×10²⁰ | 4.3×10⁻¹⁶ | 6×10⁶ |
+| 100 m | 1.3×10¹⁹ | 4.8×10⁻¹⁶ | 6×10⁵ |
+
+**Thick by five to nine orders throughout the nozzle region**, so escape is wing-limited rather
+than free, and a thick-line surface loss over ~100 Doppler widths is ~3 kW/m² at 4 kK and
+~370 kW/m² at 15 kK against a plume flux of order 10⁷ kW/m². **On this screen seeded radiation
+is negligible.** It is still a required calculation, for one reason: the loss matters exactly
+where the lines go thin, which is the cool low-density outer plume — the same region where `r_σ`
+is decided. *A channel that is negligible in the core and decisive at the edge cannot be
+screened by a core estimate.* Real tabulated alkali opacity is required here on the same grounds
+as §5.3.
+
+**Survivability is a different problem from the plate's, not an easier one.**
+
+- **Neutrals are not deflected at all.** Whatever fraction is un-ionised flies straight through
+  the field. That fraction is the magnetic nozzle's own version of the capture problem, and it
+  sets what a physical backstop still has to catch.
+- **The coil cannot ablate.** A pusher plate survives by losing mass (§6.5); a superconducting
+  coil quenches. It needs a radiation shield with its own thermal path, and the shield is dry mass.
+- **Interchange/RT at the field–plasma interface** — §6.7's configuration exactly (light fluid
+  accelerating heavy), except the field has **zero areal density**, the most adverse point of the
+  `σ` trade. Whatever bound Rung 2 develops applies here in its worst case.
+- **Detachment.** Field lines close on the coil, so plasma that follows them faithfully returns
+  and cancels its own impulse. This is the standard unsolved magnetic-nozzle problem and it is a
+  first-order efficiency term, not a detail.
+
+**Which is the argument for a hybrid.** A ring coil at the plate rim with a physical plate behind
+it pairs naturally: the field turns the ionised fraction over the whole solid angle, and the
+plate catches the neutrals and anything that breaks through. The plate then sees a much reduced
+flux, so the ablator term — the study's largest denominator uncertainty (§6.5) — shrinks with it.
+The failure mode is that they fight: a field that steers plasma *away* from the plate subtracts
+plate impulse while adding its own, and only a coupled calculation gives the net. **Magnetic,
+physical, and hybrid are three configurations, not two.**
+
+**The pure magnetic nozzle is analysed before the hybrid** (Rung 1A-i then 1A-ii). The pure case
+is the clean question — can a field control this plasma at all — and it produces the unmagnetised
+fraction that is the hybrid's entire premise, so the hybrid is not well posed before it. The
+routing is asymmetric: a closed window kills both, because the field either couples or it does
+not; but a field that couples yet covers too little mass is the case the hybrid exists to rescue,
+so that outcome opens Rung 1A-ii instead of closing it.
+
 ---
 
 ## 7. Modelling requirements
@@ -1213,8 +1411,12 @@ sweep. The pipeline is therefore staged, with a control-surface hand-off:
 - **Tier 2 — add radiation transport.** Required at the plate, where `τ_opt` straddles 1 (§5.3)
   and where the thermal load is the binding constraint. Flux-limited diffusion with
   Rosseland means in the diffusion coefficient and Planck means in the emission source.
+- **Tier 3 — MHD, for the magnetic arms only (§6.9, Rung 1A).** Resistive MHD with a seeded
+  Saha/conductivity closure and alkali line opacity. Required there and **not** required for any
+  plate arm.
 - **Explicitly not required:** material strength (everything is far past melt on µs
-  timescales), chemistry beyond dissociation/ionisation, gravity, MHD.
+  timescales), chemistry beyond dissociation/ionisation, gravity, and — *for the plate arms* —
+  MHD.
 
 **Geometry:** 2-D axisymmetric `(r, z)` is required for resolved projectile penetration,
 jetting, angular tamper coverage, and plate transport. Spherical 1-D is a prescribed-deposition,
@@ -1390,6 +1592,12 @@ run that produces the acceleration history it needs — and the ablator is last.
 result with analytic capture geometry and an RT bound. It may foreclose a clearly poor design,
 but cannot establish a positive final verdict before 2-D resolves deposition and angular flow.
 
+**Rung 1A is a branch, not a step in that line.** It screens whether the plate should be replaced
+or supplemented by a magnetic nozzle, in two ordered phases — **1A-i pure magnetic, then 1A-ii
+hybrid**. It runs on Rung 1's output and costs no 2-D work, and it sits here rather than later
+because a positive result changes the architecture that Rungs 3–6 would otherwise be optimising.
+Rungs 2–6 proceed on the plate arms regardless of its outcome.
+
 ### Rung 0 — the analytic reference ledger (no kernel work)
 
 A single cold-path calculator that owns **every closed-form number this document quotes**, so
@@ -1456,6 +1664,96 @@ This does not make an axial projectile spherical or permit 1-D to resolve penetr
 - [ ] **Gate:** compare each candidate's `β/C` with the appropriate bare and same-charged-mass
       extra-slug references. If its bracket cannot approach either break-even frontier, the
       tamper is dead and the remaining rungs are descoped to a bare-plate Isp confirmation.
+
+### Rung 1A — magnetic-nozzle feasibility screen
+
+**Why here.** It needs Rung 1's material model and expansion history and nothing else; it is a
+cold-path calculation plus one 1-D trajectory; and if the window is shut it shuts before any 2-D
+work is bought. If it is open it changes the architecture, so it cannot wait until after the
+plate rungs. §3.6 makes this unavoidable: the dominant loss is a *plate* limit, and the obvious
+question is why not remove the plate.
+
+**Ordering: the pure magnetic nozzle is analysed first, the hybrid second.** The pure case asks
+whether a field can control this plasma at all, and it *produces* the quantity the hybrid is
+built around — the unmagnetised fraction a backstop would have to catch. The hybrid is not well
+posed until that number exists. Note the gate logic is asymmetric: a pure case that fails on the
+**window** (`r_β > r_σ`) fails for the hybrid too, since the field either couples or it does not;
+but a pure case that fails only on **coverage** — too much mass neutral or unconfined — is
+precisely the case a hybrid exists to rescue, and gates *into* Rung 1A-ii rather than out of it.
+
+#### Rung 1A-i — pure magnetic nozzle (Arms M1 and M2, no backstop)
+
+- [ ] **The window.** Compute `r_β(k, m_enc, B)` and `r_σ` — the latter over seed fraction
+      `y_seed`, seed species, and recombination branch — along Rung 1's expansion trajectory. **Gate: if `r_β > r_σ` across the plausible range, the
+      magnetic nozzle is dead and Rung 1A ends here.**
+- [ ] **Ionisation and conductivity.** Saha with alkali seed over the trajectory, at *both* ends
+      of the §13.1 frozen-recombination bracket, for Na and K, `y_seed` = 1–2 wt%. Report `n_e`,
+      `σ_e`, and `Rm(r)`. Note that neither end of that bracket is the pessimistic one here (§6.9).
+- [ ] **Alkali radiation.** `τ_line(r)` for the seed resonance lines *and* the seeded continuum,
+      against real tabulated opacity. Report radiative loss as a fraction of plume energy and,
+      specifically, **its effect on `r_σ`** — the screen says the lines are thick by 5–9 orders
+      and the loss is negligible, but it is decided where they go thin, which is the outer edge
+      that sets the answer (§6.9).
+- [ ] **Field energy and coil mass.** `E_mag = M_ej·u²` and virial coil-plus-shield mass against a
+      stated vehicle dry-mass allowance, swept over `k` and `m_enc`. **Report the partial-confinement
+      trade** — how much of the ceiling is bought by how much less than `β_plasma < 1` over the
+      full solid angle. Full confinement at the reference point is 138 GJ and probably unaffordable.
+- [ ] **Sweep `k` downward.** The ballistic optimum does not transfer: `E_mag/E = 2k/(1+k)`
+      and the ceiling both favour low `k`. Span at least `k` = 0.5–8, **including the `k < 1`
+      region no plate can use**, and report Isp *and* projectile economy together, since the
+      low-`k` gain is bought with projectile consumption and heat load (§3.5).
+- [ ] **Encounter mass.** `E_mag` is linear in `m_enc`, so smaller and more frequent cuts coil
+      mass — the opposite of §6.5.1's ablation-driven conclusion. Quantify the fork (§6.9).
+- [ ] **Arms M1 and M2** (§4.2), to separate the initial-mixing risk from the initial-volume gain.
+      Include the pancaked-anvil sizing check against §6.2.
+- [ ] **Neutral fraction** vs radius and recombination branch — the mass the field cannot touch.
+      **This is Rung 1A-ii's entry datum**: it sets what a backstop must catch and therefore the
+      hybrid's ablator term. Report it whether or not the pure case passes its own gate.
+- [ ] **Survivability.** Coil radiative load and shield mass; neutral bombardment; quench margin;
+      and whether the coil can be kept out of the direct line at all (§6.9).
+- [ ] **Detachment.** Whether plasma leaves the field or returns along closed lines. Report as an
+      efficiency factor on realised impulse, not a footnote.
+- [ ] **Interchange/RT at the field–plasma interface**, reusing Rung 2's machinery at *zero*
+      interface areal density — the most adverse case of §6.7.
+- [ ] **Isp accounting.** The seed is charged at `y_seed`; `m_coil` is not charged but is not free
+      (§3.1). Report each magnetic arm's Isp **alongside its dry-mass penalty and the resulting
+      vehicle mass ratio** — a coil that doubles dry mass can lose the mission while winning on Isp.
+- [ ] **Gate, three-way — this is the routing decision, not a pass/fail:**
+      1. **Window shut** (`r_β > r_σ` across the plausible range) → the field cannot couple to
+         this plasma at any radius. **Both** the pure and hybrid nozzles are dead; stop, and the
+         study proceeds on the plate arms alone.
+      2. **Window open and coverage sufficient** — the field controls enough of the mass, and
+         coil-plus-shield fits the dry-mass allowance, to clear the §3.4 comparison against the
+         best physical-plate configuration at the same charged mass → the pure magnetic nozzle
+         is live. Run Rung 1A-ii anyway, since a backstop may still pay for itself.
+      3. **Window open but coverage insufficient** — the field couples, but too much mass is
+         neutral or escapes at `β_plasma > 1` → **this is not a failure, it is the hybrid's
+         entry condition.** Go to Rung 1A-ii.
+
+#### Rung 1A-ii — hybrid magnetic + physical nozzle
+
+Entered from case 2 or 3 above. The premise is that the field and the plate are complementary
+rather than competing: the field turns the ionised fraction over the whole solid angle, and the
+plate catches the neutrals and whatever escapes the field. Its risk is that they *subtract*.
+
+- [ ] **Entry datum.** Take Rung 1A-i's neutral-and-unconfined fraction vs radius as the flux the
+      plate must catch, and its angular distribution as the plate's inflow.
+- [ ] **Do they reinforce or subtract?** A field that steers plasma away from the plate removes
+      plate impulse while adding its own. Compute the *net* axial impulse of the combined
+      configuration, not the sum of the two parts computed separately. **Gate: if the net is
+      below the better of the two alone, the hybrid is rejected and the study keeps whichever
+      single mechanism won.**
+- [ ] **Coil siting.** A ring coil at the plate rim is the natural geometry — structurally
+      supported, and shadowed from the direct line by the plate itself. Check that against the
+      field topology the nozzle actually needs; the two may not be compatible.
+- [ ] **Reduced ablator.** The plate now sees only the unmagnetised flux, so re-run §6.5's
+      ablation balance at that reduced fluence. This is the hybrid's main prize: the ablator is
+      the study's largest denominator uncertainty (27×), and a hybrid that cuts the flux cuts it.
+- [ ] **Three-way comparison** at equal charged mass and equal dry-mass allowance: best plate
+      configuration (Arm D or bare), best pure magnetic (Arm M1/M2), and the hybrid — each with
+      its Isp, projectile economy, realisation fraction, and dry-mass penalty.
+- [ ] **Gate:** the hybrid is adopted only if it beats *both* single mechanisms on the §3.4
+      comparison, with its coil-plus-shield mass and its residual ablator both counted.
 
 ### Rung 2 — RT treatment for Arm D (the widest Pass-1 uncertainty)
 
@@ -1593,6 +1891,8 @@ work lands.
 | Carbon-carbon rejected as a hot face (burns in atomic O) | **Weakened** | Exposure is only during the pulse, when renewed oil covers it; between pulses there is no gas. Held in reserve on the escalation path, not adopted (§6.5.4) |
 | SiC + Ti as the settled hot-face stack | **Departed** | Selected there for oxidation and per-pulse thermal shock at GPa loads. Here loads are ~2 MPa and the plate self-limits, so **steel + oil is the baseline** and ceramic is a burn-through hedge (§6.5.4) |
 | Existing `eta_capture` sweep data | Cross-check only | Incidence geometry differs |
+| MHD excluded from the physics tiers | **No, for the magnetic arms** | Rung 1A's device *is* magnetic, so resistive MHD with a seeded conductivity closure is required there. It remains excluded for every plate arm (§7.2) |
+| The pusher plate is the momentum-receiving structure | **Under test** | §3.6 shows the 70% loss is a *plate* limit rather than a physical one, so Rung 1A screens replacing or supplementing it (§6.9) |
 
 **Records written.** Each clears the project's bar for an architecture decision record —
 hard to reverse, surprising without context, and the result of a genuine trade-off:
@@ -1610,6 +1910,12 @@ hard to reverse, surprising without context, and the result of a genuine trade-o
 - [x] **[ADR-0033](docs/adr/0033-rt-deferral-does-not-transfer-to-the-tamper.md)** — the
       RT/RM deferral does not transfer; RT is load-bearing here in three places (§6.7).
       ADR-0020 carries a pointer and is otherwise unchanged.
+
+**Owed if Rung 1A clears its gate.** A magnetic nozzle is a different device, not a variant of
+the pusher plate, and adopting one would reverse this document's own framing that the plate is
+the structure which receives the impulse. That needs its own record before any magnetic arm
+becomes a baseline rather than a screen — Rung 1A-i's gate is the trigger, and Rung 1A-ii's
+result decides whether the record is about replacing the plate or supplementing it.
 
 Canonical terms for this study are in [`CONTEXT.md`](CONTEXT.md) under *Language — tamped-nozzle
 study*; §0 is the symbol table and §14 the reading-order glossary for this document.
@@ -1679,6 +1985,28 @@ State these in any write-up. Each could move the answer.
     so the answer is bracketed rather than wrong — but `Σ`, `Φ`, `τ_opt`, and the headline
     Pass-1 Isp all inherit whichever convention is chosen, so it must be one convention. Rung 0
     reconciles the closed forms; Rung 4 measures where inside the bracket the real capture sits.
+14. **The magnetic-nozzle window may simply be shut.** The field controls the flow only where
+    `β_plasma ≲ 1` and couples to it only where `Rm ≫ 1`; the first gets easier with radius and
+    the second harder, so the nozzle exists only in the gap `r_β < r_σ` (§6.9). Neither bound is
+    known. Alkali seeding at 1–2 wt% is what holds the outer edge open, and potassium buys ~40×
+    more ionisation than sodium at 2500 K where the window closes. Rung 1A-i decides it, and a
+    shut window kills the hybrid too.
+15. **Full-solid-angle magnetic confinement is probably unaffordable, so the real question is
+    partial.** `E_mag = M_ej·u²` exactly, independent of interaction radius — 138 GJ at `k` = 6
+    and a 200 kg encounter, i.e. a 138–459 t coil against a 1000 t vehicle. What fraction of the
+    ceiling a *partial* nozzle buys is unknown and is Rung 1A-i's central number.
+16. **Alkali seed environmental deposition is deliberately out of scope here, and is owed to the
+    write-up.** At 1–2 wt% of carried mass the absolute flux is large: a ~300 kt/yr carried-mass
+    programme deposits thousands of tonnes per year of alkali against a natural meteoric sodium
+    input of order 70 t/yr, and the water itself is a larger perturbation by mass against a total
+    meteoric influx of order 15 kt/yr. The removal chemistry (Na → NaOH → NaHCO₃, polymerising
+    onto meteoric smoke and sedimenting, mesospheric residence of days to weeks) is well
+    established — but **a known sink does not establish benignity at tens of times the natural
+    source**, and the mesospheric alkali layers couple to D-region chemistry, sporadic-E, and
+    noctilucent-cloud nucleation. **This study computes none of it.** It is recorded here so the
+    write-up addresses it explicitly rather than by omission, and so silence is not mistaken for
+    a finding. Two things would move it most: whether carried mass is sourced off-Earth, and what
+    fraction of exhaust leaving at ~20 km/s from an escape trajectory stays bound at all.
 
 ### 13.1 Uncertainty budget for the Arm D Isp bracket
 
@@ -1730,6 +2058,11 @@ here are the load-bearing ones, quoted so this table stands alone.
 | **Realization fraction** | `r_real = β/(√(1+K_ej)−1)`, the net vehicle impulse divided by the same-ejecta-mass ceiling. A hydrodynamic comparison metric feeding Isp; 62.9% is only the labelled §3.4 reference break-even. |
 | **Projectile economy** | Net vehicle impulse per projectile mass, `β·w = J/m_i`. A velocity-equivalent metric, not a physical velocity. Reported alongside effective Isp and not combined with it — see §3.1. |
 | **Arm D / Arm B** | Filled-interlayer configuration (the design) / vacuum-gap configuration (provisionally foreclosed, retained as a control). |
+| **Arm M1 / Arm M2** | Magnetic-nozzle arms: seeded solid ice only / seeded ice anvil backed by seeded snow. No tamper, no interlayer, provisionally no ablator (§4.2, Rung 1A). |
+| **Magnetic nozzle** | Replacing the pusher plate with a magnetic field that acts on the whole expansion rather than only on what flies into a plate. It cannot beat the ceiling, but it can attack the capture fraction — the dominant loss (§3.6, §6.9). |
+| **Alkali seeding** | 1–2 wt% of the carried mass as Na or K, `y_seed`. Their low ionisation potential (4.34 / 5.14 eV vs 13.6 for H and O) keeps the plume conducting after water has recombined. Standard MHD-generator practice at ~1 mol%. Charged in Isp; the coil is not. |
+| **The nozzle window** | `r_β < r_σ` — the field controls the flow only outside `r_β` (`β_plasma ≲ 1`) and couples to it only inside `r_σ` (`Rm ≫ 1`). The magnetic nozzle exists only if the two overlap (§6.9). |
+| **`β_plasma`** | Plasma pressure over magnetic pressure. Never written bare `β`, which is the net-vehicle-impulse coefficient. |
 | **Transit ratio `Θ`** | Slug disassembly time / tamper shock-transit time. `Θ ≳ 3` is the current screening gate, not a universal sharp threshold. |
 | **Arrival window** | Duration over which fireball material reaches the plate, set by its velocity dispersion. ~750 µs here. |
 | **Areal density `σ`** | Mass per unit area. The tamper's figure of merit, conserved through vaporisation. |
