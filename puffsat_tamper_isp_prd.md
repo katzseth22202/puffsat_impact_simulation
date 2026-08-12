@@ -63,7 +63,7 @@ denominator both scale with `m_i`.
 | `Isp_eff = J/(g₀·m_charged) = βw/(g₀C)` | **effective specific impulse** — the final carried-mass-economy deliverable (§3.1) | 984 s bare plate (Pass 1, upper bound) |
 | `g₀` | standard gravity, 9.80665 m/s² | — |
 | `r_real = J/J_max = β/(√(1+K_ej)−1)` | **realization fraction** — net vehicle impulse as a share of the ceiling for the same ejecta mass (§3.3). A hydrodynamic comparison metric feeding Isp, not a replacement for Isp. The subscript distinguishes it from radial coordinate `r` | 49.4% bare; 62.9% is only the §3.4 reference-case break-even |
-| **ballistic capture fraction** | `max[0, (1 − 1/√k)/2]` — share of the isotropic, pressure-free ballistic fireball that outruns its own recoil and reaches the plate. Its zero below `k = 1` is a ballistic-model limit, not a general zero-thrust claim (§2.2, §8) | 31.2% at `k = 7.06` |
+| **ballistic capture fraction** | `max[0, (1 − 1/√k)/2]` — share of the isotropic, pressure-free ballistic fireball that outruns its own recoil and reaches the plate. Its zero below `k = 1` is a ballistic-model limit, not a general zero-thrust claim (§2.2, §8). **It imposes no plate radius: this is the `R → ∞` value**, and §5.3's `Σ` uses a different convention (§3.6, §13.13) | 31.2% at `k = 7.06` |
 
 ### 0.2 Speeds, impulse, and energy
 
@@ -82,10 +82,11 @@ denominator both scale with `m_i`.
 | `j = J/m_i` | net axial vehicle impulse per projectile mass | `βw` |
 | `J_wall`, `J_wall,z` | **plate pressure impulse** — the time-integrated axial force on the plate itself (§7.6.1). Distinct from `J`: it omits the projectile momentum debit and the momentum of everything that never touches the plate, so `J_wall ≠ J`. The difference between it and the upstream ram flux is a headline diagnostic | — |
 | `P_ejecta` | signed total axial ejecta momentum; useful, plate-opposed ejecta has `P_ejecta < 0` | — |
+| `Δp` | axial momentum change delivered by the plate per kg of captured gas: *arrival speed + axial approach speed* for a perfectly collimating plate, or *twice the axial approach speed* for a flat specular one (§3.6) | 27.81 km/s at `k = 6` |
 | `M_ej = m_i(1+K_ej)` | total ejecta mass, including the projectile | — |
 | `j_max = w(√(1+K_ej) − 1)`; `J_max = m_i·j_max` | **the thermodynamic ceiling**, respectively per projectile mass and per pulse (§3.2) | — |
 | `v_e,max = j_max/K_ej` | net effective exhaust velocity at the ceiling, normalised by nonprojectile ejecta mass | — |
-| `β = J/(m_i·w)` | **dimensionless net-vehicle-impulse coefficient**: net vehicle impulse divided by the magnitude of the incoming projectile momentum. It includes the projectile momentum debit. `β·w = J/m_i` has velocity units but is not the speed or velocity increment of any material or body. `β_bare`, `β_tamp` are the ballistic closed forms; `β_ideal = √(1+k) − 1` | `β_bare(7.06)` = 0.9087, `β_bare(14.12)` = 1.6835 |
+| `β = J/(m_i·w)` | **dimensionless net-vehicle-impulse coefficient**: net vehicle impulse divided by the magnitude of the incoming projectile momentum. It includes the projectile momentum debit. `β·w = J/m_i` has velocity units but is not the speed or velocity increment of any material or body. `β_bare`, `β_tamp` are the ballistic closed forms; `β_ideal = √(1+k) − 1`; `β_flat = (√k−1)²/(2√k)` is the flat-plate specular counterpart of `β_bare`, which is itself the focus-matched-paraboloid case (§3.6) | `β_bare(7.06)` = 0.9087, `β_bare(14.12)` = 1.6835 |
 | **projectile economy** | `β·w = J/m_i` — net vehicle impulse per projectile mass, the second reported metric (§3.1); a velocity-equivalent impulse normalisation, not a physical velocity | — |
 | `E` | incoming projectile kinetic energy per pulse, `½m_i w²`; `E/J = w/(2β)` is energy per unit impulse (§3.5) | 69.8 GJ (`τ_t = 0`) / 37.2 GJ (`τ_t = 1`), both at `μ = 0` |
 
@@ -518,6 +519,86 @@ least 6–32 rather than clustering around the bare-control answer.
 the same end: both raise `β`. §3.4 shows extra slug reaches 58.3% of ceiling against the
 tamper's 61.7%, and extra slug additionally carries no RT risk, no interlayer, no porosity
 model, and no assembly complexity. **The tamper must beat a rival that is strictly simpler.**
+
+### 3.6 Worked example — where the ballistic numbers come from, and what they assume
+
+§3.4 and §3.5 quote `β_bare` without deriving it. This is the ledger behind one row, `k = 6`,
+because two of its steps are not obvious and one of them changes how §6.6 should be read.
+Rung 0's calculator must reproduce every line here.
+
+**The fireball.** Recoil `V = w/(1+k)` = 10.71 km/s *away* from the plate; expansion
+`u = w√k/(1+k)` = 26.24 km/s; `u/V = √k` = 2.45. Material reaches the plate only if it outruns
+the recoil, `cos θ > 1/√k` = 0.408, which is **29.6% of the ejecta** — 2.07 kg out of the 7 kg
+that leaves per kg of projectile.
+
+**Nothing but the plate contributes.** The blob as a whole carries 7 kg × 10.71 km/s = 75, i.e.
+exactly `−m_i·w`. With no plate, `J = 0` identically. So every newton-second of thrust comes
+from the plate acting on that 29.6%; the other 70.4% is *already* moving the useful way (−z)
+and does no more than cancel the incoming debit. This is why capture fraction dominates
+everything.
+
+**What the captured cone delivers:**
+
+| quantity | value |
+|---|---|
+| best-aimed element, θ = 0: `u − V` | 15.53 km/s |
+| **mean** axial approach over the cone | **7.77 km/s** |
+| mean speed leaving, redirected to `−z` | 20.04 km/s |
+| Δp per captured kg = axial in + speed out | **27.81 km/s** |
+
+The mean is half the best element because the cone's rim barely outruns the recoil: as
+`cos θ → 1/√k` the axial approach speed → 0. The plate then roughly doubles each element's
+contribution by reversing it.
+
+**The effective exhaust velocity is momentum per kg of *carried* mass**, not per kg of ejecta
+and not any material speed:
+
+```
+v_e = (2.071/6) × 27.81 = 9.60 km/s   →   Isp = 979 s
+```
+
+**One third of the carried mass does all the work, and each of those kilograms is worth
+~28 km/s.** That is the whole of the 979 s.
+
+**Why it is ~half the ceiling.** Throw all 7 kg coherently at `w/√(1+k)` = 28.35 km/s: gross
+198.4, minus the 75 debit, is 123.4 per kg of projectile, over the 6 kg actually carried —
+`v_e,max` = 20.57 km/s, or 2098 s. The ballistic model realises **46.7%** of it. The shortfall
+is *not* an outgoing-direction loss: it is (a) 70% of the mass never being turned at all and
+(b) the captured 30% arriving with a 0–26 km/s speed spread where the ceiling wants one common
+speed. Neither is fixable by plate shape.
+
+**`β_bare` already assumes a perfectly collimating plate.** It sends each captured element to
+`−z` at its full arrival speed, `Δp = |v| + v_z` — which is the *focus-matched paraboloid*, not
+a flat plate. A flat plate reverses only the axial component, `Δp = 2v_z`, giving the closed
+form `β_flat = (√k−1)²/(2√k)` = 0.429 and **547 s**. So the concave-plate collimation prize is
+inside the 979 s figure, not upside on top of it, and §6.6's sweep is asking how much of that
+already-assumed prize a real stagnating plenum returns.
+
+**`β_bare` also assumes an infinite plate.** It captures everything with `v_z > 0` and imposes
+no plate radius. Because rays near the capture threshold arrive nearly grazing, they land at
+large radius, so a finite plate loses them — and the ballistic geometry is far more sensitive
+to `R/d` than the `R → ∞` figures suggest (`k = 7.06`):
+
+| plate | ballistic capture | parabolic `β` (Isp) | flat `β` (Isp) | parabola/flat |
+|---|---|---|---|---|
+| `R/d` = 1.5 — the §4/§5.3 reference (`R` = 15 m, `d` = 10 m) | 10.6% | 0.339 (368 s) | 0.292 (317 s) | 1.16× |
+| `R/d` = 2.5 | 16.4% | 0.511 (553 s) | 0.400 (434 s) | 1.28× |
+| `R → ∞` | 31.2% | **0.909 (984 s)** | 0.517 (560 s) | 1.79× |
+
+Two consequences. First, **the headline 984 s is an `R → ∞` idealisation**, and the document
+also carries a third, mutually inconsistent capture fraction — §5.3's `Σ` applies the rim angle
+to the *blob-frame* emission angle rather than to the ray direction, giving 22.3%. These three
+must be reconciled (Rung 0, §13.13); the honest reading is that pure ray-tracing *understates*
+capture, because the flow is pressure-bearing at Mach ≈ 2.5 and steers inward — which is this
+study's central thesis — so the truth lies between the ray-optics and infinite-plate limits and
+only a simulation places it.
+
+Second, **§6.6's specular prize is derived for the wrong source.** Its `(1+cosθ)/(2cosθ)` bound
+of 1.09 / 1.19 / 1.23 assumes a *static* point source radiating uniformly into solid angle. A
+recoiling fireball skews its rays toward grazing incidence, where a flat plate collects
+`2v cos θ → 0` and a parabola collects `v(1 + cos θ) → v`. The prize is correspondingly larger —
+1.28× rather than 1.23× at `R/d` = 2.5 — so §6.6 understates the parabola's case, though not by
+enough to overturn its area-penalty argument on its own.
 
 ---
 
@@ -994,9 +1075,17 @@ foreclosed band. Here `δ` is dish depth; `d` is source-to-plate standoff.
 
 | | value |
 |---|---|
-| specular upper bound, parabola/flat, mass-weighted `(1+cosθ)/(2cosθ)` | 1.09 / 1.19 / **1.23** at `R/d` = 1 / 2 / 2.5 |
+| specular upper bound, parabola/flat, mass-weighted `(1+cosθ)/(2cosθ)` — *static-source weighting; corrected below* | 1.09 / 1.19 / **1.23** at `R/d` = 1 / 2 / 2.5 |
 | prior *measured* concave lift at plane-wave incidence | `eta_capture` 0.915 → 0.977 → 0.994, **+9%** |
 | paraboloid surface area vs flat disk (`F = d`, `R = 2.5d`) | **+32%** |
+
+**That upper bound is derived for the wrong source and is too low.** It weights
+`(1+cosθ)/(2cosθ)` over a *static* point source radiating uniformly into solid angle. The real
+source recoils, so material near the capture threshold crawls toward the plate with near-zero
+axial speed and arrives nearly grazing — where a flat plate collects `2v cos θ → 0` while a
+parabola collects `v(1 + cos θ) → v`. Re-weighting over the actual ballistic ray distribution
+gives 1.28× at `R/d` = 2.5 rather than 1.23× (§3.6). The correction does not overturn the area
+argument below, but the sweep should be scored against the recoiling-source bound.
 
 A ≤23% impulse gain against a ~32% area penalty in ablator and structure — with sub-linear
 ablation making extra area *worse*, and more normal rim incidence collecting more flux.
@@ -1320,6 +1409,10 @@ the only thing downstream rungs are permitted to quote closed-form figures from.
       confirming the inherited ballistic model before anything is built on it.
 - [ ] Regenerate the §3.4, §3.5, and §4 tables from it and reconcile any residual disagreement
       with a quoted figure, rather than carrying both.
+- [ ] **Reconcile the capture-fraction conventions** (§13.13): `β_bare`'s `R → ∞` 31.2%, §5.3's
+      blob-frame-angle 22.3%, and the consistent finite-plate ray value of 10.6% at `R/d` = 1.5.
+      Pick one convention, state it wherever a capture fraction or an Isp is quoted, and report
+      the ray-optics/infinite-plate pair as an explicit bracket rather than a single number.
 - [ ] **Known open reconciliation:** §6.5's soak depth `√(4α_th·t)` ≈ 173 µm implies
       `α_th ≈ 1.0×10⁻⁵ m²/s`, against the 1.2×10⁻⁵ stated in §0.6, which gives ~190 µm. Fixing
       it moves a chain — 1.36 → 1.49 kg/m², ~0.95 → ~1.04 MJ/m², the 672 MJ basis and the four
@@ -1577,6 +1670,15 @@ State these in any write-up. Each could move the answer.
     snow-*slug* corner of the original `(slug density, standoff)` scoping or to a `μ = 0` case.
     Rung 1 must fix Arm D's `(r_slug, s, μ, ρ_interlayer)` and emit its `Θ`, `a_RT(t)`, and mass
     ledger before any Arm D screening number is quoted as such.
+13. **Three inconsistent ballistic capture fractions are in circulation** (§3.6). `β_bare` and
+    every Isp figure derived from it use 31.2% at `k = 7.06`, which imposes **no plate radius**
+    — it is the `R → ∞` limit. §5.3's `Σ` uses 22.3%, applying the rim angle to the blob-frame
+    emission angle rather than to the ray direction. The geometrically consistent finite-plate
+    ray calculation at the reference `R/d` = 1.5 gives **10.6%**, and 368 s rather than 984 s.
+    Pure ray-tracing understates capture, since the flow is pressure-bearing and steers inward,
+    so the answer is bracketed rather than wrong — but `Σ`, `Φ`, `τ_opt`, and the headline
+    Pass-1 Isp all inherit whichever convention is chosen, so it must be one convention. Rung 0
+    reconciles the closed forms; Rung 4 measures where inside the bracket the real capture sits.
 
 ### 13.1 Uncertainty budget for the Arm D Isp bracket
 
