@@ -122,3 +122,14 @@ worst exactly where the shortfall would occur.
 - **Flat only** (simplest build, conservative floor). Rejected as the *sole* shape: it leaves the
   cheap rebound-fanning recovery on the table at the low/mid-v anchors where there is no focal penalty
   and the cloud need not be stretched as hard.
+
+## Amendment (2026-08, scope pointer): the foreclosure is conditional on plane-wave incidence
+
+The foreclosure above — and its "never reopened" — is correct **for the incidence geometry this ADR
+is about**: a shaped cloud delivered onto the plate, i.e. a plane wave, which a dish maps onto its
+focus. A paraboloid focuses *parallel → point* and collimates *point → parallel*, and cannot do both;
+which one occurs is set by where the source sits. Under **point-source incidence** — a compact
+fireball at the focus, as in the tamped-nozzle study — the same geometry collimates and produces no
+focal region, so the hot-spot mechanism that forecloses the deep dish is absent rather than
+outweighed. See **ADR-0032**, which records the precondition and the countervailing area/stagnation
+penalties. Nothing above changes for the `f(v)` envelope study.

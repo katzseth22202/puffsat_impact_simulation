@@ -1133,21 +1133,24 @@ work lands.
 | SiC + Ti as the settled hot-face stack | **Departed** | Selected there for oxidation and per-pulse thermal shock at GPa loads. Here loads are ~2 MPa and the plate self-limits, so **steel + oil is the baseline** and ceramic is a burn-through hedge (§6.5.4) |
 | Existing `eta_capture` sweep data | Cross-check only | Incidence geometry differs |
 
-**Records to write before this work lands.** Each clears the project's bar for an
-architecture decision record — hard to reverse, surprising without context, and the result
-of a genuine trade-off:
+**Records written.** Each clears the project's bar for an architecture decision record —
+hard to reverse, surprising without context, and the result of a genuine trade-off:
 
-- [ ] **The tamper is an isentropic piston, not a mirror; recoil is credited; the
-      deliverable is realization fraction against a single ceiling.** Replaces the prior
-      `Λ > 1 + τ` criterion. The surprising content is §3.3.
-- [ ] **An Isp deliverable pulls ablator mass, vehicle scale, and cadence inside the scope
-      boundary** that prior scope places outside — and inter-pulse thermal accumulation
-      with them.
-- [ ] **The deep-dish foreclosure is conditional on plane-wave incidence** and does not
-      transfer to point-source incidence (§6.6). Amend the existing record rather than
-      contradict it.
-- [ ] **The RT/RM deferral does not transfer**; RT is load-bearing here in three places
-      (§6.7).
+- [x] **[ADR-0030](docs/adr/0030-tamper-isentropic-piston-not-mirror.md)** — the tamper is an
+      isentropic piston, not a mirror; recoil is credited; the deliverable is realization
+      fraction against a single ceiling. Replaces the prior `Λ > 1 + τ` criterion (§3.3).
+- [x] **[ADR-0031](docs/adr/0031-isp-deliverable-pulls-scope-inward.md)** — an Isp deliverable
+      pulls ablator mass, vehicle scale, and cadence inside the scope boundary that prior
+      scope places outside, and inter-pulse thermal accumulation with them (§3.1).
+- [x] **[ADR-0032](docs/adr/0032-deep-dish-foreclosure-is-incidence-conditional.md)** — the
+      deep-dish foreclosure is conditional on plane-wave incidence and inverts under a point
+      source (§6.6). ADR-0021 carries a pointer and is otherwise unchanged.
+- [x] **[ADR-0033](docs/adr/0033-rt-deferral-does-not-transfer-to-the-tamper.md)** — the
+      RT/RM deferral does not transfer; RT is load-bearing here in three places (§6.7).
+      ADR-0020 carries a pointer and is otherwise unchanged.
+
+Canonical terms for this study are in [`CONTEXT.md`](CONTEXT.md) under *Language — tamped-nozzle
+study*; §14 below is the reading-order glossary for this document.
 
 ---
 

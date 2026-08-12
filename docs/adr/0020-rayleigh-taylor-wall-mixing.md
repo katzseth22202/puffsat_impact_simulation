@@ -52,3 +52,15 @@ lower bound on `f` **subject to the channel-2 watchdog**; the best-estimate abla
 is RT-optimistic; and RT concentrates peak local flux/ablation, so the ablation-per-pulse number
 back-propagated to the MEMS replenishment system (§7) is an **underestimate** — RT loosens that
 logistics requirement rather than tightening it, so it is conservative to omit.
+
+## Amendment (2026-08, scope pointer): the argument is interface-specific, not general
+
+The momentum-conservation argument above is correct **for the interface this ADR is about** — the
+near-wall boundary layer, where the unstable surface separates two parcels of gas that both deliver
+their momentum to the plate regardless of how corrugated the boundary between them is. It does not
+generalize to an interface where mixing changes *which body carries the mass*. In the tamped-nozzle
+study the plume/tamper interface is exactly that: entrainment converts a coherent inertial tamper
+into ordinary reaction mass, which is a different (and worse) use of the same kilograms, not a
+corrugation with conserved momentum on both sides. There the mixed fraction is wider than the margin
+being decided, so RT is modeled rather than deferred. See **ADR-0033**. Nothing above changes for the
+`f(v)` envelope study.

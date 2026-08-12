@@ -1,10 +1,16 @@
 # PuffSat Impact Simulation
 
-Glossary for the per-collision study that computes the paper's fudge factor `f(v)` —
-the momentum-transfer efficiency of a PuffSat gas pulse bouncing off the pusher plate.
-Full design: [`puffsat_impact_sim_design.md`](puffsat_impact_sim_design.md).
+Glossary for two studies in this repository:
 
-## Language
+- the **per-collision study** that computes the paper's fudge factor `f(v)` — the
+  momentum-transfer efficiency of a PuffSat gas pulse bouncing off the pusher plate.
+  Full design: [`puffsat_impact_sim_design.md`](puffsat_impact_sim_design.md).
+- the **tamped-nozzle study** that computes effective Isp for a tamped head-on collision.
+  Full requirements: [`puffsat_tamper_isp_prd.md`](puffsat_tamper_isp_prd.md).
+
+They share the vehicle and the pusher plate, not the deliverable.
+
+## Language — per-collision study (`f(v)`)
 
 **Fudge factor (`f`)**:
 The axial momentum actually delivered to the plate by one pulse, as a fraction of the
@@ -72,3 +78,52 @@ scales as `ρ ∝ m_pulse/R²` through the Σ contract. "A 15 m-wide plate" ther
 (`R = 7.5 m`) — distinct from tripling `R` itself. State whether a plate dimension is `R` or `2R`
 whenever it is not a ratio.
 _Avoid_: "plate width/size" as a bare number (ambiguous between `R` and `2R`).
+
+## Language — tamped-nozzle study (effective Isp)
+
+**Pusher plate**:
+The permanent structure on the vehicle that receives the impulse, with a hole at its vertex
+through which the projectile passes. Always "plate", never "dish" — earlier tamper notes used
+"dish" and it is the outlier.
+_Avoid_: pusher dish, nozzle (the nozzle is the tamper + plate acting together, not the plate)
+
+**Slug ratio (`k`)**:
+Slug mass per **projectile** kg, per pulse — the carried mass the projectile buries itself in,
+divided by the projectile's own mass. A continuous real, ≈ 7 at the bare-plate Isp optimum, not
+a count. Stated in this direction always; the inverse (projectile per carried kg) reads as a
+plausible but different quantity and has caused a real collision.
+_Avoid_: "impactor-to-rocket-mass ratio" (ambiguous in direction), treating `k` as an integer
+
+**Carried-mass ratio (`K`)**:
+*Total* carried mass per projectile kg — slug plus tamper plus interlayer, `K = k(1+τ)`. The
+only quantity the thermodynamic ceiling depends on, so it is `K` rather than `k` that appears
+in `J_max = w(√(1+K) − 1)`. Distinct from `k`: a tamper raises `K` at fixed `k`.
+_Avoid_: using `k` where `K` is meant once a tamper is present
+
+**Tamper**:
+Carried mass placed beyond the slug, on the far side from the plate, that turns part of the
+away-going fireball back toward it. Fully vaporised — it works by **areal density**, which is
+conserved through vaporisation, not by surviving. It is a **piston**, not a mirror: it takes
+backward momentum (credited, not lost) and what it wastes is entropy (ADR-0030).
+_Avoid_: reflector, mirror (both imply reflected-speed is the figure of merit — it is not)
+
+**Capture fraction**:
+`(1 − 1/√k)/2` — the share of an isotropic fireball that outruns its own centre-of-mass recoil
+and reaches the plate. **Zero at `k ≤ 1`**: below that the device produces no thrust at all.
+Pure geometry, distinct from `eta_capture` in the `f(v)` study.
+_Avoid_: conflating with `eta_capture` (that is a 2D/1D wall-impulse ratio, this is a
+free-flight geometric fraction)
+
+**Realization fraction**:
+Delivered axial impulse as a share of the thermodynamic ceiling `w(√(1+K) − 1)`. The tamped
+study's deliverable, and what makes "spend the mass as tamper" and "spend it as slug" directly
+comparable. A bare plate realizes ≈ 49%; a tamper must exceed ≈ 63% at τ = 1 to pay.
+_Avoid_: tamper multiplier, `Λ` (a ratio of two realized numbers, which hides the ceiling and
+miscounts recoil as loss — ADR-0030)
+
+**Projectile economy**:
+Axial impulse per **projectile** kg, `β·w` — the infrastructure-throughput counterpart to
+effective Isp's carried-mass economy. Reported beside Isp, never combined with it: converting
+projectiles to payload-equivalent needs program economics this repository does not model.
+_Avoid_: two-currency ledger (jargon, and it implied a combined figure of merit that is not
+constructed)
