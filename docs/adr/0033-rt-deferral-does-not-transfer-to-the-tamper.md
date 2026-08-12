@@ -18,20 +18,24 @@ being a piston and becomes ordinary reaction mass — which the ceiling framewor
 use of the same kilograms. This is not a corrugation with conserved momentum on both sides; it is a
 change in which body is carrying what.
 
-**And the effect is larger than the margin being decided.** Using the self-similar mix growth
-`h ≈ α·A·a·t²` with `α = 0.02–0.05` and Atwood number ≈ 1:
+**And the effect is comparable with the reference margin being decided.** Using the self-similar
+mix growth
+`h_b ≈ α_mix·A_RT·a_RT·t²` with `α_mix = 0.02–0.05` and Atwood number ≈ 1:
 
-| configuration | `a = P/σ` | window | bubble depth `h` | tamper thickness | **mixed fraction** |
+| configuration | `a_RT = P/σ` | window | bubble depth `h_b` | tamper thickness `h_t` | **bubble-depth fraction `h_b/h_t`** |
 |---|---|---|---|---|---|
-| filled interlayer, contact tamper | 1.9×10⁸ m/s² | 27.6 µs | 2.9–7.3 mm | 34.8 mm | **8–21%** (16–63% total mix width) |
+| filled interlayer, contact tamper | 1.9×10⁸ m/s² | 27.6 µs | 2.9–7.3 mm | 34.8 mm | **8–21%** |
 | vacuum standoff, tamper at 1 m | 3.9×10⁸ m/s² | 45 µs | 16–40 mm | 16.2 mm | **100–246% — fully disrupted** |
 
-The standoff configuration's tamper is **shredded before it finishes its job**, across the whole
-plausible `α` range — a thin sheet rammed by a fast plume is torn apart, while a thicker shell
-pressed gently holds together. That is an independent mechanism reaching the same verdict as
-ADR-0030's entropy argument, and together they foreclose it. For the filled configuration the bound
-is *not* decisive: a 16–63% mixed fraction moves the realization fraction roughly between "piston"
-(~62% of ceiling) and "just extra slug" (~58%), **against a 62.9% threshold.** The uncertainty is
+The screen predicts that the standoff configuration's tamper is **shredded before it finishes
+its job**, across the whole plausible `α_mix` range — a thin sheet rammed by a fast plume is torn
+apart, while a thicker shell pressed gently holds together. That is an independent mechanism
+reaching the same verdict as ADR-0030's entropy argument, and together they provisionally foreclose
+it. For the filled configuration the bound is *not* decisive: a separate 16–63% total mix-width
+heuristic maps the realization fraction
+roughly between "piston" (~62% of ceiling) and "just extra slug" (~58%), near the 62.9%
+reference-case threshold. Bubble-depth fraction and total mix-width fraction are not interchangeable,
+and the map from either to realization fraction is a screening assumption. The uncertainty is
 wider than the decision.
 
 **It is load-bearing in three distinct places**, which is why it cannot be carried as a footnote:
@@ -44,8 +48,10 @@ wider than the decision.
    window while 1 m features grow ×2.6, so on a 0.68 m-radius tamper only gross shape survives. This
    is why the tamper's design variable is angular coverage rather than curvature.
 
-**An axisymmetric code cannot represent it.** Both kernels in this repository are axisymmetric by
-design, so this is not a resolution question but a dimensionality one.
+**Axisymmetry is useful but incomplete.** An axisymmetric code can represent some modal growth and
+provide bounds, but cannot reproduce a general three-dimensional perturbation spectrum or turbulent
+mixing cascade. Escalation beyond an axisymmetric screen is a dimensionality question, not merely a
+resolution question.
 
 ## Consequences
 
@@ -53,7 +59,7 @@ design, so this is not a resolution question but a dimensionality one.
   *second* — immediately after the run that produces the acceleration history it needs, and before
   any 2-D work — because no downstream effort can produce a verdict while this term is wider than the
   margin. It is escalated only as far as needed: a tightened analytic bound against the actual
-  decaying `a(t)` and a stated initial perturbation spectrum; then a mix model; then a resolved
+  decaying `a_RT(t)` and a stated initial perturbation spectrum; then a mix model; then a resolved
   spot-check.
 - The RT contribution is reported as an **explicit ± on the realization fraction**, at whatever level
   it is settled.

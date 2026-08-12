@@ -94,30 +94,60 @@ a count. Stated in this direction always; the inverse (projectile per carried kg
 plausible but different quantity and has caused a real collision.
 _Avoid_: "impactor-to-rocket-mass ratio" (ambiguous in direction), treating `k` as an integer
 
-**Carried-mass ratio (`K`)**:
-*Total* carried mass per projectile kg — slug plus tamper plus interlayer, `K = k(1+τ)`. The
-only quantity the thermodynamic ceiling depends on, so it is `K` rather than `k` that appears
-in `J_max = w(√(1+K) − 1)`. Distinct from `k`: a tamper raises `K` at fixed `k`.
-_Avoid_: using `k` where `K` is meant once a tamper is present
+**Tamper ratio (`τ_t`)**:
+Tamper mass per **slug** kg, `τ_t = m_t/m_s`. The subscript is required because optical depth is
+`τ_opt`. This is a mass ratio, not an optical property.
+_Avoid_: bare `τ` in the tamped-nozzle study
+
+**Interlayer ratio (`μ`)**:
+Interlayer mass per **slug** kg, `μ = m_int/m_s`. It is zero for the bare and vacuum-gap reference
+cases, but nonzero for filled Arm D and must not be silently folded into `τ_t`.
+
+**Hydrodynamic carried-mass ratio (`K`)**:
+All nonprojectile carried mass represented in the near-field hydrodynamics per projectile kg,
+`K = m_hydro/m_i`. When the only regions are slug, tamper, and interlayer,
+`K = (m_s+m_t+m_int)/m_i = k(1+τ_t+μ)`; simulated spacers or supports add their own terms.
+It equals the charged-mass ratio only when no other expendable carried mass is present.
+_Avoid_: `K = k(1+τ_t)` when an interlayer is present; using `k` where `K` is meant
+
+**Charged-mass ratio (`C`)**:
+All expended mass carried by the vehicle per projectile kg, `C = m_charged/m_i`. Thus
+`C = K + a_abl + a_other`, where `a_abl = m_abl/m_i` and `a_other` covers named expendables
+outside the near-field model. Effective Isp uses `C`:
+`Isp_eff = βw/(g₀C)`.
+
+**Ejecta-mass ratio (`K_ej`)**:
+Nonprojectile mass that exits with the event's ejecta per projectile kg. The thermodynamic
+ceiling uses this mass: `j_max = J_max/m_i = w(√(1+K_ej) − 1)`. In a closed no-ablator
+near-field calculation, `K_ej = K`; in Pass 2 it also includes whatever ablator mass the wall
+model ejects across the system boundary.
+This is distinct from `C`, which charges expended carried mass whether or not all of it exits.
 
 **Tamper**:
 Carried mass placed beyond the slug, on the far side from the plate, that turns part of the
 away-going fireball back toward it. Fully vaporised — it works by **areal density**, which is
-conserved through vaporisation, not by surviving. It is a **piston**, not a mirror: it takes
-backward momentum (credited, not lost) and what it wastes is entropy (ADR-0030).
+conserved through vaporisation, not by surviving. It is a **piston**, not a mirror: its
+backward momentum is credited, while its entropy production is one part of the ceiling-shortfall
+ledger (ADR-0030).
 _Avoid_: reflector, mirror (both imply reflected-speed is the figure of merit — it is not)
 
-**Capture fraction**:
-`(1 − 1/√k)/2` — the share of an isotropic fireball that outruns its own centre-of-mass recoil
-and reaches the plate. **Zero at `k ≤ 1`**: below that the device produces no thrust at all.
-Pure geometry, distinct from `eta_capture` in the `f(v)` study.
+**Ballistic capture fraction**:
+`max[0, (1 − 1/√k)/2]` — the share of the isotropic, pressure-free ballistic fireball model
+that outruns its own centre-of-mass recoil and reaches the plate. It is zero at `k ≤ 1`; this is
+a limit of the ballistic model, not a claim that pressure-driven hydrodynamic thrust is exactly
+zero there. Pure geometry, distinct from `eta_capture` in the `f(v)` study.
 _Avoid_: conflating with `eta_capture` (that is a 2D/1D wall-impulse ratio, this is a
 free-flight geometric fraction)
 
 **Realization fraction**:
-Delivered axial impulse as a share of the thermodynamic ceiling `w(√(1+K) − 1)`. The tamped
-study's deliverable, and what makes "spend the mass as tamper" and "spend it as slug" directly
-comparable. A bare plate realizes ≈ 49%; a tamper must exceed ≈ 63% at τ = 1 to pay.
+Net axial vehicle impulse as a share of the thermodynamic ceiling for the same ejecta mass,
+`r_real = J/J_max = β/(√(1+K_ej) − 1)`. This is the hydrodynamic comparison metric that feeds the
+effective-Isp deliverable and makes "spend the mass as tamper" and "spend it as slug" directly
+comparable. The often-quoted 62.9% break-even value applies only to the reference candidate
+`k = 7.06, τ_t = 1, μ = a_abl = 0` compared with the bare `k = 7.06` design; swept configurations
+use their own charged-mass break-even condition, `β_candidate/C_candidate > β_reference/C_reference`.
+Equivalently, the candidate's required realization fraction is
+`β_reference C_candidate/[C_reference(√(1+K_ej_candidate)−1)]`.
 _Avoid_: tamper multiplier, `Λ` (a ratio of two realized numbers, which hides the ceiling and
 miscounts recoil as loss — ADR-0030)
 

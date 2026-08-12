@@ -21,37 +21,48 @@ Where it *departs* from a decision recorded there, §12 says so explicitly.
 ## 0. Symbols and notation
 
 Every symbol used later in this document is defined here, so it can be read front to back
-without forward references. Values in the *reference* column are the reference case of §4
-(`w = 75 km/s`, `k = 7.06`, 200 kg pulse) and are quoted for orientation only — the section
-cited is authoritative. §0.8 lists the letters that carry more than one meaning; §14 is the
-glossary of named concepts, and [`CONTEXT.md`](CONTEXT.md) holds the canonical prose terms.
+without forward references. Values in the *reference* column are the analytic, no-interlayer
+reference case of §4 (`w = 75 km/s`, `k = 7.06`, `μ = 0`, 200 kg total encounter mass) and
+are quoted for orientation only — the section cited is authoritative. Filled Arm D has
+`μ > 0`, so those reference masses do not describe Arm D. §0.8 lists the few deliberately
+similar symbols; §14 is the glossary of named concepts, and [`CONTEXT.md`](CONTEXT.md) holds
+the canonical prose terms.
 
 **Frame and sign conventions.** Cylindrical `(r, z)`, axisymmetric about the device axis.
 **`+z` is the thrust direction.** The projectile arrives travelling `−z`, so its momentum is a
 debit, and useful ejecta also leaves travelling `−z`; impulse `J` is counted positive in `+z`.
 This is the origin of the `−1` in every impulse law (§2.1).
 
-**Normalisation.** `β`, `k`, and `K` are dimensionless. When `J` or the ceiling is written
-*per projectile kg*, that means `J/m_i`, with units `N·s/kg = m/s`; recover the per-pulse
-impulse by multiplying by `m_i`. `m_charged`, `E`, and the figures in §4 are per pulse unless
-stated otherwise. The two normalisations are interchangeable for Isp, since its numerator and
+**Normalisation.** `β`, `k`, `τ_t`, `μ`, `K`, `K_ej`, and `C` are dimensionless. Lower-case
+`j = J/m_i` denotes impulse per projectile mass, with units `N·s/kg = m/s`; upper-case `J`
+denotes per-pulse impulse. `m_charged`, `E`, and the figures in §4 are per pulse unless stated
+otherwise. The two normalisations are interchangeable for Isp, since its numerator and
 denominator both scale with `m_i`.
 
 ### 0.1 Masses, mass ratios, and the deliverables
 
 | symbol | meaning | reference |
 |---|---|---|
-| `m_i` | projectile (PuffSat) mass per pulse — **never charged in Isp**, it is not carried. Written `m_projectile` where the contrast with carried mass is the point (§3.1) | 24.81 kg at `τ` = 0; 13.23 kg at `τ` = 1 (§4) |
-| `m_s`, `m_t` | slug mass, tamper mass | 175.2 kg / — at `τ` = 0; 93.4 kg each at `τ` = 1 |
-| `m_charged` | all expended **carried** mass per pulse — slug + tamper + interlayer, plus the ablator in Pass 2. The Isp denominator (§3.1) | 175.2 kg (Pass 1, `τ` = 0) |
+| `m_i` | projectile (PuffSat) mass per pulse — **never charged in Isp**, because it is supplied externally rather than carried by the vehicle. Written `m_projectile` where the contrast with carried mass is the point (§3.1) | 24.81 kg at `τ_t = 0`; 13.23 kg at `τ_t = 1`, both with `μ = 0` (§4) |
+| `m_s`, `m_t`, `m_int` | slug, tamper, and interlayer mass per pulse | 175.2 kg / — / — at `τ_t = μ = 0`; 93.4 kg / 93.4 kg / — at `τ_t = 1, μ = 0` |
+| `m_hydro` | all nonprojectile carried mass represented in the near-field hydrodynamics: at minimum `m_s + m_t + m_int`, plus any consumable spacer/support or added material region | 175.2 kg (bare reference) |
+| `m_abl` | ablator mass expended per pulse; zero by construction in Pass 1 and measured per configuration in Pass 2 | — |
+| `m_other` | other expended carried mass not represented in the near-field hydrodynamics. Must be named per configuration; permanent dry structure is excluded | zero in current references |
+| `m_enc = m_i+m_hydro` | **encounter mass per pulse** — projectile plus near-field carried mass. This is what “200 kg reference encounter” means; it is not the Isp denominator | 200 kg in §4 |
+| `m_charged = m_hydro+m_abl+m_other` | all expended **carried** mass per pulse. The Isp denominator (§3.1); a consumable Arm B spacer is charged here and included in `m_hydro` if simulated | 175.2 kg (Pass 1, bare reference) |
 | `k` | **slug ratio** — slug mass per projectile kg. Continuous, not a count | 7.06; bare-plate optimum `k*` = 7.057 |
-| `τ` | **tamper ratio** — tamper mass per slug kg. *Also optical depth, §0.8* | swept 0–2; `τ` = 1 is the reference tamper |
-| `K = k(1+τ)` | **carried-mass ratio** — total carried mass per projectile kg. The only quantity the ceiling depends on (§3.2) | 7.06 (`τ` = 0) / 14.12 (`τ` = 1); swept 6–32 |
-| `K*`, `k*` | the value of `K` (or `k`) that maximises Isp | 7.06 on Pass 1; higher on Pass 2 (§3.5) |
-| `Isp_eff = J/(g₀·m_charged)` | **effective specific impulse** — the deliverable (§3.1) | 984 s bare plate (Pass 1, upper bound) |
+| `τ_t = m_t/m_s` | **tamper ratio** — tamper mass per slug kg. The subscript distinguishes it from optical depth `τ_opt` | swept 0–2; `τ_t = 1` is the analytic reference tamper |
+| `μ = m_int/m_s` | **interlayer ratio** — interlayer mass per slug kg. Zero for the bare and vacuum-gap references; nonzero for filled Arm D | swept, not yet pinned |
+| `K = m_hydro/m_i` | **hydrodynamic carried-mass ratio**. For the named slug/tamper/interlayer regions only, `K = k(1+τ_t+μ)`; additional simulated material adds its own mass ratio | 7.06 (`τ_t = μ = 0`) / 14.12 (`τ_t = 1, μ = 0`); swept 6–32 |
+| `a_abl = m_abl/m_i` | ablator mass expended per projectile kg | zero in Pass 1; measured in Pass 2 |
+| `a_other = m_other/m_i` | other expended carried mass per projectile kg | zero in current references |
+| `C = m_charged/m_i` | **charged-mass ratio** — the denominator mass per projectile kg, `C = K + a_abl + a_other` | equals `K` in §4 |
+| `K_ej = (M_ej−m_i)/m_i` | **ejecta-mass ratio** — nonprojectile mass leaving with the event's ejecta per projectile kg. The ceiling depends on `K_ej`, not on how that mass was allocated | `K_ej = K` in Pass 1; see §3.2 for Pass 2 |
+| `K*`, `k*` | the value of `K` (or `k`) that maximises Isp **for a named configuration family and pass**; there is no universal `K*` | bare Pass-1 control `k*_bare = 7.057`; other optima are measured (§3.5) |
+| `Isp_eff = J/(g₀·m_charged) = βw/(g₀C)` | **effective specific impulse** — the final carried-mass-economy deliverable (§3.1) | 984 s bare plate (Pass 1, upper bound) |
 | `g₀` | standard gravity, 9.80665 m/s² | — |
-| **realization fraction** | delivered `J` / `J_max` — what share of the ceiling a configuration achieves (§3.3) | 49.4% bare; **62.9% is the threshold the tamper must beat** |
-| **capture fraction** | `(1 − 1/√k)/2` — share of an isotropic fireball that outruns its own recoil and reaches the plate. Zero at `k ≤ 1` (§2.2) | 31.2% at `k` = 7.06 |
+| `r_real = J/J_max = β/(√(1+K_ej)−1)` | **realization fraction** — net vehicle impulse as a share of the ceiling for the same ejecta mass (§3.3). A hydrodynamic comparison metric feeding Isp, not a replacement for Isp. The subscript distinguishes it from radial coordinate `r` | 49.4% bare; 62.9% is only the §3.4 reference-case break-even |
+| **ballistic capture fraction** | `max[0, (1 − 1/√k)/2]` — share of the isotropic, pressure-free ballistic fireball that outruns its own recoil and reaches the plate. Its zero below `k = 1` is a ballistic-model limit, not a general zero-thrust claim (§2.2, §8) | 31.2% at `k = 7.06` |
 
 ### 0.2 Speeds, impulse, and energy
 
@@ -60,48 +71,51 @@ denominator both scale with `m_i`.
 | `w` | **closing speed** of projectile and vehicle, head-on, vehicle frame | 75 km/s (envelope 74–81) |
 | `w̄` | mass-weighted mean closing speed, used only when reproducing prior work's Isp figure | 77.28 km/s (§3.2) |
 | `V = w/(1+k)` | merged blob's centre-of-mass recoil speed, directed *away* from the plate | 9.31 km/s |
-| `u = w√k/(1+k)` | fireball expansion speed in the blob frame. `u/V = √k` sets the capture fraction | 24.72 km/s |
+| `u = w√k/(1+k)` | fireball expansion speed in the blob frame. `u/V = √k` sets the ballistic capture fraction | 24.72 km/s |
 | `U_shock` | shock speed through the tamper (ice Hugoniot at ~70 GPa) — **an estimate** (§13.9) | ≈12 km/s |
 | `c_s` | sound speed | ≈9.8 km/s in the fireball |
 | `M` | Mach number | ≈2.5 terminal, at the transport hand-off (§7.1) |
-| `Δv` | velocity increment — the vehicle's per pulse (§4.1); the *tamper's* in the recoil clock `σ_t·Δv/P` (§6.3) | 1.69 m/s per pulse |
-| `J` | **net axial impulse delivered to the vehicle**, positive in `+z` and including the incoming projectile's `−m_i·w` momentum debit; `J = β·m_i·w` | 1.69×10⁶ N·s per 200 kg pulse |
-| `P_ejecta`, `M_ej = m_i(1+K)` | total axial momentum and total mass of the ejecta (§3.2) | — |
-| `J_max = w(√(1+K) − 1)` | **the ceiling** — Cauchy–Schwarz bound on `J` per projectile kg (§3.2) | — |
-| `v_e,max = J_max/K` | exhaust velocity at the ceiling | — |
+| `Δv_vehicle` | vehicle velocity increment per pulse, `J/M_vehicle` (§4.1) | 1.69 m/s per pulse |
+| `Δv_t` | tamper velocity change used in the recoil-time estimate `σ_t·Δv_t/P` (§6.3); not the vehicle's pulse increment | — |
+| `J` | **net axial impulse delivered to the vehicle**, positive in `+z` and including the incoming projectile's `−m_i·w` momentum debit; `J = β·m_i·w` | 1.69×10⁶ N·s per 200 kg reference encounter |
+| `j = J/m_i` | net axial vehicle impulse per projectile mass | `βw` |
+| `P_ejecta` | signed total axial ejecta momentum; useful, plate-opposed ejecta has `P_ejecta < 0` | — |
+| `M_ej = m_i(1+K_ej)` | total ejecta mass, including the projectile | — |
+| `j_max = w(√(1+K_ej) − 1)`; `J_max = m_i·j_max` | **the thermodynamic ceiling**, respectively per projectile mass and per pulse (§3.2) | — |
+| `v_e,max = j_max/K_ej` | net effective exhaust velocity at the ceiling, normalised by nonprojectile ejecta mass | — |
 | `β = J/(m_i·w)` | **dimensionless net-vehicle-impulse coefficient**: net vehicle impulse divided by the magnitude of the incoming projectile momentum. It includes the projectile momentum debit. `β·w = J/m_i` has velocity units but is not the speed or velocity increment of any material or body. `β_bare`, `β_tamp` are the ballistic closed forms; `β_ideal = √(1+k) − 1` | `β_bare(7.06)` = 0.9087, `β_bare(14.12)` = 1.6835 |
 | **projectile economy** | `β·w = J/m_i` — net vehicle impulse per projectile mass, the second reported metric (§3.1); a velocity-equivalent impulse normalisation, not a physical velocity | — |
-| `E` | pulse kinetic energy `½m_i w²`; `E/J = w/(2β)` is energy per unit impulse (§3.5) | 69.8 GJ (`τ` = 0) / 37.2 GJ (`τ` = 1) |
+| `E` | incoming projectile kinetic energy per pulse, `½m_i w²`; `E/J = w/(2β)` is energy per unit impulse (§3.5) | 69.8 GJ (`τ_t = 0`) / 37.2 GJ (`τ_t = 1`), both at `μ = 0` |
 
 ### 0.3 Geometry
 
 | symbol | meaning | reference |
 |---|---|---|
-| `θ` | polar angle from the `+z` axis; `θ_max` is the angle subtended by the plate rim (§6.6) | material with `cos θ > 1/√k` reaches the plate |
-| `r`, `z` | radial and axial coordinate; `r̂`, `ẑ`, `n̂` are unit vectors (radial, axial, surface normal) | — |
-| `v_z` | axial velocity component, as in the wall-impulse integrand `ρv_z² + P` (§7.6) | — |
+| `θ` | polar angle from the plate-directed `+z` axis; `θ_max` is the angle the plate rim subtends at the source (§6.6) | ballistic material with `cos θ > 1/√k` reaches the plate |
+| `r`, `z` | radial and axial coordinate; `r̂`, `ẑ` are unit vectors. `n̂_wall` points from fluid into the plate (the direction of pressure force on it); `n̂_cs` points outward from a fluid control volume | — |
+| `v_z` | axial fluid-velocity component, used in the control-surface momentum flux (§7.6) | — |
 | `r_slug` | slug radius | 0.290 m (ice) / 0.683 m (snow) |
-| `h` | **tamper thickness**, `h = m_t/(2πs²ρ_t)` (§6.1). *Also RT bubble depth, §0.8* | 3.5 cm (snow slug) / 19.3 cm (ice slug, contact) |
-| `s` | **tamper stand-off radius** — radius of the tamper shell from the blob centre, so `s = r_slug` at contact. The interlayer fills it in Arm D | 0.29 m (ice) / 0.68 m (snow) at contact; 1 m in the standoff cases |
-| `d` | **plate standoff** — blob to plate. Distinct from `s`. *Also dish depth in the ratio `d/D`, §0.8* | 10 m reference; §7.1 spans to ~25 m |
+| `h_t` | **tamper thickness**, `h_t = m_t/(2πs²ρ_t)` (§6.1) | 3.5 cm (snow slug) / 19.3 cm (ice slug, contact) |
+| `s` | **tamper stand-off radius** — radius of the tamper shell from the blob centre, so `s = r_slug` at contact. In Arm D the interlayer occupies the radial gap `r_slug < r < s` | 0.29 m (ice) / 0.68 m (snow) at contact; 1 m in the standoff cases |
+| `d` | **plate standoff** — axial distance from the fireball's apparent source to the plate vertex. Distinct from `s` | 10 m reference; §7.1 spans to ~25 m |
 | `R` | pusher-plate **radius** (its diameter is `2R`) | 15 m reference; up to ~25 m under a mass ceiling |
 | `F` | paraboloid focal length; the focus-matched design sets `F = d` (§6.6) | 6–10 m |
-| `d/D` | paraboloid **depth over diameter** — the shape parameter, `= R/(8F)` | 0.19 at (15 m, 10 m); swept to ~0.35 |
-| `A` | area, as in `σ = m/A`. *Also Atwood number, §0.8* | — |
+| `δ/D` | paraboloid **dish depth over diameter** — the shape parameter, `δ/D = R/(8F)`. `δ` is not the plate standoff `d` | 0.19 at (`R = 15 m`, `F = 10 m`); swept to ~0.35 |
+| `A` | named geometric area, as in `σ = m/A`; the reference full-shell tamper uses hemispherical area `2πs²`, while partial coverage uses its actual covered area. Distinct from Atwood number `A_RT` | — |
 
 ### 0.4 Material state and thermophysics
 
 | symbol | meaning | reference |
 |---|---|---|
 | `ρ` | mass density; `ρ_slug`/`ρ_s`, `ρ_tamper`/`ρ_t`, `ρ_interlayer` | ice 917, snow 70, slush ~400 kg/m³ |
-| `σ = m/A` | **areal density** — the tamper's figure of merit, conserved through vaporisation (§2.3). `σ_t` (tamper), `σ_proj`, `σ_target`, `σ_plume`, `σ_abl` (ablated per pulse). *Also Stefan–Boltzmann, §0.8* | `σ_t` = 14.9 kg/m² at `τ` = 1, `s` = 1 m |
-| `Σ` | areal density **of the gas slab at the plate** — deliberately distinct from `σ` | ≈0.063 kg/m² |
+| `σ = m/A` | **areal density** — the tamper's figure of merit, conserved through vaporisation (§2.3). `σ_t` (tamper), `σ_proj`, `σ_target`, `σ_plume`, `σ_abl` (ablated per pulse) | `σ_t` = 14.9 kg/m² at `τ_t = 1`, `s = 1 m` |
+| `Σ` | gas mass column per unit plate area at arrival — deliberately distinct from generic `σ`. The quoted reference is plate-area-averaged; local solver outputs are functions of radius and time | ≈0.063 kg/m² |
 | `e` | specific internal energy. *Distinct from `e_eff`, §0.7* | 305.7 MJ/kg = 57.1 eV per H₂O molecule |
 | `T` | temperature (K, or eV where the plasma state matters) | 14 kK fireball; 50–80 kK at stagnation |
 | `P` | pressure. *Momentum in `P_ejecta` only* | ~2 MPa peak at the plate; ~70 GPa in the tamper shock |
-| `γ` | ratio of specific heats, `γ_eff`. *Also RT growth rate, §0.8* | `γ_eff` = 1.25 |
+| `γ` | ratio of specific heats, `γ_eff`; distinct from RT growth rate `γ_RT` | `γ_eff` = 1.25 |
 | `κ` | gray opacity | 10–1000 m²/kg — uncertain across two decades |
-| `τ = κΣ` | **optical depth** at the plate (§5.3). *Collides with the tamper ratio, §0.8* | 0.63–63 — straddles `τ ~ 1` |
+| `τ_opt = κΣ` | **optical depth** at the plate (§5.3). Distinct from tamper ratio `τ_t` | 0.63–63 — straddles `τ_opt ~ 1` |
 
 ### 0.5 Timescales and the transit ratio
 
@@ -109,28 +123,29 @@ denominator both scale with `m_i`.
 |---|---|---|
 | `t` | time | total simulated ~2–3 ms |
 | `t_dis = r_slug/u` | **slug disassembly time** — the event the tamper must act within. Spelled `t_disassembly` in §6.1 | 11.7 µs (ice) / 27.6 µs (snow) |
-| `t_shock-transit` | shock transit of the tamper, `h/U_shock` | 1.4–2.9 µs |
-| `Θ = t_dis / t_shock-transit` | **transit ratio** — whether the tamper can communicate its inertia across its own thickness in time. Must exceed ~3 (§6.1) | 9.5 (snow slug) / 0.7 (ice slug, contact) |
-| **arrival window** | duration over which fireball material reaches the plate, set by its velocity dispersion (§6.4) | ~750 µs at `d` = 10 m |
+| `t_shock-transit` | shock transit of the tamper, `h_t/U_shock` | 1.4–2.9 µs |
+| `Θ = t_dis / t_shock-transit` | **transit ratio** — how many tamper shock-transit times fit within the slug-disassembly time. `Θ ≳ 3` is the current screening gate, not a universal instability threshold; the sweep tests sensitivity (§6.1) | 9.5 (snow slug) / 0.7 (ice slug, contact) |
+| **arrival window** | time between the first and last arrivals in a stated velocity or cumulative-mass interval. The ~750 µs estimate uses the 8–20 km/s ballistic range; simulations must state their mass-flux cutoff so numerical tails do not define the interval (§6.4) | ~750 µs at `d = 10 m` |
 
 ### 0.6 Plate, ablation, and Rayleigh–Taylor
 
 | symbol | meaning | reference |
 |---|---|---|
-| `Φ` | fluence at the plate | ≈12.6 MJ/m² |
-| `α` (ablation) | sub-linearity exponent, `σ_abl ∝ Φ^α`, `α < 1` — vapour shielding (§6.5) | — |
-| `Q*` | effective heat of ablation, the ablator's material figure of merit | — |
-| `T_abl` | ablator vaporisation temperature. An ablating surface is **temperature-pinned**, so this bounds the plate (§6.5.2) | 800–1000 K → plate 753–905 K |
-| `k` (conduction) | thermal conductivity. *Third meaning of `k`, §0.8* | 45 W/m/K (steel) |
-| `α` (thermal) | thermal diffusivity. *Second meaning of `α`, §0.8* | 1.2×10⁻⁵ m²/s (steel) |
-| `σ` (radiation) | Stefan–Boltzmann constant, in the `2σT⁴` two-face radiation term (§6.5.2) | 5.67×10⁻⁸ W/m²/K⁴ |
+| `Φ` | time-integrated incident energy flux per unit plate area over one pulse; state whether a quoted value is local, peak, or area-averaged | ≈12.6 MJ/m² (reference estimate; basis specified in §6.5) |
+| `α_abl` | ablation sub-linearity exponent, `σ_abl ∝ Φ^α_abl`, `α_abl < 1` — vapour shielding (§6.5) | — |
+| `Q*` | effective energy removed from the incident/wall balance per kg of ablator expelled, used in `ṁ = q_in/Q*`; it is a model parameter that may include phase change and other unresolved losses, not merely latent heat | — |
+| `T_abl` | effective ablator vaporisation temperature imposed by the wall model while ablation is active. It bounds the substrate only while an unbroken ablating layer maintains that boundary (§6.5.2) | 800–1000 K → plate 753–905 K |
+| `k_cond` | thermal conductivity | 45 W/m/K (steel) |
+| `α_th` | thermal diffusivity | 1.2×10⁻⁵ m²/s (steel) |
+| `σ_SB` | Stefan–Boltzmann constant, in the `2σ_SB T⁴` two-face radiation term (§6.5.2) | 5.67×10⁻⁸ W/m²/K⁴ |
 | `Δh` | specific enthalpy rise of regenerative coolant (§6.5.3) | 0.33–3.34 MJ/kg |
-| `a = P/σ` | acceleration driving RT at the plume/tamper interface (§6.7) | 1.9×10⁸ m/s² (Arm D) / 3.9×10⁸ (Arm B) |
-| `A` (Atwood) | Atwood number — light fluid pushing dense, so ≈1 here | ≈1 |
-| `k` (wavenumber) | RT wavenumber `2π/λ` for a feature of wavelength `λ`. *Fourth meaning of `k`* | 10 cm and 1 m features tabulated |
-| `γ = √(A·k·a)` | RT linear growth rate. *Second meaning of `γ`* | ×20 at 10 cm over the window |
-| `α` (mix) | self-similar mix coefficient in `h ≈ α·A·a·t²`. *Third meaning of `α`* | 0.02–0.05 |
-| **mixed fraction** | RT bubble depth as a share of tamper thickness — whether the tamper stays a coherent piston (§6.7) | 8–21% Arm D; ≥100% (disrupted) Arm B |
+| `a_RT = P_int/σ_t` | screening estimate of acceleration driving RT at the plume/tamper interface. `P_int` is the interface pressure; simulations emit the area-weighted history `a_RT(t)` rather than assuming a constant (§6.7) | 1.9×10⁸ m/s² (Arm D) / 3.9×10⁸ (Arm B) |
+| `A_RT` | Atwood number — light fluid pushing dense, so ≈1 here | ≈1 |
+| `k_RT = 2π/λ` | RT wavenumber for a feature of wavelength `λ` | 10 cm and 1 m features tabulated |
+| `γ_RT = √(A_RT·k_RT·a_RT)` | RT linear growth rate | ×20 at 10 cm over the window |
+| `h_b = α_mix·A_RT·a_RT·t²` | one-sided RT bubble depth in the self-similar screening model (§6.7) | — |
+| `α_mix` | self-similar RT mix coefficient | 0.02–0.05 |
+| **bubble-depth fraction** | `h_b/h_t`, the one-sided RT bubble depth divided by tamper thickness. The quoted total mix-width estimate is a separate, model-dependent quantity and must be labelled as such (§6.7) | 8–21% Arm D; ≥100% Arm B |
 | `α`, `ε` (compaction) | distension ratio and strain in the **P-α / ε-α** porous-ice model (§7.3). *Fourth meaning of `α`* | snow at 70 kg/m³ |
 
 ### 0.7 Symbols inherited from the per-collision `f(v)` study
@@ -144,29 +159,28 @@ deliverable of this study.**
 | `f` | that study's fudge factor — delivered axial momentum as a fraction of full capture plus perfect elastic bounce | front matter only |
 | `e_eff` | effective restitution, `p_rebound/p_in`. **Not** the specific internal energy `e` | §5.3, quoting the 2000× opacity error |
 | `eta_capture` | capture *efficiency* — a 2-D/1-D wall-impulse ratio. Distinct from this study's capture *fraction*, which is a free-flight geometric share | §6.6, §12 |
-| `Λ` | the prior **tamper multiplier**, tamped impulse over bare impulse, with criterion `Λ > 1 + τ`. Superseded by the realization fraction, which does not miscount recoil as loss (ADR-0030); still reported once at Rung 1 as a bound comparable to prior work | §10 Rung 1, §12 |
+| `Λ` | the prior **tamper multiplier**, tamped impulse over bare impulse, with criterion `Λ > 1 + τ_t`. Superseded by the realization fraction, which does not miscount recoil as loss (ADR-0030); still reported once at Rung 1 as a bound comparable to prior work | §10 Rung 1, §12 |
 
-### 0.8 Reused symbols — the same letter, a second meaning
+### 0.8 Similar symbols retained for domain conventions
 
-Kept rather than renamed, because each is standard notation in its own subfield. Context
-disambiguates in every case, but the table is the reference:
+Load-bearing collisions have explicit subscripts. The few remaining similar forms are retained
+because they are conventional, but this table makes their scopes explicit:
 
 | symbol | meanings | how to tell them apart |
 |---|---|---|
-| `τ` | **tamper ratio** (throughout) / **optical depth** `κΣ` (§4.1, §5.3, §7.2) | optical depth appears only beside `κ`, `Σ`, or the phrase "`τ ~ 1`" |
-| `k` | **slug ratio** (throughout) / thermal conductivity (§6.5.2) / RT wavenumber (§6.7) | the latter two are confined to those two sections |
-| `α` | ablation sub-linearity exponent (§3.5, §6.5) / thermal diffusivity (§6.5.2) / RT mix coefficient (§6.7) / distension in P-α compaction (§7.3) | exponent when it sits on `Φ` or `β`; the rest are section-local |
-| `σ` | **areal density** (throughout) / Stefan–Boltzmann constant (§6.5.2 only) | the constant appears only inside `2σT⁴` |
-| `A` | area (§2.3) / Atwood number (§6.7) | — |
-| `γ` | ratio of specific heats (§4) / RT growth rate (§6.7) | — |
-| `h` | tamper thickness (§6.1) / RT bubble depth (§6.7) | §6.7 compares the two — their *ratio* is the mixed fraction |
-| `d` | plate standoff (throughout) / dish depth, inside the ratio `d/D` (§6.6, §10 Rung 4) | `d/D` is always written as a ratio and is dimensionless |
+| `τ_t`, `τ_opt` | tamper ratio / optical depth | always keep the subscript |
+| `k`, `k_cond`, `k_RT` | slug ratio / thermal conductivity / RT wavenumber | always keep the subscript outside the slug ratio |
+| `α_abl`, `α_th`, `α_mix`, `α` in P-α | ablation exponent / thermal diffusivity / RT mix coefficient / porous distension | the compaction-model name retains its literature notation |
+| `σ`, `σ_SB` | areal density / Stefan–Boltzmann constant | always keep `SB` on the constant |
+| `A`, `A_RT` | geometric area / Atwood number | always keep `RT` on the latter |
+| `γ`, `γ_RT` | ratio of specific heats / RT growth rate | always keep `RT` on the latter |
+| `h_t`, `h_b` | tamper thickness / one-sided RT bubble depth | their ratio `h_b/h_t` is the bubble-depth fraction |
+| `d`, `δ` | plate standoff / dish depth | dish shape is `δ/D`, never `d/D` |
 | `e` | specific internal energy (§4) / `e_eff`, restitution from the prior study (§5.3) | `e_eff` always carries its subscript |
 | `P` | pressure (throughout) / momentum, in `P_ejecta` (§3.2) | momentum only ever as `P_ejecta` |
 
-**§6.5.2 is the one place where four collisions meet in a single expression:** in
-`k·ΔT·√(t/πα)` against `2σT⁴`, `k` is thermal conductivity, `α` thermal diffusivity, `σ` the
-Stefan–Boltzmann constant, and `t` the 750 µs residence time.
+For example, §6.5.2 writes the heat-balance expression unambiguously as
+`k_cond·ΔT·√(t/(π α_th))` against `2σ_SB T⁴`.
 
 ---
 
@@ -192,20 +206,22 @@ straddles "clearly worth it" and "actively harmful." The disagreement is entirel
 pressure coupling in a partially-ionised, optically-thick, self-similar expansion, which is
 not an algebra problem.
 
-**What makes this tractable:** §3 establishes a single thermodynamic ceiling that every
+**What makes this tractable:** §3 establishes a single thermodynamic-ceiling definition that every
 configuration can be scored against, converting a contested multiplier into a measured
-**realization fraction**. The tamper must achieve **>62.9%** of that ceiling to beat doing
-nothing. A *perfect* mirror achieves 61.7%. So the entire question is whether pressure
-coupling — omitted from every existing model — closes a 1.2-percentage-point gap.
+**realization fraction**. In the no-interlayer reference comparison of §3.4, the tamper must
+achieve **>62.9%** of that ceiling to beat the bare control, while a *perfect* mirror achieves
+61.7%. Swept designs use the configuration-specific break-even rule in §3.4. So the reference
+question is whether pressure coupling — omitted from every existing model — closes a
+1.2-percentage-point gap.
 
-**Vehicle context:** 1000 t vehicle; a 200 kg reference pulse at 1–4 Hz gives 1.69 m/s of Δv
-per pulse (0.17–0.69 g) over ~5400 pulses. Pulse mass and cadence are a **free trade at
+**Vehicle context:** 1000 t vehicle; a 200 kg reference encounter at 1–4 Hz gives 1.69 m/s of `Δv_vehicle`
+per pulse (0.17–0.69 g) over ~5400 pulses. Encounter mass and cadence are a **free trade at
 fixed thrust**, not independently pinned (§4.1).
 
-**The plate side turned out to be simpler than first scoped.** An ablating surface is
-temperature-pinned, so the substrate cannot exceed the ablator's vaporisation temperature —
-a steel plate equilibrates near **750–905 K** at 4 Hz and is comfortably fine with no
-material escalation (§6.5.2). The only plate-side quantity that matters is therefore
+**The plate-side working hypothesis is simpler than first scoped.** While an intact ablating
+layer is active, its effective vaporisation temperature pins the boundary; the closed-form
+screen predicts a steel plate near **750–905 K** at 4 Hz. Rung 6 must verify that interface
+condition and burn-through margin. The remaining load-bearing plate quantity is
 **ablator mass**, which is charged in the Isp denominator and is currently uncertain by 27×.
 
 **Two passes.** Pass 1 (Rungs 1–5) **ignores ablator mass entirely**, isolating the tamper
@@ -256,8 +272,9 @@ ejected backwards faster than the projectile arrived forwards. This is the origi
 3. The merged blob's centre of mass recedes from the plate at `V = w/(1+k)` while the
    fireball expands at `u = w√k/(1+k)`, where `k` = slug mass / projectile mass. Since
    `u/V = √k`, only material with `cos θ > 1/√k` outruns the recoil and reaches the plate —
-   a **capture fraction of `(1 − 1/√k)/2`**, which is 31.2% at `k = 7.06` and **exactly
-   zero at `k ≤ 1`**.
+   a **ballistic capture fraction of `max[0, (1 − 1/√k)/2]`**, which is 31.2% at
+   `k = 7.06` and zero at `k ≤ 1`. This is the pressure-free ballistic model's result;
+   hydrodynamic pressure may still produce small nonzero thrust below that threshold (§8).
 4. The **tamper** sits beyond the slug and turns part of the away-going half around. It is
    never struck by plate-bound material.
 5. Gas reaching the plate stagnates against it and re-expands, delivering axial impulse.
@@ -280,20 +297,27 @@ The deliverable is **effective specific impulse in the thrust direction**:
 
 ```
 Isp_eff = J / (g₀ · m_charged)
+        = βw / (g₀ · C)
 ```
 
 `m_charged` is **all expended carried mass**. It is evaluated in two passes:
 
 | | `m_charged` | status |
 |---|---|---|
-| **Pass 1** (Rungs 1–5) | slug + tamper + interlayer | **an upper bound on Isp**, always labelled as such |
-| **Pass 2** (Rung 6) | the above **+ ablator** | the honest number |
+| **Pass 1** (Rungs 1–5) | all expended near-field carried mass `m_hydro` + named `m_other`; ablator excluded | **an upper bound on Isp**, always labelled as such |
+| **Pass 2** (Rung 6) | Pass 1 **+ ablator** | the final charged-mass number |
 
 Pass 1 deliberately excludes the ablator so that the tamper question — the point of the
 study — is isolated from the plate question and can be answered without waiting on Rung 6.
-Pass 1 also reproduces the denominator prior work used, so it is directly comparable to
-existing figures. **No Pass-1 Isp may be quoted without the upper-bound label**, since the
-ablator's share is currently unbounded between ~2% and ~60%.
+Pass 1 preserves the no-ablator convention used by prior work. Its bare and no-interlayer
+reference cases are therefore directly comparable; filled Arm D additionally charges its
+interlayer. **No Pass-1 Isp may be quoted without the upper-bound label**, since the ablator's
+share is currently unbounded between ~2% and ~60%.
+
+The distinction between `K`, `K_ej`, and `C` matters only when the interlayer or ablator is
+present: `K` inventories the mass in the near-field hydrodynamics, `K_ej` inventories the
+mass in the ceiling calculation, and `C` inventories the carried mass charged by Isp. They
+are equal in the no-ablator reference cases, which is why earlier algebra could use one letter.
 
 **The projectile is not charged here, and the study reports a second metric instead of
 pricing it.** The vehicle spends two distinct resources per unit of Δv: mass it *carries*
@@ -324,20 +348,26 @@ minus the momentum carried out:
 J = −m_i·w − P_ejecta
 ```
 
-The ejecta's total energy is `½ m_i w²` (slug and tamper start at rest in the vehicle
-frame), so by Cauchy–Schwarz `|P_ejecta| ≤ √(2 M_ej E)` with `M_ej = m_i(1+K)`. Define
+The ejecta's total energy is at most `½ m_i w²` (all carried material starts at rest in the
+vehicle frame), so by Cauchy–Schwarz `|P_ejecta| ≤ √(2 M_ej E)`. Define
 
 ```
-K = k(1+τ) = total CARRIED mass per projectile kg
-             (τ = tamper mass per slug kg)
+K    = m_hydro/m_i         hydrodynamic carried mass / projectile mass
+     = k(1+τ_t+μ)          when slug, tamper, and interlayer are the only regions
+K_ej = (M_ej−m_i)/m_i      nonprojectile ejecta mass / projectile mass
 ```
 
-Then, per projectile kg:
+Thus the per-projectile-mass and per-pulse ceilings are, respectively:
 
 ```
-J_max   = w·(√(1+K) − 1)
-v_e,max = J_max/K = w·(√(1+K) − 1)/K
+j_max   = J_max/m_i = w·(√(1+K_ej) − 1)
+J_max   = m_i·j_max
+v_e,max = j_max/K_ej
 ```
+
+In a closed no-ablator calculation, `K_ej = K`. In Pass 2, `K_ej` also includes ablator mass
+actually ejected across the system boundary; `C` separately charges all expended ablator mass. The wall model must
+report both so Pass 2 does not silently assume they are identical.
 
 Equality requires **every ejecta element to end up moving −z at one common speed**, which
 in turn requires the plate to catch and reverse all plate-bound material. This reproduces
@@ -346,24 +376,32 @@ the project's prior analytic results exactly (`β_ideal = √(1+k) − 1`; bare-
 
 ### 3.3 Two consequences that define the study
 
-**(a) At the ceiling, the tamper is neutral.** `v_e,max` depends only on `K`, not on how
-`K` splits between slug and tamper. **The tamper can therefore never be justified as a
-momentum multiplier** — only as a *realizability* device. The deliverable is a
-**realization fraction**: what share of the ceiling a configuration achieves.
+**(a) At the ceiling, the tamper is neutral.** `v_e,max` depends only on `K_ej`, not on how
+that ejecta mass splits among slug, interlayer, tamper, and ablator. **The tamper can therefore never be justified as a
+momentum multiplier** — only as a *realizability* device. The hydrodynamic comparison metric is
+the **realization fraction** `r_real = J/J_max`: what share of the same-ejecta-mass ceiling a
+configuration achieves. It feeds the final effective-Isp deliverable.
 
-**(b) The tamper's backward recoil is credited, not lost.** Its `−z` momentum is the exact
-accounting mirror of the `+z` impulse delivered to the plate. This reverses the prior
-framing, in which tamper recoil was treated as the mechanism that kills the concept.
+**(b) The tamper's backward recoil is credited, not lost.** Its `−z` momentum contributes
+usefully to the full-system momentum balance. It is not, by itself, equal to plate impulse:
+the projectile, slug, interlayer, all escaping material, and the vehicle share that balance.
+This reverses the prior framing, in which tamper recoil was treated as the mechanism that
+kills the concept.
 
-**Design consequence:** what is actually lost is **entropy** — energy thermalised in the
-tamper, which must then be re-expanded a second time, isotropically, at a second efficiency
-cost. Entropy production rises steeply with shock strength. **The ideal tamper is a
+**Design consequence:** entropy production is one important source of shortfall — energy
+thermalised in the tamper must then be re-expanded a second time, isotropically, at a second
+efficiency cost. Angular dispersion, ejecta velocity variance, residual internal energy,
+radiation, incomplete capture, and wrong-way material can also lower `r_real`. Entropy production
+rises steeply with shock strength. **The ideal tamper is a
 maximally isentropic piston, not a cold specular mirror.** Instrument the tamper's
-entropy/thermal budget and its centre-of-mass momentum, not its reflected-speed ratio.
+entropy/thermal budget and its centre-of-mass momentum alongside the complete shortfall and
+momentum ledgers, not its reflected-speed ratio alone.
 
-### 3.4 The number to beat
+### 3.4 The reference number to beat
 
-At `w = 75 km/s`, `k = 7.06`. `β = J/(m_i·w)` is the dimensionless net-vehicle-impulse
+This subsection is an analytic **reference comparison**, not the acceptance rule for every
+swept design. It holds `w = 75 km/s`, `k = 7.06`, `μ = a_abl = 0`, and compares a
+`τ_t = 1` candidate with the bare `k = 7.06` control. `β = J/(m_i·w)` is the dimensionless net-vehicle-impulse
 coefficient, including the incoming projectile momentum debit. Thus `β·w = J/m_i` is a
 velocity-equivalent impulse per projectile mass, **not a physical axial velocity**;
 `β_bare` and `β_tamp` are the ballistic closed forms from prior work, re-verified here
@@ -373,40 +411,53 @@ velocity-equivalent impulse per projectile mass, **not a physical axial velocity
 |---|---|---|---|---|
 | **bare plate, k = 7.06** | 7.06 | 0.9087 | **49.4%** | **984 s** |
 | bare plate, k = 14.12 — same mass spent as *slug* | 14.12 | 1.6835 | 58.3% | 912 s |
-| **perfect-mirror tamper, τ = 1** | 14.12 | 1.7825 | **61.7%** | **965 s** |
+| **perfect-mirror tamper, τ_t = 1** | 14.12 | 1.7825 | **61.7%** | **965 s** |
 | *break-even against the bare plate at k = 7.06* | 14.12 | 1.817 | **62.9%** | 984 s |
 | ceiling at `K` = 7.06 / 14.12 | — | 1.839 / 2.889 | 100% | 1992 / 1565 s |
 
-Read this row by row. A tamper at `τ = 1` **beats** spending the same mass as extra slug
+Read this row by row. In this reference comparison, a tamper at `τ_t = 1` **beats** spending the same mass as extra slug
 (61.7% vs 58.3%), but **loses** to not spending the mass at all (61.7% vs the 62.9% needed)
 — *and that is with a perfect mirror*. Any finite-mass mirror does worse. Adding the
 free-plate elastic lower bound gives the honest bracket of **591–965 s against 984 s**.
 
-**Therefore the tamper pays only if pressure coupling lifts it above 62.9%.** Every prior
+**Therefore this reference tamper pays only if pressure coupling lifts it above 62.9%.** Every prior
 model of this device is ballistic (straight-line gas elements, `ρv²` only, no `P` term), and
 at `k ≈ 7` the fireball's sound speed and its recoil velocity are equal to within 5% — the
 worst possible regime in which to omit pressure. That is the gap this study exists to close.
+
+For any other candidate or for Pass 2, break-even is configuration-specific:
+
+```
+β_candidate/C_candidate > β_reference/C_reference
+r_real_candidate > [β_reference·C_candidate]
+                    / [C_reference·(√(1+K_ej_candidate)−1)]
+```
+
+Its required realization fraction follows from that candidate's `K_ej` and `C`; 62.9% must
+not be applied as a universal gate. The same-mass extra-slug competitor uses the same `C` as
+the candidate, including interlayer and configuration-dependent ablator mass.
 
 ---
 
 ### 3.5 The mass ratio is a design variable, and the Isp optimum is not where it settles
 
-`K` — carried mass per projectile kg, equivalently the split of the fixed 200 kg pulse
-between projectile and carried mass (`m_i = 200/(1+K)`) — is a primary design output of this
-study, not an inherited input.
+`K` — near-field carried mass per projectile kg — is a primary design output of this study,
+not an inherited input. Where total encounter mass is held at 200 kg,
+`m_i = 200/(1+K)`; that equality includes the projectile plus near-field carried mass and
+does not include the Pass-2 ablator unless the sweep explicitly holds total charged mass fixed.
 
-**There is a genuine physics optimum.** `K* ≈ 7.06` for a bare plate is not an economic
-result: it is the competition between capture fraction, which rises with `K`, and exhaust
+**There is a genuine bare-ballistic optimum.** `k*_bare ≈ 7.06` for a bare plate is not an economic
+result: it is the competition between ballistic capture fraction, which rises with `k`, and exhaust
 velocity, which falls with it. Pure geometry, entirely in scope.
 
 **But it is very flat, and the quantity it trades against is steep.** Three exact relations
-govern the trade — note that the first two contain **no pulse mass and no cadence**, so they
-hold under any pulse-size/rate schedule:
+govern the trade — note that the first two contain **no encounter mass and no cadence**, so they
+hold under any encounter-size/rate schedule at fixed dimensionless design:
 
 ```
 energy per unit impulse         E/J = w/(2β)     [J per N·s]
 projectiles per unit impulse         = 1/(β·w)
-effective Isp                        ∝ β/K
+effective Isp                        = βw/(g₀C)
 ```
 
 **Plate heat load and projectile consumption are the same function** — both scale as `1/β`
@@ -429,18 +480,19 @@ ablator's vaporisation point regardless of `K` or cadence (§6.5.2). What does i
 falls with `β`. The denominator is therefore
 
 ```
-m_charged / J  ∝  K/β  +  (ablator term)/β^α        with α < 1
+m_charged / J  ∝  K/β  +  (ablator term)/β^α_abl    with α_abl < 1
 ```
 
-The first term is minimised at `K* ≈ 7.06`; the second decreases monotonically with `K`. So
-their sum has **a genuine interior minimum above `K* = 7.06`**, located by how large the
-ablator's share turns out to be. This is entirely internal to Isp — no external constraint,
-no economic weighting.
+For the **bare ballistic family**, the first term is minimised at `k*_bare ≈ 7.06`; the
+ablator term may shift that family's Pass-2 optimum upward. A tamped or interlayered family
+has a different `β(K, τ_t, μ, geometry, …)` and must locate its own Pass-1 and Pass-2 optima
+from the computed curves. There is no ceiling optimum at 7.06: at the ideal ceiling,
+`v_e,max = w/(√(1+K_ej)+1)` decreases monotonically with `K_ej`.
 
-**Consequence for the two passes.** On **Pass 1** the ablator term is zero by construction,
-so the optimum sits exactly at the ceiling optimum `K* ≈ 7.06`. On **Pass 2** it shifts
-upward, and by how much is one of Rung 6's outputs. The `K` grid must therefore span well
-past 7 — at least 6–32 — rather than clustering around the Pass-1 answer.
+**Consequence for the two passes.** On **Pass 1**, the bare control should reproduce
+`k*_bare ≈ 7.06`; tamped and interlayered designs locate their own optima. On **Pass 2** every
+family is re-optimised with its measured ablator term. The `K` grid must therefore span at
+least 6–32 rather than clustering around the bare-control answer.
 
 **Consequence — the tamper's case gets harder.** The tamper and extra slug are two routes to
 the same end: both raise `β`. §3.4 shows extra slug reaches 58.3% of ceiling against the
@@ -449,16 +501,19 @@ model, and no assembly complexity. **The tamper must beat a rival that is strict
 
 ---
 
-## 4. Reference case
+## 4. Analytic no-interlayer reference case
 
-`w = 75 km/s`, `k = 7.06`, total per-pulse mass 200 kg.
+`w = 75 km/s`, `k = 7.06`, `μ = 0`, total encounter mass per pulse
+`m_i + m_s + m_t = 200 kg`. This table supports the analytic comparisons in §3.4; it is not
+the filled Arm D mass ledger.
 
-| quantity | τ = 0 | τ = 1 |
+| quantity | `τ_t = 0` | `τ_t = 1` |
 |---|---|---|
 | projectile `m_i` | 24.81 kg | 13.23 kg |
 | slug | 175.2 kg | 93.4 kg |
 | tamper | — | 93.4 kg |
-| **pulse energy `½ m_i w²`** | **69.8 GJ** | **37.2 GJ** |
+| interlayer | — | — |
+| **incoming projectile energy `½ m_i w²`** | **69.8 GJ** | **37.2 GJ** |
 | blob CM recoil `V = w/(1+k)` | 9.31 km/s | 9.31 km/s |
 | fireball expansion `u = w√k/(1+k)` | 24.72 km/s | 24.72 km/s |
 
@@ -475,43 +530,46 @@ that the whole tamper mechanism depends on.
 
 ### 4.1 Vehicle and mission context
 
-**Vehicle mass is pinned at 1000 t** (the plate is 5% of it). **Pulse mass and cadence are
-not independently pinned** — they are a free trade at fixed thrust. A 200 kg pulse is the
-reference point, not a constraint:
+**Vehicle mass is pinned at 1000 t** (the plate is 5% of it). **Encounter mass and cadence are
+not independently pinned** — they are a free trade at fixed thrust. A 200 kg encounter is the
+reference point, not a constraint; configuration-specific carried mass is `m_charged`, not 200 kg:
 
-| quantity (200 kg reference pulse) | value | derivation |
+| quantity (200 kg bare reference encounter) | value | derivation |
 |---|---|---|
-| impulse per pulse (bare, `K` = 7.06, τ = 0) | 1.69×10⁶ N·s | `β_bare · m_i · w` |
-| **Δv per pulse** | **1.69 m/s** | modest, as intended |
+| impulse per pulse (bare, `K = 7.06`, `τ_t = μ = 0`) | 1.69×10⁶ N·s | `β_bare · m_i · w` |
+| **vehicle `Δv_vehicle` per pulse** | **1.69 m/s** | modest, as intended |
 | **vehicle acceleration** | **0.17 g at 1 Hz / 0.69 g at 4 Hz** | |
-| carried mass flow | 200 kg/s / **800 kg/s** | |
+| total encounter mass flow | 200 kg/s / **800 kg/s** | includes externally supplied projectiles |
+| carried-mass flow, bare control | 175 kg/s / **701 kg/s** | `m_s` only |
 | departure burn (Δv ≈ 7.06 km/s at Isp 984 s) | ~1350 s, ~5400 pulses at 4 Hz | mass ratio 2.08 |
 | plate recoil per pulse (50 t plate) | 34 m/s | 0.17% of gas speed |
 
-Two cross-checks fall out. The 800 kg/s carried-mass flow at 4 Hz matches this project's
-independently-derived requirement (8.85 kg/s for a 10 t vehicle, i.e. 885 kg/s at 1000 t) to
-within 10%. And the 34 m/s plate recoil against ~20 km/s gas confirms the **rigid-wall
+Two cross-checks fall out. The 701 kg/s bare-control carried-mass flow and 800 kg/s total
+encounter flow bracket this project's independently-derived carried-mass requirement
+(8.85 kg/s for a 10 t vehicle, i.e. 885 kg/s at 1000 t). They are kept separate because the
+projectile is not carried. The 34 m/s plate recoil against ~20 km/s gas confirms the **rigid-wall
 assumption with a factor of ~600 in hand**.
 
-**The pulse-mass / cadence trade is genuinely free, and average heat load is invariant under
-it.** Since `E/J = w/(2β)` contains neither pulse mass nor cadence (§3.5), average thermal
-power is `Thrust · w/(2β)` — **doubling pulse mass and halving cadence changes it not at
+**The encounter-mass / cadence trade is genuinely free, and average heat load is invariant under
+it.** Here encounter mass means `m_enc`, scaled at fixed dimensionless mass ratios and geometry.
+Since `E/J = w/(2β)` contains neither encounter mass nor cadence (§3.5), average thermal
+power is `Thrust · w/(2β)` — **doubling encounter mass and halving cadence changes it not at
 all.** Thrust, and therefore acceleration and gravity loss, are likewise held. What the
 trade *does* buy:
 
 - **Less total ablator**, because ablation is sub-linear in fluence — concentrating the same
-  energy into fewer, larger pulses ablates less overall, and ablator mass is charged (§3.1).
-- **Better optical depth**: `Σ` at the plate scales with pulse mass, moving further from the
-  `τ ~ 1` regime where flux-limited diffusion is weakest and where this project has
+  energy into fewer, larger encounters ablates less overall, and ablator mass is charged (§3.1).
+- **Better optical depth**: `Σ` at the plate scales with encounter mass, moving further from the
+  `τ_opt ~ 1` regime where flux-limited diffusion is weakest and where this project has
   previously suffered a 2000× opacity error (§5.3).
-- **Scale-invariance of the tamper physics**: both `Θ` (§6.1) and the RT mixed fraction
+- **Scale-invariance of the tamper physics**: both `Θ` (§6.1) and the RT bubble-depth fraction
   (§6.7) are ratios and do not move, so the trade cannot rescue or break the tamper.
 - Cost: higher per-pulse fluence means deeper ablation per pulse, so the layer must be
   thicker — though the longer interval gives more time to lay it down.
 
 **Cadence is set by gravity losses alone.** Prior finite-burn integration on this project
 gives departure gravity losses of 2.2% at 1 g, 5.1% at 0.5 g, 9.3% at 0.25 g, so higher
-acceleration is preferred — and at fixed thrust that is a statement about pulse mass × rate,
+acceleration is preferred — and at fixed thrust that is a statement about encounter mass × rate,
 not about cadence alone. Plate thermal rejection does **not** compete for this knob (§6.5.2).
 
 One consequence stays out of scope but is no longer deferrable: the plate takes 34 m/s per
@@ -547,10 +605,13 @@ survives only as a control case.
 | specific internal energy | up to ~300 MJ/kg | 57 eV/molecule |
 | composition | H₂O through dissociation and first ionisation | multi-stage O ionisation at stagnation |
 
-**Both ends exceed the project's baseline table** (`data/tables/water.json`: ρ 0.01–1198
-kg/m³ over 61 points, T 300–60,000 K over 60 points). The extended-grid table built for a
-prior 69 km/s scenario (`water_jupiter.json`: T to 1.2×10⁶ K, ρ to 10⁻⁴, carrying real
-TOPS/OPLIB gray opacities) **does** cover it and is the intended baseline here.
+**No existing table covers the required material domain.** The baseline
+`data/tables/water.json` spans ρ 0.01–1198 kg/m³ and T 300–60,000 K, but its high-density
+states do not constitute a validated solid-ice impact EOS. The prior 69 km/s table
+`water_jupiter.json` extends T to 1.2×10⁶ K and low density to 10⁻⁴ kg/m³, but stops at
+30 kg/m³ and is a chemical-equilibrium vapor/plasma EOS. It cannot represent 917 kg/m³ ice,
+ice Hugoniots, phase boundaries under shock compression, projectile penetration, or porous
+compaction. It remains useful only after material has entered its validated fluid/plasma regime.
 
 ### 5.2 Timescales
 
@@ -568,10 +629,10 @@ TOPS/OPLIB gray opacities) **does** cover it and is the intended baseline here.
 ### 5.3 Optical depth
 
 Areal density of the gas slab at the plate is `Σ ≈ 0.063 kg/m²`. With κ for warm dense
-water uncertain across ~two decades (10–1000 m²/kg), `τ = κΣ` spans **0.63 to 63** — it
-**straddles `τ ~ 1`**, which is exactly where flux-limited diffusion is weakest. Prior
+water uncertain across ~two decades (10–1000 m²/kg), `τ_opt = κΣ` spans **0.63 to 63** — it
+**straddles `τ_opt ~ 1`**, which is exactly where flux-limited diffusion is weakest. Prior
 experience on this project is directly relevant: at 69 km/s an interim Kramers opacity ran
-~2000× low at stagnation and falsely predicted `τ ~ 1`, moving `e_eff` from 0.42 to 0.65
+~2000× low at stagnation and falsely predicted `τ_opt ~ 1`, moving `e_eff` from 0.42 to 0.65
 once real opacities were used. **Real tabulated opacity is a requirement here, not a
 refinement.**
 
@@ -585,13 +646,15 @@ All derived from scratch; estimates are flagged as such.
 
 A tamper functions only if it can communicate its inertia across its own thickness before
 the event ends. Let `Θ = t_disassembly / t_shock-transit`. With
-`t_dis = r_slug/u`, tamper thickness `h = m_t/(2πs²ρ_t)`, and `m_s = (4/3)πr³ρ_s`:
+`t_dis = r_slug/u`, tamper thickness `h_t = m_t/(2πs²ρ_t)`, and `m_s = (4/3)πr³ρ_s`:
 
 ```
-Θ = (3/2) · (ρ_tamper/ρ_slug) · (U_shock/u) · (s/r_slug)² / τ
+Θ = (3/2) · (ρ_tamper/ρ_slug) · (U_shock/u) · (s/r_slug)² / τ_t
 ```
 
-`U_shock ≈ 12 km/s` (ice Hugoniot at ~70 GPa — **estimated**, worth confirming). At τ = 1:
+`U_shock ≈ 12 km/s` (ice Hugoniot at ~70 GPa — **estimated**, worth confirming). The
+working gate `Θ ≳ 3` requires about three traversals within `t_dis`; it is a design screen,
+not a derived sharp threshold. At `τ_t = 1`:
 
 | configuration | slug radius | tamper thickness | transit | disassembly | **Θ** |
 |---|---|---|---|---|---|
@@ -601,7 +664,7 @@ the event ends. Let `Θ = t_disassembly / t_shock-transit`. With
 
 **The tamper/slug density ratio is the dominant design parameter — for a geometric timing
 reason, not an acoustic one.** It sets tamper thickness at fixed mass. There is no hard cap
-on `τ` near 1: with a snow slug, `Θ > 3` holds out to `τ ≈ 3`.
+on `τ_t` near 1: with a snow slug, `Θ > 3` holds out to `τ_t ≈ 3`.
 
 ### 6.2 Projectile penetration — a hard constraint on projectile geometry
 
@@ -641,13 +704,13 @@ estimate, and replacing it is exactly what the near-field simulation is for.*
 
 ### 6.3 The tamper's operating window
 
-Three clocks govern the tamper, and **temperature is in none of them**. At τ = 1, s = 1 m,
+Three clocks govern the tamper, and **temperature is in none of them**. At `τ_t = 1`, `s = 1 m`,
 `σ_t = 14.9 kg/m²`:
 
 | clock | mechanism | value |
 |---|---|---|
 | slug disassembly | the event it must act on ends | 11.7 µs |
-| **recoil** `σ_t·Δv/P` | it comoves with the plume; no further momentum transfers | **~45 µs** |
+| **recoil** `σ_t·Δv_t/P` | it comoves with the plume; no further momentum transfers | **~45 µs** |
 | lateral spread `R/c_s` | area grows, `σ` falls | ~200 µs |
 
 It completes its work ~4× before it disperses. The tamper–plume collision deposits
@@ -655,7 +718,7 @@ It completes its work ~4× before it disperses. The tamper–plume collision dep
 
 Cross-check: `σ_tamper/σ_plume = 1.75` here, giving a 1-D elastic free-plate
 reflected/incident ratio of **0.274**, which reproduces the prior analytic lower bound at
-τ = 1 to two figures.
+`τ_t = 1` to two figures.
 
 ### 6.4 The plate sees a quasi-steady plenum, not a bounce
 
@@ -681,7 +744,7 @@ the exact opposite — a ~µs bounce with fast relief. Consequences:
 So **capture-per-unit-fluence `∝ R²` and nothing else — plate radius is the only lever that
 breaks the standoff conflict.** In the linear regime the ablator is a fixed fractional tax,
 invariant in both `R` and `d`. With vapour shielding, ablation is sub-linear in fluence
-(`σ_abl ∝ Φ^α`, `α < 1`), so the tax scales as `d^{2(1−α)}` — **it grows with standoff.**
+(`σ_abl ∝ Φ^α_abl`, `α_abl < 1`), so the tax scales as `d^{2(1−α_abl)}` — **it grows with standoff.**
 Standoff therefore trades a peak pressure that is not binding for an ablator mass that is
 charged in the denominator.
 
@@ -706,9 +769,9 @@ The entire ablator mass is therefore set by one thing: **how much of the inciden
 the vapour curtain blocks before it reaches the wall** — a self-consistent balance that
 resists analytic estimation:
 
-| basis | depth/pulse | mass at R = 15 m | Isp tax on 200 kg |
+| basis | depth/pulse | mass at `R = 15 m` | illustrative share of a 200 kg charged-mass basis |
 |---|---|---|---|
-| prior measured 16 km/s ablation fraction (3.7–8.9% of pulse mass), rescaled to this Σ | 7–16 µm | 4.5–10 kg | **2–5%** |
+| prior study's measured 16 km/s ablation fraction (3.7–8.9% of its incident gas-pulse mass), rescaled to this Σ | 7–16 µm | 4.5–10 kg | **2–5%** |
 | same, with naive `v⁸` scaling to ~20 km/s arrival | 40–190 µm | 25–121 kg | **13–60%** |
 
 **A 27× spread**, and the study's largest single unknown. It is excluded from Pass 1 by
@@ -734,7 +797,7 @@ last (Rung 6) rather than first.
 
 The 27× uncertainty above translates directly into two qualitatively different vehicles:
 
-| branch | per pulse | **at 4 Hz** | vs the 800 kg/s propellant flow | replenishment per pulse |
+| branch | per pulse | **at 4 Hz** | vs the 800 kg/s total encounter flow | replenishment per pulse |
 |---|---|---|---|---|
 | optimistic | 4.5–10 kg | **18–40 kg/s** | 2–5% | 7–16 µm in <250 ms |
 | pessimistic | 25–121 kg | **100–484 kg/s** | **13–60%** | 40–190 µm in <250 ms |
@@ -744,9 +807,9 @@ the vehicle except the propellant itself**, and the surface-renewal system must 
 ~0.2 mm film over 707 m² between pulses. Since the ablator is charged in the denominator
 (§3.1), this is what Rung 6 resolves.
 
-**Sub-linearity makes pulse size a lever on this.** Because ablation goes as `Φ^α` with
-`α < 1`, concentrating the same total energy into fewer, larger pulses ablates *less* in
-total. Pulse mass and cadence trade freely at fixed thrust (§4.1), so **larger pulses at
+**Sub-linearity makes pulse size a lever on this.** Because ablation goes as `Φ^α_abl` with
+`α_abl < 1`, concentrating the same total energy into fewer, larger encounters ablates *less* in
+total. Encounter mass and cadence trade freely at fixed thrust (§4.1), so **larger encounters at
 proportionally lower cadence is a direct reduction in ablator mass** — one of the few levers
 that improves the denominator without touching the physics of the tamper.
 
@@ -760,7 +823,8 @@ approaches `T_abl` the driving ΔT — and with it the conducted flux — goes t
 temperature is therefore bounded by the ablator, not by the plume.
 
 Solving the steady balance for a steel plate — conducted in per pulse
-`≈ k·ΔT·√(t/πα)` (k = 45 W/m/K, α = 1.2×10⁻⁵ m²/s, t = 750 µs) against `2σT⁴` radiated from
+`≈ k_cond·ΔT·√(t/(π α_th))` (`k_cond = 45 W/m/K`, `α_th = 1.2×10⁻⁵ m²/s`, `t = 750 µs`)
+against `2σ_SB T⁴` radiated from
 both faces, at 4 Hz:
 
 | ablator surface temperature `T_abl` | **plate equilibrium** |
@@ -877,8 +941,9 @@ trajectory is `(V_cm + u·r̂)·t`, so all rays trace back to a **fixed** origin
 skews the angular distribution but does not move the apparent source. The blur is the finite
 disassembly time, `u·t_dis ≈ 0.6 m`, against a focal length of 6–10 m: about 0.04 rad.
 
-The focus-matched optimum is `d/D = R/(8d)` → **0.19** at (R = 15 m, d = 10 m), **0.31** at
-(15 m, 6 m) — inside the previously foreclosed band.
+The focus-matched shape is `δ/D = R/(8d)` because `F = d`: **0.19** at
+(`R = 15 m`, `d = 10 m`) and **0.31** at (`R = 15 m`, `d = 6 m`) — inside the previously
+foreclosed band. Here `δ` is dish depth; `d` is source-to-plate standoff.
 
 **But the prize is bounded and the parabola carries a mass penalty:**
 
@@ -910,7 +975,8 @@ additional kernel runs:
 ### 6.7 Rayleigh–Taylor limits what can be shaped, and threatens the mechanism
 
 The tamper is a light fireball pushing a dense shell: Rayleigh–Taylor unstable. With
-`a = P/σ ≈ 1.9×10⁸ m/s²` and `γ = √(A·k·a)`, over the 27.6 µs confinement window:
+`a_RT = P/σ ≈ 1.9×10⁸ m/s²` and `γ_RT = √(A_RT·k_RT·a_RT)`, over the 27.6 µs
+confinement window:
 
 | feature wavelength | growth |
 |---|---|
@@ -928,36 +994,42 @@ the fireball/interlayer interface (it makes the interlayer a continuous pressure
 medium) and fatal at the plume/tamper interface. **The two interfaces want opposite
 outcomes.**
 
-**An analytic bound, and it forecloses Arm B.** Using the self-similar mix growth
-`h ≈ α·A·a·t²` with `α = 0.02–0.05` and Atwood number ≈ 1:
+**An analytic bound, and it provisionally forecloses Arm B.** Using the self-similar mix growth
+`h_b ≈ α_mix·A_RT·a_RT·t²` with `α_mix = 0.02–0.05` and Atwood number ≈ 1:
 
-| | acceleration `a = P/σ` | window | bubble depth `h` | tamper thickness | **mixed fraction** |
+| | acceleration `a_RT = P/σ` | window | bubble depth `h_b` | tamper thickness `h_t` | **bubble-depth fraction `h_b/h_t`** |
 |---|---|---|---|---|---|
-| **Arm D** (contact, snow slug) | 1.9×10⁸ m/s² | 27.6 µs | 2.9–7.3 mm | 34.8 mm | **8–21%** (16–63% total mix width) |
+| **Arm D** (contact, snow slug) | 1.9×10⁸ m/s² | 27.6 µs | 2.9–7.3 mm | 34.8 mm | **8–21%** |
 | **Arm B** (vacuum standoff, 1 m) | 3.9×10⁸ m/s² | 45 µs | 16–40 mm | 16.2 mm | **100–246% — fully disrupted** |
 
-**Arm B's tamper is shredded before it finishes its job**, across the whole plausible `α`
+For Arm D, a separate heuristic that adds spike and bubble penetration gives a **16–63%
+total mix-width fraction**. That is not the same quantity as `h_b/h_t`, and the map from
+either measure into realization fraction is a screening assumption to be calibrated.
+
+**The screen predicts that Arm B's tamper is shredded before it finishes its job**, across the whole plausible `α_mix`
 range — a thin sheet rammed by a fast plume is torn apart, while a thicker shell pressed
 gently holds together. This is an *independent* mechanism reaching the same verdict as the
-entropy argument in §3.3, and together they foreclose Arm B (§4.2).
+entropy argument in §3.3, and together they provisionally foreclose Arm B (§4.2).
 
 *Bound, not prediction: the self-similar law assumes sustained acceleration and a broad
 initial perturbation spectrum, whereas the acceleration here decays and the initial spectrum
 is a manufacturing property. But a 2.5× overshoot does not survive a factor-of-two
 correction.*
 
-**For Arm D the bound is not decisive, and that is the problem.** A 16–63% mixed fraction
+**For Arm D the bound is not decisive, and that is the problem.** A 16–63% total mix-width estimate
 moves the realization fraction roughly between "piston" (~62%) and "just extra slug"
-(~58%) — **wider than the 62.9% margin being decided.** An axisymmetric code cannot narrow
-it. See the uncertainty budget (§13.1), where this is the top-ranked contributor to the
-Isp bracket after the ablator.
+(~58%) under the current screening map. That is close enough to the reference 62.9%
+comparison to be decision-limiting. Axisymmetric calculations can represent some modal growth
+and provide bounds, but not a general 3-D perturbation spectrum or turbulent cascade. See
+the uncertainty budget (§13.1), where this is the top-ranked Pass-1 contributor.
 
 ### 6.8 Checked and dismissed
 
 - **Pulse-to-pulse interference.** Exhaust leaves at ~20 km/s; the next projectile closes at
-  75 km/s. After a ~20 s cadence the exhaust column density is ~0.3 kg/m² against a
-  projectile areal density of 95–421 kg/m². Three orders down — not a constraint, even with
-  a collimated rebound.
+  75 km/s. At the 1–4 Hz reference cadence, the next encounter follows after 0.25–1 s. The
+  exhaust-column screen must be recomputed at that spacing, not at the obsolete 20 s value,
+  before interference is dismissed; projectile areal density 95–421 kg/m² is the comparison
+  scale.
 - **Vertex hole leakage.** 0.03% of plate area. Aiming tolerance is a separate problem and
   is out of scope here.
 
@@ -989,26 +1061,33 @@ sweep. The pipeline is therefore staged, with a control-surface hand-off:
 
 - **Tier 1 — multi-material hydrodynamics with a real EOS, no radiation.** Answers the
   first-order question: does a finite-mass tamper turn the plume, or is it blown out of the
-  way? If the realization fraction at τ = 1 does not approach 62.9%, the tamper is dead and
-  later tiers are unnecessary.
-- **Tier 2 — add radiation transport.** Required at the plate, where `τ` straddles 1 (§5.3)
+  way? For the analytic reference candidate (`τ_t = 1`, `μ = a_abl = 0`), 62.9% is the
+  reference break-even. Every swept configuration is tested against its own §3.4 condition.
+- **Tier 2 — add radiation transport.** Required at the plate, where `τ_opt` straddles 1 (§5.3)
   and where the thermal load is the binding constraint. Flux-limited diffusion with
   Rosseland means in the diffusion coefficient and Planck means in the emission source.
 - **Explicitly not required:** material strength (everything is far past melt on µs
   timescales), chemistry beyond dissociation/ionisation, gravity, MHD.
 
-**Geometry:** 2-D axisymmetric `(r, z)`. The problem has a genuine symmetry axis. 1-D
-spherical is valid for the near field over the tamper's operating window (§10, Rung 1);
-3-D buys nothing until RT is addressed, and then it buys a great deal (§6.7).
+**Geometry:** 2-D axisymmetric `(r, z)` is required for resolved projectile penetration,
+jetting, angular tamper coverage, and plate transport. Spherical 1-D is a prescribed-deposition,
+full-shell screen of material interfaces, pressure coupling, and acceleration history; it cannot
+represent an axial projectile, projectile aspect ratio, angular deposition, or general RT.
+Three-dimensional work is gated on the RT uncertainty (§6.7).
 
 ### 7.3 EOS and opacity
 
 - **Water/ice:** equilibrium EOS with dissociation and first ionisation over ρ 10⁻⁴–10³
-  kg/m³ and T 300–10⁵ K. The project's extended-grid table meets this.
+  kg/m³ and T 300–10⁵ K, including a defensible solid/liquid cold curve, shock-compressed
+  states, phase-energy reference, and release paths. No current project table meets this;
+  `water_jupiter.json` supplies only the lower-density vapor/plasma part of the eventual model.
 - **Snow at 70 kg/m³ is not a standard EOS entry.** It must be modelled as porous ice — a
   P-α or ε-α compaction model layered on the ice EOS. Porous compaction is dissipative and
   changes how the projectile's energy is deposited; **it must not be approximated by simply
   rescaling the ice EOS density.** This is the single largest new physics item.
+- **Handoff:** define a thermodynamically consistent transition from the dense ice/water model
+  into the existing dissociating/ionising vapor-plasma EOS, with one energy zero and no pressure
+  or energy discontinuity over the overlap region.
 - **Opacity:** real tabulated per-regime opacities, not Kramers (§5.3).
 - **Interlayer density is a swept axis, not a fixed choice.** Impedance matching argues for
   roughly the geometric mean of the fireball and tamper densities — **~400 kg/m³, packed
@@ -1018,11 +1097,11 @@ spherical is valid for the near field over the tamper's operating window (§10, 
 
 ### 7.4 Initial and boundary conditions
 
-- **Near field:** layered spherical/axisymmetric initial condition — projectile, slug,
-  interlayer, tamper. **The projectile's energy deposition is resolved, not prescribed**
-  (§6.2), since projectile geometry is a swept design variable and §6.2 shows the answer is
-  strongly sensitive to it. A prescribed-deposition mode is retained as a cheap screening
-  path and as the control that isolates deposition error from tamper physics.
+- **Near field:** the 1-D spherical screen initializes slug, interlayer, and tamper with a
+  bracketed prescribed-deposition profile; it cannot contain a directional projectile. The
+  2-D axisymmetric near field initializes projectile, slug, interlayer, and tamper and resolves
+  projectile energy deposition (§6.2). The prescribed-deposition mode remains the control that
+  isolates deposition error from tamper physics.
 - **Plate:** rigid, non-ablating immersed boundary for the impulse calculation; the ablating
   wall enters through the cold path (§7.1 stage 4).
 - **Far boundary:** absorbing/outflow.
@@ -1038,12 +1117,20 @@ spherical is valid for the near field over the tamper's operating window (§10, 
 
 ### 7.6 Diagnostics to instrument
 
-1. **Axial impulse on the plate vs time**, `∫∫(ρv_z² + P)·(n̂·ẑ) dA dt`, with the `ρv²` and
-   `P` terms reported **separately** — every prior model kept only `ρv²`, so the size of the
-   pressure term is itself a headline result.
-2. **Realization fraction** — delivered impulse / `w(√(1+K) − 1)`. The deliverable.
-3. **Entropy budget of the tamper** — this is what the piston framing says is lost (§3.3).
-4. **Tamper CM momentum vs time** — the credited quantity, and the measure of recoil.
+1. **Axial wall impulse vs time.** At the stationary inviscid plate, impermeability removes
+   advective mass flux, so wall force is pressure traction:
+   `J_wall,z = ∫∫ P(n̂_wall·ẑ) dA dt`, with `n̂_wall` defined in §0.3. Separately report axial
+   momentum crossing a named upstream control surface as
+   `∫∫[ρv_z(v·n̂_cs)+P(n̂_cs·ẑ)] dA dt`, where `n̂_cs` points out of the fluid control volume.
+   The familiar `ρv_z²+P` is only the planar special case; it is not the curved-wall integrand. The difference
+   between upstream ram flux and actual wall pressure impulse is a headline diagnostic.
+2. **Realization fraction** — `r_real = J/J_max = β/(√(1+K_ej)−1)`, using net vehicle impulse
+   and the same configuration's ejecta-mass ceiling. A comparison metric feeding Isp.
+3. **Complete ceiling-shortfall ledger** — entropy production, angular dispersion, ejecta
+   velocity variance, residual internal energy, radiation, incomplete capture, and wrong-way
+   material, to the extent each can be separated.
+4. **Tamper CM momentum vs time** — a credited contribution to the full-system momentum
+   audit, not a standalone proxy for plate impulse.
 5. **Fraction of tamper mass ending up plate-directed** vs entrained (the §6.7 mixing
    question, insofar as an axisymmetric code can bound it).
 6. **Angular distribution of mass flux across the control sphere** — directly comparable to
@@ -1062,13 +1149,14 @@ No result is trusted before these pass. Written **before** the code, per project
 
 **Analytic anchors specific to this device:**
 
-- [ ] **Ceiling.** In the perfectly-collimated limit, `J → w(√(1+K) − 1)` per projectile kg.
+- [ ] **Ceiling.** In the perfectly-collimated limit,
+      `j = J/m_i → w(√(1+K_ej) − 1)`.
 - [ ] **Bare ballistic limit.** At artificially low density (collisionless expansion),
-      `β_bare(7.06) → 0.9087` and the capture fraction → 0.3118.
-- [ ] **`k ≤ 1` zero-thrust floor.** Ballistically nothing reaches the plate below `k = 1`.
+      `β_bare(7.06) → 0.9087` and the ballistic capture fraction → 0.3118.
+- [ ] **`k ≤ 1` ballistic zero-capture floor.** Ballistically nothing reaches the plate below `k = 1`.
       A hydrocode should show *small but non-zero* thrust from pressure — **how much is
       itself a useful measurement** of how wrong the ballistic model is, and it is cheap.
-- [ ] **Free-plate elastic bound.** Reflected/incident → 0.274 at τ = 1 in the ballistic
+- [ ] **Free-plate elastic bound.** Reflected/incident → 0.274 at `τ_t = 1` in the ballistic
       limit (§6.3).
 - [ ] **`k → 0` degeneracy.** Zero net impulse as slug mass vanishes. A code that produces
       thrust at `k = 0` is wrong.
@@ -1080,8 +1168,8 @@ No result is trusted before these pass. Written **before** the code, per project
 - [ ] Smooth-flow order-of-accuracy test at the scheme's formal rate.
 - [ ] Two-material shock-tube with an exact interface solution (**new** — the existing
       kernels are single-material).
-- [ ] Porous-compaction Hugoniot against published P-α data for porous ice or a comparable
-      material (**new**).
+- [ ] Dense-ice and porous-ice Hugoniots plus release paths against published data;
+      compaction energy and the handoff to the vapor/plasma EOS must close (**new**).
 - [ ] **Hypervelocity penetration benchmark** (**new**, required once projectile geometry is
       a resolved variable, §6.2): reproduce a published ice-on-ice or ice-on-porous-ice
       impact — crater/penetration depth and energy partition — against experimental or
@@ -1099,15 +1187,15 @@ No result is trusted before these pass. Written **before** the code, per project
 
 | component | what it is | reuse |
 |---|---|---|
-| `crates/hydro1d` | 1-D **planar** Lagrangian rad-hydro: staggered mesh + artificial viscosity, pluggable EOS, flux-limited diffusion (Levermore–Pomraning), coupled gas+solid conduction, two-phase condensation, **ablating wall** (`Q*` surface balance, blowing factor, vapour shield). Single material. | **Extend** to spherical geometry + multi-material (Rung 1). Its ablating wall is used unchanged in Rung 6. |
+| `crates/hydro1d` | 1-D **planar** Lagrangian rad-hydro: staggered mesh + artificial viscosity, pluggable EOS, flux-limited diffusion (Levermore–Pomraning), coupled gas+solid conduction, two-phase condensation, **ablating wall** (`Q*` surface balance, blowing factor, vapour shield). Single material. | **Extend** to spherical geometry + multi-material prescribed-deposition screening (Rung 1). Its ablating wall is used in Rung 6. |
 | `crates/euler2d` | 2-D axisymmetric Euler: HLLC Godunov, MUSCL-Hancock 2nd order, Strang splitting, conservative cylindrical source, **ghost-cell immersed boundary** for a shaped plate. Ideal gas, single material. | **Extend** with the table EOS and multi-material (Rung 3); its immersed boundary is reused for the plate (Rung 4). |
 | `crates/tables` | Shared JSON table loader. | Unchanged. |
 | `crates/sweep` | Rayon-parallel sweep driver, JSONL output. | Extend with new sweep modes. |
 | `python/puffsat` | EOS/opacity table generation (CoolProp + analytic Saha/CEA-style, TOPS/OPLIB overlay), frontier extraction, analysis, plotting. | **Extend** with the porosity model; reuse the analysis and plotting pipeline. |
-| `data/tables/water_jupiter.json` | Extended-grid equilibrium water table, T to 1.2×10⁶ K, ρ to 10⁻⁴, real gray opacities. | **Baseline table for this study** (§5.1). |
+| `data/tables/water_jupiter.json` | Equilibrium vapor/plasma table, T to 1.2×10⁶ K, ρ 10⁻⁴–30 kg/m³, real gray opacities. | Reuse in its validated lower-density regime after the new dense-material handoff; not a solid/porous impact EOS (§5.1, §7.3). |
 | Build | Top-level `Makefile` over `cargo` + `uv`; JSON tables in, JSONL results out. | Unchanged. |
 
-**Verified working and directly transferable:** the analytic equilibrium water EOS, the
+**Verified working and directly transferable within their existing regimes:** the equilibrium water vapor/plasma EOS, the
 FLD implementation, the ablating-wall model, the immersed-boundary plate, the sweep/analysis
 plumbing, and the validation discipline.
 
@@ -1120,65 +1208,69 @@ sustained-feed integration window.
 ## 10. Work plan
 
 **Definition of done.** The study ends when it returns **effective Isp for Arm D within a
-stated bracket**, together with a pay/don't-pay verdict on the tamper against the 62.9%
-threshold (§3.4), the projectile-economy curve (§3.1), and the optimal mass ratio `K` (§3.5).
+stated bracket**, together with a pay/don't-pay verdict from configuration-specific §3.4
+break-even comparisons, the projectile-economy curve (§3.1), and the optimal mass ratio `K`
+for each compared configuration family (§3.5).
 The result is explicitly **single-code and preliminary**; the independent hydrocode
 cross-check is deferred and named as the outstanding validation. A bracket that straddles
-62.9% is a legitimate outcome and is reported as such — the deliverable is the bracket, not a
-verdict forced past the evidence.
+its applicable break-even frontier is a legitimate outcome and is reported as such — the
+deliverable is the bracket, not a verdict forced past the evidence.
 
 **Two passes (§3.1), executed in strict order.** Rungs 1–5 constitute **Pass 1**, which
-excludes ablator mass and returns an *upper bound* on Isp with the optimum at `K* ≈ 7.06`.
-Rung 6 adds the measured ablator (**Pass 2**), revising Isp down and shifting `K*` up.
+excludes ablator mass and returns an *upper bound* on Isp. Its bare control should recover
+`k*_bare ≈ 7.06`; each tamped/interlayered family locates its own optimum. Rung 6 adds the
+measured ablator (**Pass 2**) and re-optimises every family.
 
 **Uncertainty reduction comes before cost refinement.** RT is *inside* Pass 1's bracket and
 is its widest contributor; the ablator is *outside* Pass 1 entirely and moves the absolute
 number without changing the tamper verdict (§6.5). So RT is Rung 2 — immediately after the
 run that produces the acceleration history it needs — and the ablator is last.
 
-**Rungs 1 + 2 already give a preliminary verdict**, combining the 1-D full-shell result with
-the analytic capture geometry. That is the cheapest point at which to decide whether to
-continue, and it precedes any 2-D work.
+**Rungs 1 + 2 give a preliminary prescribed-deposition screen**, combining the 1-D full-shell
+result with analytic capture geometry and an RT bound. It may foreclose a clearly poor design,
+but cannot establish a positive final verdict before 2-D resolves deposition and angular flow.
 
-### Rung 1 — 1-D spherical multi-material (the new physics, isolated)
+### Rung 1 — material qualification and 1-D spherical prescribed-deposition screen
 
-*Why 1-D is valid here, not merely cheap: lateral communication across the fireball takes
-`r/c_s ≈ 69 µs`, against a 45 µs confinement time. The hemispheres are dynamically
-independent for the entire window in which the tamper does its work.*
+*Why 1-D is useful here: lateral communication across the fireball takes `r/c_s ≈ 69 µs`,
+against a 45 µs confinement time, so a full-shell model can cheaply screen radial loading.
+This does not make an axial projectile spherical or permit 1-D to resolve penetration or RT.*
 
 - [ ] Add spherical geometry to the 1-D Lagrangian kernel.
 - [ ] Add a per-cell material index (projectile / slug / interlayer / tamper).
-- [ ] Build the porous-ice (P-α or ε-α) compaction model and its table pathway.
-- [ ] Add resolved projectile penetration and energy deposition, with a prescribed-deposition
-      mode retained as the control (§7.4).
+- [ ] Select or construct the dense ice/water EOS, define its handoff to the vapor/plasma EOS,
+      and build the porous-ice (P-α or ε-α) compaction model (§7.3).
+- [ ] Use bracketed prescribed-deposition profiles in 1-D; resolved axial projectile
+      penetration moves to Rung 3.
 - [ ] Write the §8 acceptance tests **first**; make them pass.
-- [ ] Sweep **Arm D** over `(ρ_interlayer, standoff, τ)`; run **Arm B as a control** and
-      confirm the code reproduces its RT disruption (§6.7) rather than assuming it.
-- [ ] Sweep `K` over at least 6–32 and **locate the Pass-1 design point** (expected at the
-      ceiling optimum `K* ≈ 7.06`, since Pass 1 carries no ablator term), reporting Isp,
-      projectile economy, and energy per unit impulse together (§3.5). Report how the tamper
-      moves the optimum relative to bare.
-- [ ] Sweep **projectile geometry** — areal density, aspect ratio, bulk density — against the
-      vertex-hole and deliverability constraints (§6.2). Report the deposited-energy fraction
-      as a first-class output, since 34% vs 80% changes the device.
+- [ ] Sweep **Arm D** over `(ρ_interlayer, μ, standoff, τ_t)`; run **Arm B as a control** and
+      produce its loading and acceleration history for the separate RT treatment (§6.7).
+- [ ] Sweep `K` over at least 6–32 and **locate each Pass-1 design point**, reporting Isp,
+      projectile economy, and energy per unit impulse together (§3.5). Require the bare
+      control to recover `k*_bare ≈ 7.06`; measure how each tamped/interlayered optimum moves.
+- [ ] Sweep deposited-energy fraction and radial deposition profile over the §6.2 analytic
+      bracket; do not label these as resolved projectile-geometry results.
 - [ ] Report: realization fraction, tamper entropy budget, tamper CM momentum, `Θ` scaling
       confirmed, and `Λ` for a full-shell tamper as a bound.
-- [ ] **Emit the acceleration history `a(t)` at the plume/tamper interface** — the input
+- [ ] **Emit the acceleration history `a_RT(t)` at the plume/tamper interface** — the input
       Rung 2 needs, and free from this run.
-- [ ] **Gate:** if the realization fraction cannot approach 62.9%, the tamper is dead and
-      the remaining rungs are descoped to a bare-plate Isp confirmation.
+- [ ] **Gate:** compare each candidate's `β/C` with the appropriate bare and same-charged-mass
+      extra-slug references. If its bracket cannot approach either break-even frontier, the
+      tamper is dead and the remaining rungs are descoped to a bare-plate Isp confirmation.
 
 ### Rung 2 — RT treatment for Arm D (the widest Pass-1 uncertainty)
 
-Arm D's mixed fraction is currently bounded only at **16–63%**, spanning ~58–62% of ceiling
-against a 62.9% threshold (§6.7). **Until this narrows, no amount of downstream work can
-produce a verdict**, so it runs before any 2-D effort. Escalate only as far as needed:
+Arm D's total mix-width fraction is currently estimated only at **16–63%**, mapping under the
+screening assumption to ~58–62% of ceiling near the 62.9% reference threshold (§6.7).
+**Until this narrows, no amount of downstream work can produce a verdict**, so it runs before
+any 2-D effort. Escalate only as far as needed:
 
 - [ ] **Tightened analytic bound.** Integrate RT growth against Rung 1's *actual* decaying
-      `a(t)` instead of the constant-acceleration self-similar law, and against a stated
+      `a_RT(t)` instead of the constant-acceleration self-similar law, and against a stated
       initial perturbation spectrum rather than an assumed broad one. Cheap; may alone be
       enough, since the current bound is deliberately crude in both respects.
-- [ ] **Gate:** if the tightened bound no longer straddles 62.9%, stop here.
+- [ ] **Gate:** if the tightened bound no longer straddles the applicable configuration-specific
+      break-even frontier, stop here.
 - [ ] **Mix model**, if it still straddles — a buoyancy-drag or K-L-style mix width at the
       interface in the 1-D kernel, calibrated against published RT mixing data.
 - [ ] **Resolved spot-check**, only if the mix model is inconclusive: a 2-D or 3-D
@@ -1190,7 +1282,10 @@ produce a verdict**, so it runs before any 2-D effort. Escalate only as far as n
 
 - [ ] Port the table EOS into the 2-D kernel.
 - [ ] Add multi-material tracking.
-- [ ] Reproduce Rung 1 in the full-shell limit (**gate**).
+- [ ] Reproduce Rung 1 in the full-shell prescribed-deposition limit (**gate**).
+- [ ] Add resolved projectile penetration and energy deposition; sweep projectile areal
+      density, aspect ratio, and bulk density against the vertex-hole and deliverability
+      constraints (§6.2). Report deposited-energy fraction as a first-class output.
 - [ ] Sweep tamper **angular coverage** at fixed mass (§6.7 — coverage, not curvature).
 - [ ] Emit the control-sphere mass/velocity/angle distribution.
 
@@ -1200,7 +1295,7 @@ produce a verdict**, so it runs before any 2-D effort. Escalate only as far as n
 - [ ] Coarse far-field continuation to the plate (not free-streaming, §7.1).
 - [ ] Replace the decay-based integration window with a sustained-feed criterion (§6.4).
 - [ ] Sweep plate radius `R` (mass-ceiling constrained), standoff `d`, and shape: flat plus
-      the paraboloid family including `d/D` up to ~0.35.
+      the paraboloid family including `δ/D` up to ~0.35.
 - [ ] Emit plate flux and pressure maps.
 
 ### Rung 5 — Pass 1 deliverable
@@ -1212,8 +1307,9 @@ produce a verdict**, so it runs before any 2-D effort. Escalate only as far as n
 - [ ] Both taper calculations (closed form, §6.6).
 - [ ] Assemble **effective Isp for Arm D within a stated bracket**, on carried mass
       *excluding* the ablator — explicitly labelled an upper bound (§3.1).
-- [ ] Report the **realization fraction against 62.9%** and the resulting pay/don't-pay
-      verdict on the tamper, or an honest "cannot distinguish" if the bracket straddles it.
+- [ ] Report each **realization fraction and configuration-specific break-even frontier** and
+      the resulting pay/don't-pay verdict on the tamper, or an honest "cannot distinguish"
+      if a bracket straddles its frontier. Retain 62.9% as the labelled §3.4 reference annotation.
 - [ ] Report the projectile-economy curve and the Pass-1 optimum `K` (§3.5).
 
 ### Rung 6 — ablator and Pass 2 (last)
@@ -1227,13 +1323,13 @@ conservative for the tamper (§6.5). So it is refined only once the verdict exis
       configuration, with its `Q*` and opacity bracket, and as a mass flow (§6.5.1).
 - [ ] Report **burn-through margin** — the one abrupt failure mode, and what actually binds
       on the plate side (§6.5.2).
-- [ ] Sweep **pulse mass** to quantify the sub-linearity gain: larger pulses at
+- [ ] Sweep **encounter mass `m_enc`** at fixed ratios to quantify the sub-linearity gain: larger encounters at
       proportionally lower cadence should cut total ablator mass at fixed thrust (§4.1).
 - [ ] Confirm the **self-limiting plate equilibrium** (§6.5.2) against the coupled model, so
       the steel baseline rests on a computed interface condition rather than a closed form.
 - [ ] **Fold the ablator into the denominator** and re-derive Isp — the Pass 1 → Pass 2 step
       (§3.1). Report both, with Pass 1 still labelled an upper bound.
-- [ ] **Relocate the optimum `K`** with the ablator term present (§3.5).
+- [ ] **Relocate every configuration family's optimum `K`** with the ablator term present (§3.5).
 - [ ] **Gate:** if burn-through margin is inadequate, invoke the §6.5.4 escalation path
       (ceramic face → Nb/Mo → carbon-carbon) rather than changing the architecture.
 - [ ] Frontier extraction, plots, and the committed deliverable artifacts.
@@ -1249,19 +1345,19 @@ as the outstanding validation.
 
 | # | Decision | Rationale |
 |---|---|---|
-| D1 | **The tamper is an isentropic piston, not a cold mirror.** Instrument entropy and CM momentum. | "Reflects all energy, absorbs none, still recoils" is self-contradictory at finite mass. Under §3.3(b) the recoil energy is *credited*; entropy is what is actually lost. |
+| D1 | **The tamper is an isentropic piston, not a cold mirror.** Instrument entropy and CM momentum. | "Reflects all energy, absorbs none, still recoils" is self-contradictory at finite mass. Under §3.3(b) recoil momentum is credited; entropy is one important part of the complete ceiling-shortfall ledger. |
 | D2 | **Arm D (filled interlayer) is the design; Arm B (vacuum gap) is provisionally foreclosed and retained as a control.** | Two independent arguments close Arm B: it is a re-thermalising ram rather than a piston (§3.3), and RT disrupts its tamper completely before it acts (§6.7). Effort concentrates on narrowing Arm D's bracket. |
-| D2a | **The mass ratio `K` is optimised here, against Isp subject to the plate thermal budget — not against an economic weighting.** | The Isp optimum is real but flat (±0.6% over `K` = 6–8), while heat and projectile consumption per unit impulse both scale as `1/β` and improve steeply. The binding constraint is thermal, and it is in scope (§3.5). |
+| D2a | **The mass ratio `K` is optimised separately for each configuration family and pass, against Isp — not against an economic weighting.** | The bare ballistic optimum is real but flat (±0.6% over `k` = 6–8), while tampers and interlayers change `β(K)` and therefore may move it. Ablator cost is configuration-specific and in scope (§3.5). |
 | D2b | **Projectiles are not priced into a combined figure of merit.** | Converting projectiles to payload-equivalent needs a program economic model outside this study; importing it would make a physics result move with someone else's assumptions. Projectile economy is reported as `β` (§3.1). |
 | D3 | **Plate radius swept; plate mass a ceiling.** | §6.5: `R` is the only lever that breaks the capture-vs-fluence conflict. |
 | D4 | **Isp denominator = all expended carried mass, ablator included — but evaluated in two passes**, Pass 1 excluding it as an explicit upper bound. | Isp is a rocket-equation quantity, so anything carried and expended is charged. But the ablator is uncertain by 27× and answering it is a *plate* question; excluding it in Pass 1 decouples the *tamper* question and lets Rungs 1–5 proceed without waiting, with RT narrowed first (§3.1). |
-| D4a | **Pulse mass and cadence trade freely at fixed thrust; neither is independently pinned.** | `E/J = w/(2β)` contains neither, so average heat load and gravity loss are invariant under the trade — while sub-linear ablation means larger, rarer pulses cut ablator mass (§4.1, §6.5.1). |
+| D4a | **Encounter mass `m_enc` and cadence trade freely at fixed thrust; neither is independently pinned.** | At fixed dimensionless design, `E/J = w/(2β)` contains neither, so average heat load and gravity loss are invariant under the trade — while sub-linear ablation means larger, rarer encounters cut ablator mass (§4.1, §6.5.1). |
 | D4b | **Plate material: steel + thin renewed oil, with a thin ceramic hedge.** | An ablating surface is temperature-pinned, so the plate self-limits near 750–905 K; strength, spall, and bending are all non-binding at 2 MPa. Escalation is triggered only by inadequate burn-through margin (§6.5.2, §6.5.4). |
 | D5 | **Plate shape sweep = flat + parabola family + both tapers.** Shape itself stays open. | §6.6: the prior foreclosure is conditional on plane-wave incidence; but the parabola's area penalty may exceed its impulse gain. Genuinely two-sided. |
 | D6 | **Keep the 1-D-thermophysics × 2-D-geometry factorization**, adding a cold-path flux map. | The gas is optically thick, so radiation stays local-diffusive and the coupling is one-way. A monolithic 2-D rad-hydro across a sweep is not affordable. |
 | D7 | **Ablator mass is an emergent cost per configuration, not a specified thickness.** | §6.5: ablation is the plate's only thermal sink, so it is forced by physics. Specifying a thickness the balance does not respect would silently burn through. |
 | D8 | **Tamper design variable is angular coverage, not curvature.** | §6.7: RT destroys sub-metre features within the confinement window. |
-| D9 | **Build order: 1-D spherical first, then 2-D.** | Isolates new physics (multi-material, porosity) from new geometry, with known-answer anchors at each step. |
+| D9 | **Build order: dense-material qualification and 1-D spherical screen first, then resolved 2-D.** | Isolates EOS, multi-material, porosity, and prescribed radial loading before adding directional projectile penetration, with known-answer anchors at each step. |
 
 ---
 
@@ -1293,14 +1389,15 @@ work lands.
 hard to reverse, surprising without context, and the result of a genuine trade-off:
 
 - [x] **[ADR-0030](docs/adr/0030-tamper-isentropic-piston-not-mirror.md)** — the tamper is an
-      isentropic piston, not a mirror; recoil is credited; the deliverable is realization
-      fraction against a single ceiling. Replaces the prior `Λ > 1 + τ` criterion (§3.3).
+      isentropic piston, not a mirror; recoil is credited; realization fraction is the
+      hydrodynamic comparison metric under one ceiling definition, while effective Isp is the
+      deliverable. Replaces the prior `Λ > 1 + τ_t` criterion (§3.3).
 - [x] **[ADR-0031](docs/adr/0031-isp-deliverable-pulls-scope-inward.md)** — an Isp deliverable
       pulls ablator mass, vehicle scale, and cadence inside the scope boundary that prior
       scope places outside, and inter-pulse thermal accumulation with them (§3.1).
 - [x] **[ADR-0032](docs/adr/0032-deep-dish-foreclosure-is-incidence-conditional.md)** — the
-      deep-dish foreclosure is conditional on plane-wave incidence and inverts under a point
-      source (§6.6). ADR-0021 carries a pointer and is otherwise unchanged.
+      deep-dish foreclosure is conditional on plane-wave incidence and must be reopened for a
+      finite-standoff source (§6.6). ADR-0021 carries a pointer and is otherwise unchanged.
 - [x] **[ADR-0033](docs/adr/0033-rt-deferral-does-not-transfer-to-the-tamper.md)** — the
       RT/RM deferral does not transfer; RT is load-bearing here in three places (§6.7).
       ADR-0020 carries a pointer and is otherwise unchanged.
@@ -1315,9 +1412,10 @@ study*; §0 is the symbol table and §14 the reading-order glossary for this doc
 State these in any write-up. Each could move the answer.
 
 1. **RT/RM is un-modelled and, for Arm D, wider than the margin.** Mixing decides whether
-   the tamper is a piston or entrained payload. The analytic bound (§6.7) closes Arm B but
-   leaves Arm D at **16–63% mixed**, spanning ~58–62% of ceiling against a 62.9% threshold.
-   An axisymmetric code cannot narrow it. **Top-ranked uncertainty-reduction target**
+   the tamper is a piston or entrained payload. The analytic screen (§6.7) provisionally closes
+   Arm B but leaves Arm D at a **16–63% total mix-width estimate**, mapped heuristically to
+   ~58–62% of ceiling near the 62.9% reference threshold. Axisymmetric calculations can bound
+   some modes but not the general 3-D cascade. **Top-ranked uncertainty-reduction target**
    (§13.1, Rung 2 — it now runs *before* the ablator, not after).
 2. **Interlayer density may want to be ~400 kg/m³, not 70.** Impedance matching argues for
    packed slush over snow. Cheap to sweep; a real risk to Arm D as currently specified.
@@ -1325,23 +1423,22 @@ State these in any write-up. Each could move the answer.
    10 t/50 t inconsistency is gone (§4.1).
 4. **~~Cadence~~ — RESOLVED: not thermally limited.** The plate self-limits at the ablator's
    vaporisation temperature (§6.5.2), and average heat load is invariant under the
-   pulse-mass/cadence trade (§4.1). Cadence is set by gravity losses alone, and larger pulses
+   encounter-mass/cadence trade (§4.1). Cadence is set by gravity losses alone, and larger encounters
    at lower rate is a *free* variation that also cuts ablator mass. What remains open is the
    shock-absorber stroke this implies, which is out of scope.
 5. **~~Projectile geometry~~ — RESOLVED: it is in scope as a swept design variable** (§6.2).
    The residual risk is that resolving hypervelocity penetration is a distinct validation
-   domain (§8) and could dominate Rung 1's effort.
+   domain (§8) and could dominate Rung 3's effort.
 6. **~~Plate material~~ — LARGELY RESOLVED: steel + thin renewed oil, with a ceramic hedge.**
    Every candidate criterion is non-binding except steady-state temperature, and that
    self-limits at `T_abl` (§6.5.2, §6.5.4). **What replaces it as the open question is
    burn-through margin** — the one abrupt failure mode, since a mid-pulse breach exposes the
    substrate to 50–80 kK plume with no temperature pinning. Rung 6 reports it. Escalation
    materials are named but not invoked.
-7. **`K` and `τ` grids not pinned.** §3.5 shows the design point is expected *above* the
-   `K* ≈ 7.06` Isp peak — plausibly near `K ≈ 14` if the thermal budget binds at ~2× — so
-   the grid must span at least `K` = 6–32 rather than clustering around 7. `τ` spans 0–2.
-   The Pass-1 grid is set now; the Pass-2 shift depends on
-   Rung 6's ablator number.
+7. **`K`, `μ`, and `τ_t` grids not pinned.** The bare Pass-1 control should peak near
+   `k = 7.06`; tamped/interlayered optima are unknown, so `K` must span at least 6–32 rather
+   than clustering around 7. `τ_t` spans 0–2, and `μ` must be set by the interlayer-mass sweep.
+   Pass 2 re-optimises after Rung 6 measures the ablator term.
 8. **~~Projectile pricing~~ — RESOLVED: not priced into a combined metric.** An earlier
    draft proposed converting projectiles into payload-equivalent at an externally-supplied
    rate. Dropped: it would make a physics result depend on a program economic model outside
@@ -1362,18 +1459,19 @@ ranked by current width, with what collapses each:
 
 | # | contributor | current width | affects | in Pass 1? | collapsed by |
 |---|---|---|---|---|---|
-| 1 | **RT mix fraction at the plume/tamper interface** | 16–63% mixed → ~58–62% of ceiling | realization fraction | **yes** | **Rung 2** — bound, mix model, or resolved spot-check |
+| 1 | **RT total mix-width fraction at the plume/tamper interface** | 16–63% heuristic width → ~58–62% of ceiling under the screening map | realization fraction | **yes** | **Rung 2** — bound, mix model, or resolved spot-check |
 | 2 | **Frozen recombination** at 57 eV/molecule | this project's largest quantified physics uncertainty, in a *cooler* regime than here | realization fraction | **yes** | Rung 5 bracket, both ends |
-| 3 | **Projectile deposition** (34% vs 75% of energy into the slug) | changes which body is the fireball | everything | **yes** | Rung 1 — resolved penetration |
+| 3 | **Projectile deposition** (34% vs 75% of energy into the slug) | changes which body is the fireball | everything | **yes** | Rung 1 bracket; Rung 3 resolved penetration |
 | 4 | **Interlayer density** (70 vs ~400 kg/m³) | may invert Arm D's loading mechanism | realization fraction | **yes** | Rung 1 — cheap sweep axis |
 | 5 | **Ablator mass** (vapour-shielding balance) | **27×** → 2–60% of the mass budget | denominator | **no — excluded by construction** | Rung 6 (last) |
-| 6 | **Opacity** near `τ ~ 1` at the plate | prior experience: 2000× error from the wrong table | flux map, denominator | partly | use the real-opacity extended table |
+| 6 | **Opacity** near `τ_opt ~ 1` at the plate | prior experience: 2000× error from the wrong table | flux map, denominator | partly | use the real-opacity extended table |
 | 7 | **`U_shock` in ice** | linear in `Θ` | tamper timing | yes | literature lookup |
 
 **The two-pass split (§3.1) is what makes this tractable.** The single widest contributor —
 the ablator, at 27× — sits in the denominator and is *excluded* from Pass 1, so it cannot
 contaminate the tamper verdict. Pass 1's bracket is set by contributors 1–4, of which
-**RT alone still exceeds the 62.9% margin being decided**. Until that is narrowed, Pass 1
+**RT alone still spans the reference 62.9% comparison closely enough to be decision-limiting**.
+Until that is narrowed, Pass 1
 cannot distinguish "the tamper pays" from "the tamper is dead," and every interim number must
 carry its bracket and its upper-bound label.
 
@@ -1387,19 +1485,23 @@ here are the load-bearing ones, quoted so this table stands alone.
 | term | meaning |
 |---|---|
 | **PuffSat / projectile** | Mass accelerated by external infrastructure and aimed at the vehicle. Not carried, so not charged in Isp. |
+| **Pulse / encounter** | One projectile interaction and its associated carried reaction mass. `m_enc = m_i + m_hydro`; “200 kg” denotes this reference encounter mass, not charged carried mass. |
 | **Slug** | Carried mass the projectile buries itself in. Vaporised; becomes the fireball. |
 | **Tamper** | Dense carried mass beyond the slug that turns part of the away-going fireball around. Fully vaporised; works by inertia (areal density), not by survival. |
 | **Interlayer** | Low-density carried mass filling the standoff between slug and tamper in Arm D. Both spacer and pressure-transmitting medium. |
 | **Pusher plate** | The permanent structure that receives the impulse. Has a hole at its vertex for the projectile. |
 | **`k`** | Slug mass / projectile mass. ≈7 at the bare optimum. A continuous design variable. |
-| **`τ`** | Tamper mass per slug kg. |
-| **`K = k(1+τ)`** | Total *carried* mass per projectile kg — the only quantity the ceiling depends on. |
+| **`τ_t`** | Tamper mass per slug kg; distinct from optical depth `τ_opt`. |
+| **`μ`** | Interlayer mass per slug kg. |
+| **`K = m_hydro/m_i`** | All near-field hydrodynamic carried mass per projectile kg; equals `k(1+τ_t+μ)` when slug, tamper, and interlayer are the only material regions. |
+| **`K_ej`** | Nonprojectile ejecta mass per projectile kg; the mass used by the thermodynamic ceiling. |
+| **`C`** | All expended carried mass per projectile kg; the mass ratio used by effective Isp. |
 | **`w`** | Closing speed, 75 km/s. |
 | **`β = J/(m_i·w)`** | Dimensionless net-vehicle-impulse coefficient, including the incoming projectile momentum debit. `β·w` has velocity units but is not a physical velocity. |
-| **Capture fraction** | `(1 − 1/√k)/2` — share of an isotropic fireball that outruns its own recoil. Zero at `k ≤ 1`. |
-| **Realization fraction** | Delivered impulse / `w(√(1+K) − 1)`. **The deliverable.** Must exceed 62.9% at τ = 1 for the tamper to pay. |
+| **Ballistic capture fraction** | `max[0, (1 − 1/√k)/2]` — share of the pressure-free isotropic ballistic fireball that outruns its own recoil. Its zero at `k ≤ 1` is not a general zero-thrust claim. |
+| **Realization fraction** | `r_real = β/(√(1+K_ej)−1)`, the net vehicle impulse divided by the same-ejecta-mass ceiling. A hydrodynamic comparison metric feeding Isp; 62.9% is only the labelled §3.4 reference break-even. |
 | **Projectile economy** | Net vehicle impulse per projectile mass, `β·w = J/m_i`. A velocity-equivalent metric, not a physical velocity. Reported alongside effective Isp and not combined with it — see §3.1. |
 | **Arm D / Arm B** | Filled-interlayer configuration (the design) / vacuum-gap configuration (provisionally foreclosed, retained as a control). |
-| **Transit ratio `Θ`** | Slug disassembly time / tamper shock-transit time. Must exceed ~3 for the tamper to function. |
+| **Transit ratio `Θ`** | Slug disassembly time / tamper shock-transit time. `Θ ≳ 3` is the current screening gate, not a universal sharp threshold. |
 | **Arrival window** | Duration over which fireball material reaches the plate, set by its velocity dispersion. ~750 µs here. |
 | **Areal density `σ`** | Mass per unit area. The tamper's figure of merit, conserved through vaporisation. |
