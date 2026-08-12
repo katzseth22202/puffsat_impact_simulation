@@ -50,6 +50,7 @@ denominator both scale with `m_i`.
 | `m_other` | other expended carried mass not represented in the near-field hydrodynamics. Must be named per configuration; permanent dry structure is excluded | zero in current references |
 | `m_enc = m_i+m_hydro` | **encounter mass per pulse** — projectile plus near-field carried mass. This is what “200 kg reference encounter” means; it is not the Isp denominator | 200 kg in §4 |
 | `m_charged = m_hydro+m_abl+m_other` | all expended **carried** mass per pulse. The Isp denominator (§3.1); a consumable Arm B spacer is charged here and included in `m_hydro` if simulated | 175.2 kg (Pass 1, bare reference) |
+| `M_vehicle` | **vehicle mass** — pinned at 1000 t *initial* (wet) mass, of which the plate is 5% (§4.1). A vehicle-scale quantity, not a per-pulse one, and never charged in Isp | 1000 t |
 | `k` | **slug ratio** — slug mass per projectile kg. Continuous, not a count | 7.06; bare-plate optimum `k*` = 7.060 |
 | `τ_t = m_t/m_s` | **tamper ratio** — tamper mass per slug kg. The subscript distinguishes it from optical depth `τ_opt` | swept 0–2; `τ_t = 1` is the analytic reference tamper |
 | `μ = m_int/m_s` | **interlayer ratio** — interlayer mass per slug kg. Zero for the bare and vacuum-gap references; nonzero for filled Arm D | swept, not yet pinned |
@@ -70,7 +71,7 @@ denominator both scale with `m_i`.
 |---|---|---|
 | `w` | **closing speed** of projectile and vehicle, head-on, vehicle frame | 75 km/s (envelope 74–81) |
 | `w̄` | mass-weighted mean closing speed, used only when reproducing prior work's Isp figure | 77.28 km/s (§3.2) |
-| `V = w/(1+k)` | merged blob's centre-of-mass recoil speed, directed *away* from the plate | 9.31 km/s |
+| `V = w/(1+k)` | merged blob's centre-of-mass recoil speed, directed *away* from the plate. Written `V_cm` where the vector is meant (§6.6) | 9.31 km/s |
 | `u = w√k/(1+k)` | fireball expansion speed in the blob frame. `u/V = √k` sets the ballistic capture fraction | 24.72 km/s |
 | `U_shock` | shock speed through the tamper (ice Hugoniot at ~70 GPa) — **an estimate** (§13.9) | ≈12 km/s |
 | `c_s` | sound speed | ≈9.8 km/s in the fireball |
@@ -79,6 +80,7 @@ denominator both scale with `m_i`.
 | `Δv_t` | tamper velocity change used in the recoil-time estimate `σ_t·Δv_t/P` (§6.3); not the vehicle's pulse increment | — |
 | `J` | **net axial impulse delivered to the vehicle**, positive in `+z` and including the incoming projectile's `−m_i·w` momentum debit; `J = β·m_i·w` | 1.69×10⁶ N·s per 200 kg reference encounter |
 | `j = J/m_i` | net axial vehicle impulse per projectile mass | `βw` |
+| `J_wall`, `J_wall,z` | **plate pressure impulse** — the time-integrated axial force on the plate itself (§7.6.1). Distinct from `J`: it omits the projectile momentum debit and the momentum of everything that never touches the plate, so `J_wall ≠ J`. The difference between it and the upstream ram flux is a headline diagnostic | — |
 | `P_ejecta` | signed total axial ejecta momentum; useful, plate-opposed ejecta has `P_ejecta < 0` | — |
 | `M_ej = m_i(1+K_ej)` | total ejecta mass, including the projectile | — |
 | `j_max = w(√(1+K_ej) − 1)`; `J_max = m_i·j_max` | **the thermodynamic ceiling**, respectively per projectile mass and per pulse (§3.2) | — |
@@ -93,7 +95,7 @@ denominator both scale with `m_i`.
 |---|---|---|
 | `θ` | polar angle from the plate-directed `+z` axis; `θ_max` is the angle the plate rim subtends at the source (§6.6) | ballistic material with `cos θ > 1/√k` reaches the plate |
 | `r`, `z` | radial and axial coordinate; `r̂`, `ẑ` are unit vectors. `n̂_wall` points from fluid into the plate (the direction of pressure force on it); `n̂_cs` points outward from a fluid control volume | — |
-| `v_z` | axial fluid-velocity component, used in the control-surface momentum flux (§7.6) | — |
+| `v`, `v_z` | fluid velocity vector and its axial component; both appear in the control-surface momentum flux `ρv_z(v·n̂_cs)` (§7.6). Distinct from the material speeds `V`, `u`, `w` of §0.2 | — |
 | `r_slug` | slug radius | 0.290 m (ice) / 0.683 m (snow) |
 | `h_t` | **tamper thickness**, `h_t = m_t/(2πs²ρ_t)` (§6.1) | 3.5 cm (snow slug) / 19.3 cm (ice slug, contact) |
 | `s` | **tamper stand-off radius** — radius of the tamper shell from the blob centre, so `s = r_slug` at contact. In Arm D the interlayer occupies the radial gap `r_slug < r < s` | 0.29 m (ice) / 0.68 m (snow) at contact; 1 m in the standoff cases |
@@ -111,7 +113,7 @@ denominator both scale with `m_i`.
 | `σ = m/A` | **areal density** — the tamper's figure of merit, conserved through vaporisation (§2.3). `σ_t` (tamper), `σ_proj`, `σ_target`, `σ_plume`, `σ_abl` (ablated per pulse) | `σ_t` = 14.9 kg/m² at `τ_t = 1`, `s = 1 m` |
 | `Σ` | gas mass column per unit plate area at arrival — deliberately distinct from generic `σ`. The quoted reference is plate-area-averaged; local solver outputs are functions of radius and time | ≈0.063 kg/m² |
 | `e` | specific internal energy. *Distinct from `e_eff`, §0.7* | 305.7 MJ/kg = 57.1 eV per H₂O molecule |
-| `T` | temperature (K, or eV where the plasma state matters) | 14 kK fireball; 50–80 kK at stagnation |
+| `T` | temperature (K, or eV where the plasma state matters). `ΔT` is a temperature difference across a named interval — in §6.5.2, ablator surface to plate bulk | 14 kK fireball; 50–80 kK at stagnation |
 | `P` | pressure. *Momentum in `P_ejecta` only* | ~2 MPa peak at the plate; ~70 GPa in the tamper shock |
 | `γ` | ratio of specific heats, `γ_eff`; distinct from RT growth rate `γ_RT` | `γ_eff` = 1.25 |
 | `κ` | gray opacity | 10–1000 m²/kg — uncertain across two decades |
@@ -133,9 +135,10 @@ denominator both scale with `m_i`.
 |---|---|---|
 | `Φ` | time-integrated incident energy flux per unit plate area over one pulse; state whether a quoted value is local, peak, or area-averaged | ≈12.6 MJ/m², plate-area-averaged at `R = 15 m`, `d = 10 m`. An order-of-magnitude reference whose capture-energy basis is not derived in this document; Rung 4's flux map supersedes it (§6.5) |
 | `α_abl` | ablation sub-linearity exponent, `σ_abl ∝ Φ^α_abl`, `α_abl < 1` — vapour shielding (§6.5) | — |
-| `Q*` | effective energy removed from the incident/wall balance per kg of ablator expelled, used in `ṁ = q_in/Q*`; it is a model parameter that may include phase change and other unresolved losses, not merely latent heat | — |
+| `Q*` | effective energy removed from the incident/wall balance per kg of ablator expelled, used in `ṁ = q_in/Q*` — `ṁ` the ablated mass flux per unit wall area, `q_in` the net heat flux reaching the wall; it is a model parameter that may include phase change and other unresolved losses, not merely latent heat | — |
 | `T_abl` | effective ablator vaporisation temperature imposed by the wall model while ablation is active. It bounds the substrate only while an unbroken ablating layer maintains that boundary (§6.5.2) | 800–1000 K → plate 753–905 K |
 | `k_cond` | thermal conductivity | 45 W/m/K (steel) |
+| `c_p` | specific heat capacity, used in the soak capacity of §6.5 | ≈500 J/kg/K (steel) |
 | `α_th` | thermal diffusivity | 1.2×10⁻⁵ m²/s (steel) |
 | `σ_SB` | Stefan–Boltzmann constant, in the `2σ_SB T⁴` two-face radiation term (§6.5.2) | 5.67×10⁻⁸ W/m²/K⁴ |
 | `Δh` | specific enthalpy rise of regenerative coolant (§6.5.3) | 0.33–3.34 MJ/kg |
@@ -173,6 +176,7 @@ because they are conventional, but this table makes their scopes explicit:
 | `α_abl`, `α_th`, `α_mix`, `α` in P-α | ablation exponent / thermal diffusivity / RT mix coefficient / porous distension | the compaction-model name retains its literature notation |
 | `σ`, `σ_SB` | areal density / Stefan–Boltzmann constant | always keep `SB` on the constant |
 | `A`, `A_RT` | geometric area / Atwood number | always keep `RT` on the latter |
+| `M`, `M_ej`, `M_vehicle` | Mach number / total ejecta mass / vehicle mass | bare `M` is always the Mach number; the two masses always carry their subscript |
 | `γ`, `γ_RT` | ratio of specific heats / RT growth rate | always keep `RT` on the latter |
 | `h_t`, `h_b` | tamper thickness / one-sided RT bubble depth | their ratio `h_b/h_t` is the bubble-depth fraction |
 | `d`, `δ` | plate standoff / dish depth | dish shape is `δ/D`, never `d/D` |
@@ -300,6 +304,13 @@ The deliverable is **effective specific impulse in the thrust direction**:
 Isp_eff = J / (g₀ · m_charged)
         = βw / (g₀ · C)
 ```
+
+The two lines are one statement, written per pulse and per projectile mass. `J = β·m_i·w` is
+the net vehicle impulse and `β` the dimensionless net-vehicle-impulse coefficient (§0.2);
+`g₀` is standard gravity and `w` the 75 km/s closing speed; `m_charged` is the expended carried
+mass per pulse and **`C = m_charged/m_i` is that same mass per projectile kg — the
+charged-mass ratio of §0.1.** The projectile mass `m_i` cancels between numerator and
+denominator, which is why both forms are exact.
 
 `m_charged` is **all expended carried mass**. It is evaluated in two passes:
 
@@ -727,7 +738,7 @@ Three clocks govern the tamper, and **temperature is in none of them**. At `τ_t
 It completes its work ~4× before it disperses. The tamper–plume collision deposits
 ~72 MJ/kg — **26× past sublimation, and ~4× cooler than the fireball** (≈0.5 eV vs 1.2 eV).
 
-Cross-check: `σ_tamper/σ_plume = 1.75` here, giving a 1-D elastic free-plate
+Cross-check: `σ_t/σ_plume = 1.75` here, giving a 1-D elastic free-plate
 reflected/incident ratio of **0.274**, which reproduces the prior analytic lower bound at
 `τ_t = 1` to two figures.
 
@@ -766,7 +777,7 @@ it, and the local peak near the vertex will exceed it):
 
 | sink | capacity | share |
 |---|---|---|
-| soak into steel (`√(4αt)` ≈ 173 µm → 1.36 kg/m²) | ~0.95 MJ/m² | 8% |
+| soak into steel (`√(4α_th·t)` ≈ 173 µm → 1.36 kg/m², at `c_p` ≈ 500 J/kg/K and `ΔT` ≈ 1400 K to melt) | ~0.95 MJ/m² | 8% |
 | re-radiation, steel at 1700 K | 3.6×10⁻⁴ MJ/m² | 0.003% |
 | re-radiation, SiC at 2800 K | 2.6×10⁻³ MJ/m² | 0.021% |
 
@@ -1309,6 +1320,12 @@ the only thing downstream rungs are permitted to quote closed-form figures from.
       confirming the inherited ballistic model before anything is built on it.
 - [ ] Regenerate the §3.4, §3.5, and §4 tables from it and reconcile any residual disagreement
       with a quoted figure, rather than carrying both.
+- [ ] **Known open reconciliation:** §6.5's soak depth `√(4α_th·t)` ≈ 173 µm implies
+      `α_th ≈ 1.0×10⁻⁵ m²/s`, against the 1.2×10⁻⁵ stated in §0.6, which gives ~190 µm. Fixing
+      it moves a chain — 1.36 → 1.49 kg/m², ~0.95 → ~1.04 MJ/m², the 672 MJ basis and the four
+      shares in §6.5.3, and the ~32% regenerative cap. Resolve the chain in one place here
+      rather than patching it row by row; the §6.5.2 "0.15%–7.5% of incident fluence" range
+      moves with it and its lower bound needs restating from its own derivation.
 
 ### Rung 1 — material qualification and 1-D spherical prescribed-deposition screen
 
