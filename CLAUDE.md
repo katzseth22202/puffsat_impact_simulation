@@ -46,6 +46,18 @@ make lint       # ruff + mypy + cargo clippy + cargo fmt --check
 make fmt        # ruff format + cargo fmt
 ```
 
+**The `tamper-*` targets belong to the other study.** `puffsat_tamper_isp_prd.md` (effective Isp
+for a tamped nozzle) is a *separate study* sharing this repo's kernels, tables, and validation
+discipline — not its deliverable, regime, or plate-side conventions. Its targets are prefixed
+`tamper-`, its artifacts live under `data/results/tamper/`, and its Python is its own package
+(`python/puffsat/tamper/`). Departures from decisions recorded for the `f(v)` study are in PRD §12
+and ADR-0030..0033.
+
+```
+make tamper-ledger   # Rung 0: the analytic reference ledger (owns every closed-form number)
+make tamper-test     # that study's tests alone
+```
+
 ## Rust coding standards
 
 **Safe Rust only.** The workspace denies `unsafe_code`. Use safe Rust exclusively.

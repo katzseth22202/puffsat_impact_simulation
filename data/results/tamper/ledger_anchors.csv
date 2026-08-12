@@ -1,0 +1,9 @@
+anchor,quoted,computed,agrees,note
+"ceiling, j = w(sqrt(1+K_ej)-1) at K_ej = 7.06",1.839,1.8390139133156778,True,identity; equals prior work's beta_ideal exactly
+"bare ballistic limit, beta_bare(7.06)",0.9087,0.908687743506112,True,confirms the inherited ballistic model
+ballistic capture fraction at k = 7.06,0.3118,0.3118225176262547,True,R -> infinity convention; imposes no plate radius
+k <= 1 ballistic zero-capture floor,0,0.0,True,ballistic-model limit; hydrodynamic thrust there is a Rung 1 measurement
+free-plate elastic bound at tau_t = 1,0.274,0.27321911632101,True,"exact 1-D elastic value from §6.3's own mass pairing is 0.2732; §6.3 quotes the agreement to two figures (0.27), so 0.274 is a rounding artifact, not a model difference"
+k -> 0 degeneracy (no thrust as slug mass vanishes),0,0.0,True,a code that produces thrust at k = 0 is wrong
+prior work's Isp at w_bar = 77.28 km/s,1014 s,1014.2766020980582,True,inherited ballistic model reproduced before anything is built on it
+bare Pass-1 optimum k*_bare,7.060,7.059946769261689,True,prior work's 7.057 is the same optimum to optimiser tolerance

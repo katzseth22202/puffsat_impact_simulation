@@ -112,7 +112,7 @@ denominator both scale with `m_i`.
 |---|---|---|
 | `ρ` | mass density; `ρ_slug`/`ρ_s`, `ρ_tamper`/`ρ_t`, `ρ_interlayer` | ice 917, snow 70, slush ~400 kg/m³ |
 | `σ = m/A` | **areal density** — the tamper's figure of merit, conserved through vaporisation (§2.3). `σ_t` (tamper), `σ_proj`, `σ_target`, `σ_plume`, `σ_abl` (ablated per pulse) | `σ_t` = 14.9 kg/m² at `τ_t = 1`, `s = 1 m` |
-| `Σ` | gas mass column per unit plate area at arrival — deliberately distinct from generic `σ`. The quoted reference is plate-area-averaged; local solver outputs are functions of radius and time | ≈0.063 kg/m² |
+| `Σ` | gas mass column per unit plate area at arrival — deliberately distinct from generic `σ`. The quoted reference is plate-area-averaged; local solver outputs are functions of radius and time | 0.030–0.088 kg/m² (§5.3) |
 | `e` | specific internal energy. *Distinct from `e_eff`, §0.7* | 305.7 MJ/kg = 57.1 eV per H₂O molecule |
 | `T` | temperature (K, or eV where the plasma state matters). `ΔT` is a temperature difference across a named interval — in §6.5.2, ablator surface to plate bulk | 14 kK fireball; 50–80 kK at stagnation |
 | `P` | pressure. *Momentum in `P_ejecta` only* | ~2 MPa peak at the plate; ~70 GPa in the tamper shock |
@@ -461,7 +461,7 @@ swept design. It holds `w = 75 km/s`, `k = 7.06`, `μ = a_abl = 0`, and compares
 coefficient, including the incoming projectile momentum debit. Thus `β·w = J/m_i` is a
 velocity-equivalent impulse per projectile mass, **not a physical axial velocity**;
 `β_bare` and `β_tamp` are the ballistic closed forms from prior work, re-verified here
-(`β_bare(7.06) = 0.90871`, `β_bare(14.12) = 1.68353`):
+(`β_bare(7.06) = 0.90869`, `β_bare(14.12) = 1.68361`):
 
 | configuration | `K` | `β` | % of ceiling | Isp |
 |---|---|---|---|---|
@@ -469,7 +469,7 @@ velocity-equivalent impulse per projectile mass, **not a physical axial velocity
 | bare plate, k = 14.12 — same mass spent as *slug* | 14.12 | 1.6835 | 58.3% | 912 s |
 | **perfect-mirror tamper, τ_t = 1** | 14.12 | 1.7825 | **61.7%** | **965 s** |
 | *break-even against the bare plate at k = 7.06* | 14.12 | 1.817 | **62.9%** | 984 s |
-| ceiling at `K` = 7.06 / 14.12 | — | 1.839 / 2.889 | 100% | 1992 / 1565 s |
+| ceiling at `K` = 7.06 / 14.12 | — | 1.839 / 2.888 | 100% | 1992 / 1564 s |
 
 Read this row by row. In this reference comparison, a tamper at `τ_t = 1` **beats** spending the same mass as extra slug
 (61.7% vs 58.3%), but **loses** to not spending the mass at all (61.7% vs the 62.9% needed)
@@ -618,15 +618,16 @@ to `R/d` than the `R → ∞` figures suggest (`k = 7.06`):
 |---|---|---|---|---|
 | `R/d` = 1.5 — the §4/§5.3 reference (`R` = 15 m, `d` = 10 m) | 10.6% | 0.339 (368 s) | 0.292 (317 s) | 1.16× |
 | `R/d` = 2.5 | 16.4% | 0.511 (553 s) | 0.400 (434 s) | 1.28× |
-| `R → ∞` | 31.2% | **0.909 (984 s)** | 0.517 (560 s) | 1.79× |
+| `R → ∞` | 31.2% | **0.909 (984 s)** | 0.517 (560 s) | 1.76× |
 
 Two consequences. First, **the headline 984 s is an `R → ∞` idealisation**, and the document
 also carries a third, mutually inconsistent capture fraction — §5.3's `Σ` applies the rim angle
 to the *blob-frame* emission angle rather than to the ray direction, giving 22.3%. These three
-must be reconciled (Rung 0, §13.13); the honest reading is that pure ray-tracing *understates*
-capture, because the flow is pressure-bearing at Mach ≈ 2.5 and steers inward — which is this
-study's central thesis — so the truth lies between the ray-optics and infinite-plate limits and
-only a simulation places it.
+are reconciled in §13.13: the adopted convention is the **ray-consistent finite-plate value at a
+stated `(R, d)`, quoted as the bracket *[finite plate, `R → ∞`]***, and the rim-angle form is
+retired. The honest reading is that pure ray-tracing *understates* capture, because the flow is
+pressure-bearing at Mach ≈ 2.5 and steers inward — which is this study's central thesis — so the
+truth lies between the ray-optics and infinite-plate limits and only a simulation places it.
 
 Second, **§6.6's specular prize is derived for the wrong source.** Its `(1+cosθ)/(2cosθ)` bound
 of 1.09 / 1.19 / 1.23 assumes a *static* point source radiating uniformly into solid angle. A
@@ -788,9 +789,15 @@ compaction. It remains useful only after material has entered its validated flui
 
 ### 5.3 Optical depth
 
-Areal density of the gas slab at the plate is `Σ ≈ 0.063 kg/m²`. With κ for warm dense
-water uncertain across ~two decades (10–1000 m²/kg), `τ_opt = κΣ` spans **0.63 to 63** — it
-**straddles `τ_opt ~ 1`**, which is exactly where flux-limited diffusion is weakest. Prior
+Areal density of the gas slab at the plate is `Σ ≈ 0.030–0.088 kg/m²` over the reference
+plate (`R` = 15 m, `d` = 10 m, 200 kg encounter). This is the **capture bracket** of §3.6 carried
+through, under the convention Rung 0 adopted (§13.13): the lower edge is the ray-consistent
+finite-plate capture of 10.6%, the upper edge the `R → ∞` idealisation's 31.2%, and the truth lies
+between because the flow is pressure-bearing and steers inward. Earlier drafts quoted a single
+`Σ ≈ 0.063 kg/m²`, from the now-retired blob-frame rim-angle capture of 22.3% — which happens to
+sit inside this bracket, so **nothing downstream of `Σ` changes qualitatively.** With κ for warm
+dense water uncertain across ~two decades (10–1000 m²/kg), `τ_opt = κΣ` spans **0.30 to 88** — it
+**straddles `τ_opt ~ 1`** either way, which is exactly where flux-limited diffusion is weakest. Prior
 experience on this project is directly relevant: at 69 km/s an interim Kramers opacity ran
 ~2000× low at stagnation and falsely predicted `τ_opt ~ 1`, moving `e_eff` from 0.42 to 0.65
 once real opacities were used. **Real tabulated opacity is a requirement here, not a
@@ -877,7 +884,7 @@ It completes its work ~4× before it disperses. The tamper–plume collision dep
 ~72 MJ/kg — **26× past sublimation, and ~4× cooler than the fireball** (≈0.5 eV vs 1.2 eV).
 
 Cross-check: `σ_t/σ_plume = 1.75` here, giving a 1-D elastic free-plate
-reflected/incident ratio of **0.274**, which reproduces the prior analytic lower bound at
+reflected/incident ratio of **0.273**, which reproduces the prior analytic lower bound at
 `τ_t = 1` to two figures.
 
 ### 6.4 The plate sees a quasi-steady plenum, not a bounce
@@ -915,17 +922,24 @@ it, and the local peak near the vertex will exceed it):
 
 | sink | capacity | share |
 |---|---|---|
-| soak into steel (`√(4α_th·t)` ≈ 173 µm → 1.36 kg/m², at `c_p` ≈ 500 J/kg/K and `ΔT` ≈ 1400 K to melt) | ~0.95 MJ/m² | 8% |
+| soak into steel (`√(4α_th·t)` ≈ 190 µm → 1.49 kg/m², at `c_p` ≈ 500 J/kg/K and `ΔT` ≈ 1400 K to melt) | ~1.04 MJ/m² | 8.3% |
 | re-radiation, steel at 1700 K | 3.6×10⁻⁴ MJ/m² | 0.003% |
 | re-radiation, SiC at 2800 K | 2.6×10⁻³ MJ/m² | 0.021% |
 
-Re-radiation is four orders too slow to matter and soak covers at most ~8%. **Ablation is
+Re-radiation is four orders too slow to matter and soak covers at most ~8.3%. **Ablation is
 not a lever we choose; it is the only sink.** The only genuine design choices are ablator
 material (`Q*`) and where the mass is placed (taper, §6.6).
 
 *Note the soak row is a capacity, not a prediction — it assumes the full penetration depth
 reaches melting, which happens only if the vapour curtain fails. §6.5.2 shows the physical
 value sits far below it, which is why the plate temperature is not a constraint.*
+
+*This chain is **owned by Rung 0's calculator** (`plate_soak_chain()`), not by this table. An
+earlier draft quoted a 173 µm depth, which implies `α_th` = 1.0×10⁻⁵ m²/s against the 1.2×10⁻⁵
+of §0.6; the depth propagates into the areal mass, the capacity, the whole-plate basis, and the
+four §6.5.3 shares, so it is derived in one place rather than patched row by row. `α_th` =
+1.2×10⁻⁵ governs; `k_cond/(ρ c_p)` on the quoted constants gives 1.15×10⁻⁵, a 4% difference that
+moves nothing at this precision.*
 
 The entire ablator mass is therefore set by one thing: **how much of the incident fluence
 the vapour curtain blocks before it reaches the wall** — a self-consistent balance that
@@ -1018,9 +1032,12 @@ the same curve.
 **An earlier draft of this document got this wrong** and should not be relied on: it took the
 *capacity* of the thermal penetration depth (0.95 MJ/m², reached only if the vapour curtain
 fails completely) as the actual soak, concluded the plate was ~2× short at 4 Hz, and built a
-refractory-material ladder on it. The plausible soak range is 0.15%–7.5% of incident fluence
-— a 50× spread — and the self-limiting argument above shows the physical answer sits near the
-bottom of it.
+refractory-material ladder on it. The plausible soak range runs from **0.075%–0.15%** of
+incident fluence — the conducted-in energy `k_cond·ΔT·√(t/(π α_th))` at `T_abl` = 800 K and
+1000 K respectively, i.e. the physical soak while an unbroken ablating layer pins the surface —
+up to **8.3%**, the penetration-depth capacity above, reached only if the vapour curtain fails
+completely. That is a 55–110× spread, and the self-limiting argument shows the physical answer
+sits at the bottom of it, two orders below the capacity.
 
 **What actually binds is ablator burn-through, not plate temperature.** The entire argument
 above assumes the ablator layer is present throughout the pulse. If it burns through partway,
@@ -1035,23 +1052,23 @@ pulse** (it is charged in the denominator, §3.1) and **what burn-through margin
 retained as a documented option in case burn-through margin turns out to demand a colder
 substrate, or a later scenario pushes `T_abl` higher.
 
-Cooling cannot help *within* a pulse in any case: the thermal wave reaches only ~173 µm in
+Cooling cannot help *within* a pulse in any case: the thermal wave reaches only ~190 µm in
 750 µs, so no coolant channel is in contact with the load. Ablation is the intra-pulse sink
 for any material. Between pulses, water is already the propellant, so **200 kg/pulse of it
 flows regardless — the cooling would be mass-free.**
 
-| water state reached | Δh | per pulse (200 kg) | share of the 672 MJ soak |
+| water state reached | Δh | per pulse (200 kg) | share of the 737 MJ soak |
 |---|---|---|---|
-| ice warmed to just under melt | 0.33 MJ/kg | 66 MJ | 10% |
-| melted to liquid at 273 K | 0.66 MJ/kg | 132 MJ | 20% |
-| liquid at 373 K | 1.08 MJ/kg | **216 MJ** | **32%** |
-| saturated steam | 3.34 MJ/kg | 668 MJ | 99% |
+| ice warmed to just under melt | 0.33 MJ/kg | 66 MJ | 9% |
+| melted to liquid at 273 K | 0.66 MJ/kg | 132 MJ | 18% |
+| liquid at 373 K | 1.08 MJ/kg | **216 MJ** | **29%** |
+| saturated steam | 3.34 MJ/kg | 668 MJ | 91% |
 
 **Phase change is one-way without a radiator**, so anything boiled must reject its latent
 heat again before it can become a slug — and a steam slug is ~300× too dilute to stop the
 projectile (§6.2). Boiled coolant therefore cannot double as propellant. Melting is
 admissible: liquid water at 1000 kg/m³ against ice's 917 means a **liquid or slush slug has
-ample column density.** So the free regenerative budget caps at **~32% of the upper-bound
+ample column density.** So the free regenerative budget caps at **~29% of the upper-bound
 soak.**
 
 **If the true soak is ≲1/3 of the upper bound, propellant regenerative cooling closes the
@@ -1498,6 +1515,11 @@ Three-dimensional work is gated on the RT uncertainty (§6.7).
 
 No result is trusted before these pass. Written **before** the code, per project convention.
 
+**The anchor *values* below are owned by Rung 0's ledger** (`python/puffsat/tamper/ledger.py`) and
+are regression-tested there, so a kernel is scored against a number that cannot quietly drift. The
+checkboxes remain open regardless: they are satisfied by a *kernel* reproducing the anchor, which
+Rung 0 — closed-form algebra with no solver in it — cannot do.
+
 **Analytic anchors specific to this device:**
 
 - [ ] **Ceiling.** In the perfectly-collimated limit,
@@ -1507,7 +1529,7 @@ No result is trusted before these pass. Written **before** the code, per project
 - [ ] **`k ≤ 1` ballistic zero-capture floor.** Ballistically nothing reaches the plate below `k = 1`.
       A hydrocode should show *small but non-zero* thrust from pressure — **how much is
       itself a useful measurement** of how wrong the ballistic model is, and it is cheap.
-- [ ] **Free-plate elastic bound.** Reflected/incident → 0.274 at `τ_t = 1` in the ballistic
+- [ ] **Free-plate elastic bound.** Reflected/incident → 0.273 at `τ_t = 1` in the ballistic
       limit (§6.3).
 - [ ] **`k → 0` degeneracy.** Zero net impulse as slug mass vanishes. A code that produces
       thrust at `k = 0` is wrong.
@@ -1543,6 +1565,7 @@ No result is trusted before these pass. Written **before** the code, per project
 | `crates/tables` | Shared JSON table loader. | Unchanged. |
 | `crates/sweep` | Rayon-parallel sweep driver, JSONL output. | Extend with new sweep modes. |
 | `python/puffsat` | EOS/opacity table generation (CoolProp + analytic Saha/CEA-style, TOPS/OPLIB overlay), frontier extraction, analysis, plotting. | **Extend** with the porosity model; reuse the analysis and plotting pipeline. |
+| `python/puffsat/tamper` | **This study's own cold-path package** (Rung 0 ledger; `make tamper-*`). Separate from the flat `f(v)` modules so a cross-study import is a deliberate act. | Extend with each rung's cold path. |
 | `data/tables/water_jupiter.json` | Equilibrium vapor/plasma table, T to 1.2×10⁶ K, ρ 10⁻⁴–30 kg/m³, real gray opacities. | Reuse in its validated lower-density regime after the new dense-material handoff; not a solid/porous impact EOS (§5.1, §7.3). |
 | Build | Top-level `Makefile` over `cargo` + `uv`; JSON tables in, JSONL results out. | Unchanged. |
 
@@ -1598,35 +1621,55 @@ hybrid**. It runs on Rung 1's output and costs no 2-D work, and it sits here rat
 because a positive result changes the architecture that Rungs 3–6 would otherwise be optimising.
 Rungs 2–6 proceed on the plate arms regardless of its outcome.
 
-### Rung 0 — the analytic reference ledger (no kernel work)
+### Rung 0 — the analytic reference ledger (no kernel work) — **DONE**
 
 A single cold-path calculator that owns **every closed-form number this document quotes**, so
 the PRD, the ADRs, and the eventual analysis cannot drift apart. It is a day's work and it is
 the only thing downstream rungs are permitted to quote closed-form figures from.
 
-- [ ] Implement the mass ledger (`k`, `τ_t`, `μ`, `K`, `K_ej`, `a_abl`, `a_other`, `C`) and the
+**Delivered** as `python/puffsat/tamper/ledger.py` (`make tamper-ledger` →
+`data/results/tamper/ledger_*.csv`), with its acceptance tests in
+`python/tests/test_tamper_ledger.py` (`make tamper-test`). The closed-form cone integrals are
+cross-checked against independent numerical quadrature, and the calculator additionally carries an
+**inherited-assumption audit**: every model function names the assumptions it carries from prior
+work, each adjudicated *holds / holds-with-caveat / departs* with the rung that retires it.
+
+*Five quoted figures were corrected against the ledger* (§3.4 `β_bare(7.06)` 0.90871 → 0.90869 and
+`β_bare(14.12)` 1.68353 → 1.68361; the `K` = 14.12 ceiling 2.889 → 2.888 and its Isp 1565 → 1564 s;
+§3.6's `R → ∞` parabola/flat ratio 1.79× → 1.76×, which disagreed with its own `β` pair; and §6.3's
+free-plate ratio 0.274 → 0.273). None moves a conclusion — which is the point of finding them now
+rather than after a hydrocode is scored against them.
+
+- [x] Implement the mass ledger (`k`, `τ_t`, `μ`, `K`, `K_ej`, `a_abl`, `a_other`, `C`) and the
       per-pulse masses at a stated `m_enc`, with the interlayer and ablator conventions of §0.1
       applied uniformly.
-- [ ] Implement `β_bare(k)`, `β_ideal`, the ballistic capture fraction, the ceiling
+- [x] Implement `β_bare(k)`, `β_ideal`, the ballistic capture fraction, the ceiling
       `j_max`/`v_e,max`, realization fraction, effective Isp, projectile economy, and energy
       per unit impulse.
-- [ ] Implement the **configuration-specific break-even** comparison of §3.4 — candidate
+- [x] Implement the **configuration-specific break-even** comparison of §3.4 — candidate
       against both the bare reference and the same-charged-mass extra-slug competitor — as a
       function, not a constant. 62.9% is one evaluation of it, not a gate.
-- [ ] **Anchor:** reproduce prior work's 1014 s at `w̄ = 77.28 km/s` and `β_bare(7.06) = 0.9087`,
+- [x] **Anchor:** reproduce prior work's 1014 s at `w̄ = 77.28 km/s` and `β_bare(7.06) = 0.9087`,
       confirming the inherited ballistic model before anything is built on it.
-- [ ] Regenerate the §3.4, §3.5, and §4 tables from it and reconcile any residual disagreement
+- [x] Regenerate the §3.4, §3.5, and §4 tables from it and reconcile any residual disagreement
       with a quoted figure, rather than carrying both.
-- [ ] **Reconcile the capture-fraction conventions** (§13.13): `β_bare`'s `R → ∞` 31.2%, §5.3's
+- [x] **Reconcile the capture-fraction conventions** (§13.13): `β_bare`'s `R → ∞` 31.2%, §5.3's
       blob-frame-angle 22.3%, and the consistent finite-plate ray value of 10.6% at `R/d` = 1.5.
       Pick one convention, state it wherever a capture fraction or an Isp is quoted, and report
       the ray-optics/infinite-plate pair as an explicit bracket rather than a single number.
-- [ ] **Known open reconciliation:** §6.5's soak depth `√(4α_th·t)` ≈ 173 µm implies
+      **Resolved:** the ray-consistent finite-plate value at a stated `(R, d)` is the convention,
+      quoted as the bracket *[finite plate, `R → ∞`]*; the rim-angle form is retired and `Σ` is
+      restated on it (§5.3, §13.13). Where inside the bracket the truth sits is Rung 4's to measure.
+- [x] **Known open reconciliation:** §6.5's soak depth `√(4α_th·t)` ≈ 173 µm implies
       `α_th ≈ 1.0×10⁻⁵ m²/s`, against the 1.2×10⁻⁵ stated in §0.6, which gives ~190 µm. Fixing
       it moves a chain — 1.36 → 1.49 kg/m², ~0.95 → ~1.04 MJ/m², the 672 MJ basis and the four
       shares in §6.5.3, and the ~32% regenerative cap. Resolve the chain in one place here
       rather than patching it row by row; the §6.5.2 "0.15%–7.5% of incident fluence" range
       moves with it and its lower bound needs restating from its own derivation.
+      **Resolved:** `α_th` = 1.2×10⁻⁵ governs and the chain is derived by `plate_soak_chain()` —
+      190 µm, 1.49 kg/m², 1.04 MJ/m² (8.3% of fluence), a 737 MJ basis, shares 9/18/29/91%, and a
+      ~29% regenerative cap. The §6.5.2 range is restated as **0.075%–0.15% up to 8.3%**, its lower
+      edge now derived from `k_cond·ΔT·√(t/(π α_th))` at the two `T_abl` design points.
 
 ### Rung 1 — material qualification and 1-D spherical prescribed-deposition screen
 
@@ -1976,15 +2019,24 @@ State these in any write-up. Each could move the answer.
     snow-*slug* corner of the original `(slug density, standoff)` scoping or to a `μ = 0` case.
     Rung 1 must fix Arm D's `(r_slug, s, μ, ρ_interlayer)` and emit its `Θ`, `a_RT(t)`, and mass
     ledger before any Arm D screening number is quoted as such.
-13. **Three inconsistent ballistic capture fractions are in circulation** (§3.6). `β_bare` and
-    every Isp figure derived from it use 31.2% at `k = 7.06`, which imposes **no plate radius**
-    — it is the `R → ∞` limit. §5.3's `Σ` uses 22.3%, applying the rim angle to the blob-frame
-    emission angle rather than to the ray direction. The geometrically consistent finite-plate
-    ray calculation at the reference `R/d` = 1.5 gives **10.6%**, and 368 s rather than 984 s.
-    Pure ray-tracing understates capture, since the flow is pressure-bearing and steers inward,
-    so the answer is bracketed rather than wrong — but `Σ`, `Φ`, `τ_opt`, and the headline
-    Pass-1 Isp all inherit whichever convention is chosen, so it must be one convention. Rung 0
-    reconciles the closed forms; Rung 4 measures where inside the bracket the real capture sits.
+13. **~~Three inconsistent ballistic capture fractions~~ — RESOLVED on the closed forms, by
+    Rung 0.** All three are reproduced by the ledger at `k = 7.06`: **31.2%** (`R → ∞`, which
+    imposes no plate radius and which `β_bare` and every Isp derived from it use), **22.3%**
+    (§5.3's old `Σ`, applying the rim angle to the blob-frame *emission* angle), and **10.6%**
+    (the geometrically consistent finite-plate ray value at the reference `R/d` = 1.5, giving
+    368 s rather than 984 s).
+
+    **The adopted convention.** A capture fraction is always the **ray-consistent finite-plate**
+    value at a stated `(R, d)`, and every capture fraction or Isp is quoted as the explicit
+    bracket *[ray-consistent finite plate, `R → ∞`]* with the geometry named. The rim-angle form
+    is **retired**: it is not a capture fraction of anything, since it asks which elements are
+    *emitted* into the rim's solid angle rather than which rays land inside the rim. The
+    `R → ∞` figure is retained as the labelled upper edge because pure ray-tracing *understates*
+    capture — the flow is pressure-bearing at Mach ≈ 2.5 and steers inward, which is this study's
+    central thesis — so the truth lies between the edges and the bracket is honest where either
+    single number is not. `Σ` is restated on it in §5.3 (0.030–0.088 kg/m², `τ_opt` 0.30–88,
+    conclusion unchanged). What remains open is **where inside the bracket the real capture
+    sits**, which only Rung 4 can measure.
 14. **The magnetic-nozzle window may simply be shut.** The field controls the flow only where
     `β_plasma ≲ 1` and couples to it only where `Rm ≫ 1`; the first gets easier with radius and
     the second harder, so the nozzle exists only in the gap `r_β < r_σ` (§6.9). Neither bound is

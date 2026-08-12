@@ -55,6 +55,13 @@ __pycache__/
 !/data/results/shape_sensitivity.csv
 !/data/results/shape_frozen_spotcheck.csv
 !/data/results/*.png
+# ...and, for the tamped-nozzle study (puffsat_tamper_isp_prd.md), the Rung 0 analytic ledger.
+# It is the single source of truth for every closed-form number that PRD quotes, so it is a cited
+# deliverable in the same sense as the frontier CSVs above — and it is pure algebra, so it costs
+# nothing to keep in sync. Bulk tamper sweep output (JSONL) stays ignored like every other sweep.
+!/data/results/tamper/
+/data/results/tamper/*
+!/data/results/tamper/ledger_*.csv
 # ...and the raw TOPS/OPLIB opacity pull (ADR-0007 amendment): the citable provenance
 # artifact behind the 69 km/s table; needs a network allow to re-fetch (`make fetch-tops`).
 !/data/tables/

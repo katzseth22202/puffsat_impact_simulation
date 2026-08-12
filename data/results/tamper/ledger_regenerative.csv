@@ -1,0 +1,5 @@
+water_state,delta_h_j_kg,per_pulse_j,share_of_basis,admissible_as_slug
+ice warmed to just under melt,330000.0,66000000.0,0.08955556900606326,True
+melted to liquid at 273 K,660000.0,132000000.0,0.17911113801212653,True
+liquid at 373 K,1080000.0,216000000.0,0.2930909531107525,True
+saturated steam,3340000.0,668000000.0,0.906410910546216,False

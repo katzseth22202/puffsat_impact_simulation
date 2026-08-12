@@ -134,12 +134,22 @@ realization fraction is a design hypothesis the study tests, not a settled resul
 _Avoid_: reflector, mirror (both imply reflected-speed is the figure of merit — it is not)
 
 **Ballistic capture fraction**:
-`max[0, (1 − 1/√k)/2]` — the share of the isotropic, pressure-free ballistic fireball model
-that outruns its own centre-of-mass recoil and reaches the plate. It is zero at `k ≤ 1`; this is
-a limit of the ballistic model, not a claim that pressure-driven hydrodynamic thrust is exactly
-zero there. Pure geometry, distinct from `eta_capture` in the `f(v)` study.
+The share of the isotropic, pressure-free ballistic fireball model that outruns its own
+centre-of-mass recoil and reaches the plate. It is zero at `k ≤ 1`; this is a limit of the
+ballistic model, not a claim that pressure-driven hydrodynamic thrust is exactly zero there. Pure
+geometry, distinct from `eta_capture` in the `f(v)` study.
+
+**Always quoted as a bracket, with the plate geometry named** (PRD §13.13): the lower edge is the
+ray-consistent finite-plate value at a stated `(R, d)` — a ray is caught only if it both outruns
+the recoil and lands inside the rim — and the upper edge is the `R → ∞` closed form
+`max[0, (1 − 1/√k)/2]`, which imposes no plate radius. At `k = 7.06` that is 10.6% (`R/d` = 1.5)
+to 31.2%. Ray optics *understates* capture, because the flow is pressure-bearing at Mach ≈ 2.5 and
+steers inward, so the truth lies between the edges; placing it there is a simulation result, not
+an algebraic one.
 _Avoid_: conflating with `eta_capture` (that is a 2D/1D wall-impulse ratio, this is a
-free-flight geometric fraction)
+free-flight geometric fraction); the blob-frame rim-angle form giving 22.3% (retired — it asks
+which elements are *emitted* into the rim's solid angle, not which rays land inside it); quoting
+either edge alone as "the" capture fraction
 
 **Realization fraction**:
 Net axial vehicle impulse as a share of the thermodynamic ceiling for the same ejecta mass,

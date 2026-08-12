@@ -1,8 +1,13 @@
 # PuffSat impact simulation — single build entry point (ADR-0018).
 # Delegates to cargo (Rust hot path) and uv (Python cold path); the two meet only in data/.
+#
+# TWO STUDIES live here (CONTEXT.md). Unprefixed targets belong to the per-collision `f(v)` study
+# (puffsat_impact_sim_design.md); `tamper-*` targets belong to the tamped-nozzle effective-Isp
+# study (puffsat_tamper_isp_prd.md), whose block is at the bottom of this file.
 
 PY := uv run python
 
+.PHONY: tamper-ledger tamper-test
 .PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
@@ -348,3 +353,34 @@ data/results/shape_frozen_spotcheck.csv: data/results/sweep_frozen_shape.jsonl p
 sensitivity:
 	cargo build --release -p sweep
 	PYTHONPATH=python uv run --extra sci python -m puffsat.sensitivity
+
+# =================================================================================================
+# TAMPED-NOZZLE EFFECTIVE-Isp STUDY  —  puffsat_tamper_isp_prd.md
+#
+# A SEPARATE STUDY from everything above. Everything above computes the paper's fudge factor `f(v)`
+# (puffsat_impact_sim_design.md); the targets below compute effective specific impulse for a tamped
+# head-on collision. They share the vehicle, the pusher plate, the kernels, and the validation
+# discipline — not the deliverable, not the regime, and not the plate-side conventions (PRD §12
+# lists every departure; ADR-0030..0033 record them).
+#
+# Conventions for this block, so the two studies cannot be run into each other by accident:
+#   * every target is prefixed `tamper-`;
+#   * every artifact lands under data/results/tamper/ or data/tables/tamper/;
+#   * the Python lives in its own package, python/puffsat/tamper/, never the flat f(v) modules.
+# Rungs are PRD §10. Later rungs reuse crates/hydro1d and crates/euler2d, but always through
+# tamper-specific sweep modes and tamper-specific tables.
+# =================================================================================================
+
+## tamper-ledger: Rung 0 — the analytic reference ledger (PRD §10). The single cold-path calculator
+## that owns every closed-form number the PRD quotes, so the PRD, the ADRs, and the analysis cannot
+## drift apart; downstream rungs quote closed-form figures only from here. Pure algebra, stdlib
+## only (no `sci` extra, no tables, no kernel) -> data/results/tamper/ledger_*.csv
+tamper-ledger: data/results/tamper/ledger_anchors.csv
+
+data/results/tamper/ledger_anchors.csv: python/puffsat/tamper/ledger.py
+	@mkdir -p data/results/tamper
+	PYTHONPATH=python $(PY) -m puffsat.tamper.ledger
+
+## tamper-test: the tamped-nozzle study's tests alone (analytic anchors + invariants, PRD §8)
+tamper-test:
+	uv run pytest python/tests/test_tamper_ledger.py
