@@ -96,7 +96,8 @@ _Avoid_: "impactor-to-rocket-mass ratio" (ambiguous in direction), treating `k` 
 
 **Tamper ratio (`τ_t`)**:
 Tamper mass per **slug** kg, `τ_t = m_t/m_s`. The subscript is required because optical depth is
-`τ_opt`. This is a mass ratio, not an optical property.
+`τ_opt`. This is a mass ratio, not an optical property. The subscript convention is scoped to this
+study; the `f(v)` documents predate it and write optical depth as bare `τ`.
 _Avoid_: bare `τ` in the tamped-nozzle study
 
 **Interlayer ratio (`μ`)**:

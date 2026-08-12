@@ -39,9 +39,12 @@ change in the *kind* of quantity being delivered.
 letting it gate the *tamper* question would be a scoping failure of its own. So Isp is evaluated in
 two passes: **Pass 1 excludes ablator mass entirely** and is reported as an explicit upper bound
 (it also reproduces the denominator prior work used, so it is directly comparable); **Pass 2** folds
-in the measured ablator. Excluding it is *conservative* for the tamper verdict, because
-`E/J = w/(2β)` means raising `β` lowers ablation per unit impulse — the tamper reduces the ablator
-term rather than inflating it.
+in the measured ablator. Excluding it is *expected* to be conservative for the tamper verdict,
+because `E/J = w/(2β)` means raising `β` lowers total energy delivered per unit impulse. That is an
+expectation, not a proof: `E/J` fixes the energy, not the ablation it causes, and a tamper can also
+change the fraction reaching the plate, its angular and radial distribution, arrival velocity,
+residence time, and vapour-shield formation. PRD Rung 6 measures ablator mass per configuration and
+tests the expectation rather than inheriting it.
 
 ## Consequences
 
@@ -50,9 +53,10 @@ term rather than inflating it.
   study keeps the strict §7/§11 boundary.
 - **Pass-1 Isp figures must never be quoted without their upper-bound label.** The excluded term is
   not small and not bounded.
-- Ablator work is sequenced **last** (PRD Rung 6), after the tamper verdict exists, because it moves
-  the absolute number without changing the verdict — even the pessimistic branch takes a 984 s
-  Pass-1 figure to ~610 s, still ~1.6× methalox.
+- Ablator work is sequenced **last** (PRD Rung 6), after the tamper verdict exists, because it is
+  expected to move the absolute number without changing the verdict — even the pessimistic branch
+  takes a 984 s Pass-1 figure to ~610 s, still ~1.6× methalox. If Rung 6 finds the ablator term is
+  configuration-dependent enough to move the comparison, the verdict is re-taken at Pass 2.
 
 ## Considered Options
 

@@ -34,9 +34,12 @@ across the system boundary to `K_ej`; the charged-mass ratio `C = m_charged/m_i`
 includes all expended ablator mass and is the effective-Isp denominator.
 
 Equality requires every ejecta element to end up moving `−z` at one common speed, which requires the
-plate to catch and reverse all plate-bound material. This reproduces the prior analytic results
-exactly (`β_ideal = √(1+k) − 1`; bare-plate optimum at `k* = 7.057`; 1014 s at `w̄ = 77.28 km/s`), so
-it is a reformulation of the existing model rather than a new one.
+plate to catch and reverse all plate-bound material. At `K_ej = k` this recovers prior work's
+ideal-collimation coefficient exactly, `β_ideal = √(1+k) − 1`, so it is a reformulation of the
+existing model rather than a new one. The other two figures usually quoted beside it — the bare-plate
+optimum at `k* = 7.057` and 1014 s at `w̄ = 77.28 km/s` — are results of the **ballistic** model
+(`β_bare`); the ceiling has no interior optimum in `K_ej`, since `v_e,max = w/(√(1+K_ej)+1)` falls
+monotonically.
 
 **Two consequences, both counterintuitive.**
 
