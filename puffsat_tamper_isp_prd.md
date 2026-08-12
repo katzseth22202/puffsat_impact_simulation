@@ -50,7 +50,7 @@ denominator both scale with `m_i`.
 | `m_other` | other expended carried mass not represented in the near-field hydrodynamics. Must be named per configuration; permanent dry structure is excluded | zero in current references |
 | `m_enc = m_i+m_hydro` | **encounter mass per pulse** — projectile plus near-field carried mass. This is what “200 kg reference encounter” means; it is not the Isp denominator | 200 kg in §4 |
 | `m_charged = m_hydro+m_abl+m_other` | all expended **carried** mass per pulse. The Isp denominator (§3.1); a consumable Arm B spacer is charged here and included in `m_hydro` if simulated | 175.2 kg (Pass 1, bare reference) |
-| `k` | **slug ratio** — slug mass per projectile kg. Continuous, not a count | 7.06; bare-plate optimum `k*` = 7.057 |
+| `k` | **slug ratio** — slug mass per projectile kg. Continuous, not a count | 7.06; bare-plate optimum `k*` = 7.060 |
 | `τ_t = m_t/m_s` | **tamper ratio** — tamper mass per slug kg. The subscript distinguishes it from optical depth `τ_opt` | swept 0–2; `τ_t = 1` is the analytic reference tamper |
 | `μ = m_int/m_s` | **interlayer ratio** — interlayer mass per slug kg. Zero for the bare and vacuum-gap references; nonzero for filled Arm D | swept, not yet pinned |
 | `K = m_hydro/m_i` | **hydrodynamic carried-mass ratio**. For the named slug/tamper/interlayer regions only, `K = k(1+τ_t+μ)`; additional simulated material adds its own mass ratio | 7.06 (`τ_t = μ = 0`) / 14.12 (`τ_t = 1, μ = 0`); swept 6–32 |
@@ -58,7 +58,7 @@ denominator both scale with `m_i`.
 | `a_other = m_other/m_i` | other expended carried mass per projectile kg | zero in current references |
 | `C = m_charged/m_i` | **charged-mass ratio** — the denominator mass per projectile kg, `C = K + a_abl + a_other` | equals `K` in §4 |
 | `K_ej = (M_ej−m_i)/m_i` | **ejecta-mass ratio** — nonprojectile mass leaving with the event's ejecta per projectile kg. The ceiling depends on `K_ej`, not on how that mass was allocated | `K_ej = K` in Pass 1; see §3.2 for Pass 2 |
-| `K*`, `k*` | the value of `K` (or `k`) that maximises Isp **for a named configuration family and pass**; there is no universal `K*` | bare Pass-1 control `k*_bare = 7.057`; other optima are measured (§3.5) |
+| `K*`, `k*` | the value of `K` (or `k`) that maximises Isp **for a named configuration family and pass**; there is no universal `K*` | bare Pass-1 control `k*_bare = 7.060`; other optima are measured (§3.5) |
 | `Isp_eff = J/(g₀·m_charged) = βw/(g₀C)` | **effective specific impulse** — the final carried-mass-economy deliverable (§3.1) | 984 s bare plate (Pass 1, upper bound) |
 | `g₀` | standard gravity, 9.80665 m/s² | — |
 | `r_real = J/J_max = β/(√(1+K_ej)−1)` | **realization fraction** — net vehicle impulse as a share of the ceiling for the same ejecta mass (§3.3). A hydrodynamic comparison metric feeding Isp, not a replacement for Isp. The subscript distinguishes it from radial coordinate `r` | 49.4% bare; 62.9% is only the §3.4 reference-case break-even |
@@ -375,8 +375,11 @@ in turn requires the plate to catch and reverse all plate-bound material. At `K_
 recovers prior work's ideal-collimation coefficient exactly, `β_ideal = √(1+k) − 1`, so the
 ceiling is a reformulation of the existing model rather than a new one. **The two figures
 usually quoted beside it are *ballistic*, not ceiling, results** — the bare-plate optimum at
-`k* = 7.057` and 1014 s at `w̄ = 77.28 km/s` both follow from `β_bare`, and the ceiling itself
-has no interior optimum in `K_ej` (§3.5).
+`k* = 7.060` and 1014 s at `w̄ = 77.28 km/s` both follow from `β_bare`, and the ceiling itself
+has no interior optimum in `K_ej` (§3.5). (Rung 0's calculator reproduces the 1014 s figure to
+four digits from the same `β_bare`, and locates that model's optimum at `k* = 7.0600`; prior
+work's quoted 7.057 is the same optimum to optimiser tolerance on a curve that is flat to
+±0.6% over `k` = 6–8.)
 
 ### 3.3 Two consequences that define the study
 
@@ -396,8 +399,10 @@ kills the concept.
 thermalised in the tamper must then be re-expanded a second time, isotropically, at a second
 efficiency cost. Angular dispersion, ejecta velocity variance, residual internal energy,
 radiation, incomplete capture, and wrong-way material can also lower `r_real`. Entropy production
-rises steeply with shock strength. **The ideal tamper is a
-maximally isentropic piston, not a cold specular mirror.** Instrument the tamper's
+rises steeply with shock strength. **The study's design hypothesis is therefore that the ideal
+tamper is a maximally isentropic piston rather than a cold specular mirror** — the ceiling proof
+disqualifies the mirror as a *justification* for the tamper, but it does not by itself establish
+the piston as the realizable optimum; that is what the sweep tests. Instrument the tamper's
 entropy/thermal budget and its centre-of-mass momentum alongside the complete shortfall and
 momentum ledgers, not its reflected-speed ratio alone.
 
@@ -476,10 +481,10 @@ steeply with `K` while Isp degrades gently:
 | 10 | 1.260 | 963 s | −2.1% | 29.8 kJ/N·s | −28% |
 | 14.12 | 1.684 | 912 s | −7.4% | 22.3 kJ/N·s | **−46%** |
 | 16 | 1.858 | 888 s | −9.8% | 20.2 kJ/N·s | −51% |
-| 32 | 3.084 | 737 s | −25% | 12.2 kJ/N·s | −71% |
+| 32 | 3.068 | 733 s | −25.5% | 12.2 kJ/N·s | −70% |
 
-**What sets the design point.** Plate *temperature* does not — it is self-limiting at the
-ablator's vaporisation point regardless of `K` or cadence (§6.5.2). What does is the
+**What sets the design point.** Plate *temperature* does not — on the §6.5.2 screen it is
+self-limiting at the ablator's vaporisation point regardless of `K` or cadence. What does is the
 **ablator's share of the Isp denominator**, since ablation is sub-linear in fluence and so
 falls with `β`. The denominator is therefore
 
@@ -827,7 +832,16 @@ total. Encounter mass and cadence trade freely at fixed thrust (§4.1), so **lar
 proportionally lower cadence is a direct reduction in ablator mass** — one of the few levers
 that improves the denominator without touching the physics of the tamper.
 
-#### 6.5.2 Inter-pulse balance — the plate is self-limiting, and steel is fine
+#### 6.5.2 Inter-pulse balance — on this screen the plate self-limits, and steel is fine
+
+**Everything in this subsection is a closed-form screen, not a computed result**, and is
+carried as a hypothesis until Rung 6 tests it. It assumes an unbroken ablating layer holds
+`T_abl` for the whole pulse, a single lumped heat partition, and a cyclic equilibrium reached
+without oil pyrolysis or vapour-layer behaviour that the closed form does not represent. Rung 6
+computes the sustained-inflow ablating-wall problem and verifies (or falsifies) the interface
+condition, the heat partition, the burn-through margin, and the cyclic equilibrium. Until it
+does, "steel plus oil is settled" and the 750–905 K equilibrium are **testable hypotheses**,
+not results — and the §6.5.4 baseline rests on them.
 
 Ablation is mass-transfer cooling: its enthalpy leaves with the vapour, so the plate must
 reject only what **soaks in**. The decisive point is that **an ablating surface is a
@@ -846,9 +860,9 @@ both faces, at 4 Hz:
 | 800 K | **753 K** |
 | 1000 K | **905 K** |
 
-Steel is usable to ~1000–1200 K. **It clears this comfortably, at 4 Hz, with no material
-escalation and no active cooling.** This is why Orion's steel plate worked, and it is
-cadence-independent in the same way §4.1's heat load is: raising cadence raises both the
+Steel is usable to ~1000–1200 K. **On these assumptions it clears this comfortably, at 4 Hz,
+with no material escalation and no active cooling.** This is why Orion's steel plate worked,
+and it is cadence-independent in the same way §4.1's heat load is: raising cadence raises both the
 conducted flux and the equilibrium radiating temperature, and the balance simply moves along
 the same curve.
 
@@ -903,7 +917,7 @@ facesheet loads; **peak pressure here is ~2 MPa**, three orders of margin. Coola
 are structurally admissible, and they need to sit within ~3 mm of the surface (the 250 ms
 diffusion length in steel) — a placement the original rule would have forbidden.
 
-#### 6.5.4 Plate material: steel plus a thin oil ablator, and the question largely dissolves
+#### 6.5.4 Plate material: steel plus a thin oil ablator, and — if §6.5.2 holds — the question largely dissolves
 
 Every candidate criterion turns out to be non-binding:
 
@@ -912,11 +926,13 @@ Every candidate criterion turns out to be non-binding:
 | shock (2 MPa gas, ~3 MPa inertial at 4600 g) | non-binding — ~200× margin for any structural material |
 | spall | non-binding at 2 MPa; the rule that forbade voids was derived at 400 MPa–2 GPa |
 | bending / whole-plate rigidity | passes trivially (first mode 10–100 ms vs a 750 µs pulse) |
-| **steady-state temperature** | **bounded by `T_abl` ≈ 750–905 K — steel clears it (§6.5.2)** |
+| **steady-state temperature** | **screened as bounded by `T_abl` ≈ 750–905 K — steel clears it; a hypothesis pending Rung 6 (§6.5.2)** |
 | atomic-oxygen attack | the renewed oil layer, not the substrate, meets the plume |
 
 **Baseline: steel structure + a thin renewed oil ablator**, which is the Orion configuration
-and is vindicated by the self-limiting argument rather than merely inherited from it.
+and rests on the self-limiting argument rather than being merely inherited — but that argument
+is a closed-form screen (§6.5.2), so the baseline is **provisional on Rung 6** rather than
+settled. It is the right thing to build against; it is not yet a verified plate design.
 
 A **thin SiC or ceramic front layer** is retained as a cheap hedge. It costs little, and it
 buys margin in the one failure mode that is abrupt: if the ablator burns through mid-pulse,
@@ -1074,8 +1090,12 @@ the uncertainty budget (§13.1), where this is the top-ranked Pass-1 contributor
 A uniform 2-D grid spanning both is **~3×10⁸ cells** — infeasible once, let alone across a
 sweep. The pipeline is therefore staged, with a control-surface hand-off:
 
-1. **Near field** — resolve the tamper; run until the flow is ballistic. Output: mass /
-   velocity / angle distribution on a control sphere, plus the entropy budget.
+1. **Near field** — resolve the tamper; run until the flow is ballistic. Output: the
+   **time-resolved control-sphere state** — mass, momentum, and energy flux, pressure, and
+   material fraction as functions of polar angle and time — plus the entropy budget.
+   **A marginal mass/velocity/angle histogram is not sufficient**: stage 2 is not
+   free-streaming, so it needs the joint distribution and the pressure that steers the flow,
+   and marginals discard exactly those correlations.
 2. **Transport** — control sphere → plate. **Not free-streaming:** terminal Mach is ≈2.5,
    so pressure still steers the flow and a straight-line ballistic map is too crude. A
    coarse 2-D Euler continuation with spherical-inflow boundary conditions.
@@ -1160,9 +1180,11 @@ Three-dimensional work is gated on the RT uncertainty (§6.7).
    audit, not a standalone proxy for plate impulse.
 5. **Fraction of tamper mass ending up plate-directed** vs entrained (the §6.7 mixing
    question, insofar as an axisymmetric code can bound it).
-6. **Angular distribution of mass flux across the control sphere** — directly comparable to
-   the analytic isotropic assumption; shows whether the tamper *turns* the plume or merely
-   *stops* it.
+6. **Time-resolved control-sphere state** — mass, momentum, and energy flux, pressure, and
+   material fraction against polar angle and time (§7.1). Its angular mass-flux marginal is
+   directly comparable to the analytic isotropic assumption and shows whether the tamper
+   *turns* the plume or merely *stops* it, but the **joint, time-resolved** form is what the
+   transport stage consumes.
 7. **Flux and pressure maps over the plate surface** — feed the taper calculations and the
    ablation model.
 8. **Mass, momentum and energy audits at every dump**, closing to <1%. The entire argument
@@ -1244,8 +1266,18 @@ cross-check is deferred and named as the outstanding validation. A bracket that 
 its applicable break-even frontier is a legitimate outcome and is reported as such — the
 deliverable is the bracket, not a verdict forced past the evidence.
 
-**Two passes (§3.1), executed in strict order.** Rungs 1–5 constitute **Pass 1**, which
-excludes ablator mass and returns an *upper bound* on Isp. Its bare control should recover
+**And a narrow win is not a verdict.** If the best tamped and best untamped designs end up
+separated by only a few realization-percentage points — the scale of the §13.1 residuals, and
+of the 1.2-point gap the whole study is chasing — then the *sign* of that difference is a
+single-code artifact until an independent hydrocode or methodologically distinct spot-check
+reproduces it. In that case the study reports the magnitude, the bracket, and the named
+outstanding cross-check, and **does not report a design conclusion**. Only a separation
+comfortably outside the combined uncertainty is quotable as pay/don't-pay on one code.
+
+**Two passes (§3.1), executed in strict order.** Rung 0 is a cold-path prerequisite to both:
+it fixes the ledger and the closed-form references everything else is scored against. Rungs 1–5
+then constitute **Pass 1**, which excludes ablator mass and returns an *upper bound* on Isp.
+Its bare control should recover
 `k*_bare ≈ 7.06`; each tamped/interlayered family locates its own optimum. Rung 6 adds the
 measured ablator (**Pass 2**) and re-optimises every family.
 
@@ -1258,6 +1290,26 @@ run that produces the acceleration history it needs — and the ablator is last.
 result with analytic capture geometry and an RT bound. It may foreclose a clearly poor design,
 but cannot establish a positive final verdict before 2-D resolves deposition and angular flow.
 
+### Rung 0 — the analytic reference ledger (no kernel work)
+
+A single cold-path calculator that owns **every closed-form number this document quotes**, so
+the PRD, the ADRs, and the eventual analysis cannot drift apart. It is a day's work and it is
+the only thing downstream rungs are permitted to quote closed-form figures from.
+
+- [ ] Implement the mass ledger (`k`, `τ_t`, `μ`, `K`, `K_ej`, `a_abl`, `a_other`, `C`) and the
+      per-pulse masses at a stated `m_enc`, with the interlayer and ablator conventions of §0.1
+      applied uniformly.
+- [ ] Implement `β_bare(k)`, `β_ideal`, the ballistic capture fraction, the ceiling
+      `j_max`/`v_e,max`, realization fraction, effective Isp, projectile economy, and energy
+      per unit impulse.
+- [ ] Implement the **configuration-specific break-even** comparison of §3.4 — candidate
+      against both the bare reference and the same-charged-mass extra-slug competitor — as a
+      function, not a constant. 62.9% is one evaluation of it, not a gate.
+- [ ] **Anchor:** reproduce prior work's 1014 s at `w̄ = 77.28 km/s` and `β_bare(7.06) = 0.9087`,
+      confirming the inherited ballistic model before anything is built on it.
+- [ ] Regenerate the §3.4, §3.5, and §4 tables from it and reconcile any residual disagreement
+      with a quoted figure, rather than carrying both.
+
 ### Rung 1 — material qualification and 1-D spherical prescribed-deposition screen
 
 *Why 1-D is useful here: lateral communication across the fireball takes `r/c_s ≈ 69 µs`,
@@ -1268,6 +1320,12 @@ This does not make an axial projectile spherical or permit 1-D to resolve penetr
 - [ ] Add a per-cell material index (projectile / slug / interlayer / tamper).
 - [ ] Select or construct the dense ice/water EOS, define its handoff to the vapor/plasma EOS,
       and build the porous-ice (P-α or ε-α) compaction model (§7.3).
+- [ ] **Material-qualification gate, before any screening number is quoted.** Dense-ice and
+      porous-ice Hugoniots and release paths reproduced against published data; compaction
+      energy accounted; the dense→vapor/plasma handoff continuous in pressure and energy on one
+      energy zero (§8). This gates the *screen itself*, not merely Rung 3's penetration work:
+      the slug and tamper start as solid ice at 917 kg/m³ and the interlayer as porous ice, so a
+      screen run on an unqualified material model measures the model, not the device.
 - [ ] Use bracketed prescribed-deposition profiles in 1-D; resolved axial projectile
       penetration moves to Rung 3.
 - [ ] Write the §8 acceptance tests **first**; make them pass.
@@ -1318,11 +1376,16 @@ any 2-D effort. Escalate only as far as needed:
       density, aspect ratio, and bulk density against the vertex-hole and deliverability
       constraints (§6.2). Report deposited-energy fraction as a first-class output.
 - [ ] Sweep tamper **angular coverage** at fixed mass (§6.7 — coverage, not curvature).
-- [ ] Emit the control-sphere mass/velocity/angle distribution.
+- [ ] Emit the **time-resolved control-sphere state** (mass/momentum/energy flux, pressure,
+      material fraction vs angle and time), not a marginal histogram (§7.1, §7.6.6).
 
 ### Rung 4 — transport and plate
 
-- [ ] Spherical-inflow boundary condition from the control-sphere distribution.
+- [ ] Spherical-inflow boundary condition from the control-sphere state.
+- [ ] **Handoff verification (gate):** the reconstructed inflow must reproduce the near-field
+      run's mass, momentum, and energy fluxes and its pressure–angle correlation across the
+      control surface. An overlap-region comparison against a single-domain run at reduced
+      resolution is the check; a handoff that only matches marginals fails it.
 - [ ] Coarse far-field continuation to the plate (not free-streaming, §7.1).
 - [ ] Replace the decay-based integration window with a sustained-feed criterion (§6.4).
 - [ ] Sweep plate radius `R` (mass-ceiling constrained), standoff `d`, and shape: flat plus
@@ -1381,14 +1444,14 @@ as the outstanding validation.
 
 | # | Decision | Rationale |
 |---|---|---|
-| D1 | **The tamper is an isentropic piston, not a cold mirror.** Instrument entropy and CM momentum. | "Reflects all energy, absorbs none, still recoils" is self-contradictory at finite mass. Under §3.3(b) recoil momentum is credited; entropy is one important part of the complete ceiling-shortfall ledger. |
+| D1 | **Frame the tamper as an isentropic piston, not a cold mirror**, and instrument entropy and CM momentum accordingly. A framing and instrumentation decision, plus a design hypothesis — not a result. | "Reflects all energy, absorbs none, still recoils" is self-contradictory at finite mass, so the mirror is disqualified as a justification. Under §3.3(b) recoil momentum is credited; entropy is one important part of the complete ceiling-shortfall ledger. Whether gentle, early, pressure-mediated loading actually maximises `r_real` is measured, not assumed. |
 | D2 | **Arm D (filled interlayer) is the design; Arm B (vacuum gap) is provisionally foreclosed and retained as a control.** | Two independent arguments close Arm B: it is a re-thermalising ram rather than a piston (§3.3), and RT disrupts its tamper completely before it acts (§6.7). Effort concentrates on narrowing Arm D's bracket. |
 | D2a | **The mass ratio `K` is optimised separately for each configuration family and pass, against Isp — not against an economic weighting.** | The bare ballistic optimum is real but flat (±0.6% over `k` = 6–8), while tampers and interlayers change `β(K)` and therefore may move it. Ablator cost is configuration-specific and in scope (§3.5). |
 | D2b | **Projectiles are not priced into a combined figure of merit.** | Converting projectiles to payload-equivalent needs a program economic model outside this study; importing it would make a physics result move with someone else's assumptions. Projectile economy is reported as `β` (§3.1). |
 | D3 | **Plate radius swept; plate mass a ceiling.** | §6.5: `R` is the only lever that breaks the capture-vs-fluence conflict. |
 | D4 | **Isp denominator = all expended carried mass, ablator included — but evaluated in two passes**, Pass 1 excluding it as an explicit upper bound. | Isp is a rocket-equation quantity, so anything carried and expended is charged. But the ablator is uncertain by 27× and answering it is a *plate* question; excluding it in Pass 1 decouples the *tamper* question and lets Rungs 1–5 proceed without waiting, with RT narrowed first (§3.1). |
 | D4a | **Encounter mass `m_enc` and cadence trade freely at fixed thrust; neither is independently pinned.** | At fixed dimensionless design, `E/J = w/(2β)` contains neither, so average heat load and gravity loss are invariant under the trade — while sub-linear ablation means larger, rarer encounters cut ablator mass (§4.1, §6.5.1). |
-| D4b | **Plate material: steel + thin renewed oil, with a thin ceramic hedge.** | An ablating surface is temperature-pinned, so the plate self-limits near 750–905 K; strength, spall, and bending are all non-binding at 2 MPa. Escalation is triggered only by inadequate burn-through margin (§6.5.2, §6.5.4). |
+| D4b | **Plate material: steel + thin renewed oil, with a thin ceramic hedge — provisional on Rung 6.** | An ablating surface is temperature-pinned, so the plate self-limits near 750–905 K; strength, spall, and bending are all non-binding at 2 MPa. The temperature half of that is a *closed-form screen*, not a computed result, so the decision is a baseline to build against and Rung 6 confirms or falsifies it. Escalation is triggered only by inadequate burn-through margin (§6.5.2, §6.5.4). |
 | D5 | **Plate shape sweep = flat + parabola family + both tapers.** Shape itself stays open. | §6.6: the prior foreclosure is conditional on plane-wave incidence; but the parabola's area penalty may exceed its impulse gain. Genuinely two-sided. |
 | D6 | **Keep the 1-D-thermophysics × 2-D-geometry factorization**, adding a cold-path flux map — but gate it. | Radiation is local-diffusive and one-way wherever the flow is optically thick, which holds in the near field; at the plate `τ_opt` spans 0.63–63 and straddles 1 (§5.3), so the factorization is *adopted subject to* a coupled sensitivity spot-check at that corner (Rung 4) rather than assumed. A monolithic 2-D rad-hydro across the sweep is not affordable. |
 | D7 | **Ablator mass is an emergent cost per configuration, not a specified thickness.** | §6.5: ablation is the plate's only thermal sink, so it is forced by physics. Specifying a thickness the balance does not respect would silently burn through. |
@@ -1414,7 +1477,7 @@ work lands.
 | RT/RM deferral | **No** | Load-bearing in three places (§6.7) |
 | Deep-dish foreclosure | **No** | Conditional on plane-wave incidence (§6.6) |
 | Ablator, vehicle scale and cadence held out of scope | **No** | An Isp deliverable pulls all three inside the boundary |
-| Inter-pulse plate thermal accumulation excluded as cadence-dependent | **Partly** | Now computed rather than excluded — but the answer is that it does not bind: the plate self-limits at `T_abl` (§6.5.2) |
+| Inter-pulse plate thermal accumulation excluded as cadence-dependent | **Partly** | Now screened rather than excluded — and on that closed-form screen it does not bind, because the plate self-limits at `T_abl`. Rung 6 computes it (§6.5.2) |
 | Projectile geometry treated as an unrecorded external input | **No** | §6.2 makes it a swept design variable with a real interior optimum |
 | No voids behind the hot face (spall risk from free-surface reflection) | **No** | Derived at 400 MPa–2 GPa; peak here is ~2 MPa. Not currently exercised, since cooling proved unnecessary (§6.5.3) |
 | Carbon-carbon rejected as a hot face (burns in atomic O) | **Weakened** | Exposure is only during the pulse, when renewed oil covers it; between pulses there is no gas. Held in reserve on the escalation path, not adopted (§6.5.4) |
@@ -1458,17 +1521,20 @@ State these in any write-up. Each could move the answer.
    packed slush over snow. Cheap to sweep; a real risk to Arm D as currently specified.
 3. **~~Vehicle mass~~ — RESOLVED: 1000 t.** The plate is 5% of the vehicle and the prior
    10 t/50 t inconsistency is gone (§4.1).
-4. **~~Cadence~~ — RESOLVED: not thermally limited.** The plate self-limits at the ablator's
-   vaporisation temperature (§6.5.2), and average heat load is invariant under the
+4. **~~Cadence~~ — RESOLVED on a screen: not thermally limited.** The plate self-limits at the
+   ablator's vaporisation temperature — a closed-form screen Rung 6 must confirm
+   (§6.5.2) — and average heat load is invariant under the
    encounter-mass/cadence trade (§4.1). Cadence is set by gravity losses alone, and larger encounters
    at lower rate is a *free* variation that also cuts ablator mass. What remains open is the
    shock-absorber stroke this implies, which is out of scope.
 5. **~~Projectile geometry~~ — RESOLVED: it is in scope as a swept design variable** (§6.2).
    The residual risk is that resolving hypervelocity penetration is a distinct validation
    domain (§8) and could dominate Rung 3's effort.
-6. **~~Plate material~~ — LARGELY RESOLVED: steel + thin renewed oil, with a ceramic hedge.**
+6. **~~Plate material~~ — PROVISIONALLY RESOLVED, on a closed-form screen: steel + thin
+   renewed oil, with a ceramic hedge.**
    Every candidate criterion is non-binding except steady-state temperature, and that
-   self-limits at `T_abl` (§6.5.2, §6.5.4). **What replaces it as the open question is
+   self-limits at `T_abl` — which is screened, not computed, so the baseline stands or falls
+   with Rung 6 (§6.5.2, §6.5.4). **What replaces it as the open question is
    burn-through margin** — the one abrupt failure mode, since a mid-pulse breach exposes the
    substrate to 50–80 kK plume with no temperature pinning. Rung 6 reports it. Escalation
    materials are named but not invoked.

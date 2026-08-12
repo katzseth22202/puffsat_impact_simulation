@@ -127,9 +127,10 @@ This is distinct from `C`, which charges expended carried mass whether or not al
 **Tamper**:
 Carried mass placed beyond the slug, on the far side from the plate, that turns part of the
 away-going fireball back toward it. Fully vaporised — it works by **areal density**, which is
-conserved through vaporisation, not by surviving. It is a **piston**, not a mirror: its
-backward momentum is credited, while its entropy production is one part of the ceiling-shortfall
-ledger (ADR-0030).
+conserved through vaporisation, not by surviving. It is framed as a **piston**, not a mirror:
+its backward momentum is credited, while its entropy production is one part of the
+ceiling-shortfall ledger. Whether gentle, pressure-mediated loading actually maximises the
+realization fraction is a design hypothesis the study tests, not a settled result (ADR-0030).
 _Avoid_: reflector, mirror (both imply reflected-speed is the figure of merit — it is not)
 
 **Ballistic capture fraction**:

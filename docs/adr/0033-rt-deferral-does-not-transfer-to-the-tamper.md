@@ -24,14 +24,23 @@ mix growth
 
 | configuration | `a_RT = P/σ` | window | bubble depth `h_b` | tamper thickness `h_t` | **bubble-depth fraction `h_b/h_t`** |
 |---|---|---|---|---|---|
-| filled interlayer, contact tamper | 1.9×10⁸ m/s² | 27.6 µs | 2.9–7.3 mm | 34.8 mm | **8–21%** |
-| vacuum standoff, tamper at 1 m | 3.9×10⁸ m/s² | 45 µs | 16–40 mm | 16.2 mm | **100–246% — fully disrupted** |
+| snow slug, contact tamper (`s = 0.683 m`); slug-disassembly window | 1.9×10⁸ m/s² | 27.6 µs | 2.9–7.3 mm | 34.8 mm | **8–21%** |
+| vacuum standoff, ice slug, tamper at `s = 1 m`; tamper-recoil window | 3.9×10⁸ m/s² | 45 µs | 16–40 mm | 16.2 mm | **100–246% — fully disrupted** |
+
+**Neither row is the filled configuration as the PRD defines it** (ice slug → filled interlayer
+→ tamper at standoff), and the two rows use different windows. The first is the snow-*slug*
+corner of the original `(slug density, standoff)` scoping, carried as the filled design's
+stand-in; since `h_b ∝ a_RT·t²` the substitution is not neutral and cuts both ways. The filled
+configuration's own numbers are an output of the PRD's Rung 1 measured `a_RT(t)`, not values
+this table supplies.
 
 The screen predicts that the standoff configuration's tamper is **shredded before it finishes
 its job**, across the whole plausible `α_mix` range — a thin sheet rammed by a fast plume is torn
 apart, while a thicker shell pressed gently holds together. That is an independent mechanism
 reaching the same verdict as ADR-0030's entropy argument, and together they provisionally foreclose
-it. For the filled configuration the bound is *not* decisive: a separate 16–63% total mix-width
+it. It remains a *constant-acceleration self-similar estimate with an assumed broad initial
+perturbation spectrum*: a strong provisional foreclosure, not a verified result, and the control
+run is what confirms it. On the stand-in geometry the bound is *not* decisive: a separate 16–63% total mix-width
 heuristic maps the realization fraction
 roughly between "piston" (~62% of ceiling) and "just extra slug" (~58%), near the 62.9%
 reference-case threshold. Bubble-depth fraction and total mix-width fraction are not interchangeable,

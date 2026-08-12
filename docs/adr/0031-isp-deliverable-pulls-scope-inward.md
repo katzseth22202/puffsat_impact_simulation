@@ -21,9 +21,12 @@ excluding the ablator would be reporting a fraction with a term missing from the
   mass-flow cross-check, and to ask whether the plate can reject its absorbed heat between pulses.
 - **Inter-pulse plate thermal accumulation.** Design §11 excludes it *on the grounds that it depends
   on a cadence the `f(v)` study never fixed*. With cadence pinned, the exclusion's own precondition
-  is gone, so it is computed rather than deferred. (The answer turns out to be benign — an ablating
-  surface is temperature-pinned, so the plate self-limits near 750–905 K — but that is a result, not
-  an assumption, and it could not have been asserted without doing the work.)
+  is gone, so it is screened rather than deferred. (The screened answer is benign — an ablating
+  surface is temperature-pinned, so the plate self-limits near 750–905 K — but that is a
+  *closed-form screen*, not a computed result: it assumes an unbroken ablating layer, a lumped heat
+  partition, and no oil pyrolysis behaviour the closed form cannot represent. PRD Rung 6's
+  sustained-inflow ablating-wall calculation confirms or falsifies it, and the steel baseline is
+  provisional on that.)
 
 **What stays out, deliberately:** the conversion rate between projectile consumption and delivered
 payload (that needs program economics this repository has no basis to model — projectile economy is

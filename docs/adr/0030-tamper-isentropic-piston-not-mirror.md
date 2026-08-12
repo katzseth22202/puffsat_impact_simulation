@@ -37,7 +37,7 @@ Equality requires every ejecta element to end up moving `−z` at one common spe
 plate to catch and reverse all plate-bound material. At `K_ej = k` this recovers prior work's
 ideal-collimation coefficient exactly, `β_ideal = √(1+k) − 1`, so it is a reformulation of the
 existing model rather than a new one. The other two figures usually quoted beside it — the bare-plate
-optimum at `k* = 7.057` and 1014 s at `w̄ = 77.28 km/s` — are results of the **ballistic** model
+optimum at `k* = 7.060` and 1014 s at `w̄ = 77.28 km/s` — are results of the **ballistic** model
 (`β_bare`); the ceiling has no interior optimum in `K_ej`, since `v_e,max = w/(√(1+K_ej)+1)` falls
 monotonically.
 
