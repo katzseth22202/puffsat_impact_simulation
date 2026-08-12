@@ -18,6 +18,156 @@ Where it *departs* from a decision recorded there, §12 says so explicitly.
 
 ---
 
+## 0. Symbols and notation
+
+Every symbol used later in this document is defined here, so it can be read front to back
+without forward references. Values in the *reference* column are the reference case of §4
+(`w = 75 km/s`, `k = 7.06`, 200 kg pulse) and are quoted for orientation only — the section
+cited is authoritative. §0.8 lists the letters that carry more than one meaning; §14 is the
+glossary of named concepts, and [`CONTEXT.md`](CONTEXT.md) holds the canonical prose terms.
+
+**Frame and sign conventions.** Cylindrical `(r, z)`, axisymmetric about the device axis.
+**`+z` is the thrust direction.** The projectile arrives travelling `−z`, so its momentum is a
+debit, and useful ejecta also leaves travelling `−z`; impulse `J` is counted positive in `+z`.
+This is the origin of the `−1` in every impulse law (§2.1).
+
+**Normalisation.** `J`, `β`, `k`, `K` and the ceiling are *per projectile kg* unless stated;
+`m_charged`, `E` and the per-pulse figures in §4 are *per pulse*. The two are interchangeable
+for Isp, since numerator and denominator both scale with `m_i`.
+
+### 0.1 Masses, mass ratios, and the deliverables
+
+| symbol | meaning | reference |
+|---|---|---|
+| `m_i` | projectile (PuffSat) mass per pulse — **never charged in Isp**, it is not carried. Written `m_projectile` where the contrast with carried mass is the point (§3.1) | 24.81 kg at `τ` = 0; 13.23 kg at `τ` = 1 (§4) |
+| `m_s`, `m_t` | slug mass, tamper mass | 175.2 kg / — at `τ` = 0; 93.4 kg each at `τ` = 1 |
+| `m_charged` | all expended **carried** mass per pulse — slug + tamper + interlayer, plus the ablator in Pass 2. The Isp denominator (§3.1) | 175.2 kg (Pass 1, `τ` = 0) |
+| `k` | **slug ratio** — slug mass per projectile kg. Continuous, not a count | 7.06; bare-plate optimum `k*` = 7.057 |
+| `τ` | **tamper ratio** — tamper mass per slug kg. *Also optical depth, §0.8* | swept 0–2; `τ` = 1 is the reference tamper |
+| `K = k(1+τ)` | **carried-mass ratio** — total carried mass per projectile kg. The only quantity the ceiling depends on (§3.2) | 7.06 (`τ` = 0) / 14.12 (`τ` = 1); swept 6–32 |
+| `K*`, `k*` | the value of `K` (or `k`) that maximises Isp | 7.06 on Pass 1; higher on Pass 2 (§3.5) |
+| `Isp_eff = J/(g₀·m_charged)` | **effective specific impulse** — the deliverable (§3.1) | 984 s bare plate (Pass 1, upper bound) |
+| `g₀` | standard gravity, 9.80665 m/s² | — |
+| **realization fraction** | delivered `J` / `J_max` — what share of the ceiling a configuration achieves (§3.3) | 49.4% bare; **62.9% is the threshold the tamper must beat** |
+| **capture fraction** | `(1 − 1/√k)/2` — share of an isotropic fireball that outruns its own recoil and reaches the plate. Zero at `k ≤ 1` (§2.2) | 31.2% at `k` = 7.06 |
+
+### 0.2 Speeds, impulse, and energy
+
+| symbol | meaning | reference |
+|---|---|---|
+| `w` | **closing speed** of projectile and vehicle, head-on, vehicle frame | 75 km/s (envelope 74–81) |
+| `w̄` | mass-weighted mean closing speed, used only when reproducing prior work's Isp figure | 77.28 km/s (§3.2) |
+| `V = w/(1+k)` | merged blob's centre-of-mass recoil speed, directed *away* from the plate | 9.31 km/s |
+| `u = w√k/(1+k)` | fireball expansion speed in the blob frame. `u/V = √k` sets the capture fraction | 24.72 km/s |
+| `U_shock` | shock speed through the tamper (ice Hugoniot at ~70 GPa) — **an estimate** (§13.9) | ≈12 km/s |
+| `c_s` | sound speed | ≈9.8 km/s in the fireball |
+| `M` | Mach number | ≈2.5 terminal, at the transport hand-off (§7.1) |
+| `Δv` | velocity increment — the vehicle's per pulse (§4.1); the *tamper's* in the recoil clock `σ_t·Δv/P` (§6.3) | 1.69 m/s per pulse |
+| `J` | **axial impulse delivered to the vehicle**, positive in `+z`, `J = β·m_i·w` | 1.69×10⁶ N·s per 200 kg pulse |
+| `P_ejecta`, `M_ej = m_i(1+K)` | total axial momentum and total mass of the ejecta (§3.2) | — |
+| `J_max = w(√(1+K) − 1)` | **the ceiling** — Cauchy–Schwarz bound on `J` per projectile kg (§3.2) | — |
+| `v_e,max = J_max/K` | exhaust velocity at the ceiling | — |
+| `β` | **axial impulse per projectile kg in units of `w`.** `β_bare`, `β_tamp` are the ballistic closed forms; `β_ideal = √(1+k) − 1` | `β_bare(7.06)` = 0.9087, `β_bare(14.12)` = 1.6835 |
+| **projectile economy** | `β·w` — impulse per projectile kg, the second reported metric (§3.1) | — |
+| `E` | pulse kinetic energy `½m_i w²`; `E/J = w/(2β)` is energy per unit impulse (§3.5) | 69.8 GJ (`τ` = 0) / 37.2 GJ (`τ` = 1) |
+
+### 0.3 Geometry
+
+| symbol | meaning | reference |
+|---|---|---|
+| `θ` | polar angle from the `+z` axis; `θ_max` is the angle subtended by the plate rim (§6.6) | material with `cos θ > 1/√k` reaches the plate |
+| `r`, `z` | radial and axial coordinate; `r̂`, `ẑ`, `n̂` are unit vectors (radial, axial, surface normal) | — |
+| `v_z` | axial velocity component, as in the wall-impulse integrand `ρv_z² + P` (§7.6) | — |
+| `r_slug` | slug radius | 0.290 m (ice) / 0.683 m (snow) |
+| `h` | **tamper thickness**, `h = m_t/(2πs²ρ_t)` (§6.1). *Also RT bubble depth, §0.8* | 3.5 cm (snow slug) / 19.3 cm (ice slug, contact) |
+| `s` | **tamper stand-off radius** — radius of the tamper shell from the blob centre, so `s = r_slug` at contact. The interlayer fills it in Arm D | 0.29 m (ice) / 0.68 m (snow) at contact; 1 m in the standoff cases |
+| `d` | **plate standoff** — blob to plate. Distinct from `s`. *Also dish depth in the ratio `d/D`, §0.8* | 10 m reference; §7.1 spans to ~25 m |
+| `R` | pusher-plate **radius** (its diameter is `2R`) | 15 m reference; up to ~25 m under a mass ceiling |
+| `F` | paraboloid focal length; the focus-matched design sets `F = d` (§6.6) | 6–10 m |
+| `d/D` | paraboloid **depth over diameter** — the shape parameter, `= R/(8F)` | 0.19 at (15 m, 10 m); swept to ~0.35 |
+| `A` | area, as in `σ = m/A`. *Also Atwood number, §0.8* | — |
+
+### 0.4 Material state and thermophysics
+
+| symbol | meaning | reference |
+|---|---|---|
+| `ρ` | mass density; `ρ_slug`/`ρ_s`, `ρ_tamper`/`ρ_t`, `ρ_interlayer` | ice 917, snow 70, slush ~400 kg/m³ |
+| `σ = m/A` | **areal density** — the tamper's figure of merit, conserved through vaporisation (§2.3). `σ_t` (tamper), `σ_proj`, `σ_target`, `σ_plume`, `σ_abl` (ablated per pulse). *Also Stefan–Boltzmann, §0.8* | `σ_t` = 14.9 kg/m² at `τ` = 1, `s` = 1 m |
+| `Σ` | areal density **of the gas slab at the plate** — deliberately distinct from `σ` | ≈0.063 kg/m² |
+| `e` | specific internal energy. *Distinct from `e_eff`, §0.7* | 305.7 MJ/kg = 57.1 eV per H₂O molecule |
+| `T` | temperature (K, or eV where the plasma state matters) | 14 kK fireball; 50–80 kK at stagnation |
+| `P` | pressure. *Momentum in `P_ejecta` only* | ~2 MPa peak at the plate; ~70 GPa in the tamper shock |
+| `γ` | ratio of specific heats, `γ_eff`. *Also RT growth rate, §0.8* | `γ_eff` = 1.25 |
+| `κ` | gray opacity | 10–1000 m²/kg — uncertain across two decades |
+| `τ = κΣ` | **optical depth** at the plate (§5.3). *Collides with the tamper ratio, §0.8* | 0.63–63 — straddles `τ ~ 1` |
+
+### 0.5 Timescales and the transit ratio
+
+| symbol | meaning | reference |
+|---|---|---|
+| `t` | time | total simulated ~2–3 ms |
+| `t_dis = r_slug/u` | **slug disassembly time** — the event the tamper must act within. Spelled `t_disassembly` in §6.1 | 11.7 µs (ice) / 27.6 µs (snow) |
+| `t_shock-transit` | shock transit of the tamper, `h/U_shock` | 1.4–2.9 µs |
+| `Θ = t_dis / t_shock-transit` | **transit ratio** — whether the tamper can communicate its inertia across its own thickness in time. Must exceed ~3 (§6.1) | 9.5 (snow slug) / 0.7 (ice slug, contact) |
+| **arrival window** | duration over which fireball material reaches the plate, set by its velocity dispersion (§6.4) | ~750 µs at `d` = 10 m |
+
+### 0.6 Plate, ablation, and Rayleigh–Taylor
+
+| symbol | meaning | reference |
+|---|---|---|
+| `Φ` | fluence at the plate | ≈12.6 MJ/m² |
+| `α` (ablation) | sub-linearity exponent, `σ_abl ∝ Φ^α`, `α < 1` — vapour shielding (§6.5) | — |
+| `Q*` | effective heat of ablation, the ablator's material figure of merit | — |
+| `T_abl` | ablator vaporisation temperature. An ablating surface is **temperature-pinned**, so this bounds the plate (§6.5.2) | 800–1000 K → plate 753–905 K |
+| `k` (conduction) | thermal conductivity. *Third meaning of `k`, §0.8* | 45 W/m/K (steel) |
+| `α` (thermal) | thermal diffusivity. *Second meaning of `α`, §0.8* | 1.2×10⁻⁵ m²/s (steel) |
+| `σ` (radiation) | Stefan–Boltzmann constant, in the `2σT⁴` two-face radiation term (§6.5.2) | 5.67×10⁻⁸ W/m²/K⁴ |
+| `Δh` | specific enthalpy rise of regenerative coolant (§6.5.3) | 0.33–3.34 MJ/kg |
+| `a = P/σ` | acceleration driving RT at the plume/tamper interface (§6.7) | 1.9×10⁸ m/s² (Arm D) / 3.9×10⁸ (Arm B) |
+| `A` (Atwood) | Atwood number — light fluid pushing dense, so ≈1 here | ≈1 |
+| `k` (wavenumber) | RT wavenumber `2π/λ` for a feature of wavelength `λ`. *Fourth meaning of `k`* | 10 cm and 1 m features tabulated |
+| `γ = √(A·k·a)` | RT linear growth rate. *Second meaning of `γ`* | ×20 at 10 cm over the window |
+| `α` (mix) | self-similar mix coefficient in `h ≈ α·A·a·t²`. *Third meaning of `α`* | 0.02–0.05 |
+| **mixed fraction** | RT bubble depth as a share of tamper thickness — whether the tamper stays a coherent piston (§6.7) | 8–21% Arm D; ≥100% (disrupted) Arm B |
+| `α`, `ε` (compaction) | distension ratio and strain in the **P-α / ε-α** porous-ice model (§7.3). *Fourth meaning of `α`* | snow at 70 kg/m³ |
+
+### 0.7 Symbols inherited from the per-collision `f(v)` study
+
+These belong to the *other* study in this repository ([`puffsat_impact_sim_design.md`](puffsat_impact_sim_design.md),
+[`CONTEXT.md`](CONTEXT.md)) and appear here only when prior results are cited. **None is a
+deliverable of this study.**
+
+| symbol | meaning | where it appears here |
+|---|---|---|
+| `f` | that study's fudge factor — delivered axial momentum as a fraction of full capture plus perfect elastic bounce | front matter only |
+| `e_eff` | effective restitution, `p_rebound/p_in`. **Not** the specific internal energy `e` | §5.3, quoting the 2000× opacity error |
+| `eta_capture` | capture *efficiency* — a 2-D/1-D wall-impulse ratio. Distinct from this study's capture *fraction*, which is a free-flight geometric share | §6.6, §12 |
+| `Λ` | the prior **tamper multiplier**, tamped impulse over bare impulse, with criterion `Λ > 1 + τ`. Superseded by the realization fraction, which does not miscount recoil as loss (ADR-0030); still reported once at Rung 1 as a bound comparable to prior work | §10 Rung 1, §12 |
+
+### 0.8 Reused symbols — the same letter, a second meaning
+
+Kept rather than renamed, because each is standard notation in its own subfield. Context
+disambiguates in every case, but the table is the reference:
+
+| symbol | meanings | how to tell them apart |
+|---|---|---|
+| `τ` | **tamper ratio** (throughout) / **optical depth** `κΣ` (§4.1, §5.3, §7.2) | optical depth appears only beside `κ`, `Σ`, or the phrase "`τ ~ 1`" |
+| `k` | **slug ratio** (throughout) / thermal conductivity (§6.5.2) / RT wavenumber (§6.7) | the latter two are confined to those two sections |
+| `α` | ablation sub-linearity exponent (§3.5, §6.5) / thermal diffusivity (§6.5.2) / RT mix coefficient (§6.7) / distension in P-α compaction (§7.3) | exponent when it sits on `Φ` or `β`; the rest are section-local |
+| `σ` | **areal density** (throughout) / Stefan–Boltzmann constant (§6.5.2 only) | the constant appears only inside `2σT⁴` |
+| `A` | area (§2.3) / Atwood number (§6.7) | — |
+| `γ` | ratio of specific heats (§4) / RT growth rate (§6.7) | — |
+| `h` | tamper thickness (§6.1) / RT bubble depth (§6.7) | §6.7 compares the two — their *ratio* is the mixed fraction |
+| `d` | plate standoff (throughout) / dish depth, inside the ratio `d/D` (§6.6, §10 Rung 4) | `d/D` is always written as a ratio and is dimensionless |
+| `e` | specific internal energy (§4) / `e_eff`, restitution from the prior study (§5.3) | `e_eff` always carries its subscript |
+| `P` | pressure (throughout) / momentum, in `P_ejecta` (§3.2) | momentum only ever as `P_ejecta` |
+
+**§6.5.2 is the one place where four collisions meet in a single expression:** in
+`k·ΔT·√(t/πα)` against `2σT⁴`, `k` is thermal conductivity, `α` thermal diffusivity, `σ` the
+Stefan–Boltzmann constant, and `t` the 750 µs residence time.
+
+---
+
 ## 1. Executive summary
 
 A spacecraft is accelerated by shooting mass at it. Projectiles ("PuffSats") are launched
@@ -1150,7 +1300,7 @@ hard to reverse, surprising without context, and the result of a genuine trade-o
       ADR-0020 carries a pointer and is otherwise unchanged.
 
 Canonical terms for this study are in [`CONTEXT.md`](CONTEXT.md) under *Language — tamped-nozzle
-study*; §14 below is the reading-order glossary for this document.
+study*; §0 is the symbol table and §14 the reading-order glossary for this document.
 
 ---
 
@@ -1224,6 +1374,9 @@ carry its bracket and its upper-bound label.
 ---
 
 ## 14. Glossary
+
+Named concepts, in reading order. **Symbols are defined in full in §0**; the handful repeated
+here are the load-bearing ones, quoted so this table stands alone.
 
 | term | meaning |
 |---|---|
