@@ -51,7 +51,7 @@ for a tamped nozzle) is a *separate study* sharing this repo's kernels, tables, 
 discipline — not its deliverable, regime, or plate-side conventions. Its targets are prefixed
 `tamper-`, its artifacts live under `data/results/tamper/`, and its Python is its own package
 (`python/puffsat/tamper/`). Departures from decisions recorded for the `f(v)` study are in PRD §12
-and ADR-0030..0033.
+and ADR-0030..0034.
 
 ```
 make tamper-ledger   # Rung 0: the analytic reference ledger (owns every closed-form number)

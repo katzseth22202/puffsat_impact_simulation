@@ -94,6 +94,20 @@ a count. Stated in this direction always; the inverse (projectile per carried kg
 plausible but different quantity and has caused a real collision.
 _Avoid_: "impactor-to-rocket-mass ratio" (ambiguous in direction), treating `k` as an integer
 
+**Slug column density (`σ_slug`) vs slug bulk density (`ρ_slug`)**:
+Two independent properties of the same slug, habitually conflated as "slug density", which govern
+different physics. **Column density** is mass per unit area along the projectile's path and alone
+sets projectile coupling through the snowplow (PRD §6.2); it depends only on the slug's *radius*,
+never on its phase or its length — 60 kg confined to a 0.42 m column is 433 kg/m² whether it is
+steam, ice crystals, or solid ice. **Bulk density** is mass per unit volume; it sets the expansion
+adiabat and so the temperature reached at a given radius, which is what decides `r_σ`. Elongating a
+slug at fixed radius lowers bulk density while leaving column density untouched, so the two are
+dialable separately through the **slug aspect ratio** `L/D`. Mean free path is not a third lever: it
+is ≲1 µm at every density in this study's range, seven orders below the system scale, so
+collisionality is never the binding constraint.
+_Avoid_: unqualified "slug density"; inferring projectile coupling from bulk density (a sphere and a
+collimated jet of equal bulk density differ by ~100× in column density)
+
 **Tamper ratio (`τ_t`)**:
 Tamper mass per **slug** kg, `τ_t = m_t/m_s`. The subscript is required because optical depth is
 `τ_opt`. This is a mass ratio, not an optical property. The subscript convention is scoped to this

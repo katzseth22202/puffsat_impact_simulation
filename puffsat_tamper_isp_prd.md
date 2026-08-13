@@ -766,7 +766,7 @@ survives only as a control case.
   before the tamper finishes its job (§6.7). It is retained as a control — a code that does
   not reproduce that disruption is not to be trusted on Arm D either.
 
-**Two further arms replace the plate with a magnetic nozzle** (§6.9, Rung 1A). Both are
+**Three further arms replace the plate with a magnetic nozzle** (§6.9, Rung 1A). All are
 alkali-seeded at `y_seed` = 1–2 wt%, carry no tamper and no interlayer, and provisionally carry
 no ablator. They exist because §3.6 shows the dominant loss — 70% of the fireball never reaching
 the plate — is a limit of the *plate*, not of the physics.
@@ -782,7 +782,23 @@ the plate — is a limit of the *plate*, not of the physics.
   the largest entropy source available (§3.3), and whether the snow is swept into a coherent
   shell or left as a cold spectator is exactly the mixing question Arm M1 avoids.
 
-Both are analysed **without a backstop first (Rung 1A-i) and only then in hybrid with a physical
+- **Arm M3 — magnetic, jet-delivered elongated slug.** Seeded water boiled against the coil's eddy
+  shield, expanded through a de Laval nozzle, and delivered as a **collimated cold-crystal column**
+  rather than an assembled body. Its premise is that column density and bulk density are separable
+  (`CONTEXT.md`): column density is fixed by jet *radius* and sets projectile coupling (§6.2), while
+  *length* lowers bulk density and so raises the temperature reached at a given radius, pushing
+  `r_σ` outward — the side of the nozzle window that binds (§6.9). **M1 is its aspect-ratio-1
+  limit.** The nozzle does three jobs at once: it rejects the parasitic heat overboard as directed
+  kinetic energy, it collimates the jet, and it cools the flow enough for the jet to *stay*
+  collimated — a warm jet blows itself apart on its own vapour pressure, and a cold jet carries no
+  heat, so only an expansion that takes the water in hot and delivers it cold satisfies both. Its
+  costs are the ones M1 avoids: two-phase nucleation kinetics, a nozzle contour that must hold a few
+  mrad of divergence, a burst feed system, and a near-field expansion that is cylindrical rather
+  than spherical. **Evaluation order is an open question** — M1 is the cleanest gate for Rung 1A-i,
+  and M3's central lever can be priced there as a swept slug aspect ratio before M3 is run as a full
+  arm.
+
+All three are analysed **without a backstop first (Rung 1A-i) and only then in hybrid with a physical
 plate (Rung 1A-ii)** — the pure case produces the unmagnetised fraction that is the hybrid's
 whole premise, so it comes first (§6.9). The anvil geometry is not automatic: a `κ = 1` ice anvil
 is only ~0.15 m in radius, ~280 kg/m² of column against a 0.2 m rod's 421 kg/m², so it must be
@@ -2361,6 +2377,7 @@ here are the load-bearing ones, quoted so this table stands alone.
 | **Projectile economy** | Net vehicle impulse per projectile mass, `β·w = J/m_i`. A velocity-equivalent metric, not a physical velocity. Reported alongside effective Isp and not combined with it — see §3.1. |
 | **Arm D / Arm B** | Filled-interlayer configuration (the design) / vacuum-gap configuration (provisionally foreclosed, retained as a control). |
 | **Arm M1 / Arm M2** | Magnetic-nozzle arms: seeded solid ice only / seeded ice anvil backed by seeded snow. No tamper, no interlayer, provisionally no ablator (§4.2, Rung 1A). |
+| **Arm M3** | Magnetic-nozzle arm with a **jet-delivered elongated slug**: seeded water boiled against the eddy shield, expanded through a de Laval nozzle, and delivered as a collimated cold-crystal column. Lowers bulk density at fixed column density; M1 is its aspect-ratio-1 limit. Carries a burst feed system and the eddy shield as dry mass (§4.2, Rung 1A). |
 | **Magnetic nozzle** | Replacing the pusher plate with a magnetic field that acts on the whole expansion rather than only on what flies into a plate. It cannot beat the ceiling, but it can attack the capture fraction — the dominant loss (§3.6, §6.9). |
 | **Alkali seeding** | 1–2 wt% of the carried mass as Na or K, `y_seed`. Their low ionisation potential (4.34 / 5.14 eV vs 13.6 for H and O) keeps the plume conducting after water has recombined. Standard MHD-generator practice at ~1 mol%. Charged in Isp; the coil is not. |
 | **The nozzle window** | `r_β < r_σ` — the field controls the flow only outside `r_β` (`β_plasma ≲ 1`) and couples to it only inside `r_σ` (`Rm ≫ 1`). The magnetic nozzle exists only if the two overlap (§6.9). |
