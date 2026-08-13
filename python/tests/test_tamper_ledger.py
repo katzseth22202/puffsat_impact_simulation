@@ -706,5 +706,168 @@ def test_assumption_audit_covers_every_closed_form_model() -> None:
             assert entry.retired_by != "not yet"
 
     covered = {name for entry in audit for name in entry.applies_to}
-    for model in ("beta_bare", "beta_flat", "beta_mirror", "beta_ideal", "beta_finite"):
+    for model in (
+        "beta_bare",
+        "beta_flat",
+        "beta_mirror",
+        "beta_ideal",
+        "beta_finite",
+        "snowplow_retained_speed",
+    ):
         assert model in covered, f"{model} has no recorded assumption"
+
+
+# ---------------------------------------------------------------------------------------------
+# §6.2 / ADR-0034 — slug column density vs bulk density, and the snowplow that uses them
+# ---------------------------------------------------------------------------------------------
+
+
+def test_column_density_convention_is_the_on_axis_centre_chord() -> None:
+    """§6.2's two quoted slug column densities, rebuilt from §0.3 geometry and §0.4 densities.
+
+    The projectile travels *along the axis, through the centre*, so the column density that
+    governs the §6.2 snowplow is the centre chord `2 rho r` — **not** the disc-average
+    `m/(pi r^2)`, which for a sphere is 2/3 of it. Both of §6.2's numbers are quoted against
+    §0.3's `r_slug`, and they only reproduce under the chord convention, which is what pins it:
+    a disc-average would give 354 and 64 kg/m^2 respectively.
+    """
+    # Ice slug: r_slug = 0.290 m at 917 kg/m^3 -> §6.2's 531.7 kg/m^2.
+    assert ledger.column_density_sphere(
+        radius=ledger.R_SLUG_ICE_M, density=ledger.RHO_ICE
+    ) == pytest.approx(531.7, abs=0.5)
+    # Snow slug: r_slug = 0.683 m at 70 kg/m^3 -> §6.2's 95.6 kg/m^2. An independent second
+    # anchor on the same convention, two decades away in density.
+    assert ledger.column_density_sphere(
+        radius=ledger.R_SLUG_SNOW_M, density=ledger.RHO_SNOW
+    ) == pytest.approx(95.6, abs=0.1)
+
+
+def test_elongation_lowers_bulk_density_at_fixed_column_density() -> None:
+    """ADR-0034's central claim: length and radius are independent levers on the two densities.
+
+    60 kg in a 0.42 m-diameter column is 433 kg/m^2 of chord *at every length*, while its bulk
+    density falls as 1/L — 433 -> 43 -> 14 kg/m^3 at L = 1, 10, 30 m, i.e. 2.1x, 21x, and 64x
+    below solid ice. The invariance is not a property of the signature: the column is rebuilt
+    each time as `rho(L) . L` from the bulk density that L just changed, so if the two were the
+    same quantity this would not hold.
+    """
+    mass, radius = 60.0, 0.21
+    expected_bulk = {1.0: 433.1, 10.0: 43.31, 30.0: 14.44}
+    for length, bulk in expected_bulk.items():
+        rho = ledger.bulk_density_cylinder(mass=mass, radius=radius, length=length)
+        assert rho == pytest.approx(bulk, rel=1e-3)
+        assert ledger.column_density_cylinder(density=rho, length=length) == pytest.approx(
+            433.1, rel=1e-3
+        )
+        assert ledger.RHO_ICE / rho == pytest.approx(
+            {1.0: 2.1, 10.0: 21.2, 30.0: 63.5}[length], rel=2e-2
+        )
+
+
+def test_section_6_2_snowplow_table() -> None:
+    """§6.2: retained speed `sigma_p/(sigma_p + sigma_t)`, and energy deposited `1 - s^2`.
+
+    The projectile's figure is mass over *frontal area* — all of it is swept along the axis —
+    while the target's is the centre chord of the body being bored through. Two different
+    reductions of "areal density", and §6.2's table only closes when each takes its own.
+
+    The projectile mass is not a literal here: it is §4's tamped-case `m_i`, so this table stays
+    tied to the mass ledger rather than drifting from it.
+    """
+    m_i = ledger.MassLedger.from_ratios(k=ledger.K_BARE_OPTIMUM, tau_t=1.0).m_i
+    assert m_i == pytest.approx(13.23, abs=0.01)
+
+    rod = ledger.areal_density_disc(mass=m_i, radius=0.10)  # 0.2 m-diameter rod
+    disk = ledger.areal_density_disc(mass=m_i, radius=0.21)  # 0.42 m-diameter disk
+    assert rod == pytest.approx(421.0, abs=1.0)
+    assert disk == pytest.approx(95.5, abs=0.2)
+
+    snow = ledger.column_density_sphere(radius=ledger.R_SLUG_SNOW_M, density=ledger.RHO_SNOW)
+    ice = ledger.column_density_sphere(radius=ledger.R_SLUG_ICE_M, density=ledger.RHO_ICE)
+
+    for sigma_p, sigma_t, speed, deposited in (
+        (rod, snow, 0.815, 0.34),  # punches clean through
+        (disk, snow, 0.500, 0.75),
+        (rod, ice, 0.442, 0.80),
+    ):
+        assert ledger.snowplow_retained_speed(
+            sigma_proj=sigma_p, sigma_target=sigma_t
+        ) == pytest.approx(speed, abs=5e-4)
+        assert ledger.snowplow_energy_deposited(
+            sigma_proj=sigma_p, sigma_target=sigma_t
+        ) == pytest.approx(deposited, abs=5e-3)
+
+
+def test_adr_0034_jet_coupling_table() -> None:
+    """ADR-0034: coupling of a 60 kg jet against the 0.2 m rod, over jet diameter.
+
+    Column density is set by radius alone, so this is the table that prices the jet's *width* —
+    the constraint §6.2 imposes — independently of the length that ADR-0034's other lever turns.
+    The last row is the one that matters historically: the same 60 kg released as a
+    free-expanding 3 m-radius cloud is 3.2 kg/m^2, 167x short of the reference slug, and leaves
+    the projectile 99% of its speed. Geometry killed the pre-vaporised proposal, not phase.
+    """
+    mass = 60.0
+    rod = ledger.areal_density_disc(mass=13.23, radius=0.10)
+
+    for diameter, column, speed, deposited in (
+        (0.20, 1910.0, 0.181, 0.967),
+        (0.42, 433.0, 0.493, 0.757),
+        (1.00, 76.0, 0.846, 0.284),
+        (2.00, 19.0, 0.957, 0.085),
+    ):
+        # A cylinder's chord `rho L` is `m/(pi r^2)`, so its column is length-free — take it at
+        # an arbitrary length and confirm the two routes agree.
+        rho = ledger.bulk_density_cylinder(mass=mass, radius=diameter / 2.0, length=7.0)
+        sigma = ledger.column_density_cylinder(density=rho, length=7.0)
+        assert sigma == pytest.approx(column, rel=1e-2)  # the ADR quotes these to 2 s.f.
+        assert sigma == pytest.approx(ledger.areal_density_disc(mass=mass, radius=diameter / 2.0))
+        assert ledger.snowplow_retained_speed(sigma_proj=rod, sigma_target=sigma) == pytest.approx(
+            speed, abs=5e-4
+        )
+        assert ledger.snowplow_energy_deposited(
+            sigma_proj=rod, sigma_target=sigma
+        ) == pytest.approx(deposited, abs=5e-3)
+
+    # The killed variant: 60 kg free-expanded to a 3 m *radius* sphere.
+    cloud = ledger.column_density_sphere(radius=3.0, density=mass / (4.0 / 3.0 * math.pi * 3.0**3))
+    assert cloud == pytest.approx(3.2, abs=0.05)
+    ice = ledger.column_density_sphere(radius=ledger.R_SLUG_ICE_M, density=ledger.RHO_ICE)
+    assert ice / cloud == pytest.approx(167.0, abs=1.0)
+    assert ledger.snowplow_retained_speed(sigma_proj=rod, sigma_target=cloud) == pytest.approx(
+        0.9925, abs=5e-4
+    )
+    assert ledger.snowplow_energy_deposited(sigma_proj=rod, sigma_target=cloud) == pytest.approx(
+        0.015, abs=1e-3
+    )
+
+
+def test_jet_vs_solid_slug_coupling_depends_on_the_mass_basis() -> None:
+    """ADR-0034's "keeps 81% of a solid ice slug's coupling" — and the basis it is quoted on.
+
+    The 81% is arithmetically right: 433.1/531.7. But the two sides are **different masses**.
+    The reference solid ice slug is §0.3's `r_slug` = 0.290 m at 917 kg/m^3, which is 93.7 kg
+    (and agrees with §4's tamped-case `m_s` to the rounding of `r_slug`); the jet is quoted at
+    60 kg, a figure no section of the PRD pins. Phrased as "keeps 81%", it reads as a cost of
+    elongating, but elongation is not what it measures — 36% less mass is.
+
+    At *equal* mass the 0.42 m jet is 676 kg/m^2, i.e. **1.27x** the solid slug's column, because
+    the jet is narrower than the 0.58 m-diameter sphere. So the separability argument is stronger
+    on an equal-mass basis than the ADR states, not weaker. Both numbers are pinned here; which
+    one the documents should quote is a basis question for §4.2, and it needs the magnetic arms'
+    slug mass stated before it can be answered.
+    """
+    slug_mass = ledger.reference_slug_mass(radius=ledger.R_SLUG_ICE_M, density=ledger.RHO_ICE)
+    assert slug_mass == pytest.approx(93.7, abs=0.1)
+    # §0.3's geometry and §4's mass ledger must describe the same body.
+    assert slug_mass == pytest.approx(
+        ledger.MassLedger.from_ratios(k=ledger.K_BARE_OPTIMUM, tau_t=1.0).m_s, rel=5e-3
+    )
+
+    ice = ledger.column_density_sphere(radius=ledger.R_SLUG_ICE_M, density=ledger.RHO_ICE)
+    quoted = ledger.areal_density_disc(mass=60.0, radius=0.21)
+    equal_mass = ledger.areal_density_disc(mass=slug_mass, radius=0.21)
+
+    assert quoted / ice == pytest.approx(0.814, abs=5e-3)  # the ADR's 81%, at 60 kg
+    assert equal_mass == pytest.approx(676.0, abs=1.0)
+    assert equal_mass / ice == pytest.approx(1.272, abs=5e-3)  # the same jet, at 93.7 kg

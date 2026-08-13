@@ -891,6 +891,92 @@ def regenerative_cap() -> float:
     return max(row.share_of_basis for row in regenerative_budget() if row.admissible_as_slug)
 
 
+# ---- Slug column density vs bulk density (PRD §6.2, §6.9; ADR-0034) -----------------------------
+
+RHO_ICE = 917.0
+"""Solid water-ice density [kg/m^3] (PRD §0.4)."""
+
+RHO_SNOW = 70.0
+"""Snow density [kg/m^3] (PRD §0.4)."""
+
+R_SLUG_ICE_M = 0.290
+"""Reference solid-ice slug radius [m] (PRD §0.3); `m_s = (4/3) pi r^3 rho` gives 93.7 kg."""
+
+R_SLUG_SNOW_M = 0.683
+"""Reference snow slug radius [m] (PRD §0.3)."""
+
+
+def column_density_sphere(*, radius: float, density: float) -> float:
+    """On-axis column density of a uniform sphere [kg/m^2] — the centre chord, `2 rho r`.
+
+    The §6.2 snowplow is a *one-dimensional* momentum balance along the projectile's own path,
+    and that path runs through the slug's centre, so the mass it must sweep is the centre chord.
+    The disc-average `m/(pi r^2) = (4/3) rho r` is a different quantity — smaller by 2/3 — and
+    is not what §6.2's 531.7 kg/m^2 and 95.6 kg/m^2 are.
+    """
+    return 2.0 * density * radius
+
+
+def column_density_cylinder(*, density: float, length: float) -> float:
+    """On-axis column density of an axis-aligned uniform cylinder [kg/m^2] — `rho L`.
+
+    Same convention as `column_density_sphere`: density times the chord the projectile traverses,
+    which for a cylinder end-on is its full length.
+    """
+    return density * length
+
+
+def bulk_density_cylinder(*, mass: float, radius: float, length: float) -> float:
+    """Bulk density of a cylinder [kg/m^3], `m/(pi r^2 L)`.
+
+    The lever ADR-0034 turns: at fixed `(m, r)` this falls as `1/L` while `rho L` — the column
+    the §6.2 snowplow sees — does not move at all. Column density is set by *radius*, bulk
+    density by radius *and length*, so a slug's aspect ratio dials them apart.
+    """
+    return mass / (math.pi * radius * radius * length)
+
+
+def reference_slug_mass(*, radius: float, density: float) -> float:
+    """Slug mass from §0.3's `r_slug`, `m_s = (4/3) pi r^3 rho` (§6.1).
+
+    The bridge between §0.3's geometry and §4's mass ledger: both must describe one body, and
+    every column density quoted against `r_slug` is quoted against *this* mass.
+    """
+    return 4.0 / 3.0 * math.pi * radius**3 * density
+
+
+def areal_density_disc(*, mass: float, radius: float) -> float:
+    """Projectile areal density [kg/m^2] — mass over *frontal* area, `m/(pi r^2)`.
+
+    The projectile's own reduction, and a different one from the target's chord: every kilogram
+    of the projectile is driven along the axis, so what resists the sweep is its whole mass
+    spread over the face it presents (§6.2).
+    """
+    return mass / (math.pi * radius * radius)
+
+
+def snowplow_retained_speed(*, sigma_proj: float, sigma_target: float) -> float:
+    """§6.2 — momentum-conserving snowplow: retained speed `sigma_p/(sigma_p + sigma_t)`.
+
+    A perfectly inelastic 1-D sweep along the projectile's path. Its model caveats are §6.2's
+    own: lateral spreading of projectile debris is ignored and a disintegrating ice rod is
+    treated as a coherent penetrator, so this is an order-of-magnitude screen that Rung 3's
+    resolved penetration replaces.
+    """
+    return sigma_proj / (sigma_proj + sigma_target)
+
+
+def snowplow_energy_deposited(*, sigma_proj: float, sigma_target: float) -> float:
+    """§6.2 — fraction of projectile kinetic energy deposited, `1 - s^2` at retained speed `s`.
+
+    The merged body carries off `(1/2)(sigma_p + sigma_t) (s v)^2 = s^2` of the incoming kinetic
+    energy, so everything else is thermalised into the slug — which is the fireball this whole
+    architecture runs on. Note it is `1 - s^2`, not `1 - s`: at `s = 0.442` the deposit is 80%,
+    not 56%.
+    """
+    return 1.0 - snowplow_retained_speed(sigma_proj=sigma_proj, sigma_target=sigma_target) ** 2
+
+
 # ---- Optimisation over the mass ratio (PRD §3.5) -------------------------------------------------
 
 
@@ -1429,6 +1515,51 @@ def assumption_audit() -> list[Assumption]:
                 "*every* Pass-1 Isp is an upper bound and must be quoted as one."
             ),
             retired_by="Rung 6 (Pass 2), which re-optimises every family with its measured ablator",
+        ),
+        Assumption(
+            ident="coherent-penetrator-snowplow",
+            statement=(
+                "Penetration is a 1-D momentum-conserving sweep along the axis: no lateral "
+                "spreading of projectile debris, and a disintegrating ice rod stays coherent."
+            ),
+            source="PRD §6.2",
+            applies_to=(
+                "snowplow_retained_speed",
+                "snowplow_energy_deposited",
+            ),
+            verdict="departs",
+            why=(
+                "§6.2 labels it an order-of-magnitude estimate in its own text. At 75 km/s an ice "
+                "rod fragments and jets rather than boring a clean channel, and lateral spreading "
+                "raises the swept column, so the retained speed here is a lower bound on coupling "
+                "and the deposited fraction an upper bound. It is a screen for *geometry* — which "
+                "diameters are viable at all — never a deposition number."
+            ),
+            retired_by="Rung 3 (2-D resolved penetration), which makes deposition an output",
+        ),
+        Assumption(
+            ident="centre-chord-column-density",
+            statement=(
+                "The projectile traverses the slug's centre, so the column it sweeps is the "
+                "centre chord (2 rho r for a sphere, rho L for an axial cylinder)."
+            ),
+            source="PRD §6.2's 531.7 and 95.6 kg/m^2, which only reproduce under this convention",
+            applies_to=(
+                "column_density_sphere",
+                "column_density_cylinder",
+                "snowplow_retained_speed",
+            ),
+            verdict="holds-with-caveat",
+            why=(
+                "It is the right reduction for a centred hit and it is the one §6.2's quoted "
+                "numbers use, so it must be stated rather than left as a choice between it and "
+                "the disc-average m/(pi r^2), which is 2/3 of it for a sphere and would silently "
+                "understate coupling by a third. The caveat is aim: an off-axis hit sweeps a "
+                "shorter chord, and §6.2 lists delivery to aim tolerance as a live constraint on "
+                "projectile geometry. A jet's aim sensitivity is sharper than a sphere's, since "
+                "its column falls off a cliff at the rim rather than tapering."
+            ),
+            retired_by="Rung 3, which resolves the off-axis case the aim-tolerance sweep needs",
         ),
     ]
 
