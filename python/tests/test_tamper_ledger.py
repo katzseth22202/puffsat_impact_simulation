@@ -493,6 +493,155 @@ def test_closed_forms_match_independent_quadrature() -> None:
                 )
 
 
+# ---------------------------------------------------------------------------------------------
+# PRD §6.6 — dish rim geometry. A paraboloid's rim is NOT at the vertex standoff.
+# ---------------------------------------------------------------------------------------------
+
+
+def test_paraboloid_rim_geometry() -> None:
+    """§6.6: `delta = R^2/(4F)`, `delta/D = R/(8F)`, `tan(theta_max/2) = R/(2F)`."""
+    r, f = 15.0, 10.0
+    assert ledger.paraboloid_depth(r_rim=r, focal_length=f) == pytest.approx(5.625)
+    assert ledger.paraboloid_depth_ratio(r_rim=r, focal_length=f) == pytest.approx(0.1875)
+    # The PRD's own reference dish: rim 5.6 m proud of the vertex, so 4.4 m from the source.
+    assert f - ledger.paraboloid_depth(r_rim=r, focal_length=f) == pytest.approx(4.375)
+    theta = math.acos(ledger.rim_cos_cutoff_paraboloid(r_rim=r, focal_length=f))
+    assert math.degrees(theta) == pytest.approx(73.74, abs=0.01)
+
+    # Surface area against direct numerical integration of 2 pi r sqrt(1 + (r/2F)^2) dr.
+    n = 200_000
+    numeric = sum(
+        2.0 * math.pi * ((i + 0.5) * r / n) * math.sqrt(1.0 + ((i + 0.5) * r / n / (2 * f)) ** 2)
+        for i in range(n)
+    ) * (r / n)
+    assert ledger.paraboloid_area(r_rim=r, focal_length=f) == pytest.approx(numeric, rel=1e-6)
+    # The honest cost side: area grows far more slowly than capture does.
+    assert ledger.paraboloid_area(r_rim=r, focal_length=f) / (math.pi * r * r) < 1.15
+
+
+def test_dish_captures_far_more_than_a_flat_plate_of_the_same_radius() -> None:
+    """§6.6: the reference dish captures 19.6% and returns 653 s, against the flat plate's 10.6%.
+
+    Capture is set by where the *rim* is, and the dish's rim stands 5.6 m proud of its vertex —
+    toward the source. Scoring the dish with the flat plate's rim position is what produced the
+    368 s figure, and it understates the design that is actually specified.
+    """
+    k, r, f = 7.06, 15.0, 10.0
+    c_dish = ledger.rim_cos_cutoff_paraboloid(r_rim=r, focal_length=f)
+    c_flat = ledger.rim_cos_cutoff_flat(r_rim=r, standoff=f)
+
+    assert (1.0 - ledger.mu_capture_cutoff(k, c_flat)) / 2.0 == pytest.approx(0.106, abs=5e-4)
+    assert (1.0 - ledger.mu_capture_cutoff(k, c_dish)) / 2.0 == pytest.approx(0.196, abs=5e-4)
+    assert ledger.beta_cutoff(k, c_dish) == pytest.approx(0.603, abs=5e-4)
+    assert ledger.isp_eff(beta=ledger.beta_cutoff(k, c_dish), c_ratio=k) == pytest.approx(
+        653.0, abs=1.0
+    )
+    # The flat entry point must still agree with the general one at the same rim position.
+    assert ledger.beta_cutoff(k, c_flat) == pytest.approx(ledger.beta_finite(k, 1.5), rel=1e-9)
+
+
+def test_quarter_depth_knee_is_where_the_forward_hemisphere_is_fully_caught() -> None:
+    """§6.6: at `delta/D = 0.25` (`F = R/2`) the rim reaches the source plane, `theta_max = 90`.
+
+    There the dish catches *everything the ballistic model makes available* — so its capture and
+    `beta` coincide exactly with the `R -> infinity` figures, with a finite 7.5 m wall.
+    """
+    k, r = 7.06, 15.0
+    f_knee = r / 2.0
+    assert ledger.paraboloid_depth_ratio(r_rim=r, focal_length=f_knee) == pytest.approx(0.25)
+    assert ledger.paraboloid_depth(r_rim=r, focal_length=f_knee) == pytest.approx(7.5)
+    c = ledger.rim_cos_cutoff_paraboloid(r_rim=r, focal_length=f_knee)
+    assert c == pytest.approx(0.0, abs=1e-12)  # theta_max = 90 degrees exactly
+    assert (1.0 - ledger.mu_capture_cutoff(k, c)) / 2.0 == pytest.approx(
+        ledger.ballistic_capture_fraction(k)
+    )
+    assert ledger.beta_cutoff(k, c) == pytest.approx(ledger.beta_bare(k))
+
+
+def test_the_tamper_needs_the_dish_and_saturates_at_the_knee() -> None:
+    """§6.6/§6.3a: a tamper only pays if the plate can catch what it turns around.
+
+    Below the knee the tamper turns mass around into a rim that cannot catch it, and that mass
+    flips from a credit to a debit — catastrophically so for a flat plate. At and above the knee
+    nothing it turns can miss, so it reaches its `R -> infinity` ideal and then **saturates**:
+    extra dish depth adds nothing to the tamped case, only to the bare one.
+    """
+    k, r = 7.06, 15.0
+    c_flat = ledger.rim_cos_cutoff_flat(r_rim=r, standoff=10.0)
+
+    # Flat plate: the tamper is actively harmful, not merely unhelpful. Scored with the specular
+    # momentum a flat plate actually delivers, it drives net impulse NEGATIVE — the vehicle is
+    # pushed the wrong way — because what the tamper turns around, the plate turns straight back.
+    for plate in ("parabolic", "flat"):
+        assert ledger.beta_mirror_cutoff(k, c_flat, plate) < ledger.beta_cutoff(k, c_flat, plate)
+    assert ledger.beta_mirror_cutoff(k, c_flat, "parabolic") == pytest.approx(0.045, abs=5e-3)
+    assert ledger.beta_mirror_cutoff(k, c_flat, "flat") < 0.0
+
+    # Monotone improvement with depth, up to the knee.
+    depths = [
+        ledger.beta_mirror_cutoff(k, ledger.rim_cos_cutoff_paraboloid(r_rim=r, focal_length=f))
+        for f in (12.0, 10.0, 8.0, 7.5)
+    ]
+    assert depths == sorted(depths)
+
+    # At and beyond the knee: exactly the R -> infinity mirror value, and flat thereafter.
+    for f in (7.5, 6.5, 5.4):
+        c = ledger.rim_cos_cutoff_paraboloid(r_rim=r, focal_length=f)
+        assert ledger.beta_mirror_cutoff(k, c) == pytest.approx(ledger.beta_mirror(k), rel=1e-9)
+
+    # ...while the BARE dish keeps improving past the knee, and on Isp it beats the tamper,
+    # because dish depth costs plate mass (not charged) and a tamper costs carried mass (charged).
+    c_deep = ledger.rim_cos_cutoff_paraboloid(r_rim=r, focal_length=6.5)
+    assert ledger.isp_eff(beta=ledger.beta_cutoff(k, c_deep), c_ratio=k) > ledger.isp_eff(
+        beta=ledger.beta_mirror(k), c_ratio=2 * k
+    )
+
+
+def test_rim_cutoff_closed_forms_match_quadrature() -> None:
+    """Both new closed forms, against brute-force integration over the fireball."""
+
+    def quad(
+        k: float, c: float, mirror: bool, plate: str = "parabolic", panels: int = 60_000
+    ) -> float:
+        u, v = math.sqrt(k) / (1 + k), 1 / (1 + k)
+        total = 0.0
+        for i in range(panels):
+            mu = -1 + (i + 0.5) * 2 / panels
+            v_z = u * mu - v
+            speed = math.hypot(u * math.sqrt(max(1 - mu * mu, 0)), v_z)
+            cos_ray, m = v_z / speed, (1 + k) / panels
+            if mirror and v_z < 0:
+                # The tamper sits inboard of the rim, so it acts first: this gas is turned
+                # around, and then either lands or misses. A flat plate reverses only the axial
+                # component, so what it catches is handed back its original velocity and the
+                # tamper-plus-plate pair contributes exactly nothing.
+                if -cos_ray > c:
+                    total += 0.0 if plate == "flat" else m * (speed + v_z)
+                else:
+                    total += 2 * m * v_z
+            elif plate == "flat":
+                total += 2 * m * v_z if cos_ray > c else 0.0
+            else:
+                # Bare: caught iff the ray lies inside the rim cone, whatever the sign of v_z —
+                # a dish wrapping behind the source (c < 0) catches away-going gas directly.
+                total += m * (speed + v_z) if cos_ray > c else 0.0
+        return total
+
+    # The integrand is discontinuous at the rim cutoff, so the midpoint rule carries an O(1/n)
+    # edge error — ~0.03% at 60k panels. That is the tolerance below; it is still three orders
+    # tighter than any algebra error would be, and the smooth cases agree far better.
+    plates: tuple[ledger.PlateShape, ...] = ("parabolic", "flat")
+    for k in (3.0, 7.06, 20.0):
+        for c in (0.8, 0.5547, 0.28, 0.0, -0.32):
+            for plate in plates:
+                assert ledger.beta_cutoff(k, c, plate) == pytest.approx(
+                    quad(k, c, False, plate), rel=1e-3, abs=1e-6
+                )
+                assert ledger.beta_mirror_cutoff(k, c, plate) == pytest.approx(
+                    quad(k, c, True, plate), rel=1e-3, abs=1e-6
+                )
+
+
 def test_plate_soak_chain_resolves_the_alpha_th_discrepancy() -> None:
     """PRD §6.5 quoted a 173 um soak depth, which implies `alpha_th = 1.0e-5`, not §0.6's 1.2e-5.
 

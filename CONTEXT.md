@@ -139,17 +139,29 @@ centre-of-mass recoil and reaches the plate. It is zero at `k ≤ 1`; this is a 
 ballistic model, not a claim that pressure-driven hydrodynamic thrust is exactly zero there. Pure
 geometry, distinct from `eta_capture` in the `f(v)` study.
 
-**Always quoted as a bracket, with the plate geometry named** (PRD §13.13): the lower edge is the
-ray-consistent finite-plate value at a stated `(R, d)` — a ray is caught only if it both outruns
-the recoil and lands inside the rim — and the upper edge is the `R → ∞` closed form
-`max[0, (1 − 1/√k)/2]`, which imposes no plate radius. At `k = 7.06` that is 10.6% (`R/d` = 1.5)
-to 31.2%. Ray optics *understates* capture, because the flow is pressure-bearing at Mach ≈ 2.5 and
-steers inward, so the truth lies between the edges; placing it there is a simulation result, not
-an algebraic one.
+**Always quoted as a bracket, with the full plate geometry named** (PRD §13.13). A ray is caught
+only if it both outruns the recoil *and* lands inside the rim, so the controlling quantity is the
+**rim half-angle `θ_max`** — the half-angle the rim subtends at the source. It depends on
+`(R, d, δ)` and **not** on `R/d`: a flat plate has `θ_max = arctan(R/d)`, but a dish's rim stands
+`δ` proud of its vertex, giving `tan(θ_max/2) = R/(2F)` and a much wider cone. At `k = 7.06` the
+`δ/D` = 0.19 reference dish captures 19.6% against a flat plate's 10.6%. The upper edge is the
+`R → ∞` closed form `max[0, (1 − 1/√k)/2]` = 31.2%, which imposes no plate radius. Ray optics
+*understates* capture, because the flow is pressure-bearing at Mach ≈ 2.5 and steers inward, so
+the truth lies between the edges; placing it there is a simulation result, not an algebraic one.
 _Avoid_: conflating with `eta_capture` (that is a 2D/1D wall-impulse ratio, this is a
 free-flight geometric fraction); the blob-frame rim-angle form giving 22.3% (retired — it asks
 which elements are *emitted* into the rim's solid angle, not which rays land inside it); quoting
 either edge alone as "the" capture fraction
+
+**Dish depth (`δ/D`)**:
+The pusher plate's shape parameter: dish depth over dish *diameter*, `δ/D = R/(8F)`, where `δ` is
+how far the rim stands proud of the vertex and `D = 2R`. Plain reading: how deep the bowl is
+compared with how wide it is — 0 is a flat plate, 0.25 a bowl a quarter as deep as it is wide, 0.5
+a hemisphere. It is a primary design variable, not a detail: it sets the rim half-angle and so the
+capture fraction. `δ/D` = **0.25** is the **knee** — the rim reaches the source's plane, capture
+saturates at the ballistic maximum, and a tamper first becomes fully effective (PRD §6.6.4).
+_Avoid_: confusing `δ` (dish depth, a wall height) with `d` (plate standoff); quoting depth over
+*radius*; treating shape as a refinement rather than a lever
 
 **Realization fraction**:
 Net axial vehicle impulse as a share of the thermodynamic ceiling for the same ejecta mass,

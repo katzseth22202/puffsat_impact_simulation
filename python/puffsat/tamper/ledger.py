@@ -206,30 +206,99 @@ def ballistic_capture_fraction(k: float) -> float:
     return max(0.0, (1.0 - mu_capture_infinite(k)) / 2.0)
 
 
+def _rim_cutoff_roots(k: float, cos_theta_max: float) -> tuple[float, float]:
+    """The two `mu` roots where a ray leaves at exactly the rim half-angle `theta_max`.
+
+    A ray is caught only if its own direction lies inside the cone the rim subtends *at the
+    source*: `cos(theta_ray) = v_z/|v| > cos(theta_max)`. Squaring gives a quadratic in `mu`
+    whose roots are
+
+        mu_pm = [ V(1-c^2) +- c sqrt(u^2 - V^2 (1-c^2)) ] / u,   c = cos(theta_max),
+
+    with `mu_+` the *forward* capture threshold and `mu_-` the threshold for material that is
+    turned around first (§6.3a). Both are needed: the tamper's whole job lives below `mu_-`.
+    """
+    u, v = _u_hat(k), _v_hat(k)
+    s2 = 1.0 - cos_theta_max * cos_theta_max
+    disc = u * u - v * v * s2
+    if disc <= 0.0:
+        return (-1.0, 1.0)
+    root = cos_theta_max * math.sqrt(disc)
+    return ((v * s2 - root) / u, (v * s2 + root) / u)
+
+
+def rim_cos_cutoff_flat(*, r_rim: float, standoff: float) -> float:
+    """`cos(theta_max)` for a **flat** plate: its rim sits in the plane a distance `d` away."""
+    return math.cos(math.atan2(r_rim, standoff))
+
+
+def rim_cos_cutoff_paraboloid(*, r_rim: float, focal_length: float) -> float:
+    """`cos(theta_max)` for a **focus-matched paraboloid** — and it is *not* the flat value.
+
+    With the source at the focus the surface is `rho(theta) = 2F/(1+cos theta)`, whose cylindrical
+    radius is `2F tan(theta/2)`. The rim at radius `R` therefore sits at
+
+        tan(theta_max/2) = R/(2F),
+
+    and **the rim stands off the vertex toward the source** by the dish depth `delta = R^2/(4F)`.
+    So a dish of the same rim radius subtends a much wider cone than a flat plate at the same
+    vertex standoff, and captures far more. Past `delta/D = 0.25` (`F = R/2`) the rim reaches the
+    source plane, `theta_max` exceeds 90 degrees, and `cos(theta_max)` goes negative — the dish
+    begins catching *away-going* material, which is the tamper's job done by geometry.
+    """
+    return math.cos(2.0 * math.atan2(r_rim, 2.0 * focal_length))
+
+
+def paraboloid_depth(*, r_rim: float, focal_length: float) -> float:
+    """Dish depth `delta = R^2/(4F)` [m] — the **wall height**, vertex to rim, along the axis."""
+    return r_rim * r_rim / (4.0 * focal_length)
+
+
+def paraboloid_depth_ratio(*, r_rim: float, focal_length: float) -> float:
+    """The shape parameter `delta/D = R/(8F)` — dish depth over dish *diameter* (`D = 2R`).
+
+    0 is a flat plate; 0.25 is a bowl a quarter as deep as it is wide; 0.5 is a hemisphere.
+    """
+    return r_rim / (8.0 * focal_length)
+
+
+def paraboloid_area(*, r_rim: float, focal_length: float) -> float:
+    """Surface area of the dish [m^2], `(8 pi F^2/3)[(1 + R^2/(4F^2))^{3/2} - 1]`.
+
+    This is the ablator's coating area and the plate's mass basis, so it is the honest cost side
+    of dish depth. It grows far more slowly than capture does.
+    """
+    x = 1.0 + r_rim**2 / (4.0 * focal_length**2)
+    return (8.0 * math.pi * focal_length**2 / 3.0) * (x * math.sqrt(x) - 1.0)
+
+
+def mu_capture_cutoff(k: float, cos_theta_max: float) -> float:
+    """Forward-capture `mu` threshold for a rim half-angle `theta_max` (see `_rim_cutoff_roots`)."""
+    if k <= 1.0 and cos_theta_max >= 0.0:
+        return 1.0
+    mu_c = mu_capture_infinite(k) if cos_theta_max >= 0.0 else -1.0
+    if cos_theta_max <= -1.0:
+        return -1.0
+    _, mu_plus = _rim_cutoff_roots(k, cos_theta_max)
+    return min(1.0, max(mu_c, mu_plus))
+
+
 def mu_capture_finite(k: float, r_over_d: float) -> float:
-    """`cos(theta)` threshold for a *finite* plate of radius `R` at standoff `d` (PRD §3.6).
+    """`cos(theta)` threshold for a *finite flat* plate of radius `R` at standoff `d` (PRD §3.6).
 
     A ray is caught only if it both outruns the recoil and lands inside the rim,
-    `v_r/v_z <= R/d`. Squaring that gives a quadratic in `mu` whose upper root is
+    `v_r/v_z <= R/d`. Rays near the capture threshold arrive nearly grazing and land at large
+    radius, so a finite plate loses them — which is why the geometry is far more sensitive to
+    `R/d` than the `R -> infinity` figures suggest.
 
-        mu_R = [ q^2 V + sqrt((1+q^2) u^2 - q^2 V^2) ] / [ u (1+q^2) ],   q = R/d,
-
-    which decreases monotonically to `1/sqrt(k)` as `q -> infinity`. Rays near the capture
-    threshold arrive nearly grazing and land at large radius, so a finite plate loses them — which
-    is why the geometry is far more sensitive to `R/d` than the `R -> infinity` figures suggest.
+    **This is the flat-plate rim position.** A dish of the same rim radius has its rim standing
+    off toward the source, so it must be scored with `rim_cos_cutoff_paraboloid` instead.
     """
-    mu_c = mu_capture_infinite(k)
     if k <= 1.0:
         return 1.0
     if math.isinf(r_over_d):
-        return mu_c
-    u, v = _u_hat(k), _v_hat(k)
-    q2 = r_over_d * r_over_d
-    disc = (1.0 + q2) * u * u - q2 * v * v
-    if disc <= 0.0:
-        return 1.0
-    mu_r = (q2 * v + math.sqrt(disc)) / (u * (1.0 + q2))
-    return min(1.0, max(mu_c, mu_r))
+        return mu_capture_infinite(k)
+    return mu_capture_cutoff(k, math.cos(math.atan(r_over_d)))
 
 
 def capture_fraction_finite(k: float, r_over_d: float) -> float:
@@ -252,20 +321,82 @@ def capture_fraction_rim_angle(k: float, r_over_d: float) -> float:
 # ---- Impulse coefficients ------------------------------------------------------------------------
 
 
-def beta_finite(k: float, r_over_d: float, plate: PlateShape = "parabolic") -> float:
-    """`beta = J/(m_i w)` for a plate of radius ratio `R/d`, including the projectile debit.
+def _cone_impulse(k: float, mu_lo: float, mu_hi: float, plate: PlateShape) -> float:
+    """Impulse `sum m (|v| + v_z)` (or `2 v_z` for a flat plate) over the band `[mu_lo, mu_hi]`."""
+    if mu_hi <= mu_lo:
+        return 0.0
+    u, v = _u_hat(k), _v_hat(k)
+    mass = (1.0 + k) * (mu_hi - mu_lo) / 2.0
+    mean_axial = u * (mu_lo + mu_hi) / 2.0 - v
+    if plate == "flat":
+        return mass * 2.0 * mean_axial
+    a, b = u * u + v * v, 2.0 * u * v
+    lo, hi = max(a - b * mu_lo, 0.0), max(a - b * mu_hi, 0.0)
+    mean_speed = (2.0 / (3.0 * b)) * (lo * math.sqrt(lo) - hi * math.sqrt(hi)) / (mu_hi - mu_lo)
+    return mass * (mean_speed + mean_axial)
+
+
+def beta_cutoff(k: float, cos_theta_max: float, plate: PlateShape = "parabolic") -> float:
+    """`beta = J/(m_i w)` for a plate whose rim subtends half-angle `theta_max` at the source.
 
     `J = sum over captured mass of Delta_p`, because the blob's own momentum is exactly the
     incoming debit and cancels it (PRD §3.6): with no plate, `beta = 0`.
     """
+    mu_lo = mu_capture_cutoff(k, cos_theta_max)
+    return _cone_impulse(k, mu_lo, 1.0, plate) if mu_lo < 1.0 else 0.0
+
+
+def beta_finite(k: float, r_over_d: float, plate: PlateShape = "parabolic") -> float:
+    """`beta` for a **flat** plate of radius ratio `R/d`. Kept as the flat-plate entry point."""
     mu_lo = mu_capture_finite(k, r_over_d)
-    if mu_lo >= 1.0:
-        return 0.0
-    captured_mass = (1.0 + k) * (1.0 - mu_lo) / 2.0
-    mean_axial = _mean_axial_over_cone(k, mu_lo)
-    # Flat plate reverses only the axial component; the paraboloid returns the full speed.
-    delta_p = 2.0 * mean_axial if plate == "flat" else _mean_speed_over_cone(k, mu_lo) + mean_axial
-    return captured_mass * delta_p
+    return _cone_impulse(k, mu_lo, 1.0, plate) if mu_lo < 1.0 else 0.0
+
+
+def beta_mirror_cutoff(k: float, cos_theta_max: float, plate: PlateShape = "parabolic") -> float:
+    """A perfect-mirror tamper in front of a plate of *finite* rim angle — and its new failure mode.
+
+    At `R -> infinity` a tamper can only help: everything it turns around is eventually caught. A
+    real plate breaks that. Splitting the fireball by the sign of `v_z`:
+
+    * `v_z > 0` — already plate-bound; caught iff `v_z/|v| > c`, exactly as in the bare case;
+    * `v_z < 0` — the tamper reverses it, so it is caught iff `-v_z/|v| > c`, i.e. `mu < mu_-`;
+    * `mu_- < mu < mu_c` — **turned around and then missed.** This mass was moving `-z`, which is
+      the *useful* direction, and the tamper has flipped it to `+z` where it flies past the rim.
+      Its contribution changes sign, costing `2 m |v_z|`.
+
+    The plate's shape decides whether the *caught* half of that is worth anything. A collimating
+    dish sends it to `-z` at full speed, converting it into impulse. A **flat** plate merely
+    reverses the axial component, handing the gas back the velocity the tamper had just taken from
+    it — the pair cancels exactly, and the tamper's only remaining effect is the debit. That is why
+    a tamper in front of a flat plate produces *negative* net impulse.
+
+    So `beta = sum_captured m(|v| + v_z) + 2 sum_turned-and-missed m v_z`, the second term being
+    negative. **A tamper is only worth carrying if the plate can catch what it turns around** —
+    which is why dish geometry is prerequisite to the tamper question, not parallel to it.
+    """
+    mu_c = mu_capture_infinite(k)
+    if cos_theta_max < 0.0:
+        # The rim already reaches past the source, so nothing the tamper turns can miss: every
+        # element ends up moving -z at its own speed, which is the tamper's ideal. Note this is
+        # the *same* value as at the knee — a tamper's benefit saturates at delta/D = 0.25 and a
+        # deeper dish adds nothing to the tamped case (it only helps the bare one).
+        mu_plus = mu_minus = mu_c
+    else:
+        mu_minus, mu_plus = _rim_cutoff_roots(k, cos_theta_max)
+        mu_plus = min(1.0, max(mu_c, mu_plus))
+        mu_minus = max(-1.0, min(mu_c, mu_minus))
+    caught = _cone_impulse(k, mu_plus, 1.0, plate)
+    if plate == "flat":
+        # A flat plate reverses only the axial component, so gas the tamper turned around and
+        # the plate then turns back leaves with its *original* momentum: the pair cancels and
+        # contributes exactly nothing. Only the collimating dish converts it into impulse.
+        pass
+    else:
+        caught += _cone_impulse(k, -1.0, mu_minus, plate)
+    # Turned around, then missed: a credit becomes a debit.
+    turned_missed_mass = (1.0 + k) * (mu_c - mu_minus) / 2.0
+    mean_axial_missed = _u_hat(k) * (mu_minus + mu_c) / 2.0 - _v_hat(k)
+    return caught + 2.0 * turned_missed_mass * mean_axial_missed
 
 
 def beta_bare(k: float) -> float:
@@ -1012,6 +1143,106 @@ def capture_convention_bracket(
 
 
 @dataclass(frozen=True)
+class DishRow:
+    """One dish-depth row of §6.6: geometry, cost, and what it captures."""
+
+    label: str
+    depth_ratio: float
+    """`delta/D` — dish depth over dish diameter. 0 is flat, 0.25 the knee, 0.5 a hemisphere."""
+    focal_length_m: float
+    wall_height_m: float
+    """`delta` — the physical depth of the bowl, vertex to rim. The buildability constraint."""
+    rim_vs_source_m: float
+    """Axial position of the rim relative to the source; negative means it wraps behind it."""
+    theta_max_deg: float
+    area_m2: float
+    plate_mass_t: float
+    capture: float
+    beta_bare: float
+    isp_bare_s: float
+    beta_tamped: float
+    """Perfect-mirror tamper at `tau_t = 1` in front of *this* rim (`beta_mirror_cutoff`)."""
+    isp_tamped_s: float
+    turned_and_missed: float
+    """Ejecta fraction the tamper turns around into a rim that cannot catch it — a pure debit."""
+
+
+PLATE_AREAL_DENSITY_KG_M2 = 25.0
+"""Plate areal density [kg/m^2] implied by §6.5.4's "50 t plate, 3.2 mm steel at R = 25 m"."""
+
+PLATE_MASS_CEILING_T = 50.0
+"""Plate mass ceiling: 5% of the 1000 t vehicle (PRD §4.1)."""
+
+
+def dish_table(
+    *,
+    k: float = K_BARE_OPTIMUM,
+    r_rim: float = PLATE_RADIUS_REF_M,
+    standoff_flat: float = 10.0,
+    focal_lengths: Sequence[float] = (12.0, 10.0, 9.0, 8.0, 7.5, 6.5, 5.4),
+    w: float = W_CLOSING_MS,
+) -> list[DishRow]:
+    """PRD §6.6 — capture, impulse, and cost against dish depth, with the flat plate as row 0."""
+
+    def row(
+        label: str,
+        cos_cut: float,
+        focal: float,
+        depth: float,
+        area: float,
+        plate: PlateShape = "parabolic",
+    ) -> DishRow:
+        # Each plate is scored with the momentum transfer it actually performs: a flat plate
+        # reverses only the axial component, a focus-matched dish returns the full speed along
+        # the axis. Pairing one plate's rim position with the other's momentum transfer is the
+        # error this table exists to correct (§6.6.2).
+        beta_b = beta_cutoff(k, cos_cut, plate)
+        beta_t = beta_mirror_cutoff(k, cos_cut, plate)
+        mu_minus, _ = _rim_cutoff_roots(k, cos_cut)
+        mu_c = mu_capture_infinite(k)
+        missed = max(0.0, (mu_c - max(-1.0, min(mu_c, mu_minus))) / 2.0) if cos_cut >= 0.0 else 0.0
+        return DishRow(
+            label=label,
+            depth_ratio=depth / (4.0 * r_rim),
+            focal_length_m=focal,
+            wall_height_m=depth,
+            rim_vs_source_m=focal - depth,
+            theta_max_deg=math.degrees(math.acos(max(-1.0, min(1.0, cos_cut)))),
+            area_m2=area,
+            plate_mass_t=area * PLATE_AREAL_DENSITY_KG_M2 / 1000.0,
+            capture=max(0.0, (1.0 - mu_capture_cutoff(k, cos_cut)) / 2.0),
+            beta_bare=beta_b,
+            isp_bare_s=isp_eff(beta=beta_b, c_ratio=k, w=w),
+            beta_tamped=beta_t,
+            isp_tamped_s=isp_eff(beta=beta_t, c_ratio=2.0 * k, w=w),
+            turned_and_missed=missed,
+        )
+
+    rows = [
+        row(
+            "flat plate",
+            rim_cos_cutoff_flat(r_rim=r_rim, standoff=standoff_flat),
+            standoff_flat,
+            0.0,
+            math.pi * r_rim**2,
+            "flat",
+        )
+    ]
+    for focal in focal_lengths:
+        depth = paraboloid_depth(r_rim=r_rim, focal_length=focal)
+        rows.append(
+            row(
+                f"dish, delta/D = {paraboloid_depth_ratio(r_rim=r_rim, focal_length=focal):.3f}",
+                rim_cos_cutoff_paraboloid(r_rim=r_rim, focal_length=focal),
+                focal,
+                depth,
+                paraboloid_area(r_rim=r_rim, focal_length=focal),
+            )
+        )
+    return rows
+
+
+@dataclass(frozen=True)
 class Assumption:
     """One inherited modelling assumption, adjudicated for *this* study at *this* rung."""
 
@@ -1336,6 +1567,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     _write_csv(out / "ledger_worked_example.csv", [example])
     _write_csv(out / "ledger_anchors.csv", anchors)
     _write_csv(out / "ledger_assumptions.csv", audit)
+    _write_csv(out / "ledger_dish_depth.csv", dish_table(w=w))
     _write_csv(out / "ledger_plate_soak.csv", [plate_soak_chain()])
     _write_csv(out / "ledger_regenerative.csv", regenerative_budget())
 
@@ -1403,6 +1635,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     failures = [a for a in anchors if not a.agrees]
     print()
 
+    print("§6.6  dish depth: capture is set by where the RIM is, not by the vertex standoff")
+    print(
+        f"  {'configuration':<22}{'wall':>7}{'rim-src':>9}{'th_max':>8}{'capture':>9}"
+        f"{'beta':>7}{'Isp':>6}  |{'+tamper':>9}{'Isp':>6}{'lost':>7}{'plate':>8}"
+    )
+    for d in dish_table(w=w):
+        print(
+            f"  {d.label:<22}{d.wall_height_m:>6.1f}m{d.rim_vs_source_m:>8.1f}m"
+            f"{d.theta_max_deg:>7.1f}d{d.capture * 100:>8.1f}%{d.beta_bare:>7.3f}"
+            f"{d.isp_bare_s:>6.0f}  |{d.beta_tamped:>9.3f}{d.isp_tamped_s:>6.0f}"
+            f"{d.turned_and_missed * 100:>6.1f}%{d.plate_mass_t:>7.1f}t"
+        )
+    print(f"  plate mass ceiling {PLATE_MASS_CEILING_T:.0f} t — not binding anywhere in this range")
+    print()
+
     soak = plate_soak_chain()
     print("§6.5  plate soak chain (capacity, not prediction — reached only if the curtain fails)")
     print(
@@ -1425,7 +1672,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"  [{entry.verdict:<18}] {entry.ident:<38} retired by: {entry.retired_by}")
     print()
 
-    print(f"wrote 8 CSVs to {out}/")
+    print(f"wrote 9 CSVs to {out}/")
     if failures:
         print(f"WARNING: {len(failures)} anchor(s) disagree with the PRD — reconcile before use.")
         return 1

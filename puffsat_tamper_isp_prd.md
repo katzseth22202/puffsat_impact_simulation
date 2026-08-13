@@ -102,8 +102,11 @@ denominator both scale with `m_i`.
 | `s` | **tamper stand-off radius** — radius of the tamper shell from the blob centre, so `s = r_slug` at contact. In Arm D the interlayer occupies the radial gap `r_slug < r < s` | 0.29 m (ice) / 0.68 m (snow) at contact; 1 m in the standoff cases |
 | `d` | **plate standoff** — axial distance from the fireball's apparent source to the plate vertex. Distinct from `s` | 10 m reference; §7.1 spans to ~25 m |
 | `R` | pusher-plate **radius** (its diameter is `2R`) | 15 m reference; up to ~25 m under a mass ceiling |
-| `F` | paraboloid focal length; the focus-matched design sets `F = d` (§6.6) | 6–10 m |
-| `δ/D` | paraboloid **dish depth over diameter** — the shape parameter, `δ/D = R/(8F)`. `δ` is not the plate standoff `d` | 0.19 at (`R = 15 m`, `F = 10 m`); swept to ~0.35 |
+| `D = 2R` | plate **diameter**. Written out because the shape parameter is depth over *diameter*, not over radius | 30 m reference |
+| `F` | paraboloid **focal length** — the single number that fixes a paraboloid's curvature at a given rim radius. Small `F` = tightly curved = deep bowl. The focus-matched design sets `F = d`, putting the fireball at the dish's focus (§6.6) | 5.4–12 m |
+| `δ` | **dish depth**, a.k.a. **wall height**: how far the rim stands proud of the vertex, measured along the axis. `δ = R²/(4F)`. It is a *length*, and it is the buildability constraint on a dish. **`δ` is not the plate standoff `d`** | 5.6 m at (`R` = 15 m, `F` = 10 m) |
+| `δ/D` | paraboloid **dish depth over diameter** — the dimensionless shape parameter, `δ/D = R/(8F)`. Plain reading: *how deep the bowl is compared with how wide it is.* 0 is a flat plate, 0.25 a bowl a quarter as deep as it is wide, 0.5 a hemisphere | 0.19 reference; **0.25 is the knee** (§6.6); swept to ~0.35 |
+| `θ_max` | **rim half-angle** — the half-angle the rim subtends *at the source*. This is what actually sets capture, and it is **not** `arctan(R/d)` for a dish, because the dish's rim stands off the vertex by `δ` (§6.6) | 56.3° flat / 73.7° reference dish / 90° at the knee |
 | `A` | named geometric area, as in `σ = m/A`; the reference full-shell tamper uses hemispherical area `2πs²`, while partial coverage uses its actual covered area. Distinct from Atwood number `A_RT` | — |
 
 ### 0.4 Material state and thermophysics
@@ -112,7 +115,7 @@ denominator both scale with `m_i`.
 |---|---|---|
 | `ρ` | mass density; `ρ_slug`/`ρ_s`, `ρ_tamper`/`ρ_t`, `ρ_interlayer` | ice 917, snow 70, slush ~400 kg/m³ |
 | `σ = m/A` | **areal density** — the tamper's figure of merit, conserved through vaporisation (§2.3). `σ_t` (tamper), `σ_proj`, `σ_target`, `σ_plume`, `σ_abl` (ablated per pulse) | `σ_t` = 14.9 kg/m² at `τ_t = 1`, `s = 1 m` |
-| `Σ` | gas mass column per unit plate area at arrival — deliberately distinct from generic `σ`. The quoted reference is plate-area-averaged; local solver outputs are functions of radius and time | 0.030–0.088 kg/m² (§5.3) |
+| `Σ` | gas mass column per unit plate area at arrival — deliberately distinct from generic `σ`. The quoted reference is plate-area-averaged; local solver outputs are functions of radius and time | 0.049–0.072 kg/m² over the §6.6 dish family (§5.3) |
 | `e` | specific internal energy. *Distinct from `e_eff`, §0.7* | 305.7 MJ/kg = 57.1 eV per H₂O molecule |
 | `T` | temperature (K, or eV where the plasma state matters). `ΔT` is a temperature difference across a named interval — in §6.5.2, ablator surface to plate bulk | 14 kK fireball; 50–80 kK at stagnation |
 | `P` | pressure. *Momentum in `P_ejecta` only* | ~2 MPa peak at the plate; ~70 GPa in the tamper shock |
@@ -248,6 +251,20 @@ question is whether pressure coupling — omitted from every existing model — 
 1.69 m/s of `Δv_vehicle`
 per pulse (0.17–0.69 g) over ~2960 pulses. Encounter mass and cadence are a **free trade at
 fixed thrust**, not independently pinned (§4.1).
+
+**The plate is a dish, not a flat plate, and that is now the strongest lever on the answer.**
+Capture is set by the half-angle the plate's rim subtends at the fireball. A dish's rim stands
+proud of its vertex by the dish depth `δ`, so it is *closer* to the source than the vertex and
+subtends a much wider cone than a flat plate at the same standoff. Scored correctly, the reference
+dish captures **19.6%** and returns **653 s**, against a flat plate's 10.6% and **317 s** — which
+loses to methalox before any ablator is charged, so **the flat plate is foreclosed** (§6.6.3). At
+`δ/D` = 0.25 — a bowl a quarter as deep as it is wide, a 7.5 m wall on a 30 m plate — the rim
+reaches the fireball's own plane, capture saturates at the full ballistic 31.2%, and the headline
+**984 s becomes realisable rather than an infinite-plate idealisation.** That depth is also
+exactly where a tamper stops leaking: below it a tamper turns gas around into a rim that cannot
+catch it, flipping a credit into a debit (catastrophically so for a flat plate — a *perfect*
+mirror there yields 25 s). Hence the architecture this study now assumes: **the dish catches the
+forward hemisphere and the tamper catches what is behind it** (§6.6.4).
 
 **The plate-side working hypothesis is simpler than first scoped.** While an intact ablating
 layer is active, its effective vaporisation temperature pins the boundary; the closed-form
@@ -611,25 +628,43 @@ already-assumed prize a real stagnating plenum returns.
 
 **`β_bare` also assumes an infinite plate.** It captures everything with `v_z > 0` and imposes
 no plate radius. Because rays near the capture threshold arrive nearly grazing, they land at
-large radius, so a finite plate loses them — and the ballistic geometry is far more sensitive
-to `R/d` than the `R → ∞` figures suggest (`k = 7.06`):
+large radius, so a finite plate loses them.
 
-| plate | ballistic capture | parabolic `β` (Isp) | flat `β` (Isp) | parabola/flat |
-|---|---|---|---|---|
-| `R/d` = 1.5 — the §4/§5.3 reference (`R` = 15 m, `d` = 10 m) | 10.6% | 0.339 (368 s) | 0.292 (317 s) | 1.16× |
-| `R/d` = 2.5 | 16.4% | 0.511 (553 s) | 0.400 (434 s) | 1.28× |
-| `R → ∞` | 31.2% | **0.909 (984 s)** | 0.517 (560 s) | 1.76× |
+**Capture is set by the half-angle the rim subtends at the source, `θ_max`** — and *that*, not
+`R/d`, is the quantity to compare plates on. A flat plate's rim lies in the plane a distance `d`
+away, so `θ_max = arctan(R/d)`. A dish's rim stands proud of its vertex by the dish depth
+`δ = R²/(4F)`, so its rim is *closer to the source* and `tan(θ_max/2) = R/(2F)`. §6.6.2 derives
+both. Pairing one plate's rim position with the other's momentum transfer — which an earlier
+draft of this table did — mixes two different plates (`k = 7.06`, `R` = 15 m):
 
-Two consequences. First, **the headline 984 s is an `R → ∞` idealisation**, and the document
-also carries a third, mutually inconsistent capture fraction — §5.3's `Σ` applies the rim angle
-to the *blob-frame* emission angle rather than to the ray direction, giving 22.3%. These three
+| plate | `θ_max` | capture | `β` (Isp) |
+|---|---|---|---|
+| **flat plate, `d` = 10 m** (`R/d` = 1.5) | 56.3° | 10.6% | 0.292 (**317 s**) |
+| flat plate, `R/d` = 2.5 | 68.2° | 16.4% | 0.400 (434 s) |
+| flat plate, `R → ∞` | 90° | 31.2% | 0.517 (560 s) |
+| **dish, `δ/D` = 0.19** — the §4 reference design | 73.7° | 19.6% | 0.603 (**653 s**) |
+| **dish, `δ/D` = 0.25** — the knee (§6.6.4) | 90° | 31.2% | 0.909 (**984 s**) |
+| `R → ∞` collimating idealisation | 90° | 31.2% | **0.909 (984 s)** |
+
+A flat plate is scored with specular momentum `Δp = 2v_z`; a focus-matched dish with collimating
+momentum `Δp = |v| + v_z`. The headline 984 s is the collimating `R → ∞` row — **and the last two
+rows are numerically identical**, which is the point of §6.6: a dish at `δ/D` = 0.25 realises the
+infinite-plate figure on a 30 m plate with a 7.5 m wall, because at that depth its rim reaches the
+source's own plane and it catches every forward-going element.
+
+Two consequences. First, **the headline 984 s is realisable rather than idealised**, but only by
+a dish deep enough to put its rim in the source plane (§6.6). Scored on a *flat* plate at the
+reference standoff it is 317 s, which loses to methalox outright — hence the foreclosure in §6.6.3.
+The document also carried a third, mutually inconsistent capture fraction — §5.3's `Σ` applied the
+rim angle to the *blob-frame* emission angle rather than to the ray direction, giving 22.3%. These
 are reconciled in §13.13: the adopted convention is the **ray-consistent finite-plate value at a
 stated `(R, d)`, quoted as the bracket *[finite plate, `R → ∞`]***, and the rim-angle form is
 retired. The honest reading is that pure ray-tracing *understates* capture, because the flow is
 pressure-bearing at Mach ≈ 2.5 and steers inward — which is this study's central thesis — so the
 truth lies between the ray-optics and infinite-plate limits and only a simulation places it.
 
-Second, **§6.6's specular prize is derived for the wrong source.** Its `(1+cosθ)/(2cosθ)` bound
+Second, **§6.6's specular prize was derived for the wrong source** — and §6.6.3 now shows the
+prize is not an impulse gain per captured kilogram at all, but a 2.9× gain in what is captured. Its `(1+cosθ)/(2cosθ)` bound
 of 1.09 / 1.19 / 1.23 assumes a *static* point source radiating uniformly into solid angle. A
 recoiling fireball skews its rays toward grazing incidence, where a flat plate collects
 `2v cos θ → 0` and a parabola collects `v(1 + cos θ) → v`. The prize is correspondingly larger —
@@ -789,15 +824,15 @@ compaction. It remains useful only after material has entered its validated flui
 
 ### 5.3 Optical depth
 
-Areal density of the gas slab at the plate is `Σ ≈ 0.030–0.088 kg/m²` over the reference
-plate (`R` = 15 m, `d` = 10 m, 200 kg encounter). This is the **capture bracket** of §3.6 carried
-through, under the convention Rung 0 adopted (§13.13): the lower edge is the ray-consistent
-finite-plate capture of 10.6%, the upper edge the `R → ∞` idealisation's 31.2%, and the truth lies
-between because the flow is pressure-bearing and steers inward. Earlier drafts quoted a single
-`Σ ≈ 0.063 kg/m²`, from the now-retired blob-frame rim-angle capture of 22.3% — which happens to
-sit inside this bracket, so **nothing downstream of `Σ` changes qualitatively.** With κ for warm
-dense water uncertain across ~two decades (10–1000 m²/kg), `τ_opt = κΣ` spans **0.30 to 88** — it
-**straddles `τ_opt ~ 1`** either way, which is exactly where flux-limited diffusion is weakest. Prior
+Areal density of the gas slab at the plate is `Σ ≈ 0.049–0.072 kg/m²`, over the **dish** family
+§6.6 selects (`R` = 15 m, 200 kg encounter): 0.049 at the `δ/D` = 0.19 reference dish (19.6%
+capture over 798 m² of surface) and 0.072 at the `δ/D` = 0.25 knee (31.2% over 862 m²). Both
+capture and area move with dish depth, so `Σ` must be quoted with the shape, not just the radius.
+Earlier drafts quoted a single `Σ ≈ 0.063 kg/m²` from the now-retired blob-frame rim-angle capture
+of 22.3%, which sits inside this range — so **nothing downstream of `Σ` changes qualitatively.**
+With κ for warm dense water uncertain across ~two decades (10–1000 m²/kg), `τ_opt = κΣ` spans
+**0.49 to 72** — it **straddles `τ_opt ~ 1`** on every convention tried, which is exactly where
+flux-limited diffusion is weakest. Prior
 experience on this project is directly relevant: at 69 km/s an interim Kramers opacity ran
 ~2000× low at stagnation and falsely predicted `τ_opt ~ 1`, moving `e_eff` from 0.42 to 0.65
 once real opacities were used. **Real tabulated opacity is a requirement here, not a
@@ -908,8 +943,11 @@ the exact opposite — a ~µs bounce with fast relief. Consequences:
 ### 6.5 Ablation is the plate's only thermal sink, and its mass is a forced, unbounded cost
 
 **Scaling.** Fluence at the plate `∝ 1/d²` (independent of `R`); captured mass `∝ R²/d²`.
-So **capture-per-unit-fluence `∝ R²` and nothing else — plate radius is the only lever that
-breaks the standoff conflict.** In the linear regime the ablator is a fixed fractional tax,
+So capture-per-unit-fluence `∝ R²` at fixed *shape*. **Plate radius is not the only lever:
+§6.6 shows dish depth `δ/D` is a second and stronger one**, because it moves the rim toward the
+source and so raises `θ_max` at fixed `R` and `d` — 10.6% → 31.2% of capture between a flat plate
+and the `δ/D` = 0.25 knee, for 22% more surface area. This sentence previously read "plate radius
+is the only lever", which was true only under the flat-plate rim geometry §6.6.2 replaces. In the linear regime the ablator is a fixed fractional tax,
 invariant in both `R` and `d`. With vapour shielding, ablation is sub-linear in fluence
 (`σ_abl ∝ Φ^α_abl`, `α_abl < 1`), so the tax scales as `d^{2(1−α_abl)}` — **it grows with standoff.**
 Standoff therefore trades a peak pressure that is not binding for an ablator mass that is
@@ -1124,7 +1162,203 @@ that is marginal. *Citation caution: this project records that its Orion referen
 secondary and the primary source was never read (firewalled), so any number leaned on here
 must be checked against the originals.*
 
-### 6.6 Plate shape
+### 6.6 Plate shape — the flat plate is foreclosed, and dish depth is the dominant lever
+
+This section was rewritten after Rung 0's ledger found that **every finite-plate capture figure in
+this document had been computed with a flat plate's rim position, then quoted against a parabolic
+plate's momentum transfer.** Correcting it raises the reference design's capture by 1.8× and its
+Isp by 2.1×, and reorders the study's levers, so the geometry is derived here from scratch rather
+than asserted.
+
+#### 6.6.1 The five lengths, in plain terms
+
+Only five numbers describe the plate, and four of them are lengths. `δ` and `d` are routinely
+confused, so they are drawn rather than described:
+
+```
+                          ←────────  D = 2R = 30 m  ────────→
+              rim ┐                                            ┌ rim
+                  │╲                                          ╱│      ↕ δ = 5.6 m
+                  │ ╲__                                    __╱ │        (dish depth,
+                  │    ╲──────___                ___──────╱    │         a.k.a. wall height)
+                  └──────────────╲──────────────╱──────────────┘
+                                        ↑ vertex (with the projectile hole)
+       ●  ← fireball                    │
+       ↑                                │
+       └────────  d = 10 m  ────────────┘   (standoff, source to VERTEX)
+
+       └──── d − δ = 4.4 m ────┘             (source to RIM — the one that matters)
+```
+
+| symbol | plain reading | reference |
+|---|---|---|
+| `R` | plate **radius**, centre to rim | 15 m |
+| `D = 2R` | plate **diameter** | 30 m |
+| `d` | **standoff** — source to the plate's *vertex* (its deepest point, on the axis) | 10 m |
+| `δ` | **dish depth** or **wall height** — how far the rim stands proud of the vertex. `δ = 0` is a flat plate | 5.6 m |
+| `δ/D` | **shape parameter** — depth over diameter. *How deep the bowl is compared with how wide it is.* 0 = flat, 0.25 = a quarter as deep as wide, 0.5 = a hemisphere | 0.19 |
+| `F` | **focal length** — sets the curvature. Small `F` = deep bowl. `F = d` puts the fireball at the focus | 10 m |
+
+`F`, `δ`, and `δ/D` are three ways of saying the same thing, related by
+`δ = R²/(4F)` and `δ/D = R/(8F)`. Quote `δ/D` for shape and `δ` in metres for buildability.
+
+#### 6.6.2 Capture is set by the rim half-angle `θ_max`, and a dish's rim is not at its vertex
+
+**The capture condition.** Ballistic elements all leave one point and fly straight (§3.6), so an
+element lands on the plate if and only if **its own direction lies inside the cone the rim
+subtends at the source.** Writing `θ_ray` for the angle between an element's velocity and the
+`+z` axis, and `θ_max` for the rim half-angle:
+
+```
+caught  ⟺  cos θ_ray = v_z/|v| > cos θ_max ≡ c
+```
+
+with `v_z = u·μ − V` and `v_r = u√(1−μ²)`, where `μ = cos θ` is the blob-frame emission angle
+(§3.6). Substituting and squaring gives a quadratic in `μ` with roots
+
+```
+μ± = [ V(1−c²) ± c·√(u² − V²(1−c²)) ] / u
+```
+
+`μ₊` is the forward-capture threshold; `μ₋` matters only once a tamper exists (§6.6.4). Rung 0
+implements both (`ledger.mu_capture_cutoff`, `beta_cutoff`) and checks them against direct
+numerical integration over the fireball.
+
+**For a flat plate, `θ_max = arctan(R/d)`** — its rim lies in the plane a distance `d` away. At
+the reference geometry that is `arctan(1.5)` = **56.3°**, and capture is 10.6%.
+
+**For a paraboloid it is not.** With the source at the focus, the surface in polar coordinates
+measured from that focus is `ρ(θ) = 2F/(1+cos θ)`, whose cylindrical radius is
+`ρ sin θ = 2F·tan(θ/2)`. Setting that equal to the rim radius `R`:
+
+```
+tan(θ_max/2) = R/(2F)
+```
+
+At `R` = 15 m, `F` = 10 m this gives **θ_max = 73.7°**, not 56.3°. The reason is geometric and
+obvious once drawn: **the dish's rim stands `δ` = 5.6 m proud of its vertex, toward the source.**
+The rim is 4.4 m from the fireball, not 10 m, so it subtends a far wider cone. Capture is
+**19.6%**, not 10.6%.
+
+The error this replaces was to score the dish's capture at `arctan(R/d)` — the flat plate's rim
+position — while crediting it with the paraboloid's momentum transfer `Δp = |v| + v_z`. The two
+halves of §3.6's old table came from different plates.
+
+#### 6.6.3 The result, and the foreclosure of the flat plate
+
+Generated by Rung 0 (`ledger.dish_table`, `data/results/tamper/ledger_dish_depth.csv`) at
+`k` = 7.06, `R` = 15 m, `w` = 75 km/s, Pass 1 (no ablator, so every Isp is an upper bound).
+Plate mass uses 25 kg/m², the areal density implied by §6.5.4. **Each plate is scored with the
+momentum transfer it actually performs** — a flat plate reverses only the axial component
+(`Δp = 2v_z`), a focus-matched dish returns the full speed along the axis (`Δp = |v| + v_z`) —
+because pairing one plate's rim position with the other's momentum transfer is precisely the error
+this table corrects:
+
+| configuration | `δ` wall | source→rim | `θ_max` | capture | `β` | **Isp** | plate mass |
+|---|---|---|---|---|---|---|---|
+| **flat plate** | 0 | 10.0 m | 56.3° | 10.6% | 0.292 | **317 s** | 17.7 t |
+| dish, `δ/D` = 0.156 | 4.7 m | 7.3 m | 64.0° | 14.2% | 0.446 | 483 s | 19.3 t |
+| **dish, `δ/D` = 0.19** (reference) | 5.6 m | 4.4 m | 73.7° | 19.6% | 0.603 | **653 s** | 20.0 t |
+| dish, `δ/D` = 0.234 | 7.0 m | 1.0 m | 86.3° | 28.3% | 0.836 | 905 s | 21.1 t |
+| **dish, `δ/D` = 0.25** (the knee) | 7.5 m | 0.0 m | 90.0° | **31.2%** | 0.909 | **984 s** | 21.5 t |
+| dish, `δ/D` = 0.288 | 8.7 m | −2.2 m | 98.2° | 38.2% | 1.073 | 1162 s | 22.7 t |
+| dish, `δ/D` = 0.347 | 10.4 m | −5.0 m | 108.5° | 47.9% | 1.275 | 1381 s | 24.5 t |
+
+**The flat plate is foreclosed.** At 317 s it loses to methalox (~380 s) before the ablator is
+charged at all, and the ablator can only make it worse. It is retained solely as the
+`δ/D` = 0 control that the shape sweep must reproduce. This is a stronger statement than §6.6's
+previous position, which treated flat-versus-dish as genuinely two-sided (D5) on the basis that
+the parabola's ~23% impulse gain might not repay its ~32% area penalty. **That trade was
+mis-stated:** the parabola's real prize is not a ~23% gain in impulse per captured kilogram, it is
+a **2.9× gain in how much is captured at all** — and the cost side is unchanged, because area
+grows far more slowly than capture. The reference dish costs 13% more area than a flat disc for
+85% more Isp; the knee costs 22% more area for 168% more Isp.
+
+**Plate mass is not the constraint.** Every row is 18–25 t against the 50 t ceiling (§4.1). What
+binds is **wall height in metres** — 5.6 m at the reference, 7.5 m at the knee — and the honesty
+of the ray model, which degrades sharply past the knee (§6.6.4).
+
+#### 6.6.4 Why `δ/D` = 0.25 is the cutoff, and where the tamper takes over
+
+**The knee is exact, not chosen.** `θ_max` = 90° requires `tan 45° = 1 = R/(2F)`, i.e.
+`F = R/2`, i.e.
+
+```
+δ/D = R/(8F) = R/(4R) = 0.25          and    δ = R/2  (the wall is half the rim radius)
+```
+
+At that depth **the rim lies exactly in the source's own plane.** Three things coincide there,
+which is why it is the natural place to stop:
+
+1. **The dish captures everything the ballistic model makes available.** Every element with
+   `v_z > 0` is caught, so capture equals the `R → ∞` ballistic capture fraction, 31.2%, and `β`
+   equals `β_bare`. The 984 s headline — previously an infinite-plate idealisation (§3.6) — is
+   *realisable on a 30 m dish with a 7.5 m wall*.
+2. **Below the knee a tamper leaks; at the knee it stops leaking.** This is the load-bearing
+   point. A tamper turns away-going gas around, but that gas must still land inside the rim.
+   Splitting the fireball by the sign of `v_z`:
+
+   ```
+   v_z > 0            already plate-bound; caught iff cos θ_ray > c        (as in the bare case)
+   v_z < 0, μ ≤ μ₋    turned around and caught                            (the tamper working)
+   v_z < 0, μ₋< μ <μ_c turned around and MISSED                           (the tamper backfiring)
+   ```
+
+   The third case is a **sign flip, not a shortfall.** That gas was already moving `−z`, the
+   useful direction, cancelling part of the projectile debit. The tamper flips it to `+z`, where
+   it flies past the rim and becomes a debit. The impulse law acquires a negative term:
+
+   ```
+   β = Σ_caught m(|v| + v_z)  +  2 Σ_turned-and-missed m·v_z      (second sum negative)
+   ```
+
+   In front of a **flat** plate this is not merely wasteful, it is *destructive*. Two effects
+   compound: 32.1% of all ejecta is turned into a rim that cannot catch it, and — because a flat
+   plate reverses only the axial component — the gas it *does* catch is handed back exactly the
+   velocity the tamper had just taken from it, so that half contributes nothing at all. A
+   **perfect** mirror tamper in front of a flat plate therefore drives `β` from +0.292 to
+   **−0.256: net negative impulse, the vehicle pushed the wrong way.** The leak closes
+   monotonically with dish depth (24.2% → 14.5% → 9.0% → 3.1% → 0%) and vanishes exactly at the
+   knee. Scored against a collimating plate at the same flat rim position — the chimera the old
+   §3.6 table quoted — it is 0.045, or 25 s; either way the conclusion is the same, and it is the
+   sharpest statement of why the tamper cannot rescue a shallow plate.
+3. **Past the knee the dish stops being a mirror and becomes a cavity.** At `δ/D > 0.25` the rim
+   wraps *behind* the source: the slug and tamper assembly sits inside the bowl, and re-expanding
+   gas must escape past the region it came from. Ray optics cannot see multiple wall strikes or a
+   trapped plenum, so the 1162 s and 1381 s rows are **the least trustworthy numbers in this
+   document and are not bankable.** Everything at or below the knee involves a dish that only ever
+   sees forward-moving gas and returns it along the axis — a geometry the ray screen represents
+   honestly and the hydrocode can check.
+
+**Hence the division of labour, and it is the architecture this study now assumes:**
+
+> **The dish catches the forward hemisphere. The tamper catches what is behind it.**
+
+The dish is taken to `δ/D` = 0.25 and no deeper, because that is exactly the depth at which it has
+captured all forward-going mass and at which a tamper first becomes fully effective — nothing it
+turns around can miss. Mass on the away-going side is then the tamper's job, which it does by
+turning that mass into a rim that is now guaranteed to catch it. At the knee the perfect-mirror
+tamper reaches `β` = 1.783, precisely its `R → ∞` ideal (§3.4), and the tamper question returns to
+the clean §3.4 form: 61.7% of ceiling against the 62.9% it must beat.
+
+**Two honest qualifications on that architecture.**
+
+*First, the tamper's benefit saturates at the knee and the bare dish's does not.* `β_tamped` is
+1.783 at `δ/D` = 0.25, 0.288, and 0.347 alike — a deeper dish adds nothing to the tamped case,
+because the tamper has already delivered every element to `−z` at its own speed. So dish depth and
+tamper are **not additive**: they are two routes to the same away-going mass, and past the knee
+they compete rather than combine.
+
+*Second, on Isp alone a deeper dish beats a tamper*, because dish depth costs **plate** mass —
+permanent structure, not charged in Isp — while a tamper costs **carried** mass, which is charged
+and doubles `C`. A bare dish at `δ/D` = 0.288 shows 1162 s against the tamped knee's 965 s. The
+tamper is therefore justified **only** where wall height is the binding constraint, which is a
+structures-and-plume judgement (qualification 3 above), not an Isp result. If a 10 m wall turns
+out to be buildable *and* the cavity problem proves benign, the tamper loses to geometry. Rung 4
+must settle that, and until it does the tamper is scoped as the mechanism for away-going mass
+under a buildable-wall constraint.
+
+#### 6.6.5 The prior foreclosure, and what still holds from it
 
 **The prior study's foreclosure of a deep dish is conditional on plane-wave incidence and
 does not transfer.** A paraboloid focuses parallel→point and collimates point→parallel; it
@@ -1132,42 +1366,26 @@ cannot do both. A plane-wave cloud striking a dish gets its rebound *focused* in
 spot in strongly-radiating, optically-thick gas — the reason the deep dish was rejected. A
 source **at the focus** is the opposite case, so that mechanism does not foreclose the shape
 here. It does not follow that a dish collimates usefully: whether it does is a simulation
-result, not a corollary of ray optics (ADR-0032).
+result, not a corollary of ray optics (ADR-0032). §6.6.3 now gives that reopening a quantitative
+answer, and the answer is large enough that ADR-0021 needs its own successor record (§12).
 
 *A point-source screen, not a description of the flow.* For an instantaneous ballistic
 expansion every element's trajectory is `(V_cm + u·r̂)·t`, so all rays trace back to a **fixed**
 origin — CM recession skews the angular distribution but does not move the apparent source. The
-blur is the finite disassembly time, `u·t_dis ≈ 0.6 m`, against a focal length of 6–10 m: about
-0.04 rad. The real plume is finite-duration, spatially extended, and pressure-steered, so this
-bounds the ray-optics geometry only.
+blur is the finite disassembly time, `u·t_dis ≈ 0.6 m`, against a focal length of 5.4–12 m: about
+0.04–0.11 rad. The real plume is finite-duration, spatially extended, and pressure-steered, so
+this bounds the ray-optics geometry only — and pressure steering is expected to *raise* capture
+above these figures, not lower it (§3.6).
 
-The focus-matched shape is `δ/D = R/(8d)` because `F = d`: **0.19** at
-(`R = 15 m`, `d = 10 m`) and **0.31** at (`R = 15 m`, `d = 6 m`) — inside the previously
-foreclosed band. Here `δ` is dish depth; `d` is source-to-plate standoff.
-
-**But the prize is bounded and the parabola carries a mass penalty:**
-
-| | value |
-|---|---|
-| specular upper bound, parabola/flat, mass-weighted `(1+cosθ)/(2cosθ)` — *static-source weighting; corrected below* | 1.09 / 1.19 / **1.23** at `R/d` = 1 / 2 / 2.5 |
-| prior *measured* concave lift at plane-wave incidence | `eta_capture` 0.915 → 0.977 → 0.994, **+9%** |
-| paraboloid surface area vs flat disk (`F = d`, `R = 2.5d`) | **+32%** |
-
-**That upper bound is derived for the wrong source and is too low.** It weights
-`(1+cosθ)/(2cosθ)` over a *static* point source radiating uniformly into solid angle. The real
-source recoils, so material near the capture threshold crawls toward the plate with near-zero
-axial speed and arrives nearly grazing — where a flat plate collects `2v cos θ → 0` while a
-parabola collects `v(1 + cos θ) → v`. Re-weighting over the actual ballistic ray distribution
-gives 1.28× at `R/d` = 2.5 rather than 1.23× (§3.6). The correction does not overturn the area
-argument below, but the sweep should be scored against the recoiling-source bound.
-
-A ≤23% impulse gain against a ~32% area penalty in ablator and structure — with sub-linear
-ablation making extra area *worse*, and more normal rim incidence collecting more flux.
-**Under a charged-ablator denominator, flat may win.** The prior measurement is also direct
-evidence that stagnation blunts shape by roughly an order of magnitude relative to ray
-optics: the gas does not reflect, it stagnates into a subsonic plenum and re-expands, and
-shape acts through *confinement* (raising the rim so the layer must relieve axially), not
-through reflection.
+**What survives from the previous assessment.** The area penalty is real and is carried in the
+table above (+13% at the reference dish, +22% at the knee, +32% at `δ/D` = 0.31), and it lands on
+the ablator as coating area as well as on structure. The prior *measured* concave lift at
+plane-wave incidence (`eta_capture` 0.915 → 0.977 → 0.994, +9%) remains direct evidence that
+**stagnation blunts shape relative to ray optics**: the gas does not reflect, it stagnates into a
+subsonic plenum and re-expands, and shape acts through *confinement* as much as through
+reflection. That evidence bounds how much of the ray-optics capture gain survives — it does not
+restore the flat plate, because a flat plate's deficit here is in what reaches it at all, which
+stagnation cannot fix.
 
 **Taper is two separate levers, both closed-form cold-path calculations** requiring no
 additional kernel runs:
@@ -1660,6 +1878,14 @@ rather than after a hydrocode is scored against them.
       **Resolved:** the ray-consistent finite-plate value at a stated `(R, d)` is the convention,
       quoted as the bracket *[finite plate, `R → ∞`]*; the rim-angle form is retired and `Σ` is
       restated on it (§5.3, §13.13). Where inside the bracket the truth sits is Rung 4's to measure.
+- [x] **Not in the original checklist, and the largest finding of the rung: the finite-plate
+      capture geometry.** Every finite-plate capture figure the document carried was computed at
+      the *flat* plate's rim position, `θ_max = arctan(R/d)`, then quoted against the *parabolic*
+      plate's momentum transfer. A dish's rim stands off its vertex by `δ = R²/(4F)`, so
+      `tan(θ_max/2) = R/(2F)`. Correcting it moves the reference design from 368 s to **653 s**,
+      forecloses the flat plate at 317 s, and identifies `δ/D` = 0.25 as an exact geometric knee.
+      §6.6 is rewritten around it; §3.6, §5.3, §13.13, D5, and §12 all move with it, and an ADR
+      superseding ADR-0021 is owed (§12).
 - [x] **Known open reconciliation:** §6.5's soak depth `√(4α_th·t)` ≈ 173 µm implies
       `α_th ≈ 1.0×10⁻⁵ m²/s`, against the 1.2×10⁻⁵ stated in §0.6, which gives ~190 µm. Fixing
       it moves a chain — 1.36 → 1.49 kg/m², ~0.95 → ~1.04 MJ/m², the 672 MJ basis and the four
@@ -1839,8 +2065,18 @@ any 2-D effort. Escalate only as far as needed:
       resolution is the check; a handoff that only matches marginals fails it.
 - [ ] Coarse far-field continuation to the plate (not free-streaming, §7.1).
 - [ ] Replace the decay-based integration window with a sustained-feed criterion (§6.4).
-- [ ] Sweep plate radius `R` (mass-ceiling constrained), standoff `d`, and shape: flat plus
-      the paraboloid family including `δ/D` up to ~0.35.
+- [ ] Sweep plate radius `R` (mass-ceiling constrained), standoff `d`, and **dish depth `δ/D`
+      as a first-class axis** — the paraboloid family from the `δ/D` = 0 flat control through the
+      `δ/D` = 0.25 knee and past it to ~0.35 (§6.6). **The `δ/D` > 0.25 rows are the priority
+      target**, because that is where the ray screen stops being trustworthy: the rim wraps behind
+      the source, so the dish becomes a cavity and the screen cannot see multiple wall strikes or
+      a trapped plenum. Report whether the knee is really the right cutoff, or whether the cavity
+      penalty arrives earlier or later than `δ/D` = 0.25.
+- [ ] **Settle the dish-versus-tamper division of labour (§6.6.4).** Dish depth costs uncharged
+      plate mass and a tamper costs charged carried mass, so on Isp alone a deeper dish wins; the
+      tamper is justified only where wall height binds. Report the net axial impulse of dish and
+      tamper *together*, not the sum of each computed alone — they address the same away-going
+      mass and past the knee they compete rather than combine.
 - [ ] Emit plate flux and pressure maps.
 - [ ] **Gate (D6):** one coupled rad-hydro spot-check at the `τ_opt ~ 1` corner, showing that
       radiation and thermal loss cannot move axial impulse or the velocity/angle distribution by
@@ -1903,7 +2139,7 @@ as the outstanding validation.
 | D4 | **Isp denominator = all expended carried mass, ablator included — but evaluated in two passes**, Pass 1 excluding it as an explicit upper bound. | Isp is a rocket-equation quantity, so anything carried and expended is charged. But the ablator is uncertain by 27× and answering it is a *plate* question; excluding it in Pass 1 decouples the *tamper* question and lets Rungs 1–5 proceed without waiting, with RT narrowed first (§3.1). |
 | D4a | **Encounter mass `m_enc` and cadence trade freely at fixed thrust; neither is independently pinned.** | At fixed dimensionless design, `E/J = w/(2β)` contains neither, so average heat load and gravity loss are invariant under the trade — while sub-linear ablation means larger, rarer encounters cut ablator mass (§4.1, §6.5.1). |
 | D4b | **Plate material: steel + thin renewed oil, with a thin ceramic hedge — provisional on Rung 6.** | An ablating surface is temperature-pinned, so the plate self-limits near 750–905 K; strength, spall, and bending are all non-binding at 2 MPa. The temperature half of that is a *closed-form screen*, not a computed result, so the decision is a baseline to build against and Rung 6 confirms or falsifies it. Escalation is triggered only by inadequate burn-through margin (§6.5.2, §6.5.4). |
-| D5 | **Plate shape sweep = flat + parabola family + both tapers.** Shape itself stays open. | §6.6: the prior foreclosure is conditional on plane-wave incidence; but the parabola's area penalty may exceed its impulse gain. Genuinely two-sided. |
+| D5 | **The flat plate is foreclosed; the plate is a dish, and dish depth `δ/D` is a primary design variable swept to the `δ/D` = 0.25 knee.** Flat is retained only as the `δ/D` = 0 control. Both tapers still apply. | §6.6, rewritten: capture is set by the rim half-angle `θ_max`, and a dish's rim stands `δ` proud of its vertex, so it subtends a far wider cone than a flat plate at the same standoff. The reference dish captures 19.6% against a flat plate's 10.6% (653 s vs 317 s), and the knee captures 31.2% (984 s) for 22% more surface area. A flat plate loses to methalox before the ablator is charged. The earlier "two-sided" reading compared a ~23% impulse gain with a ~32% area penalty; the real prize is a 2.9× **capture** gain, so the trade is not close. |
 | D6 | **Keep the 1-D-thermophysics × 2-D-geometry factorization**, adding a cold-path flux map — but gate it. | Radiation is local-diffusive and one-way wherever the flow is optically thick, which holds in the near field; at the plate `τ_opt` spans 0.63–63 and straddles 1 (§5.3), so the factorization is *adopted subject to* a coupled sensitivity spot-check at that corner (Rung 4) rather than assumed. A monolithic 2-D rad-hydro across the sweep is not affordable. |
 | D7 | **Ablator mass is an emergent cost per configuration, not a specified thickness.** | §6.5: ablation is the plate's only thermal sink, so it is forced by physics. Specifying a thickness the balance does not respect would silently burn through. |
 | D8 | **Tamper design variable is angular coverage, not curvature.** | §6.7: RT destroys sub-metre features within the confinement window. |
@@ -1926,7 +2162,8 @@ work lands.
 | Rigid-during-pulse gate | Yes, passes trivially | §6.4 |
 | `10⁻³`-of-peak integration window | **No** | Wrong for a 750 µs sustained feed (§6.4) |
 | RT/RM deferral | **No** | Load-bearing in three places (§6.7) |
-| Deep-dish foreclosure | **No** | Conditional on plane-wave incidence (§6.6) |
+| Deep-dish foreclosure | **No — and now reversed with a number on it** | Conditional on plane-wave incidence; §6.6.3 measures the reopening at 2.9× in capture, and forecloses the *flat* plate instead |
+| Flat plate as a live shape option | **No** | 317 s at the reference standoff, below methalox before the ablator is charged (§6.6.3). Retained as the `δ/D` = 0 control only |
 | Ablator, vehicle scale and cadence held out of scope | **No** | An Isp deliverable pulls all three inside the boundary |
 | Inter-pulse plate thermal accumulation excluded as cadence-dependent | **Partly** | Now screened rather than excluded — and on that closed-form screen it does not bind, because the plate self-limits at `T_abl`. Rung 6 computes it (§6.5.2) |
 | Projectile geometry treated as an unrecorded external input | **No** | §6.2 makes it a swept design variable with a real interior optimum |
@@ -1953,6 +2190,16 @@ hard to reverse, surprising without context, and the result of a genuine trade-o
 - [x] **[ADR-0033](docs/adr/0033-rt-deferral-does-not-transfer-to-the-tamper.md)** — the
       RT/RM deferral does not transfer; RT is load-bearing here in three places (§6.7).
       ADR-0020 carries a pointer and is otherwise unchanged.
+
+**Owed now, from §6.6's rewrite.** ADR-0021 foreclosed the deep dish and ADR-0032 reopened that
+foreclosure *conditionally*, pending evidence. §6.6.3 supplies the evidence and inverts the
+conclusion: the dish is the design and the flat plate is foreclosed, with `δ/D` = 0.25 adopted as
+the working cutoff and the tamper scoped to away-going mass above it (§6.6.4). That is a genuine
+architecture decision — hard to reverse, surprising without context, and the result of a real
+trade — so it needs its own record superseding ADR-0021, before Rung 4's sweep is built against it.
+The record must also carry the two qualifications of §6.6.4: that the tamper's benefit saturates at
+the knee, and that on Isp alone a deeper dish would beat a tamper if wall height and the cavity
+problem allowed it.
 
 **Owed if Rung 1A clears its gate.** A magnetic nozzle is a different device, not a variant of
 the pusher plate, and adopting one would reverse this document's own framing that the plate is
@@ -2026,9 +2273,12 @@ State these in any write-up. Each could move the answer.
     (the geometrically consistent finite-plate ray value at the reference `R/d` = 1.5, giving
     368 s rather than 984 s).
 
-    **The adopted convention.** A capture fraction is always the **ray-consistent finite-plate**
-    value at a stated `(R, d)`, and every capture fraction or Isp is quoted as the explicit
-    bracket *[ray-consistent finite plate, `R → ∞`]* with the geometry named. The rim-angle form
+    **The adopted convention.** A capture fraction is always the **ray-consistent value at the
+    stated rim half-angle `θ_max`** — which depends on `(R, d, δ)`, *not* on `R/d`, because a
+    dish's rim stands off its vertex by `δ` (§6.6.2). Every capture fraction or Isp is quoted with
+    the full plate geometry named, as the explicit bracket *[ray optics at that `θ_max`,
+    pressure-steered upper edge]*. For the `δ/D` = 0.19 reference dish that bracket is
+    **19.6%–31.2%**, not the 10.6%–31.2% a flat plate would give. The rim-angle form
     is **retired**: it is not a capture fraction of anything, since it asks which elements are
     *emitted* into the rim's solid angle rather than which rays land inside the rim. The
     `R → ∞` figure is retained as the labelled upper edge because pure ray-tracing *understates*
