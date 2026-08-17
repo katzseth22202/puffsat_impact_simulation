@@ -44,16 +44,26 @@ pub struct Progress {
     /// Elapsed micros at the last emitted line; the throttle's only mutable state.
     last_emit: AtomicU64,
     start: Instant,
+    /// Completions required before an ETA is meaningful — one full worker batch. Rayon runs
+    /// `n_workers` cases concurrently, so until the first batch retires, `completed` lags the
+    /// work actually in flight by up to a whole batch and the linear extrapolation reads
+    /// `n_workers`× too long.
+    warmup: usize,
 }
 
 impl Progress {
     pub fn new(label: &'static str, total: usize) -> Self {
+        Self::with_warmup(label, total, rayon::current_num_threads())
+    }
+
+    pub fn with_warmup(label: &'static str, total: usize, warmup: usize) -> Self {
         Self {
             label,
             total,
             completed: AtomicUsize::new(0),
             last_emit: AtomicU64::new(0),
             start: Instant::now(),
+            warmup,
         }
     }
 
@@ -95,8 +105,11 @@ impl Progress {
             .compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed)
             .ok()?;
         let pct = 100.0 * completed as f64 / self.total as f64;
-        let remaining =
-            eta(completed, self.total, elapsed).map_or_else(|| "?".to_string(), fmt_duration);
+        let remaining = if completed >= self.warmup {
+            eta(completed, self.total, elapsed).map_or_else(|| "?".to_string(), fmt_duration)
+        } else {
+            "?".to_string()
+        };
         Some(format!(
             "{}: {completed}/{} ({pct:.0}%) elapsed {}, eta ~{remaining}",
             self.label,
@@ -175,13 +188,38 @@ mod tests {
     /// `~` because it is an extrapolation, not a schedule.
     #[test]
     fn line_reports_count_percent_elapsed_and_eta() {
-        let p = Progress::new("heavyplate", 100);
+        let p = Progress::with_warmup("heavyplate", 100, 8);
         for _ in 0..24 {
             assert_eq!(p.complete_at(Duration::ZERO), None);
         }
         assert_eq!(
             p.complete_at(Duration::from_secs(60)).as_deref(),
             Some("heavyplate: 25/100 (25%) elapsed 1m00s, eta ~3m00s")
+        );
+    }
+
+    /// Measured on the first regeneration run (2026-08-17): with 8 workers the first batch all
+    /// finishes at once, so `1/32 done at 17s` extrapolated to **9m09s** for a sweep that took
+    /// 1m16s — a 7× overshoot, worse than useless on the line Seth is most likely to read. Until
+    /// one full batch has landed there is no rate to extrapolate from, so say so instead of
+    /// guessing. (Steady state was fine: 1m29s predicted at 9/32, 1m16s actual.)
+    #[test]
+    fn eta_is_withheld_until_a_full_worker_batch_has_landed() {
+        let p = Progress::with_warmup("warmup", 32, 8);
+
+        // One case done, one worker's worth of information: no estimate.
+        assert_eq!(
+            p.complete_at(Duration::from_secs(17)).as_deref(),
+            Some("warmup: 1/32 (3%) elapsed 17s, eta ~?")
+        );
+
+        // Fill the batch (cases 2..=8); the 8th crosses the next throttle boundary and reports.
+        for _ in 0..6 {
+            assert_eq!(p.complete_at(Duration::from_secs(17)), None);
+        }
+        assert_eq!(
+            p.complete_at(Duration::from_secs(34)).as_deref(),
+            Some("warmup: 8/32 (25%) elapsed 34s, eta ~1m42s")
         );
     }
 
