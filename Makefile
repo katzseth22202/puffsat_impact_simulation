@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -112,6 +112,15 @@ sweep-geometry: data/results/sweep_geometry.jsonl
 data/results/sweep_geometry.jsonl: $(wildcard crates/sweep/src/*.rs) $(wildcard crates/euler2d/src/*.rs)
 	@mkdir -p data/results
 	cargo run --release -p sweep -- --geometry
+
+## sweep-geometry-m40: the same eta_capture sweep at M = 40 (the high-v scenarios' Mach anchor) ->
+## data/results/sweep_geometry_m40.jsonl. Five frontier CSVs consume it (jupiter, frozen-jupiter,
+## heavyplate, structure-heavyplate, frozen-heavyplate) as their eta_capture source.
+sweep-geometry-m40: data/results/sweep_geometry_m40.jsonl
+
+data/results/sweep_geometry_m40.jsonl: $(wildcard crates/sweep/src/*.rs) $(wildcard crates/euler2d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --geometry-m40
 
 ## analysis-geometry: f = eta_capture*(1+e_eff)/2 reconciliation + eta/f figures (Rung D follow-on)
 ## -> data/results/frontier_geometry.csv; depends on sweep-geometry.
