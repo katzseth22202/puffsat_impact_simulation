@@ -24,6 +24,8 @@
 //! `loss_conductive = 0` pending that high-v transport data. (The low-v `CoolProp` table *does* carry
 //! `k_gas`, so the low-v path activates the operator.)
 
+mod progress;
+
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write as _;
@@ -34,9 +36,10 @@ use hydro1d::conduction::Solid;
 use hydro1d::eos::TableEos;
 use hydro1d::kernel::{AblatingBounce, Ablation, CondensingBounce, CoupledBounce, Tube, Viscosity};
 use hydro1d::radiation::{Limiter, RadConstants};
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tables::Table;
+
+use crate::progress::par_map_with_progress;
 
 const TABLE_PATH: &str = "data/tables/water.json";
 const RESULT_PATH: &str = "data/results/sweep.jsonl";
@@ -179,10 +182,7 @@ fn run_one(rho_impact: f64, table: &Table, cfg: &Config) -> Record {
 /// Sweep `rho_grid` in parallel (rayon), preserving the input order. Each run is independent, so the
 /// result is deterministic regardless of the parallel schedule.
 fn run_sweep(rho_grid: &[f64], table: &Table, cfg: &Config) -> Vec<Record> {
-    rho_grid
-        .par_iter()
-        .map(|&rho| run_one(rho, table, cfg))
-        .collect()
+    par_map_with_progress("baseline", rho_grid, |&rho| run_one(rho, table, cfg))
 }
 
 /// A cold conducting wall behind the rigid plate (B-flux, ADR-0005): a semi-infinite [`Solid`] of
@@ -272,10 +272,7 @@ fn run_one_lowv(rho_impact: f64, table: &Table, cfg: &LowvConfig) -> Record {
 
 /// Sweep the low-v anchor in parallel (rayon), preserving input order.
 fn run_sweep_lowv(rho_grid: &[f64], table: &Table, cfg: &LowvConfig) -> Vec<Record> {
-    rho_grid
-        .par_iter()
-        .map(|&rho| run_one_lowv(rho, table, cfg))
-        .collect()
+    par_map_with_progress("lowv", rho_grid, |&rho| run_one_lowv(rho, table, cfg))
 }
 
 /// Run one **EOS-only** bounce at `rho_impact` (transitional anchor, ADR-0012): pure gas dynamics with
@@ -325,14 +322,12 @@ fn run_sweep_transitional(
         .iter()
         .flat_map(|&v| rho_grid.iter().map(move |&rho| (v, rho)))
         .collect();
-    grid.par_iter()
-        .map(|&(v, rho)| {
-            let cfg = Config { v, ..*base };
-            (run_one_eos(rho, table, &cfg), run_one(rho, table, &cfg))
-        })
-        .collect::<Vec<_>>()
-        .into_iter()
-        .unzip()
+    par_map_with_progress("transitional", &grid, |&(v, rho)| {
+        let cfg = Config { v, ..*base };
+        (run_one_eos(rho, table, &cfg), run_one(rho, table, &cfg))
+    })
+    .into_iter()
+    .unzip()
 }
 
 // ---- Frozen-recombination bounding sweep (audit finding 3) --------------------------------------
@@ -474,9 +469,9 @@ fn run_sweep_frozen_probe(
         .iter()
         .flat_map(|&v| rho_grid.iter().map(move |&rho| (v, rho)))
         .collect();
-    grid.par_iter()
-        .map(|&(v, rho)| run_one_frozen_probe(v, rho, table, base))
-        .collect()
+    par_map_with_progress("frozen-probe", &grid, |&(v, rho)| {
+        run_one_frozen_probe(v, rho, table, base)
+    })
 }
 
 // ---- Geometry sweep (Rung D follow-on): eta_capture(curvature × L/D × r_foot/R) -----------------
@@ -619,10 +614,9 @@ fn run_geometry_sweep(cfg: &GeoConfig) -> Vec<GeoRecord> {
             })
         })
         .collect();
-    cases
-        .par_iter()
-        .map(|&(dd, ld, rf, m)| run_eta_case(dd, ld, rf, m, cfg))
-        .collect()
+    par_map_with_progress("geometry", &cases, |&(dd, ld, rf, m)| {
+        run_eta_case(dd, ld, rf, m, cfg)
+    })
 }
 
 // ---- Ablating-wall recovery sweep (Rung E, ADR-0014) --------------------------------------------
@@ -773,10 +767,12 @@ fn run_ablating_sweep(base: &Config, base_tbl: &Table) -> Vec<AblatingRecord> {
                 .flat_map(move |&rho| ABL_OPACITY_SCALE.iter().map(move |&scale| (v, rho, scale)))
         })
         .collect();
-    cases
-        .par_iter()
-        .flat_map(|&(v, rho, scale)| run_ablating_case(v, rho, scale, base, base_tbl))
-        .collect()
+    par_map_with_progress("ablating", &cases, |&(v, rho, scale)| {
+        run_ablating_case(v, rho, scale, base, base_tbl)
+    })
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 // ---- Jupiter-retrograde 69 km/s scenario sweep (special scenario, 2026-07) ----------------------
@@ -866,10 +862,9 @@ fn run_jupiter_sweep(base_tbl: &Table) -> Vec<JupiterRecord> {
                 .flat_map(move |&len| JUP_OPACITY_SCALE.iter().map(move |&s| (rho, len, s)))
         })
         .collect();
-    cases
-        .par_iter()
-        .map(|&(rho, len, s)| run_one_jupiter(rho, len, s, base_tbl))
-        .collect()
+    par_map_with_progress("jupiter", &cases, |&(rho, len, s)| {
+        run_one_jupiter(rho, len, s, base_tbl)
+    })
 }
 
 // ---- Heavy-plate 16–28 km/s scenario sweep (special scenario, design §12.1 / ADR-0027) ----------
@@ -1002,10 +997,9 @@ fn run_heavyplate_sweep(base_tbl: &Table) -> Vec<HeavyPlateRecord> {
             cases.push((HEAVY_TAU_V, rho, HEAVY_LENGTH, s));
         }
     }
-    cases
-        .par_iter()
-        .map(|&(v, rho, l, s)| run_one_heavyplate(v, rho, l, s, base_tbl))
-        .collect()
+    par_map_with_progress("heavyplate", &cases, |&(v, rho, l, s)| {
+        run_one_heavyplate(v, rho, l, s, base_tbl)
+    })
 }
 
 // ---- Pulse-shape sensitivity sweep (design §13, ADR-0028) ---------------------------------------
@@ -1249,36 +1243,33 @@ fn run_shape_2d_sweep() -> Vec<ShapeRecord> {
         .collect();
     keys.sort_unstable();
     keys.dedup();
-    let confined: HashMap<(u64, usize), f64> = keys
-        .par_iter()
-        .map(|&(len_bits, res)| {
+    let confined: HashMap<(u64, usize), f64> =
+        par_map_with_progress("shape-2d confined", &keys, |&(len_bits, res)| {
             let b = run_shape_confined(f64::from_bits(len_bits), SHAPE_RES[res].2);
             ((len_bits, res), b.restitution_ratio())
         })
+        .into_iter()
         .collect();
-    cases
-        .par_iter()
-        .map(|&(s, dd, res)| {
-            let (scale, nr, nz) = SHAPE_RES[res];
-            let free = run_shape_free(&s, dd, nr, nz);
-            let rc = confined[&(shape_cloud(&s).1.to_bits(), res)];
-            ShapeRecord {
-                axis: s.axis.to_string(),
-                d_over_d: dd,
-                r_foot_over_r: s.r_foot_over_r,
-                l_over_d: s.l_over_d,
-                taper_frac: s.taper_frac,
-                alpha_div: s.alpha_div,
-                mach: SHAPE_MACH,
-                resolution_scale: scale,
-                eta_capture: free.restitution_ratio() / rc,
-                restitution_free: free.restitution_ratio(),
-                restitution_confined: rc,
-                incident_momentum: free.incident_momentum,
-                peak_local_pressure: free.peak_local_pressure,
-            }
-        })
-        .collect()
+    par_map_with_progress("shape-2d free", &cases, |&(s, dd, res)| {
+        let (scale, nr, nz) = SHAPE_RES[res];
+        let free = run_shape_free(&s, dd, nr, nz);
+        let rc = confined[&(shape_cloud(&s).1.to_bits(), res)];
+        ShapeRecord {
+            axis: s.axis.to_string(),
+            d_over_d: dd,
+            r_foot_over_r: s.r_foot_over_r,
+            l_over_d: s.l_over_d,
+            taper_frac: s.taper_frac,
+            alpha_div: s.alpha_div,
+            mach: SHAPE_MACH,
+            resolution_scale: scale,
+            eta_capture: free.restitution_ratio() / rc,
+            restitution_free: free.restitution_ratio(),
+            restitution_confined: rc,
+            incident_momentum: free.incident_momentum,
+            peak_local_pressure: free.peak_local_pressure,
+        }
+    })
 }
 
 /// One 1D Σ-contract row of the shape study: the shape sample it serves, the Σ role (`"sample"`
@@ -1513,10 +1504,10 @@ fn frozen_sweep_mode(
             cases.push((v, rho, Table::load(frozen_table_path(table_dir, v, rho))?));
         }
     }
-    let rows: Vec<FrozenRecord> = cases
-        .par_iter()
-        .map(|(v, rho, frozen_tbl)| run_one_frozen(*v, *rho, &table, frozen_tbl, &h2o_tbl, base))
-        .collect();
+    let rows: Vec<FrozenRecord> =
+        par_map_with_progress("frozen", &cases, |(v, rho, frozen_tbl)| {
+            run_one_frozen(*v, *rho, &table, frozen_tbl, &h2o_tbl, base)
+        });
     write_rows(result_path, &rows)?;
     for r in &rows {
         println!(
@@ -1773,10 +1764,10 @@ fn cmd_shape(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         })?;
     }
     let cases = shape_1d_cases();
-    let rows1d: Vec<Shape1DRecord> = cases
-        .par_iter()
-        .map(|(v, s, role, fac)| run_shape_1d_case(*v, s, role, *fac, &table))
-        .collect();
+    let rows1d: Vec<Shape1DRecord> =
+        par_map_with_progress("shape-1d", &cases, |(v, s, role, fac)| {
+            run_shape_1d_case(*v, s, role, *fac, &table)
+        });
     emit_scenario(RESULT_PATH_SHAPE_1D, "1D", &rows1d, |r| {
         println!(
             "rust: [{}/{}] v={:.0} Sigma={:.3} rho={:.3} L={:.2} -> e_eff={:.4} (coarse {:.4}, eos {:.4}) peak_p={:.3e}",
@@ -1806,10 +1797,9 @@ fn cmd_geometry_m40(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
                 .flat_map(move |&ld| GEO_D_OVER_D.iter().map(move |&dd| (dd, ld, rf)))
         })
         .collect();
-    let rows: Vec<GeoRecord> = cases
-        .par_iter()
-        .map(|&(dd, ld, rf)| run_eta_case(dd, ld, rf, 40.0, &cfg))
-        .collect();
+    let rows: Vec<GeoRecord> = par_map_with_progress("geometry-m40", &cases, |&(dd, ld, rf)| {
+        run_eta_case(dd, ld, rf, 40.0, &cfg)
+    });
     emit_scenario(RESULT_PATH_GEOMETRY_M40, "M=40 geometry", &rows, |r| {
         println!(
             "rust: d/D={:.2} L/D={:.2} r_foot/R={:.2} M=40 -> eta_capture={:.4}",
