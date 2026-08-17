@@ -55,6 +55,7 @@ __pycache__/
 !/data/results/shape_sensitivity.csv
 !/data/results/shape_frozen_spotcheck.csv
 !/data/results/lte_validity.csv
+!/data/results/opacity_bracket.csv
 !/data/results/*.png
 # ...and, for the tamped-nozzle study (puffsat_tamper_isp_prd.md), the Rung 0 analytic ledger.
 # It is the single source of truth for every closed-form number that PRD quotes, so it is a cited
