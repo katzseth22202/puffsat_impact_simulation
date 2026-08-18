@@ -1027,6 +1027,7 @@ fn run_heavyplate_sweep(base_tbl: &Table) -> Vec<HeavyPlateRecord> {
 // relative bias on a negligible channel is not mistaken for a large error on `f`.
 
 const RESULT_PATH_TRANSPORT: &str = "data/results/sweep_transport_check.jsonl";
+const RESULT_PATH_TRANSPORT_RES: &str = "data/results/sweep_transport_resolution.jsonl";
 
 /// Velocities [m/s] the audit runs at: the heavy-plate band's three bracket anchors, the four new
 /// anchors the extension adds, and the 69 km/s Jupiter anchor that brackets it from above.
@@ -1049,6 +1050,10 @@ const TRANSPORT_SAMPLE_STRIDE: usize = 50;
 struct TransportCheckRecord {
     v: f64,
     rho_impact: f64,
+    /// Gas cell count. Fixed at the production value for the main grid; the resolution study is
+    /// the axis that varies it, because the space-facing cell's optical depth -- and therefore
+    /// FLD's free-surface error -- is set by how finely the mesh resolves the photosphere.
+    gas_cells: usize,
     length: f64,
     e_eff: f64,
     /// FLD's own escape integral (kernel channel 1b).
@@ -1083,9 +1088,20 @@ struct TransportCheckRecord {
 
 /// Run one audited coupled bounce and reduce it to a [`TransportCheckRecord`].
 fn run_one_transport_check(v: f64, rho_impact: f64, base_tbl: &Table) -> TransportCheckRecord {
+    run_one_transport_check_at(v, rho_impact, Config::production().gas_cells, base_tbl)
+}
+
+/// The same audited bounce at an explicit cell count, for the resolution study.
+fn run_one_transport_check_at(
+    v: f64,
+    rho_impact: f64,
+    gas_cells: usize,
+    base_tbl: &Table,
+) -> TransportCheckRecord {
     let cfg = Config {
         v,
         length: HEAVY_LENGTH,
+        gas_cells,
         ..Config::production()
     };
     let tube = Tube::slug_si(
@@ -1109,6 +1125,7 @@ fn run_one_transport_check(v: f64, rho_impact: f64, base_tbl: &Table) -> Transpo
     TransportCheckRecord {
         v: cfg.v,
         rho_impact,
+        gas_cells: cfg.gas_cells,
         length: cfg.length,
         e_eff: result.bounce.e_eff,
         loss_escape_space: result.loss_escape_space,
@@ -1125,6 +1142,43 @@ fn run_one_transport_check(v: f64, rho_impact: f64, base_tbl: &Table) -> Transpo
         escape_share_of_ke: result.loss_escape_space / incident_ke,
         converged: result.bounce.converged,
     }
+}
+
+// The resolution gate (2026-08-18). Before building a fix for FLD's free surface, two things have
+// to be measured, because both change what the fix is worth:
+//
+//   1. **Is the diagnosis right?** If the escape bias does not shrink as the mesh refines, the
+//      mechanism is not resolution and the fix would be aimed at the wrong target.
+//   2. **Does `e_eff` care?** The bias reaches the deliverable only through the energy books, and
+//      `e_eff` is an integral momentum ratio that converges fast. If `e_eff` is already
+//      mesh-converged while the escape bias is not, the escape error is largely not propagating
+//      into `f`, and the first-order `delta_f` estimate is an overestimate.
+//
+// Refining is *not* proposed as the fix: this is a Lagrangian mesh, the space-facing cell's optical
+// depth spans 0.2-48 across the grid, and convergence is first order -- no static grading reaches
+// all of it. This is a measurement.
+
+/// Cell counts the resolution gate sweeps. Production is 300.
+const TRANSPORT_RES_CELLS: [usize; 4] = [150, 300, 600, 1200];
+/// Representative `(v, ρ)` states for the gate: the dilute high-v corner that carries the most
+/// escape energy, the mid-band anchor, the dense case whose surface cell is deepest in the Planck
+/// mean, and the published 28 km/s heavy-plate top.
+const TRANSPORT_RES_STATES: [(f64, f64); 4] = [
+    (69_000.0, 0.02),
+    (45_000.0, 0.04),
+    (28_000.0, 0.01),
+    (69_000.0, 0.30),
+];
+
+/// Sweep the resolution gate: the same states at four mesh resolutions.
+fn run_transport_resolution_sweep(base_tbl: &Table) -> Vec<TransportCheckRecord> {
+    let cases: Vec<(f64, f64, usize)> = TRANSPORT_RES_STATES
+        .iter()
+        .flat_map(|&(v, rho)| TRANSPORT_RES_CELLS.iter().map(move |&n| (v, rho, n)))
+        .collect();
+    par_map_with_progress("transport-resolution", &cases, |&(v, rho, n)| {
+        run_one_transport_check_at(v, rho, n, base_tbl)
+    })
 }
 
 /// Sweep the transport audit over `(v, ρ)` in parallel (rayon), input order.
@@ -1883,6 +1937,30 @@ fn cmd_transport_check(_args: &[String]) -> Result<(), Box<dyn std::error::Error
     })
 }
 
+fn cmd_transport_resolution(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let table = Table::load(TABLE_PATH_JUPITER)?;
+    let rows = run_transport_resolution_sweep(&table);
+    emit_scenario(
+        RESULT_PATH_TRANSPORT_RES,
+        "transport-resolution",
+        &rows,
+        |r| {
+            println!(
+                "rust: v={:>5.0} rho={:.3} cells={:>5} -> dtauP={:.3e} bias_R={:+.2}% bias_P={:+.2}% \
+             e_eff={:.6} escape={:.4}% of KE",
+                r.v,
+                r.rho_impact,
+                r.gas_cells,
+                r.flux_weighted_surface_cell_depth_planck,
+                100.0 * r.relative_bias,
+                100.0 * r.relative_bias_planck,
+                r.e_eff,
+                100.0 * r.escape_share_of_ke,
+            );
+        },
+    )
+}
+
 fn cmd_heavyplate(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let table = Table::load(TABLE_PATH_JUPITER)?;
     let rows = run_heavyplate_sweep(&table);
@@ -2038,6 +2116,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--frozen-probe", cmd_frozen_probe),
     ("--frozen", cmd_frozen),
     ("--ablating", cmd_ablating),
+    ("--transport-resolution", cmd_transport_resolution),
     ("--transport-check", cmd_transport_check),
     ("--jupiter", cmd_jupiter),
     ("--heavyplate", cmd_heavyplate),

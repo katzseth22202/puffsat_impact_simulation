@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 analysis-lte analysis-opacity-bracket sweep-transport-check analysis-transport-check tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution analysis-transport-check tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -291,6 +291,16 @@ sweep-transport-check: data/results/sweep_transport_check.jsonl
 data/results/sweep_transport_check.jsonl: data/tables/water_jupiter.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
 	@mkdir -p data/results
 	cargo run --release -p sweep -- --transport-check
+
+## sweep-transport-resolution: the resolution gate behind the transport check -- four representative
+## states at 150/300/600/1200 cells. Measures (a) whether the escape bias refines away, and (b)
+## whether e_eff moves at all, which is what decides how much a free-surface fix is worth ->
+## data/results/sweep_transport_resolution.jsonl.
+sweep-transport-resolution: data/results/sweep_transport_resolution.jsonl
+
+data/results/sweep_transport_resolution.jsonl: data/tables/water_jupiter.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --transport-resolution
 
 ## analysis-transport-check: reduce the audit to the verdict table (bias vs the 10% escalation gate,
 ## weighted by how much energy the channel actually carries) -> data/results/transport_check.csv.
