@@ -316,6 +316,97 @@ pub fn solve(
     }
 }
 
+/// The two radiation models' escape flux on one frozen state, side by side — the diagnostic's
+/// output record.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EscapeComparison {
+    /// Total optical depth `Σ χ dx` of the slab. The whole question is what happens near `1`.
+    pub optical_depth: f64,
+    /// What FLD reports: `(c/2)·E_surface` from its own evolved radiation field.
+    pub fld_flux: f64,
+    /// What transport reports: `2π ∫₀¹ I⁺(μ) μ dμ` from the formal solution.
+    pub transport_flux: f64,
+    /// FLD's surface radiation energy density, as handed in.
+    pub fld_e_surface: f64,
+    /// Transport's own surface radiation energy density, for separating a closure disagreement
+    /// from the two models simply carrying different `E`.
+    pub transport_e_surface: f64,
+    /// Transport's `F/(cE)` at the surface. FLD pins this at `1/2`; the departure is the anisotropy
+    /// FLD cannot see.
+    pub surface_flux_ratio: f64,
+    /// Optical depth `χ dx` of the **space-facing cell alone**.
+    ///
+    /// FLD's Marshak boundary reads a cell *average* and turns it into a surface flux, which is
+    /// only meaningful while that cell is thin. Once `χ dx ≳ 1` the boundary is converting
+    /// sub-photospheric gas into emergent radiation and its error is a discretization artifact, not
+    /// a closure one — so any comparison has to report this number or it cannot tell the two apart.
+    pub surface_cell_optical_depth: f64,
+    /// `π·S` for the space-facing cell: the flux an *opaque* surface at that cell's temperature
+    /// would emit.
+    ///
+    /// A yardstick, **not a ceiling**. It bounds the escape only when the space-facing cell is
+    /// itself optically thick; when that cell is thin (as it is throughout the re-expansion here)
+    /// the escaping radiation was emitted deeper and hotter and legitimately exceeds it. Read it
+    /// together with [`EscapeComparison::surface_cell_optical_depth`]: the pair says how far the
+    /// photosphere has retreated below the last cell.
+    pub blackbody_flux_surface: f64,
+}
+
+impl EscapeComparison {
+    /// Signed relative departure `(transport − FLD)/FLD`. Positive means FLD *under*-reports the
+    /// escape, which would make the FLD bounce too elastic.
+    ///
+    /// Returns zero when FLD reports no escape at all, since a relative error on zero is not a
+    /// number the caller can act on.
+    #[must_use]
+    pub fn relative_difference(&self) -> f64 {
+        if self.fld_flux.abs() <= f64::MIN_POSITIVE {
+            return 0.0;
+        }
+        (self.transport_flux - self.fld_flux) / self.fld_flux
+    }
+}
+
+/// Run the transport solve on a frozen slab and pair its escape flux with FLD's.
+///
+/// `fld_e_surface` is the FLD run's radiation energy density in the space-facing cell; its Marshak
+/// boundary turns that into `(c/2)·E` with no incident radiation (see
+/// [`crate::radiation::RadBc::Marshak`]).
+///
+/// # The quasi-static assumption
+///
+/// Transport here is the *formal* (steady-state) solution on the instantaneous temperature and
+/// opacity fields, while FLD's `E` carries time history. That is sound because the two clocks are
+/// nowhere near each other: light crosses a ~10 m cloud in ~3·10⁻⁸ s against a bounce lasting
+/// ~10⁻⁴ s, so the radiation field is quasi-static to a part in ~10³. It does mean the comparison
+/// attributes *all* of any `E` mismatch to the models rather than to lag.
+#[must_use]
+pub fn compare_escape(
+    slab: &Slab<'_>,
+    ordinates: &Ordinates,
+    c: f64,
+    fld_e_surface: f64,
+) -> EscapeComparison {
+    let solution = solve(slab, ordinates, c, Incident::Vacuum, Incident::Vacuum);
+    let optical_depth = slab
+        .chi
+        .iter()
+        .zip(slab.dx)
+        .map(|(&chi, &dx)| chi * dx)
+        .sum();
+    let last = slab.dx.len() - 1;
+    EscapeComparison {
+        optical_depth,
+        fld_flux: 0.5 * c * fld_e_surface,
+        transport_flux: solution.escape_flux(),
+        fld_e_surface,
+        transport_e_surface: *solution.e_rad.last().expect("slab has at least one cell"),
+        surface_flux_ratio: solution.surface_flux_ratio(c),
+        surface_cell_optical_depth: slab.chi[last] * slab.dx[last],
+        blackbody_flux_surface: PI * slab.source[last],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -700,6 +791,135 @@ mod tests {
             Incident::Vacuum,
         );
         assert_relative_eq!(deep.e_rad[n / 2], 4.0 * PI * s / c, max_relative = 1e-9);
+    }
+
+    /// **Acceptance 6 — the comparison record itself**, and the thick-limit anchor that has to hold
+    /// before any `τ ~ 1` disagreement can be read as a closure error.
+    ///
+    /// A thick isothermal slab radiates the blackbody flux `σT⁴ = acT⁴/4` — an answer fixed by
+    /// thermodynamics, not by either model. Transport must produce it. FLD's Marshak rule
+    /// `F = (c/2)E` then reproduces the same number **iff** its surface cell has drained to
+    /// `E = aT⁴/2`, half the equilibrium `aT⁴`, which is exactly the known behaviour of that
+    /// boundary condition. So the thick limit is where the two models are *supposed* to agree, and
+    /// the record must show them agreeing.
+    #[test]
+    fn thick_isothermal_slab_radiates_the_blackbody_flux_from_both_models() {
+        let (a, c, temp) = (2.0, 3.0, 1.7);
+        let n = 200;
+        let dx = vec![0.2; n];
+        let chi = vec![1.0; n]; // τ_total = 40
+        let s = planck_source(a, c, temp);
+        let source = vec![s; n];
+        let slab = Slab {
+            dx: &dx,
+            chi: &chi,
+            source: &source,
+        };
+
+        // Stefan–Boltzmann: σT⁴ = acT⁴/4, the flux a black surface emits.
+        let sigma_t4 = a * c * temp.powi(4) / 4.0;
+        // The surface energy density that makes FLD's (c/2)E equal that flux.
+        let drained = 2.0 * sigma_t4 / c;
+        assert_relative_eq!(drained, 0.5 * a * temp.powi(4), max_relative = 1e-14);
+
+        let cmp = compare_escape(&slab, &Ordinates::double_gauss(16), c, drained);
+
+        assert_relative_eq!(cmp.optical_depth, 40.0, max_relative = 1e-14);
+        assert_relative_eq!(cmp.transport_flux, sigma_t4, max_relative = 1e-6);
+        assert_relative_eq!(cmp.fld_flux, 0.5 * c * drained, max_relative = 1e-14);
+        assert!(
+            cmp.relative_difference().abs() < 1e-6,
+            "thick limit must agree, got {:.3e}",
+            cmp.relative_difference()
+        );
+
+        // Had FLD's surface cell *not* drained — sitting at full equilibrium aT⁴ — its Marshak rule
+        // would report twice the blackbody flux, and the record would say so.
+        let undrained = compare_escape(&slab, &Ordinates::double_gauss(16), c, a * temp.powi(4));
+        assert_relative_eq!(undrained.relative_difference(), -0.5, max_relative = 1e-6);
+    }
+
+    /// **Acceptance 7 — the anisotropy FLD cannot see.** FLD's Marshak rule fixes `F/(cE) = 1/2`
+    /// identically, for every state it will ever be handed. Transport lets the ratio follow the
+    /// actual angular distribution, and in a *thin* slab that distribution is limb-brightened
+    /// (`I⁺ ∝ 1/μ`), not flat.
+    ///
+    /// The ratio is formed on cell-averaged `E`, deliberately: FLD's boundary reads its last
+    /// **cell**, so the comparison has to read the same thing to be about the closure rather than
+    /// about where each model samples. The price is that the ratio — unlike the flux, which is an
+    /// exact face quantity — is **mesh-sensitive**: a surface cell spanning `Δτ = 0.25` averages in
+    /// gas well below the photosphere and reads ~0.38 even in the thick limit. Pinned below, so
+    /// nobody reads a coarse-mesh ratio as evidence of anisotropy.
+    #[test]
+    fn surface_flux_ratio_departs_from_one_half_as_the_slab_thins() {
+        let (a, c, temp) = (1.0, 1.0, 1.0);
+        let s = planck_source(a, c, temp);
+
+        // Resolve the surface cell to Δτ ≤ 0.01 at every τ, so the ratio is reading the
+        // photosphere rather than the mesh.
+        let run = |tau: f64, n: usize| {
+            let dx = vec![1.0 / n as f64; n];
+            let chi = vec![tau; n];
+            let source = vec![s; n];
+            compare_escape(
+                &Slab {
+                    dx: &dx,
+                    chi: &chi,
+                    source: &source,
+                },
+                &Ordinates::double_gauss(24),
+                c,
+                0.5 * a * temp.powi(4),
+            )
+        };
+
+        // Cell counts chosen so the surface cell spans Δτ ≈ 0.01 at every τ.
+        let mut ratios = Vec::new();
+        for &(tau, n) in &[
+            (0.01_f64, 400_usize),
+            (0.1, 400),
+            (1.0, 400),
+            (10.0, 1_000),
+            (100.0, 10_000),
+        ] {
+            ratios.push((tau, run(tau, n).surface_flux_ratio));
+        }
+
+        // Thick: the emergent intensity really is near-isotropic, so transport approaches FLD's
+        // 1/2. Only *approaches*: the residual converges like `τ_cell·ln τ_cell`, so Δτ = 0.01
+        // still leaves ~3%. Chasing 1% would take Δτ ~ 5·10⁻⁴ and a 200 000-cell mesh — which is
+        // the practical reason the production diagnostic reads the **flux**, an exact face
+        // quantity, and treats this ratio as a qualitative anisotropy indicator only.
+        let (_, thick) = *ratios.last().unwrap();
+        assert_relative_eq!(thick, 0.5, max_relative = 0.05);
+
+        // Thin: it does not. The ratio moves monotonically away as τ falls, and by τ = 0.01 the
+        // disagreement with FLD's fixed 1/2 is large enough to matter to `e_eff`.
+        assert!(
+            ratios.windows(2).all(|w| w[0].1 < w[1].1),
+            "ratio should rise monotonically with τ toward 1/2, got {ratios:?}"
+        );
+        let (_, thin) = ratios[0];
+        assert!(
+            (thin - 0.5).abs() > 0.1,
+            "τ = 0.01 should be far from FLD's fixed 1/2, got {thin:.4}"
+        );
+
+        // The mesh sensitivity itself, pinned: the same thick slab read through a coarse surface
+        // cell (Δτ = 0.25) reports ~0.38 — an artifact of averaging, not anisotropy. The escaping
+        // *flux* is a face quantity and does not move.
+        let coarse = run(100.0, 400);
+        let fine = run(100.0, 10_000);
+        assert!(
+            coarse.surface_flux_ratio < 0.42,
+            "coarse surface cell should read low, got {:.4}",
+            coarse.surface_flux_ratio
+        );
+        assert_relative_eq!(
+            coarse.transport_flux,
+            fine.transport_flux,
+            max_relative = 1e-9
+        );
     }
 
     /// **Acceptance 3 — angular convergence of the escape flux**, the quantity the diagnostic

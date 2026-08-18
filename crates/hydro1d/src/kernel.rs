@@ -32,6 +32,7 @@ use crate::Primitive;
 use crate::conduction::{GasConductionState, Solid};
 use crate::eos::{Eos, IdealGas, TableEos};
 use crate::radiation::{Limiter, Medium, RadBc, RadConstants, fld_substep};
+use crate::transport::{self, EscapeComparison, Ordinates};
 
 /// CFL number for the explicit timestep.
 const CFL: f64 = 0.4;
@@ -1020,6 +1021,180 @@ pub struct CoupledBounceResult {
     pub loss_conductive: f64,
 }
 
+/// A one-way Sₙ audit of FLD's escape-to-space channel (Q9, ADR-0012).
+///
+/// Attach with [`CoupledBounce::with_transport_audit`] and the run tallies, alongside its own
+/// `loss_escape_space`, what a discrete-ordinates solve would have reported for the same escaping
+/// flux at each substep. It **does not feed back**: the FLD field still drives the gas, so this is
+/// a bias estimate on the loss channel, not a corrected `e_eff`.
+///
+/// # Why two opacity tallies, and what neither of them is
+///
+/// FLD here is a **two-mean** model (ADR-0006): it emits and absorbs with the Planck mean `χ_P` and
+/// diffuses with the Rosseland mean `χ_R`. A gray transport solve has only one extinction
+/// coefficient, so **no single-mean Sₙ run is "FLD minus the closure"** — an exact
+/// closure-only comparison does not exist against a two-mean model.
+///
+/// The audit therefore runs both and reports them as a bracket:
+///
+/// - **Rosseland** shares the mean FLD moves flux with, so it is the closest thing to a
+///   closure-only comparison and is what [`TransportAudit::relative_bias`] — the number the
+///   escalate-to-M1 gate reads — is built from.
+/// - **Planck** is the mean that belongs in an emission/absorption transport equation, and is the
+///   physically better single-mean choice for escape.
+///
+/// Their spread is the mean-selection uncertainty. If the two tallies agree, the mean choice does
+/// not matter here and the Rosseland number is a clean closure verdict; if they diverge, the
+/// disagreement is partly about opacity means rather than about diffusion-versus-transport, and the
+/// writeup must say so rather than blaming the closure.
+#[derive(Debug, Clone)]
+pub struct TransportAudit {
+    ordinates: Ordinates,
+    /// Keep at most one sample per this many substeps, so a long run cannot grow an unbounded trace.
+    sample_stride: usize,
+    steps: usize,
+    /// Time-integrated escape as FLD reported it — the same integral as `loss_escape_space`.
+    pub fld_escape: f64,
+    /// Time-integrated escape Sₙ would have reported, on FLD's Rosseland mean.
+    pub transport_escape_rosseland: f64,
+    /// Time-integrated escape Sₙ would have reported, on the Planck mean.
+    pub transport_escape_planck: f64,
+    /// Largest instantaneous `|(transport − FLD)/FLD|` seen on the Rosseland tally.
+    pub worst_relative_difference: f64,
+    /// Slab optical depth at that worst moment.
+    pub worst_optical_depth: f64,
+    /// FLD-escape-weighted mean optical depth: where the escaping energy actually came from, so a
+    /// disagreement confined to a moment carrying no energy can be recognized as harmless.
+    pub flux_weighted_optical_depth: f64,
+    /// Escape-weighted **Rosseland** optical depth of the space-facing cell alone.
+    pub flux_weighted_surface_cell_depth: f64,
+    /// Escape-weighted **Planck** optical depth of the space-facing cell alone.
+    ///
+    /// The discriminating number. FLD's Marshak boundary converts that one cell's *average* `E`
+    /// into an emergent flux, which is only meaningful while the cell is thin in the mean that
+    /// sets `E`. Emission/absorption sets `E`, so the relevant mean is Planck: once `χ_P dx ≳ 1`
+    /// the exchange term pins `E → aT⁴` faster than the boundary can drain it, the cell never
+    /// reaches the drained `aT⁴/2` a free surface should have, and `(c/2)E` reports twice the
+    /// blackbody flux. A slab can be Rosseland-thin and Planck-thick at the same face, so the two
+    /// depths must be reported separately or the failure mode is invisible.
+    pub flux_weighted_surface_cell_depth_planck: f64,
+    /// Escape-weighted ratio of FLD's reported flux to `σT⁴` of the space-facing *cell*. Values
+    /// above 1 are expected wherever that cell is optically thin — the escaping radiation was
+    /// emitted deeper and hotter — so this measures how far below the last cell the photosphere
+    /// sits, not whether FLD is exceeding a physical bound.
+    pub flux_weighted_fld_over_blackbody: f64,
+    /// Sampled instantaneous comparisons (Rosseland), for plotting the crossing.
+    pub samples: Vec<EscapeComparison>,
+}
+
+impl TransportAudit {
+    /// A fresh audit at `S_{2·half}` angular resolution, keeping one sample per `sample_stride`
+    /// substeps.
+    ///
+    /// # Panics
+    /// Panics if `sample_stride` is zero.
+    #[must_use]
+    pub fn new(half: usize, sample_stride: usize) -> Self {
+        assert!(sample_stride > 0, "sample stride must be positive");
+        Self {
+            ordinates: Ordinates::double_gauss(half),
+            sample_stride,
+            steps: 0,
+            fld_escape: 0.0,
+            transport_escape_rosseland: 0.0,
+            transport_escape_planck: 0.0,
+            worst_relative_difference: 0.0,
+            worst_optical_depth: 0.0,
+            flux_weighted_optical_depth: 0.0,
+            flux_weighted_surface_cell_depth: 0.0,
+            flux_weighted_surface_cell_depth_planck: 0.0,
+            flux_weighted_fld_over_blackbody: 0.0,
+            samples: Vec::new(),
+        }
+    }
+
+    /// Integrated relative bias `(transport − FLD)/FLD` on the escape channel, Rosseland tally.
+    /// **This is the number the >10% escalation gate reads.**
+    #[must_use]
+    pub fn relative_bias(&self) -> f64 {
+        if self.fld_escape.abs() <= f64::MIN_POSITIVE {
+            return 0.0;
+        }
+        (self.transport_escape_rosseland - self.fld_escape) / self.fld_escape
+    }
+
+    /// Integrated relative bias on the Planck tally — the mean-selection sensitivity.
+    #[must_use]
+    pub fn relative_bias_planck(&self) -> f64 {
+        if self.fld_escape.abs() <= f64::MIN_POSITIVE {
+            return 0.0;
+        }
+        (self.transport_escape_planck - self.fld_escape) / self.fld_escape
+    }
+
+    /// Tally one substep against the state the FLD solve just left behind.
+    fn record(&mut self, fields: &RadFields, e_surface: f64, dt: f64, consts: RadConstants) {
+        let source: Vec<f64> = fields
+            .temp
+            .iter()
+            .map(|&t| transport::planck_source(consts.a, consts.c, t))
+            .collect();
+        let rosseland = transport::compare_escape(
+            &transport::Slab {
+                dx: &fields.dx,
+                chi: &fields.chi_ross,
+                source: &source,
+            },
+            &self.ordinates,
+            consts.c,
+            e_surface,
+        );
+        let planck = transport::compare_escape(
+            &transport::Slab {
+                dx: &fields.dx,
+                chi: &fields.chi_planck,
+                source: &source,
+            },
+            &self.ordinates,
+            consts.c,
+            e_surface,
+        );
+
+        self.fld_escape += dt * rosseland.fld_flux;
+        self.transport_escape_rosseland += dt * rosseland.transport_flux;
+        self.transport_escape_planck += dt * planck.transport_flux;
+        self.flux_weighted_optical_depth += dt * rosseland.fld_flux * rosseland.optical_depth;
+        self.flux_weighted_surface_cell_depth +=
+            dt * rosseland.fld_flux * rosseland.surface_cell_optical_depth;
+        self.flux_weighted_surface_cell_depth_planck +=
+            dt * rosseland.fld_flux * planck.surface_cell_optical_depth;
+        if rosseland.blackbody_flux_surface > 0.0 {
+            self.flux_weighted_fld_over_blackbody +=
+                dt * rosseland.fld_flux * (rosseland.fld_flux / rosseland.blackbody_flux_surface);
+        }
+
+        let rel = rosseland.relative_difference().abs();
+        if rel > self.worst_relative_difference {
+            self.worst_relative_difference = rel;
+            self.worst_optical_depth = rosseland.optical_depth;
+        }
+        if self.steps % self.sample_stride == 0 {
+            self.samples.push(rosseland);
+        }
+        self.steps += 1;
+    }
+
+    /// Turn the running `Σ dt·F·τ` into the flux-weighted mean `τ`. Called once at the end.
+    fn finish(&mut self) {
+        if self.fld_escape.abs() > f64::MIN_POSITIVE {
+            self.flux_weighted_optical_depth /= self.fld_escape;
+            self.flux_weighted_surface_cell_depth /= self.fld_escape;
+            self.flux_weighted_surface_cell_depth_planck /= self.fld_escape;
+            self.flux_weighted_fld_over_blackbody /= self.fld_escape;
+        }
+    }
+}
+
 /// A radiation + conduction coupled slug bounce (B5b). Holds the gas [`Tube<TableEos>`], the
 /// per-cell radiation energy density `e_rad`, an optional wall conducting [`Solid`], the physical
 /// constants, and the accumulated loss channels. One step is **Lie-split** at the hydro `dt`: the
@@ -1041,6 +1216,8 @@ pub struct CoupledBounce {
     loss_radiative_wall: f64,
     loss_escape_space: f64,
     loss_conductive: f64,
+    /// Opt-in Sₙ audit of the escape channel; `None` on production runs, and then free.
+    transport_audit: Option<TransportAudit>,
 }
 
 impl CoupledBounce {
@@ -1072,7 +1249,23 @@ impl CoupledBounce {
             loss_radiative_wall: 0.0,
             loss_escape_space: 0.0,
             loss_conductive: 0.0,
+            transport_audit: None,
         }
+    }
+
+    /// Attach a one-way Sₙ audit of the escape channel (Q9, ADR-0012). The FLD field still drives
+    /// the gas — nothing about the bounce changes — so the run stays bit-identical to an unaudited
+    /// one and the audit is a pure observer.
+    #[must_use]
+    pub fn with_transport_audit(mut self, audit: TransportAudit) -> Self {
+        self.transport_audit = Some(audit);
+        self
+    }
+
+    /// The completed audit, if one was attached.
+    #[must_use]
+    pub fn transport_audit(&self) -> Option<&TransportAudit> {
+        self.transport_audit.as_ref()
     }
 
     /// Total radiation field energy `Σ e_rad_j dx_j` (per unit wall area).
@@ -1118,6 +1311,20 @@ impl CoupledBounce {
             let last = self.tube.cells() - 1;
             self.loss_escape_space += dt * 0.5 * c * (self.e_rad[last] - e_inc);
         }
+        // Audit last, on the state the substep actually left: the temperatures have absorbed this
+        // step's exchange, so the source function the Sₙ solve emits from is the same one FLD's
+        // post-solve `e_rad` reflects. Rebuilding the fields costs a second pass of table lookups,
+        // which is why the audit is opt-in.
+        if let Some(mut audit) = self.transport_audit.take() {
+            let last = self.tube.cells() - 1;
+            audit.record(
+                &self.tube.radiation_fields(),
+                self.e_rad[last],
+                dt,
+                self.consts,
+            );
+            self.transport_audit = Some(audit);
+        }
     }
 
     /// Conductive wall loss (channel 2), via the **gas-side conduction operator** (B-flux, ADR-0005).
@@ -1143,6 +1350,9 @@ impl CoupledBounce {
     /// [`Tube::run_bounce`], and return the restitution plus the loss-channel decomposition.
     pub fn run(&mut self) -> CoupledBounceResult {
         let bounce = self.run_bounce_loop();
+        if let Some(audit) = self.transport_audit.as_mut() {
+            audit.finish();
+        }
         CoupledBounceResult {
             bounce,
             loss_radiative_wall: self.loss_radiative_wall,
@@ -1645,7 +1855,7 @@ impl BounceStepper for AblatingBounce {
 
 #[cfg(test)]
 mod tests {
-    use super::{CondensingBounce, CoupledBounce, Tube, Viscosity};
+    use super::{CondensingBounce, CoupledBounce, TransportAudit, Tube, Viscosity};
     use crate::conduction::Solid;
     use crate::eos::TableEos;
     use crate::radiation::{Limiter, RadBc, RadConstants};
@@ -2104,6 +2314,64 @@ mod tests {
         let reference = tube.clone().run_bounce();
         let coupled = CoupledBounce::new(tube, None, consts, Limiter::LevermorePomraning).run();
         assert_relative_eq!(coupled.bounce.e_eff, reference.e_eff, max_relative = 1e-6);
+    }
+
+    /// **The transport audit observes and nothing more (Q9).** The whole value of a one-way
+    /// diagnostic is that attaching it cannot change the answer it is judging. So an audited run
+    /// must reproduce the unaudited one **bit for bit** — not "to tolerance", since no floating
+    /// point in the hydro or FLD path is even reached differently.
+    ///
+    /// It must also be tallying the right thing: the audit's own FLD integral has to equal the
+    /// kernel's `loss_escape_space`, which is the channel it claims to be auditing. If those two
+    /// disagree, any bias it reports is against the wrong baseline.
+    #[test]
+    fn transport_audit_changes_nothing_and_tallies_the_escape_channel() {
+        let (cells, mach) = (120, 5.0);
+        let consts = RadConstants { c: 1.0, a: 1e-3 };
+        let make = || slug_with_table(cells, mach, gas_table(0.7, 0.3));
+
+        let plain = CoupledBounce::new(make(), None, consts, Limiter::LevermorePomraning).run();
+
+        let mut audited = CoupledBounce::new(make(), None, consts, Limiter::LevermorePomraning)
+            .with_transport_audit(TransportAudit::new(8, 20));
+        let result = audited.run();
+
+        // Bit-for-bit: the observer touched nothing.
+        assert_eq!(result.bounce.e_eff.to_bits(), plain.bounce.e_eff.to_bits());
+        assert_eq!(
+            result.loss_escape_space.to_bits(),
+            plain.loss_escape_space.to_bits()
+        );
+        assert_eq!(
+            result.loss_radiative_wall.to_bits(),
+            plain.loss_radiative_wall.to_bits()
+        );
+
+        let audit = audited.transport_audit().expect("audit was attached");
+        // Same integral, same channel: `(c/2)·E_last` summed over the same dt sequence.
+        assert_relative_eq!(
+            audit.fld_escape,
+            result.loss_escape_space,
+            max_relative = 1e-12
+        );
+        assert!(
+            !audit.samples.is_empty(),
+            "the audit should have sampled the crossing"
+        );
+        assert!(
+            audit.transport_escape_rosseland > 0.0 && audit.transport_escape_planck > 0.0,
+            "both opacity tallies should carry escaping flux"
+        );
+        // The flux-weighted τ is a genuine average over the run, so it must land inside the range
+        // of optical depths actually sampled rather than off the end of it.
+        let (lo, hi) = audit.samples.iter().fold((f64::MAX, 0.0_f64), |(l, h), s| {
+            (l.min(s.optical_depth), h.max(s.optical_depth))
+        });
+        assert!(
+            audit.flux_weighted_optical_depth >= lo && audit.flux_weighted_optical_depth <= hi,
+            "flux-weighted τ={} outside sampled range [{lo}, {hi}]",
+            audit.flux_weighted_optical_depth
+        );
     }
 
     /// **Energy balance (B5b gate).** In a closed static box (both walls, reflecting radiation

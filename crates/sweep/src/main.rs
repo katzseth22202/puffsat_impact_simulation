@@ -34,7 +34,9 @@ use std::path::Path;
 use euler2d::bounce::{PlateShape, SlugConfig, eta_capture, run_slug_bounce, taper_sigma_stats};
 use hydro1d::conduction::Solid;
 use hydro1d::eos::TableEos;
-use hydro1d::kernel::{AblatingBounce, Ablation, CondensingBounce, CoupledBounce, Tube, Viscosity};
+use hydro1d::kernel::{
+    AblatingBounce, Ablation, CondensingBounce, CoupledBounce, TransportAudit, Tube, Viscosity,
+};
 use hydro1d::radiation::{Limiter, RadConstants};
 use serde::{Deserialize, Serialize};
 use tables::Table;
@@ -1011,6 +1013,131 @@ fn run_heavyplate_sweep(base_tbl: &Table) -> Vec<HeavyPlateRecord> {
     })
 }
 
+// ---- Sₙ transport check of the FLD escape channel (Q9/Q21, ADR-0012) ----------------------------
+//
+// FLD is exact where `τ ≫ 1` and degrades as the cloud thins. Extending the study to 63 km/s pushes
+// the re-expansion toward `τ ~ 1`, so before trusting `e_eff` up there the escape-to-space channel
+// gets audited against an independent radiation model: a gray discrete-ordinates solve on the same
+// states (`hydro1d::transport`). The audit is one-way — it observes the FLD run without changing
+// it — so what it produces is a **bias estimate on a loss channel**, not a corrected `e_eff`.
+//
+// The gate (design §12.1 step 5): a bias above 10% on a channel that carries meaningful energy
+// escalates to a coupled M1 solver. Below that, the bias is recorded as the radiation-model error
+// bar and the FLD result stands. `escape_share_of_ke` is reported alongside precisely so a large
+// relative bias on a negligible channel is not mistaken for a large error on `f`.
+
+const RESULT_PATH_TRANSPORT: &str = "data/results/sweep_transport_check.jsonl";
+
+/// Velocities [m/s] the audit runs at: the heavy-plate band's three bracket anchors, the four new
+/// anchors the extension adds, and the 69 km/s Jupiter anchor that brackets it from above.
+const TRANSPORT_V: [f64; 8] = [
+    16_000.0, 22_000.0, 28_000.0, 35_000.0, 45_000.0, 55_000.0, 63_000.0, 69_000.0,
+];
+/// Impact densities [kg/m³]: the three most dilute points of the heavy-plate grid — where `τ` is
+/// smallest and FLD is weakest — plus one dense point as the `τ ≫ 1` control.
+const TRANSPORT_RHO: [f64; 4] = [0.01, 0.02, 0.04, 0.3];
+/// Angular resolution `S₃₂` (16 ordinates per hemisphere). The escape-flux convergence test in
+/// `hydro1d::transport` puts S64 within 5·10⁻³ even for the limb-brightened `τ = 0.1` case, so S32
+/// is comfortable for the `τ ≳ 0.5` states here.
+const TRANSPORT_HALF_ORDINATES: usize = 16;
+/// Keep one sampled comparison per this many substeps, bounding the trace on a ~10⁴-step run.
+const TRANSPORT_SAMPLE_STRIDE: usize = 50;
+
+/// One transport-audit row: what FLD said the escape channel carried, what Sₙ says, and how much
+/// the channel matters.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct TransportCheckRecord {
+    v: f64,
+    rho_impact: f64,
+    length: f64,
+    e_eff: f64,
+    /// FLD's own escape integral (kernel channel 1b).
+    loss_escape_space: f64,
+    /// Sₙ escape integral on the Rosseland mean — the closure-comparison tally.
+    transport_escape_rosseland: f64,
+    /// Sₙ escape integral on the Planck mean — the mean-selection tally.
+    transport_escape_planck: f64,
+    /// `(Sₙ_rosseland − FLD)/FLD`. **The gate reads this.**
+    relative_bias: f64,
+    /// `(Sₙ_planck − FLD)/FLD`; its spread against `relative_bias` is the mean-selection band.
+    relative_bias_planck: f64,
+    /// Worst instantaneous `|bias|` over the run, and the slab `τ` where it happened.
+    worst_relative_difference: f64,
+    worst_optical_depth: f64,
+    /// Escape-weighted mean slab optical depth: where the escaping energy actually came from.
+    flux_weighted_optical_depth: f64,
+    /// Escape-weighted optical depth of the space-facing cell alone. FLD's Marshak boundary is only
+    /// meaningful while this is well under 1; above that its error is the mesh, not the closure.
+    flux_weighted_surface_cell_depth: f64,
+    /// Escape-weighted **Planck** optical depth of the space-facing cell — the number that says
+    /// whether FLD's Marshak boundary is being applied to a cell it can legitimately describe.
+    flux_weighted_surface_cell_depth_planck: f64,
+    /// Escape-weighted `FLD flux / σT⁴` of the space-facing gas. Above 1 is unphysical: no surface
+    /// radiates faster than a blackbody at its own temperature.
+    flux_weighted_fld_over_blackbody: f64,
+    /// Escape loss as a fraction of the slug's incident kinetic energy. A bias on a channel worth
+    /// 0.1% of the energy budget cannot move `f`, however large the ratio looks.
+    escape_share_of_ke: f64,
+    converged: bool,
+}
+
+/// Run one audited coupled bounce and reduce it to a [`TransportCheckRecord`].
+fn run_one_transport_check(v: f64, rho_impact: f64, base_tbl: &Table) -> TransportCheckRecord {
+    let cfg = Config {
+        v,
+        length: HEAVY_LENGTH,
+        ..Config::production()
+    };
+    let tube = Tube::slug_si(
+        cfg.gas_cells,
+        rho_impact,
+        cfg.v,
+        cfg.length,
+        cfg.t0,
+        TableEos::new(base_tbl.clone()),
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    );
+    let mut bounce = CoupledBounce::new(tube, None, cfg.consts, cfg.limiter).with_transport_audit(
+        TransportAudit::new(TRANSPORT_HALF_ORDINATES, TRANSPORT_SAMPLE_STRIDE),
+    );
+    let result = bounce.run();
+    let audit = bounce
+        .transport_audit()
+        .expect("audit was attached before the run");
+    // Incident KE per unit wall area: p = ρLv and KE = ½ρLv², so KE = p·v/2.
+    let incident_ke = 0.5 * result.bounce.incident_momentum * cfg.v;
+    TransportCheckRecord {
+        v: cfg.v,
+        rho_impact,
+        length: cfg.length,
+        e_eff: result.bounce.e_eff,
+        loss_escape_space: result.loss_escape_space,
+        transport_escape_rosseland: audit.transport_escape_rosseland,
+        transport_escape_planck: audit.transport_escape_planck,
+        relative_bias: audit.relative_bias(),
+        relative_bias_planck: audit.relative_bias_planck(),
+        worst_relative_difference: audit.worst_relative_difference,
+        worst_optical_depth: audit.worst_optical_depth,
+        flux_weighted_optical_depth: audit.flux_weighted_optical_depth,
+        flux_weighted_surface_cell_depth: audit.flux_weighted_surface_cell_depth,
+        flux_weighted_surface_cell_depth_planck: audit.flux_weighted_surface_cell_depth_planck,
+        flux_weighted_fld_over_blackbody: audit.flux_weighted_fld_over_blackbody,
+        escape_share_of_ke: result.loss_escape_space / incident_ke,
+        converged: result.bounce.converged,
+    }
+}
+
+/// Sweep the transport audit over `(v, ρ)` in parallel (rayon), input order.
+fn run_transport_check_sweep(base_tbl: &Table) -> Vec<TransportCheckRecord> {
+    let cases: Vec<(f64, f64)> = TRANSPORT_V
+        .iter()
+        .flat_map(|&v| TRANSPORT_RHO.iter().map(move |&rho| (v, rho)))
+        .collect();
+    par_map_with_progress("transport-check", &cases, |&(v, rho)| {
+        run_one_transport_check(v, rho, base_tbl)
+    })
+}
+
 // ---- Pulse-shape sensitivity sweep (design §13, ADR-0028) ---------------------------------------
 //
 // Raw `f(shape)` at the FIXED best-survivable baseline design (`d/D = 0.1` headline with a flat
@@ -1734,6 +1861,28 @@ fn cmd_jupiter(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 // Heavy-plate 16–28 km/s scenario sweep: the headline e_eff(v × ρ) grid + the L-sensitivity spot
 // rows + the opacity τ-check, all on the reused Jupiter extended-grid table. Needs
 // `make tables-jupiter` first.
+fn cmd_transport_check(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let table = Table::load(TABLE_PATH_JUPITER)?;
+    let rows = run_transport_check_sweep(&table);
+    emit_scenario(RESULT_PATH_TRANSPORT, "transport-check", &rows, |r| {
+        println!(
+            "rust: v={:>5.0} rho={:.3} -> tau_w={:.3e} bias_R={:+.2}% bias_P={:+.2}% \
+             dtauR={:.2e} dtauP={:.2e} fld/BB={:.2e} escape={:.3e} ({:.4}% of KE) e_eff={:.4}",
+            r.v,
+            r.rho_impact,
+            r.flux_weighted_optical_depth,
+            100.0 * r.relative_bias,
+            100.0 * r.relative_bias_planck,
+            r.flux_weighted_surface_cell_depth,
+            r.flux_weighted_surface_cell_depth_planck,
+            r.flux_weighted_fld_over_blackbody,
+            r.loss_escape_space,
+            100.0 * r.escape_share_of_ke,
+            r.e_eff,
+        );
+    })
+}
+
 fn cmd_heavyplate(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let table = Table::load(TABLE_PATH_JUPITER)?;
     let rows = run_heavyplate_sweep(&table);
@@ -1889,6 +2038,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--frozen-probe", cmd_frozen_probe),
     ("--frozen", cmd_frozen),
     ("--ablating", cmd_ablating),
+    ("--transport-check", cmd_transport_check),
     ("--jupiter", cmd_jupiter),
     ("--heavyplate", cmd_heavyplate),
     ("--shape", cmd_shape),

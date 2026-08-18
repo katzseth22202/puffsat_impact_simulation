@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 analysis-lte analysis-opacity-bracket tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 analysis-lte analysis-opacity-bracket sweep-transport-check analysis-transport-check tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -281,6 +281,23 @@ sweep-heavyplate: data/results/sweep_heavyplate.jsonl
 data/results/sweep_heavyplate.jsonl: data/tables/water_jupiter.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
 	@mkdir -p data/results
 	cargo run --release -p sweep -- --heavyplate
+
+## sweep-transport-check: Sn discrete-ordinates audit of FLD's escape-to-space channel across
+## 16-69 km/s (Q9/Q21, ADR-0012). One-way: it observes the FLD run without changing it, so it
+## yields a bias estimate on a loss channel, not a corrected e_eff ->
+## data/results/sweep_transport_check.jsonl; depends on tables-jupiter.
+sweep-transport-check: data/results/sweep_transport_check.jsonl
+
+data/results/sweep_transport_check.jsonl: data/tables/water_jupiter.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --transport-check
+
+## analysis-transport-check: reduce the audit to the verdict table (bias vs the 10% escalation gate,
+## weighted by how much energy the channel actually carries) -> data/results/transport_check.csv.
+analysis-transport-check: data/results/transport_check.csv
+
+data/results/transport_check.csv: data/results/sweep_transport_check.jsonl python/puffsat/transport_check.py
+	PYTHONPATH=python $(PY) -m puffsat.transport_check
 
 ## analysis-heavyplate: f(v) + facesheet-survivability frontier at the pinned 30 m / <=40 t plate ->
 ## data/results/frontier_heavyplate.csv + f(v) figure; depends on sweep-heavyplate (+ M=40 geometry).
