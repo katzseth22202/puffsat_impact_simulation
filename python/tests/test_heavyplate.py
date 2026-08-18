@@ -129,20 +129,62 @@ def test_best_at_v_picks_highest_surviving_f() -> None:
 def test_length_and_opacity_sensitivity_spreads() -> None:
     """The L-sensitivity and opacity-tau diagnostics report the e_eff spread across the spot rows;
     a flat (L,kappa) response gives ~0 (the design-§12.1 tau >> 1 signature)."""
+    rho = heavyplate.RHO_SPOT[2]
     rows = [
         # headline slice at L = 10, kappa = 1 for the anchor.
-        _row(16_000.0, 0.08, 0.66, length=10.0, scale=1.0),
+        _row(16_000.0, rho, 0.66, length=10.0, scale=1.0),
         # L-spot rows: e_eff essentially flat in L.
-        _row(16_000.0, 0.08, 0.66, length=6.0, scale=1.0),
-        _row(16_000.0, 0.08, 0.665, length=14.0, scale=1.0),
+        _row(16_000.0, rho, 0.66, length=6.0, scale=1.0),
+        _row(16_000.0, rho, 0.665, length=14.0, scale=1.0),
         # tau-check rows at 28 km/s: essentially flat in opacity scale.
-        _row(28_000.0, 0.08, 0.60, length=10.0, scale=1.0),
-        _row(28_000.0, 0.08, 0.60, length=10.0, scale=0.1),
-        _row(28_000.0, 0.08, 0.601, length=10.0, scale=10.0),
+        _row(28_000.0, rho, 0.60, length=10.0, scale=1.0),
+        _row(28_000.0, rho, 0.60, length=10.0, scale=0.1),
+        _row(28_000.0, rho, 0.601, length=10.0, scale=10.0),
     ]
-    spreads = heavyplate.length_sensitivity(rows, 0.08)
+    spreads = heavyplate.length_sensitivity(rows, rho)
     assert spreads[16_000.0] == pytest.approx(0.005, abs=1e-9)
-    assert heavyplate.opacity_sensitivity(rows, 0.08) == pytest.approx(0.001, abs=1e-9)
+    assert heavyplate.opacity_sensitivity(rows, rho)[28_000.0] == pytest.approx(0.001, abs=1e-9)
+
+
+def test_diagnostics_see_the_extended_anchors_not_just_16_to_28() -> None:
+    """The regression that matters. Both diagnostics were written when the sweep stopped at 28
+    km/s, and both rest on `tau >> 1` -- a premise that expires in the 45-63 km/s extension, where
+    `L` sets when the slab goes transparent and the opacity check exists precisely to detect it.
+
+    So a row set that is flat at 16-28 and *sensitive* at 63 must be reported as sensitive. Scanning
+    only the old anchors would return "all flat" and hide exactly the finding the extension was run
+    to obtain -- a silent miss, not an error."""
+    rho = heavyplate.RHO_SPOT[0]
+    rows = [
+        # 16 km/s: flat in both, the settled tau >> 1 regime.
+        _row(16_000.0, rho, 0.66, length=10.0, scale=1.0),
+        _row(16_000.0, rho, 0.66, length=6.0, scale=1.0),
+        _row(16_000.0, rho, 0.66, length=14.0, scale=1.0),
+        _row(16_000.0, rho, 0.66, length=10.0, scale=0.1),
+        _row(16_000.0, rho, 0.66, length=10.0, scale=10.0),
+        # 63 km/s: strongly L- and opacity-sensitive, the thin-slab signature.
+        _row(63_000.0, rho, 0.50, length=10.0, scale=1.0),
+        _row(63_000.0, rho, 0.42, length=6.0, scale=1.0),
+        _row(63_000.0, rho, 0.55, length=14.0, scale=1.0),
+        _row(63_000.0, rho, 0.38, length=10.0, scale=0.1),
+        _row(63_000.0, rho, 0.60, length=10.0, scale=10.0),
+    ]
+
+    l_spreads = heavyplate.length_sensitivity(rows, rho)
+    tau_spreads = heavyplate.opacity_sensitivity(rows, rho)
+
+    assert l_spreads[16_000.0] == pytest.approx(0.0, abs=1e-12)
+    assert tau_spreads[16_000.0] == pytest.approx(0.0, abs=1e-12)
+    assert l_spreads[63_000.0] == pytest.approx(0.13, abs=1e-9)
+    assert tau_spreads[63_000.0] == pytest.approx(0.22, abs=1e-9)
+
+    # And the diagnostic velocity list must actually reach the top of the extended range.
+    assert 63_000.0 in heavyplate.V_DIAG
+    assert max(heavyplate.V_DIAG) >= 63_000.0
+
+    # The spot densities must be the ones the Rust sweep emits diagnostic rows at; picking a
+    # density outside that set finds nothing and reports a falsely clean bill of health.
+    assert heavyplate.RHO_SPOT == (0.01, 0.04, 0.10, 0.28)
 
 
 def test_frozen_bracket_subtracts_eos_delta_from_coupled_headline() -> None:

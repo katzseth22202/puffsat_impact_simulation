@@ -33,6 +33,7 @@ companion in `puffsat.structure` (ADR-0027), decoupled from this `f(v)` frontier
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from dataclasses import dataclass, fields
 from pathlib import Path
 
@@ -74,8 +75,15 @@ LENGTH_ANCHOR = 10.0
 # The three freeze-timing / L-sensitivity bracket anchors [m/s] (design §12.1) — must match the Rust
 # `HEAVY_V_ANCHORS`.
 V_ANCHORS = (16_000.0, 22_000.0, 28_000.0)
-# The opacity τ-check velocity [m/s] (design §12.1) — must match the Rust `HEAVY_TAU_V`.
-V_TAU_CHECK = 28_000.0
+# The diagnostic velocities [m/s] the L-sensitivity and opacity tau-check rows run at - must match
+# the Rust `HEAVY_DIAG_V`. Wider than `V_ANCHORS` on purpose: both diagnostics were justified by
+# `tau >> 1` holding over 16-28 km/s, and both justifications expire in the extension, so they now
+# run where they are most likely to fail rather than where they are most likely to pass.
+V_DIAG = (16_000.0, 22_000.0, 28_000.0, 45_000.0, 55_000.0, 63_000.0)
+# The density subset [kg/m^3] the diagnostic rows are emitted at - must match the Rust
+# `HEAVY_SPOT_RHO`. Reading a diagnostic at a density outside this set finds no rows and reports a
+# falsely clean bill of health, so it is a constant rather than a hand-picked literal.
+RHO_SPOT = (0.01, 0.04, 0.10, 0.28)
 
 # Plate areal density [kg/m²]: baseline stack 3-4 t at R = 5 m (design §2) ⇒ 38-51 band. At
 # R = 15 m the 45-central value is ~32 t flat (`45·π·15²`), inside the ≤ 40 t ceiling with margin.
@@ -268,7 +276,7 @@ def length_sensitivity(rows: list[HeavyPlateRow], rho: float) -> dict[float, flo
     opacity): the design-§12.1 check that `τ ≫ 1` makes `e_eff` `L`-insensitive."""
     lengths = sorted({r.length for r in rows if abs(r.opacity_scale - 1.0) <= FLOAT_TOL})
     spreads: dict[float, float] = {}
-    for v in V_ANCHORS:
+    for v in V_DIAG:
         vals = []
         for length in lengths:
             try:
@@ -280,17 +288,48 @@ def length_sensitivity(rows: list[HeavyPlateRow], rho: float) -> dict[float, flo
     return spreads
 
 
-def opacity_sensitivity(rows: list[HeavyPlateRow], rho: float) -> float:
-    """Max `e_eff` spread across the opacity scales at the τ-check velocity (fixed `rho`, headline
-    length): small ⇒ `τ ≫ 1` at the dilute top and the equilibrium headline is opacity-robust."""
-    scales = sorted({r.opacity_scale for r in rows if abs(r.v - V_TAU_CHECK) <= FLOAT_TOL})
-    vals = []
-    for scale in scales:
-        try:
-            vals.append(_e_eff_at(rows, V_TAU_CHECK, rho, LENGTH_ANCHOR, scale))
-        except KeyError:
-            continue
-    return max(vals) - min(vals) if len(vals) >= 2 else 0.0
+# Above this `e_eff` spread across the 0.1x-10x opacity bracket, the slab is responding to opacity
+# and `tau >> 1` no longer holds. Same threshold the 16-28 km/s study used to declare the headline
+# opacity-robust, kept identical so the extension is judged by the criterion it inherited.
+TAU_FLAT_TOL = 0.02
+
+
+def _worst_over_densities(
+    diagnostic: Callable[[list[HeavyPlateRow], float], dict[float, float]],
+    rows: list[HeavyPlateRow],
+) -> dict[float, float]:
+    """Per-velocity worst spread of `diagnostic` over the diagnostic densities.
+
+    A max, not a mean: the question these answer is whether the `τ ≫ 1` shortcut *ever* fails
+    across the range, and averaging would let flatness at three densities bury a failure at the
+    fourth."""
+    worst: dict[float, float] = {}
+    for rho in RHO_SPOT:
+        for v, spread in diagnostic(rows, rho).items():
+            if v not in worst or abs(spread) > abs(worst[v]):
+                worst[v] = spread
+    return worst
+
+
+def opacity_sensitivity(rows: list[HeavyPlateRow], rho: float) -> dict[float, float]:
+    """Max `e_eff` spread across the opacity scales at each diagnostic velocity (fixed `rho`,
+    headline length): small ⇒ `τ ≫ 1` there and the equilibrium headline is opacity-robust.
+
+    Returns a spread *per velocity* rather than one number. A single figure taken at 28 km/s was
+    adequate while the sweep stopped there; across 16-63 it would average away the thin-slab end,
+    which is the only part of the range where the answer is in doubt."""
+    spreads: dict[float, float] = {}
+    for v in V_DIAG:
+        scales = sorted({r.opacity_scale for r in rows if abs(r.v - v) <= FLOAT_TOL})
+        vals = []
+        for scale in scales:
+            try:
+                vals.append(_e_eff_at(rows, v, rho, LENGTH_ANCHOR, scale))
+            except KeyError:
+                continue
+        if len(vals) >= 2:
+            spreads[v] = max(vals) - min(vals)
+    return spreads
 
 
 def plot_f_of_v(
@@ -508,23 +547,35 @@ def main() -> None:
     write_summary(points, args.summary)
     figs = plot_f_of_v(points, args.plot_dir)
 
-    # Design-§12.1 diagnostics: e_eff should be flat in L (τ ≫ 1) and flat in opacity at the top.
-    rho_probe = 0.08  # a representative mid-grid density present in every slice
-    l_spreads = length_sensitivity(sweep_rows, rho_probe)
-    tau_spread = opacity_sensitivity(sweep_rows, rho_probe)
+    # Design-§12.1 diagnostics. Over 16-28 km/s these confirmed `tau >> 1` (flat in both L and
+    # kappa); across 16-63 they are a genuine question, so report the *worst* spread over the
+    # diagnostic densities rather than a single hand-picked one - a max cannot hide a failure at
+    # one density behind flatness at another.
+    l_spreads = _worst_over_densities(length_sensitivity, sweep_rows)
+    tau_spreads = _worst_over_densities(opacity_sensitivity, sweep_rows)
 
     print(
         f"geometry anchor: M = {mach:.0f} ({len(geo_rows)} cases); plate R = {PLATE_RADIUS_M} m, "
         f"m = {PULSE_MASS_KG} kg, ≤ {PLATE_MASS_CEILING_KG / 1000:.0f} t"
     )
     print(
-        f"L-sensitivity at rho={rho_probe} (τ ≫ 1 ⇒ ~0): "
+        "L-sensitivity, worst over rho in "
+        + f"{RHO_SPOT} (τ ≫ 1 ⇒ ~0): "
         + ", ".join(f"{v / 1000:.0f} km/s Δe_eff={d:+.4f}" for v, d in sorted(l_spreads.items()))
     )
     print(
-        f"opacity τ-check at 28 km/s, rho={rho_probe}: Δe_eff={tau_spread:+.4f} over 0.1x-10x κ "
-        f"({'τ ≫ 1 confirmed' if abs(tau_spread) < 0.02 else 'opacity-sensitive — τ ~ 1'})"
+        "opacity τ-check over 0.1x-10x κ, worst over the same rho: "
+        + ", ".join(f"{v / 1000:.0f} km/s Δe_eff={d:+.4f}" for v, d in sorted(tau_spreads.items()))
     )
+    thin = sorted(v for v, d in tau_spreads.items() if abs(d) >= TAU_FLAT_TOL)
+    if thin:
+        print(
+            "  opacity-sensitive (τ ~ 1, NOT τ ≫ 1) at: "
+            + ", ".join(f"{v / 1000:.0f} km/s" for v in thin)
+            + " — the L-insensitivity shortcut does not extend here"
+        )
+    else:
+        print("  τ ≫ 1 confirmed at every diagnostic velocity")
 
     # The 16 km/s overlap with the core envelope study (consistency check).
     overlap = best_at_v(points, 16_000.0, concave=True) or best_at_v(points, 16_000.0)
