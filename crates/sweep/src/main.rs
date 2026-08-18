@@ -888,16 +888,35 @@ fn run_jupiter_sweep(base_tbl: &Table) -> Vec<JupiterRecord> {
 // geometry sweep (scale-invariant), and the whole-plate structural go/no-go is the closed-form
 // companion (ADR-0027, `puffsat.structure`), decoupled from `f(v)`.
 
-/// Velocity sweep floor [m/s] and step: 16–28 km/s at 0.5 km/s → [`HEAVY_N_V`] anchors (design
-/// §12.1). Built in code from these endpoints (see [`heavy_v_grid`]).
-const HEAVY_V_LO: f64 = 16_000.0;
-const HEAVY_V_STEP: f64 = 500.0;
-const HEAVY_N_V: usize = 25;
+/// The **two-leg** velocity grid (Q17), 16–63 km/s in [`HEAVY_N_V`] anchors, built by
+/// [`heavy_v_grid`] from these endpoints.
+///
+/// Two legs because the two halves of the range are known to different degrees. Over 16–43 the
+/// existing study already showed `e_eff` varying smoothly, so 3 km/s is reconnaissance. Over
+/// 45–63 — the extension's own range — the curve has never been sampled and the `τ` structure is
+/// unknown, so it gets 1 km/s. The 43 → 45 seam is a 2 km/s join: finer than the coarse leg,
+/// coarser than the fine one, so nothing is lost across it.
+const HEAVY_V_COARSE_LO: f64 = 16_000.0;
+const HEAVY_V_COARSE_STEP: f64 = 3_000.0;
+const HEAVY_N_V_COARSE: usize = 10;
+const HEAVY_V_FINE_LO: f64 = 45_000.0;
+const HEAVY_V_FINE_STEP: f64 = 1_000.0;
+const HEAVY_N_V_FINE: usize = 19;
+const HEAVY_N_V: usize = HEAVY_N_V_COARSE + HEAVY_N_V_FINE;
 /// The freeze-timing / `L`-sensitivity bracket anchors [m/s] (design §12.1: 16 / 22 / 28 km/s).
+/// All three must land on the coarse leg — Q4 runs the full frozen-table pipeline at exactly these.
 const HEAVY_V_ANCHORS: [f64; 3] = [16_000.0, 22_000.0, 28_000.0];
-/// Impact-density grid [kg/m³], ~0.01–0.6 (design §12.1): the dilute wide-footprint corner up to the
-/// dense tight-disk corner the Σ contract reaches at `m = 100 kg`, `R = 15 m`.
-const HEAVY_RHO: [f64; 7] = [0.01, 0.02, 0.04, 0.08, 0.15, 0.3, 0.6];
+/// Impact-density grid [kg/m³] (Q11), 0.01–0.58: the dilute wide-footprint corner up to the dense
+/// tight-disk corner the Σ contract reaches at `m = 100 kg`, `R = 15 m`.
+///
+/// Deliberately non-uniform. It is **dense through 0.06–0.20**, the steep on-contour band where
+/// `ρ_ceiling(v)` actually lives and where Q15 interpolates the curve, and **coarse across the flat
+/// top**, where `e_eff` barely moves and extra points would only cost run time. The three points
+/// below 0.06 exist to support Q15's validation points, not to resolve a region the contour spends
+/// time in.
+const HEAVY_RHO: [f64; 12] = [
+    0.01, 0.02, 0.04, 0.06, 0.08, 0.10, 0.12, 0.15, 0.20, 0.28, 0.40, 0.58,
+];
 /// Fixed representative stretched-cloud length [m] the headline `e_eff(v, ρ)` grid runs at (design
 /// §12.1: `L ≈ 8–10 m`). The Python frontier reads this slice as its headline.
 const HEAVY_LENGTH: f64 = 10.0;
@@ -978,9 +997,11 @@ fn run_one_heavyplate(
 
 /// The 25-anchor heavy-plate velocity grid [m/s]: 16–28 km/s at 0.5 km/s.
 fn heavy_v_grid() -> Vec<f64> {
-    (0..HEAVY_N_V)
-        .map(|i| HEAVY_V_LO + HEAVY_V_STEP * i as f64)
-        .collect()
+    let coarse = (0..HEAVY_N_V_COARSE).map(|i| HEAVY_V_COARSE_LO + HEAVY_V_COARSE_STEP * i as f64);
+    let fine = (0..HEAVY_N_V_FINE).map(|i| HEAVY_V_FINE_LO + HEAVY_V_FINE_STEP * i as f64);
+    let mut grid = Vec::with_capacity(HEAVY_N_V);
+    grid.extend(coarse.chain(fine));
+    grid
 }
 
 /// Sweep the heavy-plate grid in parallel (rayon), input order: the headline `v(25) × ρ(7)` at fixed
@@ -2235,11 +2256,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use super::{
         ABL_KAPPA_VAPOR, ABL_Q_STAR, AblatingRecord, Config, GeoConfig, GeoRecord, HEAVY_N_V,
-        HEAVY_V_ANCHORS, HeavyPlateRecord, LowvConfig, Record, SHAPE_ALPHA, SHAPE_NOM_L_OVER_D,
-        SHAPE_NOM_RFOOT_OVER_R, SHAPE_REL, SHAPE_TAPER, SHAPE_V, Shape1DRecord, ShapeRecord,
-        TABLE_DIR_FROZEN, TABLE_DIR_FROZEN_HEAVYPLATE, TABLE_DIR_FROZEN_JUPITER, frozen_table_path,
-        heavy_v_grid, run_ablating_case, run_eta_case, run_one, run_one_frozen, run_sweep,
-        run_sweep_frozen_probe, run_sweep_lowv, run_sweep_transitional, shape_1d_cases,
+        HEAVY_RHO, HEAVY_V_ANCHORS, HeavyPlateRecord, LowvConfig, Record, SHAPE_ALPHA,
+        SHAPE_NOM_L_OVER_D, SHAPE_NOM_RFOOT_OVER_R, SHAPE_REL, SHAPE_TAPER, SHAPE_V, Shape1DRecord,
+        ShapeRecord, TABLE_DIR_FROZEN, TABLE_DIR_FROZEN_HEAVYPLATE, TABLE_DIR_FROZEN_JUPITER,
+        frozen_table_path, heavy_v_grid, run_ablating_case, run_eta_case, run_one, run_one_frozen,
+        run_sweep, run_sweep_frozen_probe, run_sweep_lowv, run_sweep_transitional, shape_1d_cases,
         shape_2d_cases, shape_frozen_rho_grid, shape_nominal, shape_rho_length, shape_samples,
     };
     use hydro1d::radiation::{Limiter, RadConstants};
@@ -2523,30 +2544,92 @@ mod tests {
         );
     }
 
-    /// The heavy-plate velocity grid is the 25 anchors 16–28 km/s at 0.5 km/s (design §12.1): a
-    /// 16 km/s floor (the core-study overlap point), a 28 km/s ceiling, and a uniform 0.5 km/s step,
-    /// with the three bracket anchors (16 / 22 / 28 km/s) all landing on the grid.
+    /// The heavy-plate velocity grid is the **two-leg 29-anchor 16–63 km/s** grid (Q17): a coarse
+    /// 3 km/s reconnaissance leg over 16–43, where the existing 16–28 study already showed `e_eff`
+    /// varying smoothly, and a fine 1 km/s leg over 45–63, the extension's own range, where the
+    /// curve has never been sampled and the `τ` structure is unknown.
+    ///
+    /// The 43 → 45 gap is deliberate, not an off-by-one: it is the seam between the two legs, and
+    /// spacing there is 2 km/s — finer than the coarse leg, coarser than the fine one — so no
+    /// resolution is lost across the join.
+    ///
+    /// The three freeze-bracket anchors (16 / 22 / 28 km/s) must land on the grid, since Q4 runs
+    /// the full probe → frozen-table → three-curve pipeline at exactly those velocities.
     #[test]
-    fn heavy_v_grid_is_25_anchors() {
+    fn heavy_v_grid_is_29_anchors_over_two_legs() {
         let grid = heavy_v_grid();
         assert_eq!(grid.len(), HEAVY_N_V);
-        assert_eq!(grid.len(), 25);
+        assert_eq!(grid.len(), 29);
         assert!((grid[0] - 16_000.0).abs() < 1e-9);
-        assert!((grid[grid.len() - 1] - 28_000.0).abs() < 1e-9);
-        for pair in grid.windows(2) {
+        assert!((grid[grid.len() - 1] - 63_000.0).abs() < 1e-9);
+
+        let coarse: Vec<f64> = grid.iter().copied().filter(|&v| v <= 43_000.0).collect();
+        let fine: Vec<f64> = grid.iter().copied().filter(|&v| v >= 45_000.0).collect();
+        assert_eq!(coarse.len(), 10, "16–43 km/s at 3 km/s is 10 anchors");
+        assert_eq!(fine.len(), 19, "45–63 km/s at 1 km/s is 19 anchors");
+
+        for pair in coarse.windows(2) {
             assert!(
-                (pair[1] - pair[0] - 500.0).abs() < 1e-9,
-                "non-uniform 0.5 km/s step: {} -> {}",
+                (pair[1] - pair[0] - 3_000.0).abs() < 1e-9,
+                "coarse leg must step 3 km/s: {} -> {}",
                 pair[0],
                 pair[1]
             );
         }
+        for pair in fine.windows(2) {
+            assert!(
+                (pair[1] - pair[0] - 1_000.0).abs() < 1e-9,
+                "fine leg must step 1 km/s: {} -> {}",
+                pair[0],
+                pair[1]
+            );
+        }
+        // Strictly increasing overall, and the seam is the 2 km/s join.
+        assert!(grid.windows(2).all(|w| w[1] > w[0]));
+        assert!((fine[0] - coarse[coarse.len() - 1] - 2_000.0).abs() < 1e-9);
+
         for &a in &HEAVY_V_ANCHORS {
             assert!(
                 grid.iter().any(|&v| (v - a).abs() < 1e-9),
                 "bracket anchor {a} not on the swept grid"
             );
         }
+    }
+
+    /// The Q11 density grid: 12 points, ascending, dense through the steep on-contour band
+    /// 0.06–0.20 and coarse across the flat top, with only three dilute points below 0.06 —
+    /// those exist to support Q15's validation points, not to resolve a region the contour spends
+    /// time in.
+    #[test]
+    fn heavy_rho_grid_is_twelve_points_dense_on_contour() {
+        assert_eq!(HEAVY_RHO.len(), 12);
+        assert!(HEAVY_RHO.windows(2).all(|w| w[1] > w[0]), "must ascend");
+        assert!((HEAVY_RHO[0] - 0.01).abs() < 1e-12);
+        assert!((HEAVY_RHO[HEAVY_RHO.len() - 1] - 0.58).abs() < 1e-12);
+
+        let on_contour = HEAVY_RHO
+            .iter()
+            .filter(|&&r| (0.06..=0.20).contains(&r))
+            .count();
+        assert_eq!(
+            on_contour, 6,
+            "steep on-contour band 0.06–0.20 gets 6 points"
+        );
+        assert_eq!(
+            HEAVY_RHO.iter().filter(|&&r| r < 0.06).count(),
+            3,
+            "three dilute points, for Q15 validation only"
+        );
+
+        // Spacing widens monotonically above the on-contour band — the flat top is deliberately
+        // coarse, and a regression that "helpfully" evened out the grid would cost run time in the
+        // region the answer does not depend on.
+        let top: Vec<f64> = HEAVY_RHO.iter().copied().filter(|&r| r >= 0.15).collect();
+        let gaps: Vec<f64> = top.windows(2).map(|w| w[1] - w[0]).collect();
+        assert!(
+            gaps.windows(2).all(|g| g[1] > g[0]),
+            "flat-top spacing should widen: {gaps:?}"
+        );
     }
 
     /// A `HeavyPlateRecord` round-trips through the JSONL boundary (ADR-0019): the Python heavyplate
