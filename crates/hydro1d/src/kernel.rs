@@ -101,6 +101,21 @@ pub struct BounceResult {
     /// temperature, since the wall cell is doubly shocked. `0` on the stick and frozen-rebound paths
     /// (not tracked there).
     pub peak_wall_temperature: f64,
+    /// Whether the run reached the `10⁻³`-of-peak tail guard rather than exhausting its step
+    /// budget (Q6, 2026-08-17).
+    ///
+    /// A run that exhausts the budget stopped **mid-infall**: the impulse integral is truncated,
+    /// so `e_eff` is not a restitution, it is an artifact. That failure mode is real and was
+    /// silent — the heavy-plate `v = 28 km/s, ρ = 0.6, κ = 10×` row reported `e_eff = 0.0562`
+    /// against neighbours of 0.6749–0.6783, because the radiatively-cooled wall cell was
+    /// compressed past the Jupiter table's ρ = 30 kg/m³ ceiling where the clamped `p(ρ)` stops
+    /// arresting the compression (cell width → 0, `dt` → 0). It also survived a regression gate,
+    /// since the stored baseline carried the identical corruption. Downstream consumers should
+    /// treat `!converged` as *no result*, not as a low one.
+    ///
+    /// Always `true` on the stick and frozen-rebound paths, whose termination is a stagnation
+    /// crossing rather than this tail guard.
+    pub converged: bool,
 }
 
 /// A 1D Lagrangian gas column on a staggered mesh, carrying its equation of state `E`.
@@ -143,6 +158,12 @@ trait BounceStepper {
     /// Advance the state by one step of `dt` — the part that varies per bounce variant.
     fn step(&mut self, dt: f64);
 
+    /// Safety cap on the integration. A run that hits it stopped mid-bounce; see
+    /// [`BounceResult::converged`]. Overridable so the guard itself is testable without physics.
+    fn max_steps(&self) -> usize {
+        400 * self.cells() + 10_000
+    }
+
     /// Fire the slug at the wall and integrate to the `10⁻³`-of-peak tail guard, returning the
     /// wall impulse and the restitution it implies.
     fn run_bounce_loop(&mut self) -> BounceResult {
@@ -153,9 +174,9 @@ trait BounceStepper {
         let mut peak_temperature: f64 = 0.0;
         let mut past_peak = false;
         let mut force_old = self.wall_force();
-        let max_steps = 400 * self.cells() + 10_000;
+        let mut converged = false;
 
-        for _ in 0..max_steps {
+        for _ in 0..self.max_steps() {
             peak = peak.max(force_old);
             peak_pressure = peak_pressure.max(self.wall_pressure());
             peak_temperature = peak_temperature.max(self.wall_temperature());
@@ -163,6 +184,7 @@ trait BounceStepper {
                 past_peak = true;
             }
             if past_peak && force_old < 1e-3 * peak {
+                converged = true;
                 break;
             }
             let dt = self.stable_dt();
@@ -180,6 +202,7 @@ trait BounceStepper {
             peak_wall_force: peak,
             peak_wall_pressure: peak_pressure,
             peak_wall_temperature: peak_temperature,
+            converged,
         }
     }
 }
@@ -598,6 +621,7 @@ impl<E: Eos> Tube<E> {
                     peak_wall_force: peak,
                     peak_wall_pressure: peak_pressure,
                     peak_wall_temperature: 0.0, // not tracked on the stick path
+                    converged: true, // stagnation crossed — this path's completion condition
                 };
             }
 
@@ -616,6 +640,7 @@ impl<E: Eos> Tube<E> {
             peak_wall_force: peak,
             peak_wall_pressure: peak_pressure,
             peak_wall_temperature: 0.0, // not tracked on the stick path
+            converged: false, // budget exhausted before stagnation — the impulse is truncated
         }
     }
 }
@@ -972,6 +997,7 @@ impl Tube<TableEos> {
                 peak_wall_force: peak,
                 peak_wall_pressure: peak_pressure,
                 peak_wall_temperature: 0.0, // not tracked on the frozen-rebound path
+                converged: true,            // stagnation-crossing termination, not the tail guard
             },
             rho_star,
             t_star,
@@ -2317,6 +2343,84 @@ mod tests {
             e_rich > e_plain && e_plain > e_poor,
             "rebound should order with the swapped-in thermal pool: rich {e_rich} vs plain \
              {e_plain} vs poor {e_poor}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod stall_guard_tests {
+    use super::{BounceResult, BounceStepper};
+
+    /// A stepper whose wall force follows a prescribed schedule, so the loop's *termination* can
+    /// be tested without any physics. `decay` controls whether the force ever falls to the
+    /// `10⁻³`-of-peak tail guard.
+    struct ScriptedStepper {
+        force: f64,
+        decay: f64,
+        budget: usize,
+    }
+
+    impl BounceStepper for ScriptedStepper {
+        fn wall_force(&self) -> f64 {
+            self.force
+        }
+        fn wall_pressure(&self) -> f64 {
+            self.force
+        }
+        fn wall_temperature(&self) -> f64 {
+            0.0
+        }
+        fn stable_dt(&self) -> f64 {
+            1e-3
+        }
+        fn total_momentum(&self) -> f64 {
+            -1.0
+        }
+        fn cells(&self) -> usize {
+            1
+        }
+        fn max_steps(&self) -> usize {
+            self.budget
+        }
+        fn step(&mut self, _dt: f64) {
+            self.force *= self.decay;
+        }
+    }
+
+    /// A bounce that reaches the tail guard has integrated the whole impulse, so its `e_eff` means
+    /// what it says.
+    #[test]
+    fn a_completed_bounce_reports_converged() {
+        let mut s = ScriptedStepper {
+            force: 1.0,
+            decay: 0.5,
+            budget: 1000,
+        };
+        let r: BounceResult = s.run_bounce_loop();
+        assert!(
+            r.converged,
+            "force decayed to the tail guard, so the run completed"
+        );
+    }
+
+    /// A bounce that exhausts its step budget stopped **mid-infall**: the impulse integral is
+    /// truncated and `e_eff` is meaningless. This is exactly what the v = 28 km/s, rho = 0.6,
+    /// kappa = 10x heavy-plate row did before the Jupiter table's rho-grid extension (Q6) — it
+    /// reported e_eff = 0.0562 against neighbours of 0.6749-0.6783, and nothing in the output
+    /// said so. It also passed the regression gate, because the stored baseline was identically
+    /// corrupt. The flag makes such a row self-identifying instead of merely implausible.
+    #[test]
+    fn a_stalled_bounce_reports_not_converged() {
+        // Force never decays, so the tail guard can never fire.
+        let mut s = ScriptedStepper {
+            force: 1.0,
+            decay: 1.0,
+            budget: 50,
+        };
+        let r: BounceResult = s.run_bounce_loop();
+        assert!(
+            !r.converged,
+            "the step budget ran out before the tail guard fired"
         );
     }
 }

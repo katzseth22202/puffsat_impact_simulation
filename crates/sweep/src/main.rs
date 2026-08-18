@@ -818,6 +818,9 @@ struct JupiterRecord {
     wall_impulse: f64,
     loss_radiative_wall: f64,
     loss_escape_space: f64,
+    /// Whether the bounce reached its tail guard (`BounceResult::converged`, Q6). Same contract
+    /// as the heavy-plate record: `false` means no result, not a low one.
+    converged: bool,
 }
 
 /// Run one 69 km/s coupled bounce at `(rho, length)` on an opacity-scaled table.
@@ -849,6 +852,7 @@ fn run_one_jupiter(rho_impact: f64, length: f64, scale: f64, base_tbl: &Table) -
         wall_impulse: result.bounce.wall_impulse,
         loss_radiative_wall: result.loss_radiative_wall,
         loss_escape_space: result.loss_escape_space,
+        converged: result.bounce.converged,
     }
 }
 
@@ -925,6 +929,10 @@ struct HeavyPlateRecord {
     wall_impulse: f64,
     loss_radiative_wall: f64,
     loss_escape_space: f64,
+    /// Whether the bounce reached its tail guard rather than exhausting its step budget
+    /// (`BounceResult::converged`, Q6). A `false` row stopped mid-infall and its `e_eff` is an
+    /// artifact, not a low restitution — the analysis must reject it, not average it in.
+    converged: bool,
 }
 
 /// Run one heavy-plate coupled bounce at `(v, rho, length)` on an opacity-scaled table.
@@ -962,6 +970,7 @@ fn run_one_heavyplate(
         wall_impulse: result.bounce.wall_impulse,
         loss_radiative_wall: result.loss_radiative_wall,
         loss_escape_space: result.loss_escape_space,
+        converged: result.bounce.converged,
     }
 }
 
@@ -2232,6 +2241,7 @@ mod tests {
             wall_impulse: 3.06e4,
             loss_radiative_wall: 1.0e6,
             loss_escape_space: 1.0e5,
+            converged: true,
         };
         let line = serde_json::to_string(&rec).unwrap();
         let back: HeavyPlateRecord = serde_json::from_str(&line).unwrap();
@@ -2247,6 +2257,7 @@ mod tests {
             "wall_impulse",
             "loss_radiative_wall",
             "loss_escape_space",
+            "converged",
         ] {
             assert!(line.contains(key), "missing field {key}");
         }

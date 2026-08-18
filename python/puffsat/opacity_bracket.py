@@ -89,24 +89,37 @@ def measure_slopes_checked(
     real-opacity row rather than extrapolated from one side, skipping any pair that includes a
     stalled row.
 
-    A stalled run reports a near-zero `e_eff` that is not a physical opacity response, and fitting
-    through it can flip the slope's sign. Such rows are excluded and returned so the caller can
-    report them rather than silently dropping evidence of a solver problem.
+    A stalled run reports a truncated impulse integral, so its `e_eff` is not a physical opacity
+    response, and fitting through it can flip the slope's sign. Such rows are excluded and returned
+    so the caller can report them rather than silently dropping evidence of a solver problem.
+
+    Rows carrying the kernel's `converged` flag are judged by it. The magnitude heuristic is only
+    the fallback for older files written before the flag existed, and it can catch a stall solely
+    when the artifact happens to look implausible — a stall that lands on a believable number would
+    slip past it.
     """
     grouped: dict[tuple[float, float, float], dict[float, float]] = defaultdict(dict)
+    flagged: set[tuple[float, float, float, float]] = set()
     for line in sweep_path.read_text().splitlines():
         if not line.strip():
             continue
         r = json.loads(line)
         key = (float(r["v"]), float(r["rho_impact"]), float(r["length"]))
-        grouped[key][float(r["opacity_scale"])] = float(r["e_eff"])
+        scale = float(r["opacity_scale"])
+        grouped[key][scale] = float(r["e_eff"])
+        if r.get("converged") is False:
+            flagged.add((*key, scale))
 
     out: dict[tuple[float, float, float], float] = {}
     stalled: list[tuple[float, float, float, float]] = []
     for key, by_scale in sorted(grouped.items()):
-        values = sorted(by_scale.values())
-        median = values[len(values) // 2]
-        bad = {s for s, e in by_scale.items() if e < STALL_FRACTION * median}
+        explicit = {s for s in by_scale if (*key, s) in flagged}
+        if explicit:
+            bad = explicit
+        else:
+            values = sorted(by_scale.values())
+            median = values[len(values) // 2]
+            bad = {s for s, e in by_scale.items() if e < STALL_FRACTION * median}
         stalled.extend(sorted((*key, s) for s in bad))
         for lo, hi in ((0.1, 10.0), (0.3, 3.0)):
             if lo in by_scale and hi in by_scale and lo not in bad and hi not in bad:

@@ -291,3 +291,29 @@ def test_kappa_scale_rescales_opacity_only() -> None:
         10.0 * np.array(base_fields["kappa_rosseland"]),
         rtol=1e-12,
     )
+
+
+def test_jupiter_rho_grid_is_extended_node_preservingly() -> None:
+    """Q6: `build_table_jupiter` never received `4ddaed5`'s rho-grid extension, so it still
+    ceilinged at 30 kg/m^3 while `water.json` reached 1198. That is not cosmetic — the heavy-plate
+    sweep loads this table, and its v = 28 km/s, rho = 0.6, kappa = 10x row stalled mid-infall with
+    e_eff = 0.0562 against neighbours of 0.6749-0.6783, because the radiatively-cooled wall cell
+    was compressed past the ceiling where clamped p(rho) stops arresting the compression.
+
+    The contract is node preservation: the first `N_RHO_JUPITER` nodes must be the *array
+    elements* of the old grid, bit-for-bit, so every query that stayed below the old ceiling
+    interpolates identically and every prior result reproduces exactly."""
+    old = np.geomspace(
+        tables.RHO_RANGE_JUPITER[0], tables.RHO_RANGE_JUPITER[1], tables.N_RHO_JUPITER
+    )
+    grid = tables.jupiter_rho_grid()
+
+    assert len(grid) > tables.N_RHO_JUPITER
+    np.testing.assert_array_equal(grid[: tables.N_RHO_JUPITER], old)  # bit-identical, not approx
+    assert grid[-1] >= tables.RHO_EXTEND_TO
+    # Continues on the base grid's own log step, so the extension has no seam.
+    step = (tables.RHO_RANGE_JUPITER[1] / tables.RHO_RANGE_JUPITER[0]) ** (
+        1.0 / (tables.N_RHO_JUPITER - 1)
+    )
+    ratios = grid[1:] / grid[:-1]
+    np.testing.assert_allclose(ratios, step, rtol=1e-12)

@@ -231,8 +231,29 @@ def build_table(
     }
 
 
+def jupiter_rho_grid(extend_to: float | None = RHO_EXTEND_TO) -> Vec:
+    """The Jupiter/heavy-plate scenario density grid, extended node-preservingly (Q6).
+
+    This table serves both the 69 km/s Jupiter scenario and the heavy-plate band, and it did not
+    receive `4ddaed5`'s extension when `build_table` did — so it ceilinged at 30 kg/m^3 while
+    `water.json` reached 1198. The radiatively-cooled wall cell compresses past that ceiling, where
+    the clamped `p(rho)` no longer rises to arrest the Lagrangian compression: cell width -> 0,
+    `dt` -> 0, and the run stalls mid-infall reporting an unphysical `e_eff` (observed at v = 28
+    km/s, rho = 0.6, kappa = 10x: 0.0562 against neighbours of 0.6749-0.6783).
+
+    The extension region above 30 kg/m^3 exists for *numerical* reasons — it gives the compressed
+    wall layer a rising pressure to push back — not because the scenario samples those densities
+    physically. `extend_to=None` rebuilds the historical unextended grid.
+    """
+    if extend_to is None:
+        return np.geomspace(RHO_RANGE_JUPITER[0], RHO_RANGE_JUPITER[1], N_RHO_JUPITER)
+    return extended_rho_grid(RHO_RANGE_JUPITER, N_RHO_JUPITER, extend_to)
+
+
 def build_table_jupiter(
-    kappa_scale: float = 1.0, tops_path: Path | None = None
+    kappa_scale: float = 1.0,
+    tops_path: Path | None = None,
+    extend_to: float | None = RHO_EXTEND_TO,
 ) -> dict[str, object]:
     """Build the Jupiter-retrograde (69 km/s) scenario table: the same equilibrium EOS on the
     extended `(rho, T)` grid (multi-stage O ladder engaged), with the interim Kramers opacity
@@ -243,7 +264,7 @@ def build_table_jupiter(
     bounce is radiatively active; the interim shape survives only in the cold molecular tail below.
     `kappa_scale` still multiplies the final field either way, so the sweep's 0.1x/10x bracket
     turns into a sensitivity band *around the real table* instead of around the placeholder."""
-    rho_grid = np.geomspace(RHO_RANGE_JUPITER[0], RHO_RANGE_JUPITER[1], N_RHO_JUPITER)
+    rho_grid = jupiter_rho_grid(extend_to)
     t_grid = np.geomspace(T_RANGE_JUPITER[0], T_RANGE_JUPITER[1], N_T_JUPITER)
 
     p, e, cs = ew.eos_grid(rho_grid, t_grid)
@@ -282,11 +303,29 @@ def build_table_jupiter(
         "Jupiter-retrograde 69 km/s special scenario (2026-07): extended T grid past the "
         "~1.5e5 K stagnation, extended rho grid for the dilute survivable clouds"
     )
+    if extend_to is not None:
+        prov["rho_grid_extension"] = {
+            "extend_to": extend_to,
+            "n_rho_total": len(rho_grid),
+            "why": (
+                "node-preserving upward continuation on the same log step (Q6, 2026-08-17): this "
+                "table serves the heavy-plate band as well as the 69 km/s scenario, and it never "
+                "received the 2026-07-16 radiative-collapse fix that build_table did — it still "
+                "ceilinged at 30 kg/m^3 while water.json reached 1198. The v = 28 km/s, rho = 0.6, "
+                "kappa = 10x sweep row stalled mid-infall at e_eff = 0.0562 (neighbours "
+                "0.6749-0.6783) because the radiatively-cooled wall cell compressed past the "
+                "ceiling, where the clamped p(rho) no longer arrests it. The extension is a "
+                "NUMERICAL provision for that single wall cell, not a claim the scenario samples "
+                "these densities; ideal-mixture EOS there (non-ideality would only stiffen p). "
+                "Above the TOPS coverage ceiling (30 kg/m^3) the stitched opacity clamps to its "
+                "edge value."
+            ),
+        }
 
     return {
         "rho_grid": [float(x) for x in rho_grid],
         "T_grid": [float(x) for x in t_grid],
-        "shape": [N_RHO_JUPITER, N_T_JUPITER],
+        "shape": [len(rho_grid), N_T_JUPITER],
         "fields": {
             "p": _flatten(p),
             "e": _flatten(e),
@@ -557,10 +596,11 @@ def main() -> None:
         table = build_table_jupiter(kappa_scale=args.kappa_scale, tops_path=args.tops)
         out = args.out or DEFAULT_TABLE_PATH_JUPITER
         opacity_label = "TOPS/OPLIB real opacity" if args.tops else "interim opacity"
+        n_rho_written, n_t_written = cast("list[int]", table["shape"])
         label = (
             f"Jupiter 69 km/s scenario table -> {out} "
-            f"({N_RHO_JUPITER}x{N_T_JUPITER} nodes, {opacity_label}, "
-            f"kappa_scale={args.kappa_scale})"
+            f"({n_rho_written}x{n_t_written} nodes, rho extended to "
+            f"{RHO_EXTEND_TO:.0f}, {opacity_label}, kappa_scale={args.kappa_scale})"
         )
     else:
         table = build_table(kappa_scale=args.kappa_scale)

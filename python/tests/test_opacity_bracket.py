@@ -81,6 +81,39 @@ def test_stalled_rows_are_rejected_rather_than_fitted(tmp_path: Path) -> None:
     assert slopes[(28e3, 0.6, 10.0)] == pytest.approx((0.6783 - 0.6763) / 2.302585, rel=1e-6)
 
 
+def test_explicit_converged_flag_outranks_the_heuristic(tmp_path: Path) -> None:
+    """Once the sweep carries `converged` (Q6), a non-converged row is rejected on the kernel's own
+    say-so rather than on a magnitude heuristic — which can only catch a stall that happens to look
+    implausible. Here the stalled row's e_eff is entirely plausible in isolation; only the flag
+    reveals it stopped mid-infall."""
+    p = tmp_path / "sweep.jsonl"
+    p.write_text(
+        "\n".join(
+            json.dumps(
+                {
+                    "v": 45e3,
+                    "rho_impact": 0.08,
+                    "length": 10.0,
+                    "opacity_scale": s,
+                    "e_eff": e,
+                    "converged": c,
+                }
+            )
+            for s, e, c in (
+                (0.1, 0.600, True),
+                (0.3, 0.610, True),
+                (1.0, 0.620, True),
+                (3.0, 0.630, True),
+                (10.0, 0.590, False),
+            )
+        )
+    )
+    slopes, stalled = ob.measure_slopes_checked(p)
+
+    assert stalled == [(45e3, 0.08, 10.0, 10.0)]
+    assert slopes[(45e3, 0.08, 10.0)] == pytest.approx((0.630 - 0.610) / 2.302585, rel=1e-6)
+
+
 def test_bracket_translates_a_kappa_error_into_an_f_band() -> None:
     """The deliverable: a fractional opacity uncertainty becomes a band on `f` via the measured
     sensitivity and `f = eta*(1 + e_eff)/2`.
