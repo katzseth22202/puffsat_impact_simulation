@@ -11,6 +11,8 @@ become validation points *on* the contour rather than the only places it may be 
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from puffsat import contour
@@ -155,3 +157,74 @@ def test_f_is_absent_rather_than_guessed_without_a_restitution_source() -> None:
 
     assert pt.e_eff is None
     assert pt.f is None
+
+
+def test_ablation_depth_is_fluence_over_ablator_enthalpy() -> None:
+    """Q7's diagnostic: per-pulse radiative fluence at the wall converted to a sacrificial-layer
+    recession depth, `depth = fluence / (rho_ablator * Q*)` (ADR-0014's quasi-steady Q* model).
+
+    Worked by hand at 1.0e7 J/m^2, Q* = 5 MJ/kg, rho = 1200 kg/m^3:
+    1.0e7/(1200*5.0e6) = 1.667e-3 m = 1.667 mm."""
+    d = contour.ablation_depth(1.0e7, q_star=5.0e6, rho_ablator=1200.0)
+    assert d == pytest.approx(1.6667e-3, rel=1e-4)
+    # Inverse in Q*: the tougher ablator recedes less for the same fluence.
+    lo = contour.ablation_depth(1.0e7, q_star=2.0e6, rho_ablator=1200.0)
+    hi = contour.ablation_depth(1.0e7, q_star=10.0e6, rho_ablator=1200.0)
+    assert lo / hi == pytest.approx(5.0, rel=1e-12)
+
+
+def test_ablation_bracket_spans_the_literature_q_star_range() -> None:
+    """ADR-0014 parameterises `Q*` over the silicone literature range 2-10 MJ/kg and requires the
+    sensitivity be reported rather than a single value quoted. The bracket is therefore the pair,
+    ordered deep-first: the *softest* ablator recedes most and is the conservative end."""
+    band = contour.ablation_bracket(1.0e7)
+
+    assert band.q_star_lo == 2.0e6
+    assert band.q_star_hi == 10.0e6
+    assert band.depth_max == pytest.approx(contour.ablation_depth(1.0e7, 2.0e6), rel=1e-12)
+    assert band.depth_min == pytest.approx(contour.ablation_depth(1.0e7, 10.0e6), rel=1e-12)
+    assert band.depth_max > band.depth_min
+
+
+def test_f_band_combines_the_freeze_and_opacity_brackets() -> None:
+    """`f` is reported as a band over both uncertainties (Q10/Q4), not one of them. They are
+    independent -- freeze timing is when the composition stops equilibrating, opacity accuracy is
+    how well TOPS knows kappa -- so they add in quadrature rather than linearly."""
+    band = contour.f_band(f=0.80, freeze_delta=0.06, opacity_delta=0.005)
+
+    assert band.f == pytest.approx(0.80)
+    assert band.half_width == pytest.approx(math.hypot(0.06, 0.005), rel=1e-12)
+    assert band.lo == pytest.approx(0.80 - math.hypot(0.06, 0.005), rel=1e-12)
+    assert band.hi == pytest.approx(0.80 + math.hypot(0.06, 0.005), rel=1e-12)
+
+
+def test_f_band_marks_an_unmeasured_freeze_bracket_rather_than_extrapolating() -> None:
+    """The freeze bracket is measured at three anchors only (Q4: 16/22/28 km/s), because it tracks
+    an ionization staircase rather than a ramp and cannot be interpolated. Above 28 km/s the band
+    must therefore be *labelled* as carried forward, not silently extrapolated -- a reader has to
+    be able to tell a measured bracket from an assumed one."""
+    measured = contour.f_band(f=0.80, freeze_delta=0.06, opacity_delta=0.005, freeze_measured=True)
+    carried = contour.f_band(f=0.78, freeze_delta=0.081, opacity_delta=0.005, freeze_measured=False)
+
+    assert measured.freeze_measured is True
+    assert carried.freeze_measured is False
+    # The carried-forward width is the widest measured one, so it cannot understate the band.
+    assert carried.half_width > measured.half_width
+
+
+def test_recession_scales_with_the_column_the_pulse_delivers() -> None:
+    """A scaling check that makes the magnitudes auditable rather than merely plausible.
+
+    Fluence tracks a roughly fixed fraction of incident kinetic energy per unit area, which is
+    `0.5*rho*L*v^2`. So at fixed `rho` and `v`, ten times the cloud length delivers ten times the
+    fluence and ten times the recession -- which is exactly why the heavy-plate scenario (L = 10 m)
+    reports ~12x the core envelope study's per-pulse recession at the same 16 km/s, and why
+    ADR-0014's few-micron figure (derived for neither) does not describe either of them."""
+    shallow = contour.ablation_depth(1.0e6, q_star=5.0e6)
+    deep = contour.ablation_depth(1.0e7, q_star=5.0e6)
+
+    assert deep / shallow == pytest.approx(10.0, rel=1e-12)
+    # And the bracket keeps that proportionality at both ends.
+    assert contour.ablation_bracket(1.0e7).depth_max / contour.ablation_bracket(
+        1.0e6
+    ).depth_max == pytest.approx(10.0, rel=1e-12)

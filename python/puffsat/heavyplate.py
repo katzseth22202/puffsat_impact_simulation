@@ -41,10 +41,12 @@ companion in `puffsat.structure` (ADR-0027), decoupled from this `f(v)` frontier
 from __future__ import annotations
 
 import argparse
+import csv
 from collections.abc import Callable
 from dataclasses import dataclass, fields
 from pathlib import Path
 
+from puffsat import contour
 from puffsat.analysis import (
     AREAL_DENSITY,
     ETA_PHYSICAL_MAX,
@@ -146,6 +148,58 @@ def e_eff_interpolator_at_v(rows: list[HeavyPlateRow], v: float) -> _LogInterp:
     if not slice_rows:
         raise ValueError(f"no headline sweep rows at v={v}")
     return _LogInterp([r.rho_impact for r in slice_rows], [r.e_eff for r in slice_rows])
+
+
+def wall_fluence_interpolator_at_v(rows: list[HeavyPlateRow], v: float) -> _LogInterp:
+    """`loss_radiative_wall(rho)` along the headline slice at `v` — the per-pulse radiative fluence
+    the plate intercepts [J/m^2], which Q7's recession diagnostic converts to an ablation depth.
+    Same log-rho interpolation as `e_eff`, so both are read at the contour density consistently."""
+    slice_rows = sorted(
+        (r for r in headline_rows(rows) if abs(r.v - v) <= FLOAT_TOL),
+        key=lambda r: r.rho_impact,
+    )
+    if not slice_rows:
+        raise ValueError(f"no headline sweep rows at v={v}")
+    return _LogInterp(
+        [r.rho_impact for r in slice_rows], [r.loss_radiative_wall for r in slice_rows]
+    )
+
+
+def freeze_delta_at_v(v: float, path: Path = DEFAULT_FROZEN_SUMMARY_PATH) -> tuple[float, bool]:
+    """Freeze-timing half-width on `f` at `v`, and whether it was *measured* there.
+
+    Q4 measures the bracket at three anchors only (16/22/28 km/s): it tracks an ionization
+    staircase rather than a ramp, so interpolating it would invent structure. Off those anchors the
+    **widest measured** width is carried forward and flagged — conservative, and visibly not a
+    measurement."""
+    if not path.exists():
+        return 0.0, False
+    widths: dict[float, float] = {}
+    with path.open() as fh:
+        for row in csv.DictReader(fh):
+            av = float(row["v"])
+            w = abs(float(row["f_eq"]) - float(row["f_frozen_rebound"])) / 2.0
+            widths[av] = max(widths.get(av, 0.0), w)
+    if not widths:
+        return 0.0, False
+    for av, w in widths.items():
+        if abs(av - v) <= FLOAT_TOL:
+            return w, True
+    return max(widths.values()), False
+
+
+def opacity_delta_at_v(v: float, path: Path = Path("data/results/opacity_bracket.csv")) -> float:
+    """Widest Q18 opacity half-width on `f` among the heavy-plate states at or nearest `v`."""
+    if not path.exists():
+        return 0.0
+    rows = []
+    with path.open() as fh:
+        rows = [r for r in csv.DictReader(fh) if r["sweep"] == "sweep_heavyplate"]
+    if not rows:
+        return 0.0
+    vs = sorted({float(r["v"]) for r in rows})
+    nearest = min(vs, key=lambda x: abs(x - v))
+    return max(float(r["delta_f"]) for r in rows if abs(float(r["v"]) - nearest) <= FLOAT_TOL)
 
 
 def stagnation_coefficient_at_v(rows: list[HeavyPlateRow], v: float) -> float:
@@ -584,6 +638,40 @@ def main() -> None:
         )
     else:
         print("  τ ≫ 1 confirmed at every diagnostic velocity")
+
+    # Q15: reduce onto the continuous survivable-density contour, with both bands and Q7's
+    # recession diagnostic. Pure post-processing over what is already loaded.
+    contour_rows = contour.build_curve(
+        velocities,
+        c_stag_at=lambda v: stagnation_coefficient_at_v(sweep_rows, v),
+        e_eff_at=lambda v: e_eff_interpolator_at_v(sweep_rows, v),
+        fluence_at=lambda v: wall_fluence_interpolator_at_v(sweep_rows, v),
+        freeze_delta_at=freeze_delta_at_v,
+        opacity_delta_at=opacity_delta_at_v,
+        p_limit=P_LIMIT_BASELINE,
+    )
+    contour.write_curve(contour_rows)
+    switch = [r for r in contour_rows if r.point.ceiling_limited]
+    print(
+        "\ncontour (Q15): rho(v) = min(rho_ceiling, rho_max); "
+        + (
+            f"shape box binds below {switch[0].point.v / 1000:.0f} km/s, survivability above"
+            if switch
+            else "shape box binds throughout"
+        )
+    )
+    for r in contour_rows:
+        if r.point.v % 6000 < 1e-9 or abs(r.point.v - 63_000.0) < 1e-9:
+            p = r.point
+            b = r.band
+            a = r.ablation
+            mark = "" if b.freeze_measured else " (freeze bracket carried forward)"
+            print(
+                f"  {p.v / 1000:>5.0f} km/s  rho={p.rho_contour:.4f}  rf/R={p.r_foot_over_r:.3f}  "
+                f"eta={p.eta_capture:.4f}  f={p.f:.3f} [{b.lo:.3f}, {b.hi:.3f}]  "
+                f"recession {a.depth_min * 1e6:.1f}-{a.depth_max * 1e6:.1f} um/pulse{mark}"
+            )
+    print(f"python: wrote {contour.DEFAULT_CONTOUR_PATH}")
 
     # The 16 km/s overlap with the core envelope study (consistency check).
     overlap = best_at_v(points, 16_000.0, concave=True) or best_at_v(points, 16_000.0)

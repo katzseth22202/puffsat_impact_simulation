@@ -216,3 +216,184 @@ def contour_point(
         e_eff=e_eff,
         f=None if e_eff is None else best[0] * (1.0 + e_eff) / 2.0,
     )
+
+
+# --- Q7: per-pulse radiative fluence -> sacrificial-layer recession -----------------------------
+#
+# A *diagnostic*, not a gate (Q7). It converts the wall's radiative fluence into how deep the
+# renewable sacrificial layer recedes per shot, so the between-pulse MEMS renewal rate (ADR-0014)
+# has a number to be sized against.
+#
+# **It is an upper bound, and a loose one.** The quasi-steady balance sends *all* intercepted flux
+# into ablation enthalpy, crediting nothing to two effects that are both large here:
+#
+#   1. **Re-radiation.** An ablating surface at these fluences runs hot and radiates a large
+#      fraction straight back out. Not modelled.
+#   2. **Vapor shielding.** ADR-0014's own curtain (`kappa_vapor`) attenuates the incoming flux
+#      before it reaches the surface; the ablating-bounce runs show that is not a small correction.
+#      This diagnostic reads the *rigid-wall* fluence, which is the unshielded case.
+#
+# Read the numbers as "no more than this", never as an estimate.
+
+# Silicone-class ablator density [kg/m^3]. ADR-0014's own sanity figure -- "a few um of ablator
+# ~ 0.4 kg" over the R = 5 m plate -- implies ~1200, which is where this comes from.
+RHO_ABLATOR = 1200.0
+# Effective heat of ablation [J/kg]. ADR-0014 parameterises it over the silicone literature range
+# and requires the sensitivity be reported rather than a single value quoted.
+Q_STAR_BRACKET = (2.0e6, 10.0e6)
+
+
+def ablation_depth(fluence: float, q_star: float, rho_ablator: float = RHO_ABLATOR) -> float:
+    """Recession depth [m] per pulse from a radiative `fluence` [J/m^2].
+
+    ADR-0014's quasi-steady surface energy balance: all intercepted flux goes into the ablation
+    enthalpy, so `depth = fluence / (rho_ablator * Q*)`. Conservative by construction -- it credits
+    nothing to re-radiation or to conduction into the substrate, both of which reduce the recession.
+    """
+    return fluence / (rho_ablator * q_star)
+
+
+@dataclass(frozen=True)
+class AblationBand:
+    """Recession bracket over the literature `Q*` range."""
+
+    fluence: float
+    q_star_lo: float
+    q_star_hi: float
+    depth_max: float
+    depth_min: float
+
+
+def ablation_bracket(fluence: float, rho_ablator: float = RHO_ABLATOR) -> AblationBand:
+    """Recession depth over `Q_STAR_BRACKET`, deep end first.
+
+    The *softest* ablator recedes most, so `depth_max` pairs with `q_star_lo`. Reporting the pair
+    rather than a midpoint is ADR-0014's explicit requirement: `Q*` is a parameter of the model, not
+    a measurement of this system.
+    """
+    return AblationBand(
+        fluence=fluence,
+        q_star_lo=Q_STAR_BRACKET[0],
+        q_star_hi=Q_STAR_BRACKET[1],
+        depth_max=ablation_depth(fluence, Q_STAR_BRACKET[0], rho_ablator),
+        depth_min=ablation_depth(fluence, Q_STAR_BRACKET[1], rho_ablator),
+    )
+
+
+# --- The reported band on f --------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class FBand:
+    """`f` with its combined uncertainty band."""
+
+    f: float
+    freeze_delta: float
+    opacity_delta: float
+    half_width: float
+    lo: float
+    hi: float
+    #: False when the freeze bracket at this velocity was carried forward rather than measured.
+    freeze_measured: bool
+
+
+def f_band(
+    f: float,
+    freeze_delta: float,
+    opacity_delta: float,
+    freeze_measured: bool = True,
+) -> FBand:
+    """Combine the freeze-timing (Q4) and opacity (Q10/Q18) brackets into one band on `f`.
+
+    **In quadrature, not linearly.** The two are independent: freeze timing is *when* the
+    composition stops equilibrating during re-expansion, opacity accuracy is *how well TOPS knows
+    kappa*. Adding them linearly would claim a correlation that does not exist and overstate the
+    band; in practice the freeze bracket dominates by an order of magnitude anyway.
+
+    `freeze_measured` is carried through rather than folded into the number. Q4 measures the freeze
+    bracket at three anchors only -- it tracks an ionization staircase, not a ramp, so it cannot be
+    interpolated -- and a reader has to be able to tell a measured bracket from a carried-forward
+    one.
+    """
+    half = math.hypot(freeze_delta, opacity_delta)
+    return FBand(
+        f=f,
+        freeze_delta=freeze_delta,
+        opacity_delta=opacity_delta,
+        half_width=half,
+        lo=f - half,
+        hi=f + half,
+        freeze_measured=freeze_measured,
+    )
+
+
+# --- The assembled deliverable ------------------------------------------------------------------
+
+DEFAULT_CONTOUR_PATH = Path("data/results/frontier_contour_heavyplate.csv")
+
+CSV_HEADER = (
+    "v,rho_ceiling,rho_contour,binds,d_over_d,l_over_d,r_foot_over_r,eta_capture,"
+    "e_eff,f,freeze_delta,freeze_measured,opacity_delta,f_lo,f_hi,"
+    "wall_fluence,ablation_depth_max_um,ablation_depth_min_um"
+)
+
+
+@dataclass(frozen=True)
+class ContourRow:
+    """One fully-resolved point on the reported curve."""
+
+    point: ContourPoint
+    band: FBand
+    ablation: AblationBand
+
+
+def build_curve(
+    velocities: list[float],
+    c_stag_at: Callable[[float], float],
+    e_eff_at: Callable[[float], Callable[[float], float]],
+    fluence_at: Callable[[float], Callable[[float], float]],
+    freeze_delta_at: Callable[[float], tuple[float, bool]],
+    opacity_delta_at: Callable[[float], float],
+    p_limit: float,
+    d_over_d: float = D_OVER_D_HEADLINE,
+    path: Path = DEFAULT_GEOMETRY_PATH,
+) -> list[ContourRow]:
+    """Assemble the contour curve with its bands and the Q7 recession diagnostic.
+
+    Every input is a callable rather than a dataframe so this stays pure post-processing over
+    whatever the caller has already loaded, and so the module keeps no dependency on the analysis
+    that consumes it.
+    """
+    out: list[ContourRow] = []
+    for v in velocities:
+        e_of_rho = e_eff_at(v)
+        pt = contour_point(
+            v,
+            c_stag=c_stag_at(v),
+            p_limit=p_limit,
+            d_over_d=d_over_d,
+            path=path,
+            e_eff_at=e_of_rho,
+        )
+        assert pt.f is not None  # e_eff_at was supplied, so f is populated
+        freeze_delta, measured = freeze_delta_at(v)
+        band = f_band(pt.f, freeze_delta, opacity_delta_at(v), freeze_measured=measured)
+        ablation = ablation_bracket(fluence_at(v)(pt.rho_contour))
+        out.append(ContourRow(point=pt, band=band, ablation=ablation))
+    return out
+
+
+def write_curve(rows: list[ContourRow], path: Path = DEFAULT_CONTOUR_PATH) -> None:
+    """Write the contour deliverable CSV."""
+    lines = [CSV_HEADER]
+    for r in rows:
+        p, b, a = r.point, r.band, r.ablation
+        lines.append(
+            f"{p.v},{p.rho_ceiling:.6e},{p.rho_contour:.6e},"
+            f"{'survivability' if p.ceiling_limited else 'shape_box'},"
+            f"{p.d_over_d},{p.l_over_d:.6f},{p.r_foot_over_r:.6f},{p.eta_capture:.6f},"
+            f"{p.e_eff:.6f},{p.f:.6f},{b.freeze_delta:.6f},{b.freeze_measured},"
+            f"{b.opacity_delta:.6e},{b.lo:.6f},{b.hi:.6f},"
+            f"{a.fluence:.6e},{a.depth_max * 1e6:.3f},{a.depth_min * 1e6:.3f}"
+        )
+    path.write_text("\n".join(lines) + "\n")

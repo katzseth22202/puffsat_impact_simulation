@@ -334,7 +334,7 @@ data/results/transport_check.csv: data/results/sweep_transport_check.jsonl pytho
 ## data/results/frontier_heavyplate.csv + f(v) figure; depends on sweep-heavyplate (+ M=40 geometry).
 analysis-heavyplate: data/results/frontier_heavyplate.csv
 
-data/results/frontier_heavyplate.csv: data/results/sweep_heavyplate.jsonl data/results/sweep_geometry_m40.jsonl python/puffsat/heavyplate.py
+data/results/frontier_heavyplate.csv: data/results/sweep_heavyplate.jsonl data/results/sweep_geometry_m40.jsonl python/puffsat/heavyplate.py python/puffsat/contour.py
 	PYTHONPATH=python uv run --extra sci python -m puffsat.heavyplate
 
 ## analysis-structure-heavyplate: ADR-0027 closed-form whole-plate structural bound (rigid-during-
