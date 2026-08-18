@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -119,15 +119,26 @@ data/results/sweep_geometry.jsonl: $(wildcard crates/sweep/src/*.rs) $(wildcard 
 ## own measured de_eff/dln(kappa).
 analysis-opacity-bracket: data/results/opacity_bracket.csv
 
-data/results/opacity_bracket.csv: data/results/sweep_heavyplate.jsonl data/results/sweep_jupiter.jsonl data/results/frozen_probe_heavyplate.jsonl data/results/frozen_probe_jupiter.jsonl python/puffsat/opacity_bracket.py
+data/results/opacity_bracket.csv: data/results/sweep_heavyplate.jsonl data/results/sweep_jupiter.jsonl data/results/frozen_probe_heavyplate.jsonl data/results/frozen_probe_heavyplate_diag.jsonl data/results/frozen_probe_jupiter.jsonl python/puffsat/opacity_bracket.py
 	PYTHONPATH=python $(PY) -m puffsat.opacity_bracket
+
+## sweep-probe-heavyplate-diag: turnaround states at the diagnostic velocities (16-63 km/s x the
+## spot densities) -> data/results/frozen_probe_heavyplate_diag.jsonl. Separate from the Q4
+## freeze-bracket probe on purpose: the frozen-table builder emits one Saha table per probe row, and
+## those tables are only wanted at the three freeze anchors. Consumed by analysis-lte and
+## analysis-opacity-bracket, which need a composition at every state they report on.
+sweep-probe-heavyplate-diag: data/results/frozen_probe_heavyplate_diag.jsonl
+
+data/results/frozen_probe_heavyplate_diag.jsonl: data/tables/water_jupiter.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --probe-heavyplate-diag
 
 ## analysis-lte: McWhirter LTE-validity check at the probe turnaround states (Q5) ->
 ## data/results/lte_validity.csv. Both the Saha EOS and the LTE TOPS opacity assume collisionally
 ## controlled level populations; this reports where the probed states sit relative to that.
 analysis-lte: data/results/lte_validity.csv
 
-data/results/lte_validity.csv: data/results/frozen_probe_heavyplate.jsonl data/results/frozen_probe_jupiter.jsonl python/puffsat/lte.py python/puffsat/eos_water.py
+data/results/lte_validity.csv: data/results/frozen_probe_heavyplate.jsonl data/results/frozen_probe_heavyplate_diag.jsonl data/results/frozen_probe_jupiter.jsonl python/puffsat/lte.py python/puffsat/eos_water.py
 	PYTHONPATH=python $(PY) -m puffsat.lte
 
 ## sweep-geometry-m40: the same eta_capture sweep at M = 40 (the high-v scenarios' Mach anchor) ->

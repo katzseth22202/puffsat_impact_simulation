@@ -65,6 +65,13 @@ const RESULT_PATH_GEOMETRY_M40: &str = "data/results/sweep_geometry_m40.jsonl";
 // extended-grid table; its own result files + freeze-bracket directory.
 const RESULT_PATH_HEAVYPLATE: &str = "data/results/sweep_heavyplate.jsonl";
 const RESULT_PATH_FROZEN_PROBE_HEAVYPLATE: &str = "data/results/frozen_probe_heavyplate.jsonl";
+// Turnaround states at the *diagnostic* velocities, in a separate file on purpose. The frozen-table
+// builder emits one Saha table per row of the probe it reads (`build_frozen_tables_from_probe`), so
+// folding these into the Q4 probe above would build ~36 expensive tables that nothing consumes.
+// These rows feed only the LTE check (Q5) and the opacity bracket (Q18), which need a turnaround
+// (rho*, T*) at every state they report on — without them the new 45-63 km/s tau-check rows would be
+// silently dropped for want of a composition.
+const RESULT_PATH_PROBE_HEAVYPLATE_DIAG: &str = "data/results/frozen_probe_heavyplate_diag.jsonl";
 const RESULT_PATH_FROZEN_HEAVYPLATE: &str = "data/results/sweep_frozen_heavyplate.jsonl";
 const TABLE_DIR_FROZEN_HEAVYPLATE: &str = "data/tables/frozen_heavyplate";
 
@@ -920,13 +927,26 @@ const HEAVY_RHO: [f64; 12] = [
 /// Fixed representative stretched-cloud length [m] the headline `e_eff(v, ρ)` grid runs at (design
 /// §12.1: `L ≈ 8–10 m`). The Python frontier reads this slice as its headline.
 const HEAVY_LENGTH: f64 = 10.0;
-/// `L`-sensitivity spot-check lengths [m] at the anchors; the headline `HEAVY_LENGTH` = 10 m is the
-/// reference from the main grid, so these bracket it below and above (`τ ≫ 1` ⇒ `e_eff` flat in `L`).
+/// `L`-sensitivity spot-check lengths [m]; the headline `HEAVY_LENGTH` = 10 m is the reference from
+/// the main grid, so these bracket it below and above, giving each spot-checked state a three-point
+/// `L` curve.
 const HEAVY_L_SPOT: [f64; 2] = [6.0, 14.0];
-/// Velocity [m/s] the one-shot opacity τ-check runs at: the dilute 28 km/s top (design §12.1).
-const HEAVY_TAU_V: f64 = 28_000.0;
+/// Velocities [m/s] the diagnostic rows (`L`-sensitivity and the opacity τ-check) run at.
+///
+/// **Deliberately wider than the old single 28 km/s point.** Both diagnostics were previously
+/// justified by `τ ≫ 1` holding across the 16–28 band, and both of those justifications expire in
+/// the extension: `L` sets when the slab goes transparent, and the τ-check exists precisely to
+/// detect that. 45/55/63 km/s are where the claims are most likely to fail, so they are where the
+/// checks now run. Distinct from [`HEAVY_V_ANCHORS`], which stays at three points because Q4's
+/// freeze-timing pipeline behind it is expensive.
+const HEAVY_DIAG_V: [f64; 6] = [16_000.0, 22_000.0, 28_000.0, 45_000.0, 55_000.0, 63_000.0];
+/// Density subset [kg/m³] for the diagnostic rows — a spot-check spans the range rather than
+/// resolving it, and the full 12-point grid at every diagnostic velocity would triple the sweep for
+/// no extra signal. Every entry must be in [`HEAVY_RHO`], so the opacity bracket can pair these rows
+/// with the `κ = 1` headline row and the probe's turnaround state at the same `(v, ρ)`.
+const HEAVY_SPOT_RHO: [f64; 4] = [0.01, 0.04, 0.10, 0.28];
 /// Opacity scales for the τ-check (scale 1.0 is the headline, already in the main grid). If `e_eff`
-/// does not move across these, `τ ≫ 1` is confirmed at the dilute top and the headline is robust.
+/// does not move across these, `τ ≫ 1` is confirmed there and the headline is robust.
 const HEAVY_TAU_SCALES: [f64; 4] = [0.1, 0.3, 3.0, 10.0];
 
 /// One heavy-plate row: the swept `(v, ρ, length, opacity_scale)` case with the restitution, the
@@ -1007,28 +1027,39 @@ fn heavy_v_grid() -> Vec<f64> {
 /// Sweep the heavy-plate grid in parallel (rayon), input order: the headline `v(25) × ρ(7)` at fixed
 /// `L` and `κ = 1`, plus the `L`-sensitivity spot rows at the anchors and the opacity τ-check rows at
 /// the 28 km/s top.
-fn run_heavyplate_sweep(base_tbl: &Table) -> Vec<HeavyPlateRecord> {
-    let mut cases: Vec<(f64, f64, f64, f64)> = Vec::new(); // (v, rho, length, scale)
-    // Headline grid: all 25 velocities × ρ at the representative length, real opacity (κ = 1).
+/// The heavy-plate case list `(v, ρ, length, opacity_scale)`: the headline grid plus the two
+/// diagnostic families. Factored out so its shape is testable without running any physics — a
+/// duplicated or missing case is invisible in the output but corrupts every average taken over it.
+fn heavyplate_cases() -> Vec<(f64, f64, f64, f64)> {
+    let mut cases: Vec<(f64, f64, f64, f64)> = Vec::new();
+    // Headline grid: all 29 velocities × 12 densities at the representative length, real opacity.
     for &v in &heavy_v_grid() {
         for &rho in &HEAVY_RHO {
             cases.push((v, rho, HEAVY_LENGTH, 1.0));
         }
     }
-    // L-sensitivity spot-check at the anchors (the headline L = HEAVY_LENGTH comes from the grid).
-    for &v in &HEAVY_V_ANCHORS {
-        for &rho in &HEAVY_RHO {
+    // L-sensitivity spot-check (the headline L = HEAVY_LENGTH comes from the grid above, so each
+    // spot-checked state ends up with a three-point L curve).
+    for &v in &HEAVY_DIAG_V {
+        for &rho in &HEAVY_SPOT_RHO {
             for &l in &HEAVY_L_SPOT {
                 cases.push((v, rho, l, 1.0));
             }
         }
     }
-    // Opacity τ-check at the dilute 28 km/s top (κ = 1 comes from the main grid).
-    for &rho in &HEAVY_RHO {
-        for &s in &HEAVY_TAU_SCALES {
-            cases.push((HEAVY_TAU_V, rho, HEAVY_LENGTH, s));
+    // Opacity τ-check (κ = 1 comes from the main grid).
+    for &v in &HEAVY_DIAG_V {
+        for &rho in &HEAVY_SPOT_RHO {
+            for &s in &HEAVY_TAU_SCALES {
+                cases.push((v, rho, HEAVY_LENGTH, s));
+            }
         }
     }
+    cases
+}
+
+fn run_heavyplate_sweep(base_tbl: &Table) -> Vec<HeavyPlateRecord> {
+    let cases = heavyplate_cases();
     par_map_with_progress("heavyplate", &cases, |&(v, rho, l, s)| {
         run_one_heavyplate(v, rho, l, s, base_tbl)
     })
@@ -1875,6 +1906,21 @@ fn cmd_frozen_jupiter(_args: &[String]) -> Result<(), Box<dyn std::error::Error>
 // Heavy-plate 16–28 km/s freeze-timing bracket (ADR-0026 instrument at the 16 / 22 / 28 km/s
 // anchors, on the reused Jupiter extended-grid table). Needs `make tables-jupiter` /
 // `tables-frozen-heavyplate` first. (`base.v` is overridden per grid velocity inside the mode.)
+fn cmd_probe_heavyplate_diag(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let base = Config {
+        v: HEAVY_DIAG_V[0],
+        length: HEAVY_LENGTH,
+        ..Config::production()
+    };
+    frozen_probe_mode(
+        &HEAVY_DIAG_V,
+        &HEAVY_SPOT_RHO,
+        TABLE_PATH_JUPITER,
+        &base,
+        RESULT_PATH_PROBE_HEAVYPLATE_DIAG,
+    )
+}
+
 fn cmd_frozen_probe_heavyplate(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let base = Config {
         v: HEAVY_V_ANCHORS[0],
@@ -2225,6 +2271,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--transitional", cmd_transitional),
     ("--frozen-probe-jupiter", cmd_frozen_probe_jupiter),
     ("--frozen-jupiter", cmd_frozen_jupiter),
+    ("--probe-heavyplate-diag", cmd_probe_heavyplate_diag),
     ("--frozen-probe-heavyplate", cmd_frozen_probe_heavyplate),
     ("--frozen-heavyplate", cmd_frozen_heavyplate),
     ("--frozen-probe-shape", cmd_frozen_probe_shape),
@@ -2255,11 +2302,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        ABL_KAPPA_VAPOR, ABL_Q_STAR, AblatingRecord, Config, GeoConfig, GeoRecord, HEAVY_N_V,
-        HEAVY_RHO, HEAVY_V_ANCHORS, HeavyPlateRecord, LowvConfig, Record, SHAPE_ALPHA,
-        SHAPE_NOM_L_OVER_D, SHAPE_NOM_RFOOT_OVER_R, SHAPE_REL, SHAPE_TAPER, SHAPE_V, Shape1DRecord,
-        ShapeRecord, TABLE_DIR_FROZEN, TABLE_DIR_FROZEN_HEAVYPLATE, TABLE_DIR_FROZEN_JUPITER,
-        frozen_table_path, heavy_v_grid, run_ablating_case, run_eta_case, run_one, run_one_frozen,
+        ABL_KAPPA_VAPOR, ABL_Q_STAR, AblatingRecord, Config, GeoConfig, GeoRecord, HEAVY_DIAG_V,
+        HEAVY_L_SPOT, HEAVY_LENGTH, HEAVY_N_V, HEAVY_RHO, HEAVY_SPOT_RHO, HEAVY_TAU_SCALES,
+        HEAVY_V_ANCHORS, HeavyPlateRecord, LowvConfig, Record, SHAPE_ALPHA, SHAPE_NOM_L_OVER_D,
+        SHAPE_NOM_RFOOT_OVER_R, SHAPE_REL, SHAPE_TAPER, SHAPE_V, Shape1DRecord, ShapeRecord,
+        TABLE_DIR_FROZEN, TABLE_DIR_FROZEN_HEAVYPLATE, TABLE_DIR_FROZEN_JUPITER, frozen_table_path,
+        heavy_v_grid, heavyplate_cases, run_ablating_case, run_eta_case, run_one, run_one_frozen,
         run_sweep, run_sweep_frozen_probe, run_sweep_lowv, run_sweep_transitional, shape_1d_cases,
         shape_2d_cases, shape_frozen_rho_grid, shape_nominal, shape_rho_length, shape_samples,
     };
@@ -2594,6 +2642,70 @@ mod tests {
                 "bracket anchor {a} not on the swept grid"
             );
         }
+    }
+
+    /// The heavy-plate case list: the headline grid plus both diagnostic families, with **no
+    /// duplicates**.
+    ///
+    /// The duplicate check is the substantive one. A case listed twice runs twice, writes two
+    /// identical rows, and then silently double-weights that state in every average the Python
+    /// frontier takes — a corruption that produces confident, wrong numbers and shows up nowhere in
+    /// the output. It is easy to reintroduce, because the diagnostic families deliberately overlap
+    /// the headline grid in `(v, ρ)` and are kept distinct only by `L` or `opacity_scale`.
+    #[test]
+    fn heavyplate_case_list_covers_headline_and_diagnostics_without_duplicates() {
+        let cases = heavyplate_cases();
+        let headline = HEAVY_N_V * HEAVY_RHO.len();
+        let l_spot = HEAVY_DIAG_V.len() * HEAVY_SPOT_RHO.len() * HEAVY_L_SPOT.len();
+        let tau = HEAVY_DIAG_V.len() * HEAVY_SPOT_RHO.len() * HEAVY_TAU_SCALES.len();
+        assert_eq!(cases.len(), headline + l_spot + tau);
+        assert_eq!(cases.len(), 348 + 48 + 96);
+
+        let mut keys: Vec<(u64, u64, u64, u64)> = cases
+            .iter()
+            .map(|&(v, r, l, s)| (v.to_bits(), r.to_bits(), l.to_bits(), s.to_bits()))
+            .collect();
+        keys.sort_unstable();
+        let before = keys.len();
+        keys.dedup();
+        assert_eq!(before, keys.len(), "duplicate case in the heavy-plate list");
+
+        // Every headline (v, ρ) is present exactly once at the reference L and κ = 1.
+        for &v in &heavy_v_grid() {
+            for &rho in &HEAVY_RHO {
+                let n = cases
+                    .iter()
+                    .filter(|&&(cv, cr, cl, cs)| {
+                        cv == v && cr == rho && cl == HEAVY_LENGTH && cs == 1.0
+                    })
+                    .count();
+                assert_eq!(n, 1, "headline ({v}, {rho}) appears {n} times");
+            }
+        }
+
+        // The diagnostic densities must be drawn from the headline grid, or the opacity bracket
+        // cannot pair a τ-check row with its κ = 1 row and its probe turnaround state.
+        for &rho in &HEAVY_SPOT_RHO {
+            assert!(
+                HEAVY_RHO.iter().any(|&r| (r - rho).abs() < 1e-12),
+                "spot density {rho} is not on the headline grid"
+            );
+        }
+        // Likewise the diagnostic velocities, and they must reach the top of the new range — the
+        // whole point of widening them is to test the τ ≫ 1 claim where it is likeliest to fail.
+        let grid = heavy_v_grid();
+        for &v in &HEAVY_DIAG_V {
+            assert!(
+                grid.iter().any(|&g| (g - v).abs() < 1e-9),
+                "diagnostic velocity {v} is not on the swept grid"
+            );
+        }
+        assert!(
+            HEAVY_DIAG_V.iter().any(|&v| v >= 63_000.0),
+            "diagnostics must reach the top of the extended range"
+        );
+        // κ = 1 is never duplicated into the τ family; it comes from the headline grid.
+        assert!(!HEAVY_TAU_SCALES.iter().any(|&s| (s - 1.0).abs() < 1e-12));
     }
 
     /// The Q11 density grid: 12 points, ascending, dense through the steep on-contour band

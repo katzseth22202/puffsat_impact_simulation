@@ -210,8 +210,14 @@ def evaluate_probe(path: Path) -> list[tuple[ProbeState, StateVerdict]]:
     return out
 
 
+# The diagnostic probe is listed alongside the two freeze-bracket probes because it carries the
+# 45-63 km/s turnaround states. Without it the LTE verdict over the extended range rests only on
+# *bracketing* -- 28 km/s and 69 km/s both pass, so the middle is presumed to -- and a criterion
+# whose tightest margin was found at the coldest end (not the hottest) does not deserve that
+# presumption untested.
 DEFAULT_PROBE_PATHS = (
     Path("data/results/frozen_probe_heavyplate.jsonl"),
+    Path("data/results/frozen_probe_heavyplate_diag.jsonl"),
     Path("data/results/frozen_probe_jupiter.jsonl"),
 )
 DEFAULT_SUMMARY_PATH = Path("data/results/lte_validity.csv")

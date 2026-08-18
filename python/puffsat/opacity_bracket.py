@@ -152,12 +152,23 @@ def f_band(slope: float, fraction: float, eta_capture: float) -> FBand:
     return FBand(fraction=fraction, delta_e_eff=d_e, delta_f=eta_capture * d_e / 2.0)
 
 
-DEFAULT_SWEEPS = (
+# Each sweep is paired with *every* probe file that can supply a turnaround state for it. The
+# heavy-plate arm needs two: the Q4 freeze-bracket probe covers 16-28 km/s at the full density
+# grid, while the diagnostic probe covers the 45-63 km/s tau-check states. Those live in a separate
+# file because the frozen-table builder emits one Saha table per probe row, and those tables are
+# only wanted at the three freeze anchors.
+DEFAULT_SWEEPS: tuple[tuple[Path, tuple[Path, ...]], ...] = (
     (
         Path("data/results/sweep_heavyplate.jsonl"),
-        Path("data/results/frozen_probe_heavyplate.jsonl"),
+        (
+            Path("data/results/frozen_probe_heavyplate.jsonl"),
+            Path("data/results/frozen_probe_heavyplate_diag.jsonl"),
+        ),
     ),
-    (Path("data/results/sweep_jupiter.jsonl"), Path("data/results/frozen_probe_jupiter.jsonl")),
+    (
+        Path("data/results/sweep_jupiter.jsonl"),
+        (Path("data/results/frozen_probe_jupiter.jsonl"),),
+    ),
 )
 DEFAULT_SUMMARY_PATH = Path("data/results/opacity_bracket.csv")
 
@@ -171,19 +182,30 @@ CSV_HEADER = (
 )
 
 
-def _zbar_by_state(probe_path: Path) -> dict[tuple[float, float], tuple[float, float]]:
-    """`(t_star, mean oxygen charge)` keyed by `(v, rho_impact)` from a probe file."""
+def _zbar_by_state(
+    *probe_paths: Path,
+) -> dict[tuple[float, float], tuple[float, float]]:
+    """`(t_star, mean oxygen charge)` keyed by `(v, rho_impact)`, merged over probe files.
+
+    Missing files are skipped rather than raising: a probe that has not been generated yet costs
+    coverage, and the caller already drops states it cannot find a composition for.
+    """
     from puffsat import eos_water
 
     out: dict[tuple[float, float], tuple[float, float]] = {}
-    for line in probe_path.read_text().splitlines():
-        if not line.strip():
+    for probe_path in probe_paths:
+        if not probe_path.exists():
             continue
-        d = json.loads(line)
-        comp = eos_water.composition(float(d["rho_star"]), float(d["t_star"]))
-        o_tot = comp.n_o + sum(comp.n_o_ions)
-        zbar = sum((k + 1) * n for k, n in enumerate(comp.n_o_ions)) / o_tot if o_tot > 0 else 0.0
-        out[(float(d["v"]), float(d["rho_impact"]))] = (float(d["t_star"]), zbar)
+        for line in probe_path.read_text().splitlines():
+            if not line.strip():
+                continue
+            d = json.loads(line)
+            comp = eos_water.composition(float(d["rho_star"]), float(d["t_star"]))
+            o_tot = comp.n_o + sum(comp.n_o_ions)
+            zbar = (
+                sum((k + 1) * n for k, n in enumerate(comp.n_o_ions)) / o_tot if o_tot > 0 else 0.0
+            )
+            out[(float(d["v"]), float(d["rho_impact"]))] = (float(d["t_star"]), zbar)
     return out
 
 
@@ -191,12 +213,12 @@ def write_summary(path: Path = DEFAULT_SUMMARY_PATH) -> list[tuple[float, float,
     """Write the per-state opacity band on `f`; return any stalled rows encountered."""
     lines = [CSV_HEADER]
     all_stalled: list[tuple[float, float, float, float]] = []
-    for sweep_path, probe_path in DEFAULT_SWEEPS:
-        if not sweep_path.exists() or not probe_path.exists():
+    for sweep_path, probe_paths in DEFAULT_SWEEPS:
+        if not sweep_path.exists() or not any(p.exists() for p in probe_paths):
             continue
         slopes, stalled = measure_slopes_checked(sweep_path)
         all_stalled.extend(stalled)
-        states = _zbar_by_state(probe_path)
+        states = _zbar_by_state(*probe_paths)
         for (v, rho, length), slope in sorted(slopes.items()):
             if (v, rho) not in states:
                 continue
