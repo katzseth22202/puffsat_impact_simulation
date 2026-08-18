@@ -16,8 +16,21 @@ Physics of the sizing (all inherited from Rung S, ADR-0010):
   cubically, while extra thickness only buys the relaxed material allowable (400 → 900 MPa,
   a factor 2.25 in `rho`, equivalent to just 1.31x in `R`).
 - `e_eff(rho)` comes from the 69 km/s coupled sweep (`--jupiter`), interpolated per shape at its
-  Σ-implied density, and bracketed over the table's opacity scale (the stagnated slab sits near
-  `tau ~ 1` here, so unlike the 16 km/s anchor the radiative loss IS opacity-sensitive).
+  Σ-implied density, and bracketed over the table's opacity scale.
+
+  **Corrected 2026-08-18.** This used to say "the stagnated slab sits near `tau ~ 1` here, so
+  unlike the 16 km/s anchor the radiative loss IS opacity-sensitive". Both halves were wrong, in
+  opposite directions:
+
+  - The slab is **not** near `tau ~ 1` at stagnation. That described the interim *Kramers*
+    placeholder opacity, which CONCLUSION.md records as ~2000x low. On the real TOPS/OPLIB table
+    the axial `tau` at turnaround is **22-2314** across the rho band, so FLD is squarely inside its
+    own regime there. The transport concern survives but *relocates* to the re-expansion, where
+    the gas crosses `tau ~ 1` on the way out and sets the escape channel (Q9/ADR-0012).
+  - Nor is the 16 km/s anchor opacity-*insensitive*. The heavy-plate sweep moves `e_eff` by 0.078
+    over 0.1x-10x kappa at its dilute end at 16 km/s, versus 0.230 at 63 km/s -- a difference of
+    degree, not of kind. The old contrast came from reading a single mid-grid density where the
+    response happens to be small.
 - `eta_capture` comes from the geometry sweep at the M = 40 strong-shock spot check (falling
   back to the production M = 20 anchor), scale-invariant in `R`.
 
