@@ -10,12 +10,16 @@
 //!   a flux function (the AV kernel has no Riemann solver; ADR-0022).
 //! - [`conduction`] — the semi-infinite conducting solid behind the rigid wall (ADR-0005, Rung-B
 //!   B4): the conductive-to-plate loss channel, an implicit 1D heat-conduction mesh.
+//! - [`transport`] — a gray discrete-ordinates (Sₙ) solve on a *frozen* slab. Not part of the time
+//!   loop: it is the independent radiation model that measures how far [`radiation`]'s
+//!   flux-limited diffusion is off where FLD is weakest, near `τ ~ 1` (ADR-0012).
 
 pub mod conduction;
 pub mod eos;
 pub mod kernel;
 pub mod radiation;
 pub mod riemann;
+pub mod transport;
 
 /// A primitive fluid state `(ρ, u, p)` — the shared currency between the kernel and the oracle.
 #[derive(Debug, Clone, Copy, PartialEq)]
