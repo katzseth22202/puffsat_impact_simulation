@@ -57,6 +57,8 @@ __pycache__/
 !/data/results/lte_validity.csv
 !/data/results/opacity_bracket.csv
 !/data/results/transport_check.csv
+# 20 rows; the evidence behind step 5's delta_f bound and 1h25m of CPU to regenerate.
+!/data/results/sweep_mesh_convergence.jsonl
 !/data/results/*.png
 # ...and, for the tamped-nozzle study (puffsat_tamper_isp_prd.md), the Rung 0 analytic ledger.
 # It is the single source of truth for every closed-form number that PRD quotes, so it is a cited

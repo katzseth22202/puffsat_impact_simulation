@@ -1,11 +1,19 @@
-"""Heavy-plate 16-28 km/s special-scenario analysis: `f(v)` + facesheet survivability at a pinned
+"""Heavy-plate 16-63 km/s special-scenario analysis: `f(v)` + facesheet survivability at a pinned
 30 m / ≤ 40 t plate (design §12.1, ADR-0027).
 
 The scenario scales the vehicle up from the core envelope: a **100 kg** PuffSat pulse on a
-**tripled** pusher plate (`R = 15 m`, 30 m diameter) of mass **≤ 40 t**, swept **16-28 km/s at
-0.5 km/s** (25 anchors; 16 km/s overlaps the core anchor as a consistency check). The question
-(design §12.1): does the fudge factor stay near `f ≈ 0.8`, and does the facesheet survive, at this
-larger, faster, heavier configuration?
+**tripled** pusher plate (`R = 15 m`, 30 m diameter) of mass **≤ 40 t**, swept **16-63 km/s** on a
+two-leg grid — 3 km/s over 16-43 (10 anchors) and 1 km/s over 45-63 (19) — for 29 anchors, with
+16 km/s overlapping the core anchor as a consistency check. Two legs because the halves are known
+to different degrees: 16-28 was swept by the original study and varies smoothly, while 45-63 has
+never been sampled and its `tau` structure is unknown. The question (design §12.1): does the fudge
+factor stay near `f ≈ 0.8`, and does the facesheet survive, at this larger, faster, heavier
+configuration?
+
+**The `tau >> 1` shortcut does not travel with the range.** The original study justified skipping a
+full `L` axis, and reading the opacity check at a single velocity, on the slab being optically
+thick throughout 16-28 km/s. `L` sets when the slab goes transparent, so both diagnostics now run
+across `V_DIAG` (to 63 km/s) and report the worst spread over `RHO_SPOT`.
 
 Unlike `jupiter.py` — which pins the velocity and sweeps the plate radius — here **`R` and `m` are
 pinned** and the **velocity** is the swept axis. The Sigma contract (ADR-0003)
