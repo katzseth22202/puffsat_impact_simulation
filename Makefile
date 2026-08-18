@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution analysis-transport-check tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -301,6 +301,16 @@ sweep-transport-resolution: data/results/sweep_transport_resolution.jsonl
 data/results/sweep_transport_resolution.jsonl: data/tables/water_jupiter.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
 	@mkdir -p data/results
 	cargo run --release -p sweep -- --transport-resolution
+
+## sweep-mesh-convergence: deep e_eff mesh-convergence ladder (300..4800 cells) at the transport
+## gate's four states. Unaudited on purpose -- the Sn audit is a bit-identical observer, so dropping
+## it leaves e_eff unchanged and makes the 4800-cell rungs affordable ->
+## data/results/sweep_mesh_convergence.jsonl.
+sweep-mesh-convergence: data/results/sweep_mesh_convergence.jsonl
+
+data/results/sweep_mesh_convergence.jsonl: data/tables/water_jupiter.json $(wildcard crates/sweep/src/*.rs) $(wildcard crates/hydro1d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --mesh-convergence
 
 ## analysis-transport-check: reduce the audit to the verdict table (bias vs the 10% escalation gate,
 ## weighted by how much energy the channel actually carries) -> data/results/transport_check.csv.

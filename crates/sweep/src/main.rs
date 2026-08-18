@@ -1077,8 +1077,9 @@ struct TransportCheckRecord {
     /// Escape-weighted **Planck** optical depth of the space-facing cell — the number that says
     /// whether FLD's Marshak boundary is being applied to a cell it can legitimately describe.
     flux_weighted_surface_cell_depth_planck: f64,
-    /// Escape-weighted `FLD flux / σT⁴` of the space-facing gas. Above 1 is unphysical: no surface
-    /// radiates faster than a blackbody at its own temperature.
+    /// Escape-weighted `FLD flux / σT⁴` of the space-facing *cell*. Above 1 is expected wherever
+    /// that cell is optically thin — the escaping radiation was emitted deeper and hotter — so this
+    /// measures how far below the last cell the photosphere sits, not a physical violation.
     flux_weighted_fld_over_blackbody: f64,
     /// Escape loss as a fraction of the slug's incident kinetic energy. A bias on a channel worth
     /// 0.1% of the energy budget cannot move `f`, however large the ratio looks.
@@ -1169,6 +1170,83 @@ const TRANSPORT_RES_STATES: [(f64, f64); 4] = [
     (28_000.0, 0.01),
     (69_000.0, 0.30),
 ];
+
+const RESULT_PATH_MESH: &str = "data/results/sweep_mesh_convergence.jsonl";
+
+/// One mesh-convergence row: `e_eff` alone, at an explicit cell count.
+///
+/// Deliberately **unaudited**. The Sₙ audit is a bit-identical observer (proved by
+/// `transport_audit_changes_nothing_and_tallies_the_escape_channel`), so dropping it leaves `e_eff`
+/// unchanged while removing an Sₙ solve per substep — which is what makes 4800-cell meshes
+/// affordable. The question here is whether the *deliverable* has converged, not what the audit
+/// says about it.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+struct MeshConvergenceRecord {
+    v: f64,
+    rho_impact: f64,
+    length: f64,
+    gas_cells: usize,
+    e_eff: f64,
+    peak_wall_pressure: f64,
+    incident_momentum: f64,
+    wall_impulse: f64,
+    loss_radiative_wall: f64,
+    loss_escape_space: f64,
+    converged: bool,
+}
+
+/// Cell ladder for the deep mesh-convergence study. Production is 300; each rung doubles, and cost
+/// grows roughly as cells² (the CFL step count scales with the mesh too).
+const MESH_CELLS: [usize; 5] = [300, 600, 1200, 2400, 4800];
+
+/// Run one unaudited coupled bounce at an explicit cell count.
+fn run_one_mesh_case(
+    v: f64,
+    rho_impact: f64,
+    gas_cells: usize,
+    base_tbl: &Table,
+) -> MeshConvergenceRecord {
+    let cfg = Config {
+        v,
+        length: HEAVY_LENGTH,
+        gas_cells,
+        ..Config::production()
+    };
+    let tube = Tube::slug_si(
+        cfg.gas_cells,
+        rho_impact,
+        cfg.v,
+        cfg.length,
+        cfg.t0,
+        TableEos::new(base_tbl.clone()),
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    );
+    let result = CoupledBounce::new(tube, None, cfg.consts, cfg.limiter).run();
+    MeshConvergenceRecord {
+        v: cfg.v,
+        rho_impact,
+        length: cfg.length,
+        gas_cells,
+        e_eff: result.bounce.e_eff,
+        peak_wall_pressure: result.bounce.peak_wall_pressure,
+        incident_momentum: result.bounce.incident_momentum,
+        wall_impulse: result.bounce.wall_impulse,
+        loss_radiative_wall: result.loss_radiative_wall,
+        loss_escape_space: result.loss_escape_space,
+        converged: result.bounce.converged,
+    }
+}
+
+/// Sweep the deep mesh-convergence ladder over the gate's four states.
+fn run_mesh_convergence_sweep(base_tbl: &Table) -> Vec<MeshConvergenceRecord> {
+    let cases: Vec<(f64, f64, usize)> = TRANSPORT_RES_STATES
+        .iter()
+        .flat_map(|&(v, rho)| MESH_CELLS.iter().map(move |&n| (v, rho, n)))
+        .collect();
+    par_map_with_progress("mesh-convergence", &cases, |&(v, rho, n)| {
+        run_one_mesh_case(v, rho, n, base_tbl)
+    })
+}
 
 /// Sweep the resolution gate: the same states at four mesh resolutions.
 fn run_transport_resolution_sweep(base_tbl: &Table) -> Vec<TransportCheckRecord> {
@@ -1937,6 +2015,23 @@ fn cmd_transport_check(_args: &[String]) -> Result<(), Box<dyn std::error::Error
     })
 }
 
+fn cmd_mesh_convergence(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let table = Table::load(TABLE_PATH_JUPITER)?;
+    let rows = run_mesh_convergence_sweep(&table);
+    emit_scenario(RESULT_PATH_MESH, "mesh-convergence", &rows, |r| {
+        println!(
+            "rust: v={:>5.0} rho={:.3} cells={:>5} -> e_eff={:.6} peak_p={:.4e} escape={:.4e} conv={}",
+            r.v,
+            r.rho_impact,
+            r.gas_cells,
+            r.e_eff,
+            r.peak_wall_pressure,
+            r.loss_escape_space,
+            r.converged,
+        );
+    })
+}
+
 fn cmd_transport_resolution(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let table = Table::load(TABLE_PATH_JUPITER)?;
     let rows = run_transport_resolution_sweep(&table);
@@ -2116,6 +2211,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--frozen-probe", cmd_frozen_probe),
     ("--frozen", cmd_frozen),
     ("--ablating", cmd_ablating),
+    ("--mesh-convergence", cmd_mesh_convergence),
     ("--transport-resolution", cmd_transport_resolution),
     ("--transport-check", cmd_transport_check),
     ("--jupiter", cmd_jupiter),
