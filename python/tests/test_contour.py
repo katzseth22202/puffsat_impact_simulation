@@ -228,3 +228,37 @@ def test_recession_scales_with_the_column_the_pulse_delivers() -> None:
     assert contour.ablation_bracket(1.0e7).depth_max / contour.ablation_bracket(
         1.0e6
     ).depth_max == pytest.approx(10.0, rel=1e-12)
+
+
+def test_pinned_shape_is_the_one_that_survives_the_worst_case() -> None:
+    """Q13's companion curve. The headline lets the cloud shape float with velocity -- design SS7's
+    schedule `shape(v)`, one shot at a time. The pinned curve answers the opposite question: what
+    if you cannot vary it, and must fly one shape everywhere?
+
+    Then the shape is forced by the *most demanding* velocity in the range, because it has to
+    survive there. Pinning anywhere else would produce a curve that fails at the top end, which is
+    not a curve anyone can fly."""
+    pin = contour.pinned_shape(63_000.0, c_stag=1.26, p_limit=4.0e8)
+    free = contour.contour_point(63_000.0, c_stag=1.26, p_limit=4.0e8)
+
+    # At the pinning velocity the two coincide -- that is where the constraint binds.
+    assert pin.rho_contour == pytest.approx(free.rho_contour, rel=1e-12)
+    assert pin.r_foot_over_r == pytest.approx(free.r_foot_over_r, rel=1e-12)
+
+
+def test_pinned_curve_is_dilute_and_therefore_worse_at_low_speed() -> None:
+    """The cost of not scheduling. A shape sized to survive 63 km/s is far more dilute than 16 km/s
+    needs (0.081 against a 0.582 contour), and a dilute cloud radiates away more of the bounce --
+    so the pinned curve must sit at or below the floating one everywhere, with the gap widest where
+    the two densities differ most."""
+    e_of_rho = {0.0806: 0.36, 0.5822: 0.64}
+
+    def e_eff_at(rho: float) -> float:
+        return e_of_rho[min(e_of_rho, key=lambda k: abs(k - rho))]
+
+    free_16 = contour.contour_point(16_000.0, c_stag=1.26, p_limit=4.0e8, e_eff_at=e_eff_at)
+    pinned_16 = contour.pinned_shape(63_000.0, c_stag=1.26, p_limit=4.0e8, e_eff_at=e_eff_at)
+
+    assert pinned_16.rho_contour < free_16.rho_contour
+    assert pinned_16.f is not None and free_16.f is not None
+    assert pinned_16.f < free_16.f

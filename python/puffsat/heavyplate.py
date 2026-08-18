@@ -671,6 +671,33 @@ def main() -> None:
                 f"eta={p.eta_capture:.4f}  f={p.f:.3f} [{b.lo:.3f}, {b.hi:.3f}]  "
                 f"recession {a.depth_min * 1e6:.1f}-{a.depth_max * 1e6:.1f} um/pulse{mark}"
             )
+    # Q13's companion: one shape flown everywhere, sized by the most demanding velocity in range.
+    v_max = max(velocities)
+    pinned = contour.pinned_shape(
+        v_max, c_stag=stagnation_coefficient_at_v(sweep_rows, v_max), p_limit=P_LIMIT_BASELINE
+    )
+    print(
+        f"pinned-shape companion (Q13): one cloud at rho={pinned.rho_contour:.4f}, "
+        f"rf/R={pinned.r_foot_over_r:.3f}, sized to survive {v_max / 1000:.0f} km/s"
+    )
+    worst = 0.0
+    for r in contour_rows:
+        v = r.point.v
+        pp = contour.pinned_point(
+            v,
+            pinned,
+            c_stag=stagnation_coefficient_at_v(sweep_rows, v),
+            p_limit=P_LIMIT_BASELINE,
+            e_eff_at=e_eff_interpolator_at_v(sweep_rows, v),
+        )
+        assert pp.f is not None and r.point.f is not None
+        worst = max(worst, r.point.f - pp.f)
+        if v % 9000 < 1e-9 or abs(v - v_max) < 1e-9:
+            print(
+                f"  {v / 1000:>5.0f} km/s  floating f={r.point.f:.3f}  pinned f={pp.f:.3f}  "
+                f"cost of not scheduling = {r.point.f - pp.f:+.3f}"
+            )
+    print(f"  worst schedule value across the range: {worst:.3f} in f")
     print(f"python: wrote {contour.DEFAULT_CONTOUR_PATH}")
 
     # The 16 km/s overlap with the core envelope study (consistency check).

@@ -397,3 +397,62 @@ def write_curve(rows: list[ContourRow], path: Path = DEFAULT_CONTOUR_PATH) -> No
             f"{a.fluence:.6e},{a.depth_max * 1e6:.3f},{a.depth_min * 1e6:.3f}"
         )
     path.write_text("\n".join(lines) + "\n")
+
+
+def pinned_shape(
+    pin_v: float,
+    c_stag: float,
+    p_limit: float,
+    d_over_d: float = D_OVER_D_HEADLINE,
+    path: Path = DEFAULT_GEOMETRY_PATH,
+    e_eff_at: Callable[[float], float] | None = None,
+) -> ContourPoint:
+    """The single cloud shape flown at every velocity when the schedule is *not* available (Q13).
+
+    Design SS7 treats the cloud as a per-shot schedule `shape(v)` -- the plate is one built object,
+    the cloud is not. The pinned curve is the companion that asks what happens without that freedom.
+
+    The shape is set by the **most demanding velocity in the range**, since one shape must survive
+    everywhere; pinning it anywhere else yields a curve that fails at the top end, which is not a
+    curve anyone can fly. Below `pin_v` it is then more dilute than survivability requires, and a
+    dilute cloud radiates away more of the bounce -- so the pinned curve sits at or below the
+    floating one, and the gap is the value of being able to schedule.
+    """
+    return contour_point(
+        pin_v,
+        c_stag=c_stag,
+        p_limit=p_limit,
+        d_over_d=d_over_d,
+        path=path,
+        e_eff_at=e_eff_at,
+    )
+
+
+def pinned_point(
+    v: float,
+    shape: ContourPoint,
+    c_stag: float,
+    p_limit: float,
+    e_eff_at: Callable[[float], float] | None = None,
+) -> ContourPoint:
+    """Evaluate an already-pinned `shape` at velocity `v`.
+
+    The shape's density and `eta_capture` are carried over unchanged -- that is what "pinned" means
+    -- while `rho_ceiling` and `e_eff` are re-read at `v`. Comparing `rho_contour` against
+    `rho_ceiling` on the result tells you whether the pinned shape still survives there; sized at
+    the range's worst velocity it always does, with margin to spare lower down, and that unused
+    margin is exactly the restitution the schedule would have recovered.
+    """
+    e_eff = e_eff_at(shape.rho_contour) if e_eff_at is not None else None
+    return ContourPoint(
+        v=v,
+        rho_ceiling=rho_ceiling(v, c_stag, p_limit),
+        rho_contour=shape.rho_contour,
+        ceiling_limited=False,
+        d_over_d=shape.d_over_d,
+        l_over_d=shape.l_over_d,
+        r_foot_over_r=shape.r_foot_over_r,
+        eta_capture=shape.eta_capture,
+        e_eff=e_eff,
+        f=None if e_eff is None else shape.eta_capture * (1.0 + e_eff) / 2.0,
+    )
