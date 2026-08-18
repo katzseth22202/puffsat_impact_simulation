@@ -101,6 +101,38 @@ but small slice of this (`e_eff` 0.63 → up to ~0.68 at 16 km/s; injection-domi
 shielding-dominated), but the ~11 km/s dip is an EOS energy sink and is **not** radiatively
 fillable ([ADR-0014](docs/adr/0014-ablating-wall.md)).
 
+**The claim now reaches 63 km/s, on a different vehicle.** The core envelope above is 3.2–16 km/s
+at 25 kg on a 5 m plate. The **heavy-plate special scenario** (design §12.1) scales that up — 100 kg
+on a 30 m / ≤ 40 t plate — and was extended in 2026-08 from 16–28 km/s to a continuous **16–63 km/s**
+curve ([ADR-0035](docs/adr/0035-heavy-plate-range-extension-and-contour-construction.md)).
+
+**`f` holds 0.79–0.82 across that entire range** (`data/results/frontier_contour_heavyplate.csv`),
+with 16 km/s reproducing the previously published 0.811. The band is ±0.04–0.05, dominated by the
+freeze-timing bracket; the opacity bracket contributes ±0.005
+([ADR-0036](docs/adr/0036-opacity-bracket-grounded-in-the-data-not-the-placeholder.md)) and the
+radiation-model bound ±0.003
+([ADR-0037](docs/adr/0037-transport-check-verdict-fld-stands-on-the-quantity-that-matters.md)).
+This does not move the core-envelope headline above; it extends where the `f ≈ 0.8` claim has been
+tested.
+
+Three things that pass came out of testing rather than assumption, and one that does not:
+
+- **FLD's escape-to-space channel is wrong by up to a factor of 2** at these conditions — a
+  free-surface boundary applied to a cell that does not resolve the photosphere. It does not reach
+  the deliverable: across a 16× mesh refinement the escape channel moves +8.5–13.8% and is still
+  rising while `e_eff` settles to better than 0.7%. Measured, not argued (ADR-0037).
+- **LTE is checked directly across 45–63 km/s**, not inferred by bracketing. All pass; the tightest
+  margin in the whole 16–63 band is at the *coldest* end (2.5× at 16 km/s), not the hottest
+  (ADR-0036).
+- **The `τ ≫ 1` justification was never valid at the dilute end, including in the published 16–28
+  km/s range.** The evidence was already on disk and unexamined — the reporting probed a single
+  density that fell just under the flatness threshold. `f(v)` stands (it is computed at the real
+  opacity); the *reasoning* did not, and design §12.1 now says so.
+- **Per-pulse ablator recession is 196–1911 µm at 16 km/s and 8.3–41.4 mm at 63 km/s**, against
+  ADR-0014's "a few µm". An upper bound (no re-radiation, no vapor shielding) and a diagnostic
+  rather than a gate — but the sacrificial-layer renewal rate is sized against it, so the gap is
+  open.
+
 ## Status & open items
 
 **One validation gate (upgrades a preliminary number to validated; no longer blocks quotation):**

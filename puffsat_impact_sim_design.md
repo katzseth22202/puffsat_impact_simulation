@@ -263,11 +263,26 @@ kernels and (where the grid reaches) the same tables. They are documented here r
 one is **Jupiter-retrograde** (100 kg pulse at a single 69 km/s, dilute τ~1 plasma, `sweep-jupiter`
 + the ADR-0026 freeze bracket amendment). This section documents the second.
 
-### 12.1 Heavy-plate (16–28 km/s, 100 kg pulse, 30 m / ≤ 40 t plate)
+### 12.1 Heavy-plate (16–63 km/s, 100 kg pulse, 30 m / ≤ 40 t plate)
 
 **Question.** Does the fudge factor stay in the ballpark of `f ≈ 0.8`, and does the plate survive,
 when the vehicle is scaled up — bigger pulses on a much larger, heavier plate at higher closing
 speeds than the core envelope's 16 km/s ceiling?
+
+**Answer (2026-08, extended to 63 km/s — ADR-0035).** Yes. On the contour construction `f` holds
+**0.79–0.82 across the whole 16–63 km/s range**, and the 16 km/s point reproduces the previously
+published 0.811, so the extension is consistent with what it extends.
+
+| v [km/s] | 16 | 22 | 28 | 34 | 40 | 45 | 50 | 55 | 63 |
+|---|---|---|---|---|---|---|---|---|---|
+| ρ contour [kg/m³] | 0.582 | 0.582 | 0.427 | 0.287 | 0.206 | 0.160 | 0.130 | 0.106 | 0.081 |
+| binds | box | box | surv | surv | surv | surv | surv | surv | surv |
+| **f** | 0.794 | 0.816 | 0.813 | 0.813 | 0.816 | 0.818 | 0.819 | 0.817 | **0.809** |
+
+The band is `±0.04–0.05`, dominated by the freeze-timing bracket; the opacity bracket contributes
+`±0.005` (ADR-0036) and the radiation-model bound `±0.003` (ADR-0037), so in quadrature they are
+almost entirely the freeze number. Above 28 km/s the freeze bracket is **carried forward and
+labelled**, not extrapolated — it tracks an ionization staircase, not a ramp.
 
 **Pinned knobs (deviations from §2).**
 
@@ -276,7 +291,7 @@ speeds than the core envelope's 16 km/s ceiling?
 | Pulse mass `m` | 25 kg | **100 kg** | gas per shot; the `m` in `ρ ∝ m/R²` |
 | Plate radius `R` | 5 m | **15 m** (30 m diameter) | radius *tripled*; canonical `R`, see CONTEXT |
 | Plate mass | 3–4 t | **≤ 40 t (ceiling)** | rigid-wall note: recoil `2m/M ≈ 0.5%`/pulse |
-| Velocity | 3.2–16 km/s | **16–28 km/s @ 0.5** | 25 anchors; 16 overlaps the core anchor (consistency check) |
+| Velocity | 3.2–16 km/s | **16–63 km/s, two legs** | 3 km/s over 16–43 + 1 km/s over 45–63 = 29 anchors; 16 overlaps the core anchor (consistency check) |
 | Gas | water | water | unchanged |
 
 Because `R` grows 3× while `m` grows 4×, the Σ contract puts impact density **below** the core
@@ -293,19 +308,45 @@ opacity check below.
   `water.json` (interim Kramers, `T ≤ 60 kK`) lacks. Jupiter established that real opacity is
   decisive here (interim Kramers ran ~2000× low at stagnation and falsely predicted `τ ~ 1`).
 - **`e_eff`:** the coupled radiation bounce (`CoupledBounce`, `wall = None`, high-v config),
-  **equilibrium EOS + real opacity as the headline across all 25 velocities**. Grid: `v` (25) ×
-  `ρ` (~0.01–0.6, ~7 pts) at a fixed representative stretched-cloud length `L ≈ 8–10 m`, with an
-  `L`-sensitivity spot-check at anchors (`τ ≫ 1` makes `e_eff` `L`-insensitive, so a full `L` axis
-  is not swept).
+  **equilibrium EOS + real opacity as the headline across all 29 velocities**. Grid: `v` (29) ×
+  `ρ` (12 pts, 0.01–0.58, dense through the steep on-contour band 0.06–0.20) at a fixed
+  representative stretched-cloud length `L = 10 m`, with `L`-sensitivity and opacity τ-check rows
+  at six diagnostic velocities spanning the full range.
 - **Brackets:** the ADR-0026 **frozen-recombination** bracket (probe + sudden-freeze bound) at
-  **16 / 22 / 28 km/s** as the named high-v caveat (it grows with `v`); a one-shot
-  **opacity-scale τ-check** at 28 km/s to confirm `τ ≫ 1` at the dilute top.
+  **16 / 22 / 28 km/s** as the named high-v caveat (it grows with `v`); the opacity bracket grounded
+  in the data's own published accuracy (ADR-0036); the Sₙ transport bound (ADR-0037).
+
+> **Correction (2026-08-18).** This section previously justified skipping a full `L` axis, and
+> reading the opacity check at a single velocity, on `τ ≫ 1` holding throughout. **That was never
+> true at the dilute end, including in the published 16–28 km/s range.** The 28 km/s τ-check rows
+> already on disk showed `Δe_eff` over 0.1×–10× κ of 0.1259 at ρ = 0.01 falling to 0.0072 at
+> ρ = 0.30, but the reporting probed only ρ = 0.08 — the single density that falls just under the
+> 0.02 flatness threshold — and printed "τ ≫ 1 confirmed". Both diagnostics now run across six
+> velocities and report the **worst** spread over the diagnostic densities.
+>
+> `f(v)` itself stands: `e_eff` is computed at κ = 1 with the real TOPS opacity, and the resulting
+> *uncertainty* is what ADR-0036's bracket quantifies from OPLIB's published 20–30% accuracy rather
+> than from the 0.1×–10× range. It is this justification that was wrong, not the answer.
+>
+> `L`-sensitivity behaves as expected for a thinning slab: worst `Δe_eff` over `L ∈ {6, 10, 14}`
+> grows from 0.016 at 16 km/s to 0.052 at 45 km/s.
 - **`eta_capture`:** reuse the **M = 40 geometry sweep** (`sweep_geometry_m40.jsonl`). `eta_capture`
   is set by the ratios `r_foot/R`, `L/D`, and curvature (scale-invariant), and is Mach-converged by
   M = 40 (M = 10/20/40 agree < 1%), so the M ≈ 32–56 heavy-plate clouds need no new 2D runs. Flat +
   shallow-concave, as always.
 - **Deliverable:** `f = eta_capture·(1 + e_eff)/2` as a dual curve (conservative floor as headline),
   with the `f = 0.8` reference line marked (ADR-0009, a reference anchor, not a mission gate).
+  Reduced onto the **continuous survivable-density contour** `ρ(v) = min(ρ_ceiling(v), ρ_max)`
+  rather than read off the discrete 27-shape grid (ADR-0035) — the grid, not the physics, was
+  setting where the curve stepped. Which limit binds is reported: below ~25 km/s the **shape box**
+  binds (the cloud cannot be built dense enough), above it **survivability** does.
+  A **pinned-shape companion** (one cloud flown everywhere, sized by the worst velocity) is emitted
+  alongside; the gap between them — the value of being able to schedule the cloud per shot — is at
+  most **0.017 in `f`**, less than the freeze bracket.
+- **Per-pulse ablation diagnostic (Q7, ADR-0014):** the wall's radiative fluence converted to
+  sacrificial-layer recession — **196–1911 µm/pulse at 16 km/s, 8.3–41.4 mm at 63 km/s**, against
+  ADR-0014's "a few µm". An **upper bound**, crediting nothing to re-radiation or to ADR-0014's own
+  vapor curtain, and a diagnostic rather than a gate — but the renewal rate is sized against it.
 - **Facesheet survivability:** peak `≈ 1.2ρv²` vs the SiC+Ti ladder (400 baseline / 700 / 900 MPa),
   the Σ contract (`m = 100`, `R = 15`) resolving the survivable-optimal shape per velocity.
 
