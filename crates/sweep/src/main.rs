@@ -61,6 +61,11 @@ const RESULT_PATH_FROZEN_PROBE_JUPITER: &str = "data/results/frozen_probe_jupite
 const RESULT_PATH_FROZEN_JUPITER: &str = "data/results/sweep_frozen_jupiter.jsonl";
 const TABLE_DIR_FROZEN_JUPITER: &str = "data/tables/frozen_jupiter";
 const RESULT_PATH_GEOMETRY_M40: &str = "data/results/sweep_geometry_m40.jsonl";
+// Design §7's remaining `r_foot/R` nodes (0.8/0.9/1.0), in their own file: five frontier CSVs
+// consume `sweep_geometry_m40.jsonl` and must not shift. Same `GeoRecord` schema, so the analysis
+// concatenates the two.
+const RESULT_PATH_GEOMETRY_WIDE: &str = "data/results/sweep_geometry_wide.jsonl";
+const RESULT_PATH_GEOMETRY_WIDE_HEADROOM: &str = "data/results/sweep_geometry_wide_headroom.jsonl";
 // The heavy-plate 16–28 km/s special scenario (design §12.1, ADR-0027): reuses the Jupiter
 // extended-grid table; its own result files + freeze-bracket directory.
 const RESULT_PATH_HEAVYPLATE: &str = "data/results/sweep_heavyplate.jsonl";
@@ -499,6 +504,21 @@ const GEO_D_OVER_D: [f64; 3] = [0.0, 0.10, 0.15];
 const GEO_L_OVER_D: [f64; 3] = [0.3, 0.6, 1.0];
 /// Footprint coverage `r_foot/R` (design §sweep 0.3–1.0; `R` fixed, the shared knob).
 const GEO_RFOOT_OVER_R: [f64; 3] = [0.3, 0.5, 0.7];
+/// The rest of design §7's specified `r_foot/R` range. The original grid stopped at 0.7, which is
+/// where `contour::R_FOOT_BOX` took its upper edge from — so the box edge was the *sweep's* limit,
+/// not a delivery constraint. It binds: the 25 kg / 5 m core plate needs `r_foot/R` 0.87 at 45 km/s
+/// and 1.00 at 55 km/s to hold the eta-optimal `L/D = 0.3` on the survivable contour, and clamping
+/// it at 0.7 forces a cloud stretch that costs ~0.05 in `f`. Past `r_foot/R = 1` the cloud is wider
+/// than the plate and the spill is unambiguous, so 1.0 is the physical end of the useful range.
+const GEO_RFOOT_WIDE: [f64; 3] = [0.8, 0.9, 1.0];
+/// Radial domain margin past the plate rim, as a multiple of `r_plate` (§7: room for gas to escape).
+/// Held at the original value so the extended grid is directly comparable to the published rows.
+const GEO_RIM_HEADROOM: f64 = 1.4;
+/// Headroom multipliers for the domain-convergence check. `r_max = GEO_RIM_HEADROOM * r_plate`
+/// measures escape room from the *plate* rim, so as `r_foot/R -> 1` the room past the *cloud* edge
+/// shrinks from `3.7 r_foot` (at 0.3) to `0.4 r_foot` (at 1.0). A too-tight domain would confine the
+/// rebound and inflate `eta_capture` exactly where the new rows are, so it is measured, not assumed.
+const GEO_RIM_HEADROOM_CHECK: [f64; 3] = [1.4, 2.0, 2.8];
 /// Incident-Mach anchors. `eta_capture` is geometry-dominated and only weakly Mach-dependent, so two
 /// anchors bracket that dependence; D7 pairs them with the 1D `e_eff` velocity anchors. The physical
 /// incident Mach of the production cloud is M ≈ 21 at the 11 km/s dip and M ≈ 32 at 16 km/s
@@ -561,10 +581,29 @@ fn run_eta_case(
     mach: f64,
     cfg: &GeoConfig,
 ) -> GeoRecord {
+    run_eta_case_with_headroom(
+        d_over_d,
+        l_over_d,
+        r_foot_over_r,
+        mach,
+        cfg,
+        GEO_RIM_HEADROOM,
+    )
+}
+
+/// [`run_eta_case`] with the radial domain margin exposed, for the domain-convergence check.
+fn run_eta_case_with_headroom(
+    d_over_d: f64,
+    l_over_d: f64,
+    r_foot_over_r: f64,
+    mach: f64,
+    cfg: &GeoConfig,
+    rim_headroom: f64,
+) -> GeoRecord {
     let r_foot = 1.0;
     let r_plate = r_foot / r_foot_over_r;
     let length = l_over_d * 2.0 * r_foot;
-    let r_max = r_plate * 1.4; // room past the rim for gas to escape (§7)
+    let r_max = r_plate * rim_headroom; // room past the rim for gas to escape (§7)
     let depth = d_over_d * 2.0 * r_plate;
     let z_max = depth + 2.0 * length + 1.5; // dish + cloud + rebound headroom
     let free = run_slug_bounce(&SlugConfig {
@@ -2183,6 +2222,82 @@ fn cmd_shape(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     })
 }
 
+/// One domain-convergence row: `eta_capture` at a given radial margin, at the corner where the
+/// margin is tightest (`r_foot/R = 1.0`, cloud edge flush with the plate rim).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+struct HeadroomRecord {
+    d_over_d: f64,
+    l_over_d: f64,
+    r_foot_over_r: f64,
+    mach: f64,
+    /// `r_max / r_plate`.
+    rim_headroom: f64,
+    eta_capture: f64,
+}
+
+// Design §7 specified `r_foot/R` over 0.3–1.0; the implemented grid stopped at 0.7 and
+// `contour::R_FOOT_BOX` inherited that as its upper edge. This completes the specified range at the
+// same M = 40 anchor, and measures the domain-convergence risk that comes with it.
+fn cmd_geometry_wide(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let cfg = GeoConfig::production();
+    let cases: Vec<(f64, f64, f64)> = GEO_RFOOT_WIDE
+        .iter()
+        .flat_map(|&rf| {
+            GEO_L_OVER_D
+                .iter()
+                .flat_map(move |&ld| GEO_D_OVER_D.iter().map(move |&dd| (dd, ld, rf)))
+        })
+        .collect();
+    let rows: Vec<GeoRecord> = par_map_with_progress("geometry-wide", &cases, |&(dd, ld, rf)| {
+        run_eta_case(dd, ld, rf, 40.0, &cfg)
+    });
+    emit_scenario(
+        RESULT_PATH_GEOMETRY_WIDE,
+        "wide-footprint geometry",
+        &rows,
+        |r| {
+            println!(
+                "rust: d/D={:.2} L/D={:.2} r_foot/R={:.2} M=40 -> eta_capture={:.4}",
+                r.d_over_d, r.l_over_d, r.r_foot_over_r, r.eta_capture,
+            );
+        },
+    )?;
+
+    // Domain convergence at the tightest corner: only 0.4 r_foot of escape room past the cloud edge
+    // at the default margin, against 3.7 at r_foot/R = 0.3. Run the headline curvature across L/D.
+    let checks: Vec<(f64, f64, f64)> = GEO_RFOOT_WIDE
+        .iter()
+        .flat_map(|&rf| {
+            GEO_L_OVER_D
+                .iter()
+                .flat_map(move |&ld| GEO_RIM_HEADROOM_CHECK.iter().map(move |&h| (rf, ld, h)))
+        })
+        .collect();
+    let head: Vec<HeadroomRecord> =
+        par_map_with_progress("geometry-wide-headroom", &checks, |&(rf, ld, h)| {
+            let r = run_eta_case_with_headroom(0.10, ld, rf, 40.0, &cfg, h);
+            HeadroomRecord {
+                d_over_d: r.d_over_d,
+                l_over_d: r.l_over_d,
+                r_foot_over_r: r.r_foot_over_r,
+                mach: r.mach,
+                rim_headroom: h,
+                eta_capture: r.eta_capture,
+            }
+        });
+    emit_scenario(
+        RESULT_PATH_GEOMETRY_WIDE_HEADROOM,
+        "wide-footprint domain check",
+        &head,
+        |r| {
+            println!(
+                "rust: L/D={:.2} r_foot/R={:.2} r_max/r_plate={:.1} -> eta_capture={:.4}",
+                r.l_over_d, r.r_foot_over_r, r.rim_headroom, r.eta_capture,
+            );
+        },
+    )
+}
+
 // High-Mach spot check for the Jupiter scenario: the full geometry grid at M = 40 (the
 // strong-shock plateau check past the production anchors 10/20).
 fn cmd_geometry_m40(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
@@ -2286,6 +2401,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--heavyplate", cmd_heavyplate),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),
+    ("--geometry-wide", cmd_geometry_wide),
     ("--geometry", cmd_geometry),
 ];
 

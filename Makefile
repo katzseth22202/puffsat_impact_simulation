@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -140,6 +140,17 @@ analysis-lte: data/results/lte_validity.csv
 
 data/results/lte_validity.csv: data/results/frozen_probe_heavyplate.jsonl data/results/frozen_probe_heavyplate_diag.jsonl data/results/frozen_probe_jupiter.jsonl python/puffsat/lte.py python/puffsat/eos_water.py
 	PYTHONPATH=python $(PY) -m puffsat.lte
+
+## sweep-geometry-wide: design SS7's remaining r_foot/R nodes (0.8/0.9/1.0) at the same M = 40
+## anchor -> data/results/sweep_geometry_wide.jsonl, plus a radial-domain convergence check
+## (data/results/sweep_geometry_wide_headroom.jsonl). The original grid stopped at 0.7, which is
+## where contour.R_FOOT_BOX took its upper edge; separate file so the five CSVs that consume
+## sweep_geometry_m40.jsonl are untouched.
+sweep-geometry-wide: data/results/sweep_geometry_wide.jsonl
+
+data/results/sweep_geometry_wide.jsonl: $(wildcard crates/sweep/src/*.rs) $(wildcard crates/euler2d/src/*.rs)
+	@mkdir -p data/results
+	cargo run --release -p sweep -- --geometry-wide
 
 ## sweep-geometry-m40: the same eta_capture sweep at M = 40 (the high-v scenarios' Mach anchor) ->
 ## data/results/sweep_geometry_m40.jsonl. Five frontier CSVs consume it (jupiter, frozen-jupiter,
