@@ -270,14 +270,22 @@ when the vehicle is scaled up — bigger pulses on a much larger, heavier plate 
 speeds than the core envelope's 16 km/s ceiling?
 
 **Answer (2026-08, extended to 63 km/s — ADR-0035).** Yes. On the contour construction `f` holds
-**0.79–0.82 across the whole 16–63 km/s range**, and the 16 km/s point reproduces the previously
+**0.78–0.82 across the whole 16–63 km/s range**, and the 16 km/s point reproduces the previously
 published 0.811, so the extension is consistent with what it extends.
 
 | v [km/s] | 16 | 22 | 28 | 34 | 40 | 45 | 50 | 55 | 63 |
 |---|---|---|---|---|---|---|---|---|---|
-| ρ contour [kg/m³] | 0.582 | 0.582 | 0.427 | 0.287 | 0.206 | 0.160 | 0.130 | 0.106 | 0.081 |
+| ρ contour [kg/m³] | 0.582 | 0.582 | 0.359 | 0.233 | 0.165 | 0.126 | 0.093 | 0.070 | 0.047 |
+| focusing | 1.15 | 1.15 | 1.18 | 1.22 | 1.25 | 1.27 | 1.39 | 1.52 | 1.70 |
 | binds | box | box | surv | surv | surv | surv | surv | surv | surv |
-| **f** | 0.794 | 0.816 | 0.813 | 0.813 | 0.816 | 0.818 | 0.819 | 0.817 | **0.809** |
+| **f** | 0.794 | 0.816 | 0.812 | 0.812 | 0.815 | 0.817 | 0.813 | 0.805 | **0.783** |
+
+> **Correction (2026-08-21).** These are the focusing-corrected numbers. As first published the
+> contour compared the *plane-wave* stagnation peak against `P_limit`, omitting the concave
+> local-peak `focusing` factor (1.15–2.20 across the shape box) that the discrete frontier had
+> always applied — so it flew 470–565 MPa against its own 400 MPa baseline across 28–60 km/s. The
+> correction costs −0.001 below 45 km/s rising to −0.026 at 63, and moves the headline from
+> 0.79–0.82 to 0.78–0.82. See ADR-0035.
 
 The band is `±0.04–0.05`, dominated by the freeze-timing bracket; the opacity bracket contributes
 `±0.005` (ADR-0036) and the radiation-model bound `±0.003` (ADR-0037), so in quadrature they are
@@ -342,7 +350,8 @@ opacity check below.
   binds (the cloud cannot be built dense enough), above it **survivability** does.
   A **pinned-shape companion** (one cloud flown everywhere, sized by the worst velocity) is emitted
   alongside; the gap between them — the value of being able to schedule the cloud per shot — is at
-  most **0.017 in `f`**, less than the freeze bracket.
+  most **0.040 in `f`** (0.017 before the 2026-08-21 focusing correction), still less than the
+  freeze bracket but no longer comfortably so.
 - **Per-pulse ablation diagnostic (Q7, ADR-0014):** the wall's radiative fluence converted to
   sacrificial-layer recession — **196–1911 µm/pulse at 16 km/s, 8.3–41.4 mm at 63 km/s**, against
   ADR-0014's "a few µm". An **upper bound**, crediting nothing to re-radiation or to ADR-0014's own

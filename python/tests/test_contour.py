@@ -12,6 +12,7 @@ become validation points *on* the contour rather than the only places it may be 
 from __future__ import annotations
 
 import math
+from itertools import pairwise
 
 import pytest
 
@@ -61,14 +62,20 @@ def test_contour_takes_the_shape_box_limit_when_survivability_is_slack() -> None
 
 
 def test_contour_takes_the_survivability_limit_when_the_box_is_slack() -> None:
-    """At high speed survivability binds: 63 km/s admits only ~0.080 kg/m^3, well inside what the
-    box can deliver, so the cloud must be stretched to meet it."""
+    """At high speed survivability binds, and the density it admits is **below** the plane-wave
+    ceiling by exactly the focusing factor.
+
+    `rho_ceiling` is the plane-wave limit `P_limit/(c_stag v^2)`. The facesheet actually sees that
+    load concentrated by the dish (ADR-0010), so the flyable density is `rho_ceiling / focusing`.
+    Before 2026-08-21 the contour used the plane-wave value directly and flew ~27% over its own
+    limit."""
     pt = contour.contour_point(63_000.0, c_stag=1.26, p_limit=4.0e8)
 
     assert pt.ceiling_limited
-    assert pt.rho_contour == pytest.approx(pt.rho_ceiling, rel=1e-12)
-    assert pt.rho_contour == pytest.approx(0.080_04, rel=1e-3)
-    # The solved shape must actually sit on the contour and inside the box.
+    assert pt.focusing > 1.0, "the headline contour is concave, so it must concentrate"
+    assert pt.rho_contour == pytest.approx(pt.rho_ceiling / pt.focusing, rel=1e-3)
+    assert pt.rho_contour < pt.rho_ceiling
+    # The solved shape must sit inside the box and match its own Sigma-contract density.
     assert impact_density(
         pt.l_over_d, pt.r_foot_over_r, contour.PULSE_MASS_KG, contour.PLATE_RADIUS_M
     ) == pytest.approx(pt.rho_contour, rel=1e-9)
@@ -76,22 +83,97 @@ def test_contour_takes_the_survivability_limit_when_the_box_is_slack() -> None:
     assert contour.R_FOOT_BOX[0] <= pt.r_foot_over_r <= contour.R_FOOT_BOX[1]
 
 
-def test_contour_maximizes_eta_along_the_iso_density_curve() -> None:
-    """One equation (fixed rho) in two shape parameters leaves a one-parameter family, so the
-    contour point is *chosen*, not determined -- it is the member of that family with the highest
-    `eta_capture`, since `e_eff` is already pinned by rho.
+def test_contour_never_flies_over_the_pressure_limit_it_claims_to_respect() -> None:
+    """The regression test for the 2026-08-21 focusing bug.
 
-    The chosen point must beat every other feasible point on the same curve."""
+    The contour is *defined* as the densest cloud the facesheet survives, so the peak it actually
+    flies must never exceed `p_limit`. The pre-fix construction compared the **plane-wave** peak
+    against the limit while the facesheet sees the **focused** peak, so it sat over the limit at
+    every velocity where survivability bound -- 509 MPa against a 400 MPa limit at 45 km/s. Nothing
+    in the old test suite looked at the flown pressure, which is why it survived review."""
+    for v in range(28_000, 64_000, 4_000):
+        pt = contour.contour_point(float(v), c_stag=1.26, p_limit=4.0e8)
+        assert pt.peak_pressure <= 4.0e8 * (1.0 + 1e-9), (
+            f"contour at {v / 1000:.0f} km/s flies {pt.peak_pressure / 1e6:.0f} MPa "
+            f"against a 400 MPa limit"
+        )
+        # Where survivability binds, the box could have built something denser and was forbidden.
+        # (Checked against the box rather than the pressure, so it is not just restating the
+        # active-constraint test that sets `ceiling_limited`.)
+        if pt.ceiling_limited:
+            assert pt.rho_contour < contour.rho_max_achievable()
+
+
+def test_contour_agrees_with_the_discrete_frontier_it_replaced() -> None:
+    """The cross-check that decided the focusing bug was in the contour, not in the fix.
+
+    `heavyplate_frontier` evaluates the same physics on the 27-shape grid and has always applied
+    the focusing factor. At 45 km/s its best surviving concave shape is `L/D = 0.3, r_foot/R = 0.5`
+    -> `rho = 0.1258`, focusing 1.27, peak 399 MPa against the 400 MPa baseline. The continuous
+    contour must land on that point, since the grid node is available to it."""
+    pt = contour.contour_point(45_000.0, c_stag=1.2315, p_limit=4.0e8)
+
+    assert pt.rho_contour == pytest.approx(0.1258, rel=0.02)
+    assert pt.r_foot_over_r == pytest.approx(0.5, abs=0.02)
+    assert pt.l_over_d == pytest.approx(0.3, abs=0.02)
+    assert pt.focusing == pytest.approx(1.27, abs=0.02)
+
+
+def test_contour_keeps_the_best_surviving_shape_in_the_box() -> None:
+    """The objective, restated for the 2D search. Fixing `rho` first is no longer possible -- the
+    survivable density depends on the shape through `focusing` -- so the contour sweeps the box and
+    keeps the best *surviving* shape. Nothing that survives may beat it."""
     pt = contour.contour_point(63_000.0, c_stag=1.26, p_limit=4.0e8)
 
-    feasible = []
-    for i in range(200):
-        rf = contour.R_FOOT_BOX[0] + i * (contour.R_FOOT_BOX[1] - contour.R_FOOT_BOX[0]) / 199
-        lod = contour.l_over_d_for(pt.rho_contour, rf)
-        if contour.L_OVER_D_BOX[0] <= lod <= contour.L_OVER_D_BOX[1]:
-            feasible.append(contour.eta_at(lod, rf, pt.d_over_d))
-    assert feasible, "the iso-density curve must intersect the shape box"
-    assert pt.eta_capture >= max(feasible) - 1e-9
+    for i in range(60):
+        rf = contour.R_FOOT_BOX[0] + i * (contour.R_FOOT_BOX[1] - contour.R_FOOT_BOX[0]) / 59
+        for j in range(60):
+            lod = (
+                contour.L_OVER_D_BOX[0]
+                + j * (contour.L_OVER_D_BOX[1] - contour.L_OVER_D_BOX[0]) / 59
+            )
+            ok, rho, _, _ = contour.survivable(lod, rf, 63_000.0, 1.26, 4.0e8, pt.d_over_d)
+            if ok:
+                # No restitution source was supplied, so the objective is density.
+                assert rho <= pt.rho_contour + 1e-6
+
+
+def test_peak_and_score_fall_with_cloud_length() -> None:
+    """The two monotonicities `contour_point`'s bisection rests on.
+
+    At fixed footprint, lengthening the cloud (a) drops `rho` as `1/(L/D)` through the Sigma
+    contract, which drops the facesheet peak, and (b) drops `eta_capture`, because a longer column
+    splats with more radial relief. So the best surviving shape at each footprint is the *shortest*
+    cloud that survives, and the search can bisect for it instead of scanning.
+
+    If a future geometry sweep breaks either monotonicity the bisection silently returns the wrong
+    shape, so both are pinned here rather than left as a comment."""
+    lengths = (0.3, 0.45, 0.6, 0.8, 1.0)
+    for rf in (0.35, 0.5, 0.65):
+        peaks = [contour.survivable(ld, rf, 45_000.0, 1.2315, 4.0e8, 0.10)[3] for ld in lengths]
+        etas = [contour.eta_at(ld, rf, 0.10) for ld in lengths]
+        rhos = [contour.survivable(ld, rf, 45_000.0, 1.2315, 4.0e8, 0.10)[1] for ld in lengths]
+        assert all(a > b for a, b in pairwise(peaks)), f"peak not monotone at rf={rf}"
+        assert all(a > b for a, b in pairwise(etas)), f"eta not monotone at rf={rf}"
+        assert all(a > b for a, b in pairwise(rhos)), f"rho not monotone at rf={rf}"
+
+
+def test_contour_leaves_no_survivable_density_unused() -> None:
+    """The bisection is what makes this exact rather than grid-resolution-limited.
+
+    Where survivability binds, the contour must not sit *inside* the limit with room to spare --
+    unused survivable density is `e_eff` thrown away. There are exactly two ways to be done: the
+    cloud sits on the pressure limit, or it has already been shortened to the box's own `L/D` floor
+    and cannot be made denser at that footprint. Anything else means the search stopped early."""
+    for v in (28_000.0, 34_000.0, 45_000.0, 55_000.0, 63_000.0):
+        pt = contour.contour_point(v, c_stag=1.2315, p_limit=4.0e8)
+        assert pt.ceiling_limited, f"survivability should bind at {v / 1000:.0f} km/s"
+        on_the_limit = pt.peak_pressure == pytest.approx(4.0e8, rel=1e-6)
+        at_the_box_floor = pt.l_over_d == pytest.approx(contour.L_OVER_D_BOX[0], abs=1e-9)
+        assert on_the_limit or at_the_box_floor, (
+            f"{v / 1000:.0f} km/s: {pt.peak_pressure / 1e6:.1f} MPa at L/D={pt.l_over_d:.4f} "
+            f"is neither on the limit nor at the box floor"
+        )
 
 
 def test_eta_interpolation_reproduces_the_geometry_grid_nodes() -> None:

@@ -6,14 +6,31 @@ answered by extending the same scenario on unchanged knobs (100 kg pulse, `R = 1
 water) rather than standing up a separate high-velocity study. One continuous curve, not an island.
 
 **`f` stays near 0.8 across the whole range.** On the contour construction below it holds
-**0.79–0.82** from 16 to 63 km/s, and the 16 km/s point reproduces the published 0.811, so the
+**0.78–0.82** from 16 to 63 km/s, and the 16 km/s point reproduces the published 0.811, so the
 extension is consistent with what it extends.
 
 | v [km/s] | 16 | 22 | 28 | 34 | 40 | 45 | 50 | 55 | 63 |
 |---|---|---|---|---|---|---|---|---|---|
-| ρ contour [kg/m³] | 0.582 | 0.582 | 0.427 | 0.287 | 0.206 | 0.160 | 0.130 | 0.106 | 0.081 |
+| ρ contour [kg/m³] | 0.582 | 0.582 | 0.359 | 0.233 | 0.165 | 0.126 | 0.093 | 0.070 | 0.047 |
+| focusing | 1.15 | 1.15 | 1.18 | 1.22 | 1.25 | 1.27 | 1.39 | 1.52 | 1.70 |
 | binds | box | box | surv | surv | surv | surv | surv | surv | surv |
-| **f** | 0.794 | 0.816 | 0.813 | 0.813 | 0.816 | 0.818 | 0.819 | 0.817 | **0.809** |
+| **f** | 0.794 | 0.816 | 0.812 | 0.812 | 0.815 | 0.817 | 0.813 | 0.805 | **0.783** |
+
+> **Correction (2026-08-21): the focusing factor.** The numbers above are the corrected ones. As
+> first published this contour compared the **plane-wave** stagnation peak against `P_limit` while
+> the facesheet actually sees that load *concentrated by the dish* — the same `focusing` factor
+> (1.15–2.20 across the shape box) that `heavyplate_frontier` and `analysis.survivability_frontier`
+> had applied to the discrete grid all along. The contour therefore flew **470–565 MPa against its
+> own 400 MPa baseline** across 28–60 km/s.
+>
+> The discrete construction was right and the contour was wrong; the corrected contour reproduces
+> the grid's own best surviving shape at 45 km/s (`ρ = 0.1261, focusing 1.27, 400 MPa` against the
+> grid's `0.1258, 1.27, 399 MPa`), which is what identified the faulty side.
+>
+> **Cost: −0.001 below 45 km/s, −0.007 at 50, −0.012 at 55, −0.026 at 63.** The headline claim
+> moves from 0.79–0.82 to **0.78–0.82**; the shape of the result and every conclusion drawn from it
+> stand. The contour densities drop substantially (0.081 → 0.047 at 63 km/s) because that is the
+> density the plate can actually take.
 
 ## The velocity grid has two legs, because the halves are known to different degrees
 
@@ -57,15 +74,19 @@ whole range), which is why the discrete construction kept selecting `L/D = 0.3`.
 `eta` spans 0.79–0.99; along the schedule it spans 0.972–0.978. A bilinear fit over a 3×3×3 sweep is
 adequate for the second and would be advertising unearned precision in the first.
 
-## The cloud schedule is worth 0.017 in `f`
+## The cloud schedule is worth 0.040 in `f`
 
 Design §7 treats the cloud as a per-shot schedule `shape(v)`, available because the plate is one
 built object and the cloud is not. The pinned-shape companion asks what happens without that freedom:
 one shape flown everywhere, forced by the most demanding velocity since it must survive there.
 
-The worst gap across 16–63 km/s is **0.017 in `f`**, against a freeze-timing band of ~0.05. The
-schedule buys less than the dominant uncertainty. Worth knowing before anyone builds per-shot cloud
-shaping to recover it.
+The worst gap across 16–63 km/s is **0.040 in `f`**, against a freeze-timing band of ~0.05. The
+schedule still buys less than the dominant uncertainty, but the margin is now slim rather than
+comfortable. Worth knowing before anyone builds per-shot cloud shaping to recover it.
+
+*(2026-08-21: was 0.017 before the focusing correction above. The pinned shape must survive the
+worst velocity, and focusing makes that requirement bite harder, so the one-shape-everywhere cloud
+is pushed further from the per-shot optimum than the uncorrected contour suggested.)*
 
 ## What the sweep may report about itself
 

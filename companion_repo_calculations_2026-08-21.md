@@ -892,9 +892,34 @@ fly the growth push at all.
 (`f = 0.731`), against 0.676 at `f = 0.80` and 0.683 against the corrected heavy plate. Still
 nowhere near the 0.471 that 0015's "0.4-0.5" branch assumed.
 
-**Fix cost: ~1-2 h** (fold focusing into `contour.contour_point` as a fixed point, regenerate
-`frontier_contour_heavyplate.csv`, amend ADR-0035). **Not done unilaterally -- it moves a
-published deliverable and wants your sign-off.**
+**FIXED 2026-08-21**, on sign-off. `contour.focusing_at` + `contour.survivable`, and
+`contour_point` reformulated as a **constrained maximum over the shape box** rather than
+"pick `rho` first, then maximize `eta` on the iso-density curve". Making `rho` shape-dependent made
+the old formulation circular; stating the search over the 2D box removes the circularity instead of
+iterating it away, and lets the optimizer trade `eta` against `focusing`. The inner search is a
+bisection on `L/D`, since `peak`, `eta` and `rho` all fall monotonically with cloud length
+(pinned by `test_peak_and_score_fall_with_cloud_length`), so the contour lands **exactly** on the
+pressure limit rather than one grid step inside it.
+
+| v [km/s] | 16 | 22 | 28 | 34 | 40 | 45 | 50 | 55 | 63 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| published `f` | 0.794 | 0.816 | 0.813 | 0.813 | 0.816 | 0.818 | 0.819 | 0.817 | 0.809 |
+| corrected `f` | 0.794 | 0.816 | 0.812 | 0.812 | 0.815 | 0.817 | 0.813 | 0.805 | **0.783** |
+| corrected `rho` | 0.582 | 0.582 | 0.359 | 0.233 | 0.165 | 0.126 | 0.093 | 0.070 | 0.047 |
+| focusing | 1.15 | 1.15 | 1.18 | 1.22 | 1.25 | 1.27 | 1.39 | 1.52 | 1.70 |
+
+**Headline moves 0.79-0.82 -> 0.78-0.82.** Every point now flies at or under 400 MPa; before the
+fix they ran **470-565 MPa** across 28-60 km/s. Also **the schedule value moved 0.017 -> 0.040**:
+the pinned shape must survive the worst velocity, and focusing makes that bite harder.
+
+*Done test-first, after a false start.* The fix was written before its test, which is backwards for
+this repo. The red step was supplied afterwards by reverting `contour.py` to the committed version
+and running the new regression check against it: **9/9 velocities over the limit, 470-565 MPa.**
+A test that has never been seen to fail is not known to be a test.
+
+Updated: ADR-0035 (correction block + the 0.040 schedule figure), design SS12.1, `CONCLUSION.md`,
+`frontier_contour_heavyplate.csv` (now carries `focusing` and `peak_mpa` columns so the flown
+pressure is auditable from the deliverable itself).
 
 ## Q-I. Is the focusing model itself right? *(assumption underneath Q-D)*
 `peak = c_stag rho v^2 * (P_local_concave / P_local_flat)` treats the **flat 2D** peak as equal to

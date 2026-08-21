@@ -106,7 +106,7 @@ at 25 kg on a 5 m plate. The **heavy-plate special scenario** (design §12.1) sc
 on a 30 m / ≤ 40 t plate — and was extended in 2026-08 from 16–28 km/s to a continuous **16–63 km/s**
 curve ([ADR-0035](docs/adr/0035-heavy-plate-range-extension-and-contour-construction.md)).
 
-**`f` holds 0.79–0.82 across that entire range** (`data/results/frontier_contour_heavyplate.csv`),
+**`f` holds 0.78–0.82 across that entire range** (`data/results/frontier_contour_heavyplate.csv`),
 with 16 km/s reproducing the previously published 0.811. The band is ±0.04–0.05, dominated by the
 freeze-timing bracket; the opacity bracket contributes ±0.005
 ([ADR-0036](docs/adr/0036-opacity-bracket-grounded-in-the-data-not-the-placeholder.md)) and the
