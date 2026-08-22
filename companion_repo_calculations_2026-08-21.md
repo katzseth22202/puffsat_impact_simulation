@@ -520,9 +520,42 @@ goes: 125 MJ/kg at the hottest pulse against 86 MJ/kg of thermal motion. Add it,
 
 ## Owed to `puffsat_impact_simulation` instead
 See [`impact_sim_conductivity_and_bag.md`](impact_sim_conductivity_and_bag.md) for both specs.
-- [ ] **Study 1**: `sigma(T, rho, x_K)` across all three collision regimes, validated against the
-      1960s MHD-generator literature already in `references.bib`. Reports `Rm(T)` and `1/Rm(T)`
-      directly, so `tab:seed_window` is regenerated and the cliff temperature falls out as an output.
+- [x] **Study 1**: `sigma(T, rho, x_K)`. **DONE 2026-08-22.** `python/puffsat/conductivity.py`,
+      `make analysis-conductivity`, 7 tests. Built test-first with the seams agreed in advance:
+      `electron_density`, `sigma`, `magnetic_reynolds` public; collision frequencies private.
+
+      **It reproduces every number the audit computed by hand, independently.** That is the check
+      that the assembly is not quietly missing a term:
+
+      | quantity | audit (by hand) | this module |
+      | --- | ---: | ---: |
+      | water/seed electron ratio at 15 000 K | 38x | **37.8x** |
+      | water ionised fraction at 15 000 K | 5.9% | **5.8%** |
+      | blended `sigma` at 15 000 K | ~6950 S/m | **6993 S/m** |
+      | `sigma` at 3000 K | 68 S/m | **67.1 S/m** |
+
+      Plus the analytic acceptance test the repo's standards ask for: with electron-neutral
+      collisions switched off, `sigma` reproduces **Spitzer's** conductivity
+      (`1.899e4 T_e[eV]^1.5 / ln Lambda`) to 2%.
+
+      **Regenerated `tab:seed_window`** (rho = 0.32, x_K = 0.01, `v L = 1.81e4`):
+
+      | T [K] | 2000 | 3000 | 5000 | 8000 | 11000 | 15000 |
+      | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+      | seed ionised | 0.0002 | 0.020 | 0.565 | 1.000 | 1.000 | 1.000 |
+      | `sigma` [S/m] | 1.06 | 67.1 | 452 | 731 | 2184 | 6993 |
+      | `Rm` | 0.024 | 1.53 | 10.3 | 16.6 | 49.7 | 159 |
+      | leak `~1/Rm` | 1.000 | 0.655 | 0.097 | 0.060 | 0.020 | 0.006 |
+
+      **The cliff is an output, not an assertion: `Rm = 1` at 2845 K** for that `v L`, against the
+      paper's revised floor of ~3300 K.
+
+- [x] **Item 3 (`tab:seed_window`)** falls out of Study 1 above -- regenerated, not reproduced.
+- [x] **Add an alkali species.** Done as a *trace layer* over `eos_water` rather than inside its
+      Newton solve: potassium's Saha is closed exactly against water's electron field
+      (`n_e^2 + n_e(K - n_w) - K(n_w + n_K) = 0`), so a verified solver every EOS table depends on
+      is left untouched. The one approximation is named in the docstring: water's own ionisation is
+      not re-solved with the seed's electrons present, worth ~1.3% at 15 000 K.
 - [ ] **Study 2**: does a projectile couple to a **droplet cloud** at 0.32 kg/m^3 the way it couples
       to a vapour? Decides whether `k = 8.5` survives if the leak turns out small and the bag becomes
       an unpressurised container. Note the bag does *not* become unnecessary: spreading 213 kg over
@@ -1013,19 +1046,49 @@ Measured and **answered no** at contour densities (spread 0.002-0.006), but the 
 future scenario flies `rho < 0.04`, the `L = 10 m` anchor stops being harmless (spread 0.0155 at
 0.04, 0.0517 at 0.01). **Cost: an assert. Worth: cheap insurance, no present error.**
 
-## Q-F. Kerrebrock's decoupling -- does the conductivity cliff exist at all? *(physics, open)*
-Item 2 already flags it: if electron temperature decouples from gas temperature in the seeded
-plume, the ~3300 K cliff the leak schedule rests on may not be there. This is a **real** effect in
-MHD generators (it is what non-equilibrium MHD *is*), and it runs in the direction that helps the
-paper. **Cost: it falls out of Study 1 if the two-temperature option is built in from the start;
-expensive to retrofit.** **Worth: high -- it is load-bearing for item 10's leak bracket.**
+## Q-F. Kerrebrock's decoupling. **ANSWERED 2026-08-22: the cliff does not survive it.**
+`sigma` carries an explicit electron temperature (default `T_e = T_gas`, reproducing equilibrium
+exactly), so the question could be asked rather than retrofitted. Raising `T_e` above the gas:
 
-## Q-G. Both sides of the `sigma` comparison are weakly sourced. *(paper backing)*
-The paper's `Rm` column has no published `sigma`, no stated `v`, and no stated `L`; the model side
-has `ln Lambda = 2.5` (marginal for a Spitzer formula that assumes it is large) and a hand-picked
-`Q_en = 1e-19 m^2`. **Until Study 1 lands, no factor-of-a-few claim in either direction is
-defensible.** Validation data is already in `references.bib` (`kerrebrock1964nonequilibrium`,
-`rosa1968mhd`, `messerle1995mhd`), measured in exactly the 2000-3000 K cliff regime.
+| `T_e - T_gas` | +0 K | +500 K | +1000 K | +2000 K |
+| --- | ---: | ---: | ---: | ---: |
+| cliff at `v L = 5e3` | 3422 K | 2884 K | 2378 K | **none in range** |
+| cliff at `v L = 1.81e4` | 2845 K | 2341 K | 1841 K | **none in range** |
+
+**A ~2000 K electron elevation removes the cliff entirely** from the 1500-15 000 K window. So the
+seed window's floor is not a property of the gas temperature alone, and the leak schedule that
+rests on it is conditional on electron-ion equilibrium that nobody has established.
+
+**And it may explain the audit's own discrepancy.** The gap the audit found at 3000 K -- 68 S/m
+modelled against ~405 S/m implied by the paper's `Rm` column, a factor of 6 -- is almost exactly
+what a **+1000 K** electron temperature produces: `sigma` rises 67 -> **390 S/m**. That is close
+enough to be worth stating and *not* close enough to be a demonstration. A fixed offset is not a
+model. **The honest reading: the factor of 6 is the size a plausible non-equilibrium electron
+temperature would produce, so it is not necessarily an error in either calculation -- it may be a
+missing term.** Deciding needs an electron energy balance (Joule heating against elastic loss),
+which needs an E-field and is a real piece of work. `cliff_temperature(..., t_e_offset=)` exists to
+ask the question, not to answer it.
+
+## Q-G. Both sides of the `sigma` comparison are weakly sourced. **PARTLY CLOSED, honestly.**
+**The model side is now explicit rather than hand-picked.** `Q_en = 1e-19 m^2` is a parameter of
+`sigma`, not a buried constant, so it can be swept; `sigma` is directly inverse in it wherever
+neutrals dominate. `ln Lambda` is computed, and comes out **2.5-2.8** across the window -- which
+`coulomb_logarithm`'s docstring says plainly is at the edge of where Spitzer's weak-coupling theory
+applies. Together these two make a **factor-of-two claim on `sigma` undecidable by this model**, and
+the code says so rather than implying a precision it does not have.
+
+**The paper side is unchanged, and one part of it is now sharper.** `v` and `L` never enter
+separately -- only as the product `v L`, since `Rm = mu0 sigma v L`. The paper states neither, so
+`magnetic_reynolds` deliberately takes **no default**: a default would be inventing the input that
+makes the column reproducible. Back-solving the paper's own `Rm = 361` at 15 000 K against the
+audit's conductivity gives `v L ~ 1.81e4 m^2/s`, which is what the regenerated table uses and
+labels as an inference, not a citation.
+
+**I could not do the literature validation.** `references.bib` is not in this repository or the
+companion clone, so `kerrebrock1964nonequilibrium`, `rosa1968mhd` and `messerle1995mhd` are names to
+me and nothing more. Checking this model against measured potassium-seeded conductivity at
+2000-3000 K -- the cliff regime, where it matters most -- **remains open and is the single most
+valuable thing left on this item.** I have deliberately not substituted remembered numbers for it.
 
 ## Q-H. Ablation is the plate's real exposure, and it is a diagnostic rather than a gate.
 2.7-13.6 mm/pulse at 45 km/s rising to 8.3-41.4 mm at 63 (upper bound, nothing credited to

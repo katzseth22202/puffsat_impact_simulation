@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -140,6 +140,14 @@ analysis-lte: data/results/lte_validity.csv
 
 data/results/lte_validity.csv: data/results/frozen_probe_heavyplate.jsonl data/results/frozen_probe_heavyplate_diag.jsonl data/results/frozen_probe_jupiter.jsonl python/puffsat/lte.py python/puffsat/eos_water.py
 	PYTHONPATH=python $(PY) -m puffsat.lte
+
+## analysis-conductivity: Study 1 -- sigma(T, rho, x_K) for the potassium-seeded plasma, the
+## regenerated tab:seed_window, and the conductivity cliff as an output -> data/results/seed_window.csv
+analysis-conductivity: data/results/seed_window.csv
+
+data/results/seed_window.csv: python/puffsat/conductivity.py python/puffsat/eos_water.py
+	@mkdir -p data/results
+	PYTHONPATH=python uv run python -m puffsat.conductivity
 
 ## sweep-geometry-wide: design SS7's remaining r_foot/R nodes (0.8/0.9/1.0) at the same M = 40
 ## anchor -> data/results/sweep_geometry_wide.jsonl, plus a radial-domain convergence check
