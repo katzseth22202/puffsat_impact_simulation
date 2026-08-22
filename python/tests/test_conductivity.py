@@ -151,3 +151,115 @@ def test_seed_window_caps_the_leak_where_the_field_is_not_held() -> None:
     # The seed is fully ionised well before the top of the window.
     assert rows[-1].ionised_fraction == pytest.approx(1.0)
     assert rows[0].leak_fraction == pytest.approx(1.0), "at 2000 K the field is not held at all"
+
+
+def test_hall_parameter_agrees_with_the_conductivity_identity() -> None:
+    """Slice 5: `beta = omega_c tau = e B / (m_e nu)`.
+
+    Checked against a route that shares no arithmetic with the implementation. Since
+    `sigma = n_e e^2/(m_e nu)`, it follows that `beta = sigma B / (n_e e)` -- the same number
+    assembled from three already-tested public quantities instead of from the collision frequency.
+    If the two disagree, either `sigma` or `beta` has the collision frequency wrong.
+    """
+    t, rho, x_k, b = 3000.0, 0.32, 0.01, 2.0
+    beta = conductivity.hall_parameter(t, rho, x_k, b)
+    identity = (
+        conductivity.sigma(t, rho, x_k)
+        * b
+        / (conductivity.electron_density(t, rho, x_k) * conductivity.E_CHARGE)
+    )
+    assert beta == pytest.approx(identity, rel=1e-12)
+    # Linear in B, by construction.
+    assert conductivity.hall_parameter(t, rho, x_k, 4.0) == pytest.approx(2.0 * beta, rel=1e-12)
+
+
+def test_ionisation_sensitivity_matches_the_saha_exponent_where_the_seed_is_weak() -> None:
+    """Slice 6: `S = d ln n_e / d ln T_e`, the gain in the instability's feedback loop.
+
+    The electrothermal runaway is: a local rise in `n_e` concentrates current, which raises local
+    heating, which raises `T_e`, which raises `n_e`. `S` is the gain of that last link, so it
+    decides whether the loop can close at all.
+
+    In the weakly-ionised seed limit `n_e = sqrt(n_K K)` with `K ~ T^1.5 exp(-chi/kT)`, so
+    `n_e ~ T^0.75 exp(-chi/2kT)` and the exponent follows analytically:
+
+        S = 3/4 + chi / (2 k T_e)
+
+    At 2500 K with `chi = 4.34 eV`: `kT = 0.2154333 eV`, so `S = 0.75 + 10.0727 = 10.823`.
+    A gain of ~11 is very large -- this is why seeded plasmas are prone to the instability at all.
+    """
+    s = conductivity.ionisation_sensitivity(2500.0, 0.32, 0.01)
+    assert s == pytest.approx(10.823, rel=0.02)
+
+
+def test_ionisation_sensitivity_collapses_once_the_seed_is_fully_ionised() -> None:
+    """Slice 6b: the stabilising limit, and it is a hard one.
+
+    Once every potassium atom is ionised, raising `T_e` cannot liberate more seed electrons -- the
+    feedback loop's gain collapses and the ionisation runaway is choked off at source. Water's own
+    ionisation takes over, but at 12.6-13.6 eV it is far less sensitive than the 4.34 eV seed at
+    these temperatures.
+
+    This is a *computable* stabilisation boundary, not a literature criterion, which is why it is
+    the part of the instability story this repository can actually settle."""
+    weak = conductivity.ionisation_sensitivity(2500.0, 0.32, 0.01)
+    saturated = conductivity.ionisation_sensitivity(8000.0, 0.32, 0.01)
+    assert saturated < 0.25 * weak, "the gain must collapse once the seed saturates"
+
+
+def test_electrothermal_screen_needs_both_hall_drive_and_ionisation_gain() -> None:
+    """Slice 7: the screen, and what it is honestly for.
+
+    The electrothermal runaway needs *both* links of its loop intact: a Hall parameter large enough
+    for a conductivity perturbation to redirect current and change the local heating (`beta` above
+    ~2), and an ionisation gain large enough for the resulting `T_e` rise to make more electrons
+    (`S` above ~1). Killing either breaks the loop.
+
+    The regime map is the opposite of the intuitive one, and the numbers below are measured rather
+    than assumed. At the bag's 0.32 kg/m^3 the plasma is **strongly collisional**: `beta` is only
+    0.42 at 3000 K in a 1 T field, and it *falls* with temperature (0.52 at 2500 K to 0.023 at
+    15 000 K) because Coulomb collisions grow faster than the mobility. So the hot end is safe on
+    **both** counts -- low gain and low Hall drive -- and the risk sits at the cool end, which is
+    exactly where the cliff and the Q-F question live.
+    """
+    cool_strong_b = conductivity.electrothermal_screen(3000.0, 0.32, 0.01, b_field=6.0)
+    cool_weak_b = conductivity.electrothermal_screen(3000.0, 0.32, 0.01, b_field=0.005)
+    hot = conductivity.electrothermal_screen(11000.0, 0.32, 0.01, b_field=6.0)
+
+    assert cool_strong_b.at_risk, "cool + strongly magnetised is where the instability lives"
+    assert not cool_weak_b.at_risk, "no Hall drive, no feedback"
+    assert not hot.at_risk, "seed saturated: the gain is gone"
+    # At the hot end *both* links are broken, not just the gain -- beta falls with temperature here.
+    assert hot.hall_parameter < cool_strong_b.hall_parameter
+    assert hot.ionisation_sensitivity < 1.0 < cool_strong_b.ionisation_sensitivity
+
+
+def test_the_bag_is_collisional_enough_that_a_strong_field_is_needed_to_close_the_loop() -> None:
+    """The quantitative form of the same finding, and the one number worth carrying to the paper.
+
+    `beta = eB/(m_e nu)` and `nu ~ 3.7e11 /s` at the bag's density and 3000 K, so reaching the
+    screening threshold takes several tesla. Below that the Hall link is broken and the uniform
+    two-temperature description behind Q-F is safe from filamentation regardless of the gain.
+
+    Diluting the plasma reverses this fast: `nu` falls with the neutral density, so a tenth of the
+    density needs roughly a tenth of the field."""
+    b_needed = 2.0 / conductivity.hall_parameter(3000.0, 0.32, 0.01, 1.0)
+    assert b_needed == pytest.approx(4.73, rel=0.05)
+    b_needed_dilute = 2.0 / conductivity.hall_parameter(3000.0, 0.032, 0.01, 1.0)
+    assert b_needed_dilute < 0.2 * b_needed
+
+
+def test_seed_window_carries_the_instability_data_without_assuming_a_field() -> None:
+    """The table reports the field needed to reach the Hall threshold, not a Hall parameter at some
+    assumed field. That keeps it free of a number this repository does not own, and it is the more
+    useful form anyway: it is what the bag field has to be compared against.
+
+    The two columns move in opposite directions, which is the whole story of the screen. The gain
+    `S` falls with temperature as the seed saturates; the field needed to close the Hall link rises,
+    because Coulomb collisions make the plasma more collisional as it ionises."""
+    rows = conductivity.seed_window(0.32, 0.01, 1.81e4)
+    assert all(a.ionisation_sensitivity > b.ionisation_sensitivity for a, b in pairwise(rows))
+    assert all(a.b_field_for_beta_crit < b.b_field_for_beta_crit for a, b in pairwise(rows))
+    # Both links are only plausibly live at the cool end, which is where the cliff sits.
+    assert rows[0].ionisation_sensitivity > 10.0
+    assert rows[-1].ionisation_sensitivity < 0.05

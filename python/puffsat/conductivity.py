@@ -212,6 +212,114 @@ def cliff_temperature(
     return 0.5 * (lo + hi)
 
 
+def hall_parameter(
+    temp: float,
+    rho: float,
+    x_k: float,
+    b_field: float,
+    t_e: float | None = None,
+    q_en: float = Q_EN,
+) -> float:
+    """`beta = omega_c tau = e B / (m_e nu)` -- how far an electron gyrates between collisions.
+
+    It is the control parameter for the **electrothermal (Velikhov) instability**: the Hall effect
+    is what lets a local conductivity perturbation redirect the current and change the local Joule
+    heating, which is the feedback that drives the runaway. Below `beta ~ 1` the electrons are
+    collision-dominated, the feedback loop is broken, and a uniform two-temperature description is
+    safe. Well above it, a seeded plasma can filament into hot streamers instead of heating evenly.
+
+    There is no default `B`: this repository does not own the bag field, and inventing one would be
+    the same error as inventing the `v L` product in `magnetic_reynolds`.
+    """
+    t_e = temp if t_e is None else t_e
+    n_e = electron_density(temp, rho, x_k, t_e)
+    nu = _nu_coulomb(n_e, t_e) + _nu_electron_neutral(temp, rho, x_k, t_e, q_en)
+    return E_CHARGE * b_field / (M_E * nu)
+
+
+def ionisation_sensitivity(
+    temp: float, rho: float, x_k: float, t_e: float | None = None, rel_step: float = 1.0e-4
+) -> float:
+    """`S = d ln n_e / d ln T_e` -- the gain in the electrothermal feedback loop.
+
+    The runaway is: a local rise in `n_e` concentrates the current (via the Hall effect), which
+    raises the local Joule heating, which raises `T_e`, which raises `n_e`. `S` is the gain of the
+    last link, and it is the term this repository can compute without any literature.
+
+    Two limits matter and both fall out of the Saha balance already implemented:
+
+    - **Weak seed ionisation:** `n_e ~ T^0.75 exp(-chi/2kT)`, so `S -> 3/4 + chi/(2 k T_e)`, which
+      is ~11 at 2500 K. A gain that large is why seeded plasmas are unstable at all.
+    - **Saturated seed:** every potassium atom is ionised, so `T_e` cannot liberate more and `S`
+      collapses. The runaway is choked at source, independently of the Hall parameter.
+
+    Central difference in `ln T_e` rather than the analytic exponent, so it stays correct through
+    the saturation knee where the closed form does not apply.
+    """
+    t_e = temp if t_e is None else t_e
+    hi = electron_density(temp, rho, x_k, t_e * (1.0 + rel_step))
+    lo = electron_density(temp, rho, x_k, t_e * (1.0 - rel_step))
+    return (math.log(hi) - math.log(lo)) / (2.0 * rel_step)
+
+
+#: Hall parameter above which the Hall-driven feedback is taken to be active. Engineering practice
+#: for seeded MHD plasmas puts the critical value around 2; the sign change in the feedback occurs
+#: near 1. **A screening threshold, not a dispersion relation** -- see `electrothermal_screen`.
+BETA_CRIT = 2.0
+#: Ionisation gain above which the `T_e -> n_e` link is taken to be live. Order-unity by
+#: construction: at `S < 1` a fractional rise in `T_e` makes a smaller fractional rise in `n_e`, so
+#: the loop attenuates.
+SENSITIVITY_CRIT = 1.0
+
+
+@dataclass(frozen=True)
+class ElectrothermalScreen:
+    """Screening result for the electrothermal (Velikhov) instability at one state."""
+
+    temp: float
+    b_field: float
+    hall_parameter: float
+    ionisation_sensitivity: float
+    at_risk: bool
+
+
+def electrothermal_screen(
+    temp: float,
+    rho: float,
+    x_k: float,
+    b_field: float,
+    t_e: float | None = None,
+) -> ElectrothermalScreen:
+    """Screen a state for electrothermal-instability risk. **A screen, not a stability analysis.**
+
+    The runaway needs both links of its loop: the Hall effect must be strong enough to turn a
+    conductivity perturbation into a heating perturbation (`beta > BETA_CRIT`), and the ionisation
+    must be sensitive enough to turn that heating into more electrons
+    (`S > SENSITIVITY_CRIT`). Breaking either breaks the loop, so requiring both is a *necessary*
+    condition and this function can only rule states **out**, never in.
+
+    **What this repository can and cannot settle.** `beta` and `S` are computed exactly from the
+    conductivity model. The threshold `BETA_CRIT = 2` is engineering practice for seeded MHD
+    plasmas, taken on authority: the real criterion comes from a linearised dispersion relation
+    (Velikhov 1962; Kerrebrock 1964) whose sources are not available here, and it depends on the
+    degree of non-equilibrium, the seed fraction and the geometry. So a state flagged `at_risk`
+    means "the loop is closed and the literature criterion must be checked", not "this filaments".
+
+    Why it matters: if the instability triggers, the plasma breaks into hot streamers, the uniform
+    two-temperature description behind Q-F fails, and the *effective* conductivity is **lower** than
+    a smooth calculation predicts -- the opposite direction from the decoupling itself.
+    """
+    beta = hall_parameter(temp, rho, x_k, b_field, t_e)
+    gain = ionisation_sensitivity(temp, rho, x_k, t_e)
+    return ElectrothermalScreen(
+        temp=temp,
+        b_field=b_field,
+        hall_parameter=beta,
+        ionisation_sensitivity=gain,
+        at_risk=beta > BETA_CRIT and gain > SENSITIVITY_CRIT,
+    )
+
+
 @dataclass(frozen=True)
 class SeedWindowRow:
     """One row of the regenerated `tab:seed_window`."""
@@ -222,6 +330,12 @@ class SeedWindowRow:
     sigma: float
     rm: float
     leak_fraction: float
+    #: `S = d ln n_e / d ln T_e`, the electrothermal feedback gain.
+    ionisation_sensitivity: float
+    #: Field [T] needed to reach `BETA_CRIT`. Reported instead of a Hall parameter at an assumed
+    #: `B`, because this repository does not own the bag field: it is the number the field must be
+    #: compared against, and it needs no assumption to compute.
+    b_field_for_beta_crit: float
 
 
 def seed_window(
@@ -252,6 +366,8 @@ def seed_window(
                 sigma=s,
                 rm=rm,
                 leak_fraction=min(1.0 / rm, 1.0),
+                ionisation_sensitivity=ionisation_sensitivity(t, rho, x_k, t_e),
+                b_field_for_beta_crit=BETA_CRIT / hall_parameter(t, rho, x_k, 1.0, t_e),
             )
         )
     return out
@@ -259,10 +375,14 @@ def seed_window(
 
 def write_seed_window(rows: list[SeedWindowRow], path: Path = DEFAULT_SEED_WINDOW_PATH) -> None:
     """Write the regenerated table as CSV."""
-    lines = ["T_K,n_e_m3,ionised_fraction,sigma_S_per_m,Rm,leak_fraction"]
+    lines = [
+        "T_K,n_e_m3,ionised_fraction,sigma_S_per_m,Rm,leak_fraction,"
+        "ionisation_sensitivity,B_T_for_beta_crit"
+    ]
     lines += [
         f"{r.temp:.0f},{r.n_e:.6e},{r.ionised_fraction:.6f},"
-        f"{r.sigma:.6e},{r.rm:.6e},{r.leak_fraction:.6f}"
+        f"{r.sigma:.6e},{r.rm:.6e},{r.leak_fraction:.6f},"
+        f"{r.ionisation_sensitivity:.4f},{r.b_field_for_beta_crit:.4f}"
         for r in rows
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -277,16 +397,22 @@ def main() -> None:
         f"python: seed window at rho = {REF_RHO} kg/m^3, x_K = {REF_X_K}, v*L = {REF_V_L:g} m^2/s"
     )
     header = f"  {'T [K]':>7} {'n_e [m^-3]':>12} {'ionised':>8} {'sigma [S/m]':>12}"
-    print(f"{header} {'Rm':>10} {'leak':>7}")
+    print(f"{header} {'Rm':>10} {'leak':>7} {'gain S':>8} {'B@beta=2':>9}")
     for r in rows:
         print(
             f"  {r.temp:7.0f} {r.n_e:12.3e} {r.ionised_fraction:8.4f} "
-            f"{r.sigma:12.4g} {r.rm:10.4g} {r.leak_fraction:7.3f}"
+            f"{r.sigma:12.4g} {r.rm:10.4g} {r.leak_fraction:7.3f} "
+            f"{r.ionisation_sensitivity:8.2f} {r.b_field_for_beta_crit:8.2f}T"
         )
     try:
         print(f"  cliff (Rm = 1) at {cliff_temperature(REF_RHO, REF_X_K, REF_V_L):.0f} K")
     except ValueError as exc:
         print(f"  no cliff in range: {exc}")
+    print(
+        "  electrothermal screen: the loop needs beta > "
+        f"{BETA_CRIT:g} AND S > {SENSITIVITY_CRIT:g}; the gain collapses above ~5000 K, and at "
+        "this density the Hall link needs several tesla."
+    )
     print(f"python: wrote {DEFAULT_SEED_WINDOW_PATH}")
 
 

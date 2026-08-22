@@ -1069,6 +1069,60 @@ missing term.** Deciding needs an electron energy balance (Joule heating against
 which needs an E-field and is a real piece of work. `cliff_temperature(..., t_e_offset=)` exists to
 ask the question, not to answer it.
 
+### Q-F(b). Hall parameter and instability screen. **ESTABLISHED 2026-08-22.**
+Before the two-temperature balance is worth writing, two things had to be checked: whether a
+steady-state treatment is even valid, and whether a *uniform* one is -- because the electrothermal
+(Velikhov) instability filaments a non-equilibrium seeded plasma into hot streamers, and if it
+triggers the whole uniform picture fails.
+
+**Steady state is comfortably valid.** Electrons relax by elastic collisions at rate `delta nu`
+with `delta = 2 m_e/M = 6.1e-5`:
+
+| T [K] | 2500 | 3000 | 5000 | 10000 |
+| --- | ---: | ---: | ---: | ---: |
+| `tau_relax` [s] | 5.0e-8 | 4.4e-8 | 1.3e-8 | 8.3e-9 |
+| vs the ~200 us expansion | 4000x | 4500x | 15000x | 24000x |
+
+So `T_e` tracks the local balance instantaneously. **No ODE and no transient** -- the balance is
+algebraic at every point, which is most of what would have made it hard.
+
+**The instability loop needs two links, and this repo can compute both.** A local rise in `n_e`
+redirects current via the Hall effect (link 1, needs `beta = eB/(m_e nu)` large), which raises local
+heating and `T_e`, which makes more electrons (link 2, needs the gain
+`S = d ln n_e / d ln T_e` large). Break either and the loop opens.
+
+| T [K] | 2000 | 3000 | 5000 | 8000 | 11000 | 15000 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| gain `S` | 13.3 | 9.05 | 3.51 | 0.11 | 0.01 | 0.00 |
+| `B` [T] for `beta = 2` | 3.36 | 4.73 | 19.7 | 26.4 | 39.8 | 87.1 |
+
+**Both results run opposite to the intuitive guess, and both are reassuring.**
+- **The gain collapses above ~5000 K** as the seed saturates -- once every potassium atom is
+  ionised, hotter electrons cannot make more. This is a *computable* stabilisation boundary, not a
+  literature criterion, which is why it is the part this repository can actually settle.
+- **`beta` *falls* with temperature** (0.52 at 2500 K to 0.023 at 15 000 K in 1 T), because Coulomb
+  collisions grow faster than the mobility. So the hot end is safe on **both** counts. I had assumed
+  the opposite and wrote a test asserting it; the data corrected me.
+
+**At the bag's 0.32 kg/m^3 the plasma is strongly collisional and the Hall link is probably open:**
+`beta = 0.42` at 3000 K in 1 T, so closing it needs **~4.7 T**. Diluting reverses this fast -- `nu`
+tracks the neutral density, so a tenth of the density needs about a tenth of the field.
+
+**The verdict, stated at the strength it deserves.** The risk sits at the cool end (2500-5000 K),
+which is exactly where the cliff and the Q-F question live -- so it is not a comfortable
+separation. But it needs several tesla at bag density. **`electrothermal_screen` can only rule
+states *out*, never in:** `beta` and `S` are computed exactly, but `BETA_CRIT = 2` is engineering
+practice taken on authority. The real criterion is a linearised dispersion relation (Velikhov 1962;
+Kerrebrock 1964) whose sources are not available here -- the same `references.bib` gap as Q-G. A
+state flagged `at_risk` means "check the literature criterion", not "this filaments".
+
+**Consequence for Q-F.** If the instability does trigger, the effective conductivity is **lower**
+than a smooth calculation gives -- the *opposite* direction from the decoupling itself. So the two
+effects fight, and quoting the decoupling gain without the instability check would be
+one-sided. **What is still needed to close Q-F: `B(t)` and the expansion `u` from the companion
+repo.** With those the balance is ~60 lines and half a day; without them it would produce a `T_e`
+driven by invented numbers.
+
 ## Q-G. Both sides of the `sigma` comparison are weakly sourced. **PARTLY CLOSED, honestly.**
 **The model side is now explicit rather than hand-picked.** `Q_en = 1e-19 m^2` is a parameter of
 `sigma`, not a buried constant, so it can be swept; `sigma` is directly inverse in it wherever
