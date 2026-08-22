@@ -1150,3 +1150,59 @@ re-radiation or ADR-0014's vapor curtain). Over an 11-cycle chain this is a cons
 problem, and it is **measured** where the `f` collapse was supposed. **Cost to tighten: crediting
 re-radiation + the vapor curtain is a real modelling task, not a re-run.** **Worth: high -- this,
 not restitution, is the strongest plate-side objection, and the paper currently under-argues it.**
+
+## Q-J. The magnetic nozzle's field retention is coupled to the frozen-recombination bracket.
+**Opened 2026-08-22, from a design question of Seth's:** *should the nozzle push while the gas is
+still reasonably hot, by keeping the initial steam pressure down?* The direction is right, the
+mechanism named is not, and the steam may already solve it without the lever.
+
+**The goal is right.** The leak falls by a factor of 6 between 3000 K and 5000 K (65% -> 10%), so
+being on the hot side of the cliff during the push is exactly the design target.
+
+**But initial pressure does not set the exit temperature.** In a nozzle `T_exit/T_0` is fixed by how
+much you expand -- the area ratio and `gamma` -- not by the absolute starting pressure. Halving
+`P_0` at the same `T_0` and area ratio gives the *same* exit temperature and less thrust. Pushing
+**is** cooling: the gas cools because work is extracted from it, and no pressure setting avoids that.
+
+**What lower density does do, and what it costs.** At fixed temperature, diluting genuinely helps
+conduction -- and genuinely hurts stability:
+
+| `rho` [kg/m^3] | 0.32 | 0.032 | 0.0032 |
+| --- | ---: | ---: | ---: |
+| `sigma` at 3000 K [S/m] | 67 | 153 | **235** |
+| `beta` at 1 T | 0.42 | 3.1 | **16.3** |
+
+**3.5x better conduction against 39x more Hall drive** -- straight from "instability impossible"
+into the at-risk band of Q-F(b). Diluting trades field retention against filamentation; it is not a
+free win.
+
+**The good news: the dissociation buffer probably already does the job.** Along an adiabatic
+expansion from 8000 K through a 100x density drop, with `v L ~ rho^(-1/3)` at fixed mass:
+
+| `gamma_eff` | `Rm` along the expansion | leak at the end |
+| --- | --- | ---: |
+| **1.2** | *rises* 16.6 -> 29 | **3.5%** |
+| 1.3 | rises, then collapses to 1.1 | 89% |
+
+And `eos_water` says the real value is **`gamma_eff` = 1.10-1.25**, sitting at 1.11-1.16 through the
+4000-8000 K band. So the expansion lands in the good column: water dissociation absorbs the energy
+that would otherwise appear as cooling, the gas coasts down slowly, and `Rm` actually **increases**
+during the push because the cloud grows faster than `sigma` falls.
+
+**So the real lever is not pressure -- it is whether the recombination energy comes back.** That is
+**ADR-0026's frozen-recombination bracket**, which this repo already owns for the plate side. In
+equilibrium, `gamma_eff` stays ~1.15 and the field is held throughout. If recombination **freezes**,
+the buffering stops, `gamma_eff` climbs toward the frozen value, and the expansion moves toward the
+1.3 column where the field collapses at the end of the push.
+
+**This is a coupling neither list has**, and it reaches the frozen bracket from a direction nobody
+has used: the same question that brackets `e_eff` on the plate also decides whether the magnetic
+nozzle keeps its field. Worth stating in the paper as one question, not two.
+
+**Do not over-trust the numbers above.** The expansion is a constant-`gamma` adiabat, not
+`eos_water`'s actual isentrope, and `v L ~ rho^(-1/3)` assumes fixed mass and constant expansion
+speed. The 1.2-vs-1.3 split is far enough from the real 1.10-1.25 range that the *direction* is
+solid, but the **margin is not trustworthy at this level of care**. **Cost to settle: ~1 h** (run it
+on the real isentrope through `eos_water`, and take `v(t)` and `L(t)` from the companion repo's
+expansion rather than assuming them). **Worth: high -- it converts a design intuition about nozzle
+pressure into a statement about a bracket that is already funded and half-built.**
