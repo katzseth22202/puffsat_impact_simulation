@@ -954,11 +954,58 @@ Two things worth naming:
 **So Q-D's fix rests on a validated premise.** Done red-green this time: the test was written
 first and failed on `KeyError: 'peak_local_pressure_confined'` before the field existed.
 
-**Still open (Seam B, not taken):** the *cross-kernel* leg -- whether the confined-2D peak matches
-the 1D Lagrangian `hydro1d` `peak_wall_pressure` that `c_stag` is actually measured from. Seam A
-cannot see a normalization error between the two kernels. ADR-0003 already cross-checks `1+e_eff`
-between them to ~5%, so this is a narrowing rather than an unknown. **Cost: ~half a day** (matched
-configs across two kernels, different units).
+## Q-I(b). Seam B: the absolute level. **DONE 2026-08-22 -- and it is analytic, not cross-kernel.**
+`crates/euler2d/tests/wall_pressure.rs`.
+
+**The seam was easier and sharper than billed.** `bounce.rs` normalizes to `rho0 = 1`, `v = 1`,
+`p0 = 1/(gamma M^2)`, so `peak_local_pressure` is *already* in units of `rho0 v^2` -- it **is** a
+`c_stag`. So Seam B is not a fuzzy cross-kernel comparison at all: the plane-wave limit has a
+closed form (the piston problem), and at `gamma = 1.4, M = 40` it is **1.20097**, approaching the
+strong-shock `(gamma+1)/2 = 1.2`.
+
+**Measured: 1.33479, i.e. +11.1%.** And it does **not converge away** -- identical to five decimals
+from `nz = 80` to `640`, an 8x refinement.
+
+**What it is.** Not wall heating, and not a startup spike. The wall pressure rises *smoothly* to
+1.335 at `t ~ 0.08`, decays back **through** the exact 1.201, and settles near 1.164 as the rear
+rarefaction arrives. A resolved, converged **impact overshoot** of a finite slug arriving through a
+low-density ambient. (Distinct from the 1D kernel's `peak_wall_force` spike at ~`2.0 rho v^2`, which
+ADR-0010 correctly diagnosed as an artificial-viscosity artifact.)
+
+**A suspicion that did not pan out.** The kernel's own Noh acceptance test measures "in a band that
+avoids ... the axis (the classic wall-heating anomaly)", while `max_plate_pressure` samples exactly
+that wall cell. I expected contamination. There is none worth the name: the post-shock plateau sits
+at `1.0057x` exact **in the wall cell itself** and `0.999x` a few cells in.
+
+**Does it corrupt `focusing`? No -- and this is the result that matters.** `focusing` is a ratio of
+two peak-over-time pressures, so a common overshoot divides out. Measured at `r_foot/R = 0.5,
+L/D = 0.3`: **1.2714 from peak-over-time against 1.2627 from the sustained load, 0.7% apart.** Same
+cancellation ADR-0003 relies on for `eta_capture`. Pinned by
+`focusing_does_not_depend_on_measuring_the_overshoot_or_the_steady_load`.
+
+**Correction to how I reported Seam A.** I wrote that the flat 2D plate "sees the plane-wave load"
+to 1.4%. The **number stands** -- flat and confined peaks agree to 1.4% -- but the gloss was
+incomplete: *both sides carry the +11% overshoot*, because both are peak-over-time. So Seam A shows
+the two are **measured consistently**, not that the flat plate sees the *steady* plane-wave load.
+Seam B is what supplies the absolute level, and the two must be read together.
+
+**The one residual optimism, and it is real.** The model computes
+`peak = c_stag * rho * v^2 * focusing`, where `c_stag` is the **steady** reflected-shock coefficient
+from the 1D kernel. So it prices the steady stagnation load times a geometric concentration, and
+**omits the ~11% impact overshoot** the 2D kernel says is physically there. If that overshoot is
+real for a delivered pulse, true facesheet peaks run ~11% above what the survivability frontier
+classifies. That sits inside the 400 -> 700/900 MPa SiC+Ti margin, and it is the *same direction* as
+Seam A's 1.4% -- the model is consistently a little optimistic, never conservative.
+
+**Worth deciding (new, small):** should `c_stag` be redefined to include the overshoot, or should
+`P_limit` carry it as an explicit margin? Right now it is carried by neither and is simply absent.
+**Cost: ~1 h either way. Worth: an 11% uniform shift in every survivability verdict.**
+
+*Process notes.* Two mistakes cost time and are worth recording. `Grid2D::run_to(t)` resets `t = 0`
+internally, so it takes a **duration**, not an absolute time -- two diagnostics mislabelled their
+time axis before I checked, which is what made the first "peak at t=0.044" reading look impossible
+and prompted the check. And I briefly broke `bounce.rs` by adding a doc comment to
+`init_slug_grid`, which was **already public** with one; reverted.
 
 ## Q-E. Does the ~5 m cloud length the contour delivers matter, given `e_eff` is read at `L = 10 m`?
 Measured and **answered no** at contour densities (spread 0.002-0.006), but the *reason* is that
