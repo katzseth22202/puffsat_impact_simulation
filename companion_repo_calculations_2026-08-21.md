@@ -560,7 +560,15 @@ See [`impact_sim_conductivity_and_bag.md`](impact_sim_conductivity_and_bag.md) f
       to a vapour? Decides whether `k = 8.5` survives if the leak turns out small and the bag becomes
       an unpressurised container. Note the bag does *not* become unnecessary: spreading 213 kg over
       660 m^3 is a field requirement independent of heat.
-- [ ] The cooling history `T(t)`, which item 10's quadrature consumes.
+- [x] **The cooling history `T(t)`, which item 10's quadrature consumes. BUILT 2026-08-22.**
+      `python/puffsat/expansion.py` + `make analysis-expansion` -> `data/results/cooling_history.csv`.
+      Quasi-1D steady isentropic expansion on `eos_water`, run on **both** branches of
+      ADR-0026. Full findings in Q-L below; the three headline consequences are that the
+      residence time is **1.7-2.8 ms, not the 5.5 ms Q-K assumed**, that `v L` is now an
+      **output** (5.5e4-9.7e4) rather than the guess Q-G could not source, and that the
+      equilibrium/frozen bracket on exit temperature is **a factor 3**, which spans the whole
+      cliff. So the answer to "is the plume still hot at the exit" is *yes on every leg in
+      equilibrium, and no on the cold leg if recombination freezes*.
 - [ ] Fireball density, for the recombination-freeze check below 0.01 kg/m^3.
 - [x] ~~LTE check: item 1's Saha solve assumes it and nobody has verified it.~~ **Already done.**
       `python/puffsat/lte.py` (McWhirter) + `data/results/lte_validity.csv`; commit `4e89105`,
@@ -1366,3 +1374,121 @@ instability time to grow. Field residence is `l/v` = 23.8/4350 ~ **5.5 ms**. Whe
 still above 4000 K at that point is exactly the cooling history the companion repo asked this repo
 for, and which is still unbuilt. **`T(t)` is now the item the most threads are waiting on:** Q-F,
 Q-K and item 10's quadrature all reduce to it.
+
+> **Superseded 2026-08-22 by Q-L.** The 5.5 ms above is wrong: it divides the bore length by an
+> assumed constant 4.35 km/s, and the plume **accelerates** through the nozzle. The solved
+> residence is **1.69-2.71 ms**. The error ran against the design, not for it -- less residence
+> means less time for the instability to grow -- and Q-L narrows this section's exposure to a
+> single corner, the cold leg on the frozen branch. The three levers and the `BETA_CRIT` caveat
+> below are unaffected; only the clock changes.
+
+## Q-L. The cooling history `T(t)`. **BUILT 2026-08-22.** The bracket is the answer.
+`python/puffsat/expansion.py`, `make analysis-expansion`, `data/results/cooling_history.csv`.
+
+**The model, and the one assumption in it.** Quasi-1D steady isentropic expansion of the
+post-impact plume, parametrised by density so nothing is root-found on the nozzle: the adiabat
+`de = -p d(1/rho)` is integrated on the real `eos_water` EOS (which publishes no entropy
+function, so the adiabat *is* the path), `u` follows from `h + u^2/2 = h0`, and the area from
+`rho u A = const`, referenced to the sonic throat. **The paper's `20 T -> 5 T` is `A/A* = 4` by
+flux conservation with no further assumption** -- so `T` against area ratio is assumption-free.
+Only the *clock* needs a shape for `A(x)` along the bore, and a linear opening over 23.8 m is
+assumed there. Consumers that can work in area ratio are free of it.
+
+**It runs on both branches of ADR-0026, and that turns out to be the finding.**
+
+| closing speed | `T` exit, equilibrium | `T` exit, frozen | residence | `v L` |
+| ---: | ---: | ---: | ---: | ---: |
+| 75 km/s | 16 224 K | 5 297 K | 1.69 ms | 9.7e4 |
+| 65 | 14 151 K | 4 528 K | 1.95 ms | 8.5e4 |
+| 56.53 | 11 681 K | 3 922 K | 2.22 ms | 7.4e4 |
+| 45.58 | 4 597 K | 2 972 K | 2.71 ms | 6.0e4 |
+
+**1. The residence time is 1.7-2.8 ms, not 5.5 ms.** Q-K divided 23.8 m by an assumed 4.35 km/s.
+The plume does not travel at a constant 4.35 km/s -- it **accelerates**, 8.0 -> 16.2 km/s on the
+hot leg and 5.0 -> 9.9 km/s on the cold one, because that is what a nozzle does. Halving the
+residence runs *in the design's favour*: the instability has less time to grow. Independent
+corroboration: the cold leg's 2.71 ms is the paper's own stated ~2.3 ms snowplow transit, which
+was not an input to this calculation.
+
+**2. Q-K's question, answered.** The threshold field is 9.7 T at 4000 K against the 5 T flown, so
+"is the plume still above 4000 K when it leaves the field" decides it.
+
+- **75 and 65 km/s: yes on both branches.** No exposure.
+- **56.53: yes in equilibrium (11 681 K); marginal frozen (3 922 K).**
+- **45.58: yes in equilibrium (4 597 K); no if recombination freezes (2 972 K).**
+
+So **the exposure is one corner -- the cold leg, on the frozen branch -- and nowhere else.** That
+is a much narrower claim than Q-K could make, and it is narrower in the safe direction.
+
+**3. `v L` is now an output.** Q-G's finding was that no gap between this model and
+`tab:seed_window`'s `Rm` column is measurable, because the paper never states the `v` and `L`
+behind it. The solve supplies both: local flow speed times local flux-tube radius, giving
+`v L` = **5.5e4 to 9.7e4 m^2/s**. Against Q-G(b)'s two disagreeing corners:
+
+| what it reproduces | `v L` needed | against the computed 5.5e4-9.7e4 |
+| --- | ---: | --- |
+| `tab:bag_state` leak 4.4% at ~3500 K | 1.0e5 | **at the top of the range** -- corroborated |
+| window floor ~3300 K | 6.0e3 | **10x below the range** -- not reachable |
+| the 2026-08-21 audit's back-solve | 1.8e4 | **3x below the range** |
+
+**The paper's leak number survives and its window floor does not.** The `Rm` column cannot be an
+isotherm sweep at 6.0e3; the geometry does not produce that product anywhere in the expansion.
+
+**4. Item 10's quadrature, run here rather than routed.** Residence-weighted `1/Rm`, the exact
+thing item 10 asks for ("weight `1/Rm(T)` by how long the plume spends at each `T`"):
+
+| closing speed | 75 | 65 | 56.53 | 45.58 |
+| --- | ---: | ---: | ---: | ---: |
+| leak, equilibrium | 0.11% | 0.17% | 0.29% | **2.54%** |
+| leak, frozen | 1.21% | 1.80% | 2.58% | **5.38%** |
+
+**The paper's published 4.4% sits inside this bracket**, near the cold-and-frozen corner. It is
+not reproduced by any single row, which is the point: it is a trajectory average, and averaging
+over the trajectory is what produces a number of that size.
+
+**5. Radiation was checked, not assumed away.** The isentrope is adiabatic, which is a claim. The
+plume is diffusion-limited while hot (Rosseland depth up to 420 across the bore) and the radiated
+fraction of internal energy over the whole transit is **1.3% to 13.2%**, worst at 56.53 km/s in
+equilibrium. So adiabatic holds -- but it is an **underestimate of the cooling by up to 13%**,
+always toward a colder exit, so the equilibrium column above is an upper bound.
+
+The resolution is set by this integral rather than by `T(t)`: the loss is concentrated in a narrow
+window around the opacity crossover, and a coarse sampling that resolves the temperature history
+perfectly well understates the radiated fraction by ~3x. At the shipped settings it is converged
+to three digits (0.1324 against 0.1326 at double the stations). The exit temperatures and the leak
+column do not move at all between those resolutions.
+
+**6. A trap worth recording, because I fell into it.** The first version of the radiation check
+branched on the **Rosseland** optical depth and then computed the emission from the **Planck**
+mean. TOPS puts `kappa_P/kappa_R ~ 100` for water at 9000-15 000 K, so states that read
+"optically thin" by Rosseland are still deeply thick to their own lines, and the loss came out
+two to three orders of magnitude too high. It reported the plume radiating away **five times its
+own internal energy**, and the tell was that the number **grew without bound under grid
+refinement** rather than converging. Fixed by taking the flux-limited minimum of three rates --
+emission, free-streaming, diffusion -- which is ADR-0006's own convention. The regression test is
+the invariant it violated: nothing radiates faster than a blackbody at its own temperature
+through its own surface.
+
+**What this does not settle.** Which branch of the bracket is real. That is a factor 3 in exit
+temperature and it spans the entire cliff, so it is now the largest single uncertainty on the
+nozzle side -- exactly as ADR-0026 found it to be on the plate side.
+
+## Q-M. Which branch of the frozen bracket is real? *(now the highest-value open item)*
+Everything above brackets rather than answers, and the bracket is a factor 3 in exit temperature,
+2.5x in leak, and the difference between "no exposure anywhere" and "the cold leg is exposed".
+**The criterion is a rate comparison and it is computable**: recombination rate against expansion
+rate, `tau_rec` vs `rho/(d rho/dt)`, along the history this repo now owns. Neither repo has done
+it, and both are currently quoting brackets because of it. **Cost: moderate** -- it needs
+three-body and radiative recombination coefficients for H and O, which are tabulated. **Worth:
+the highest on the list**, because a single calculation collapses a bracket that two separate
+studies are each carrying at full width.
+
+## Q-N. The nozzle exhaust speed is not the momentum-sharing speed, and the paper uses one number.
+The solve gives an exhaust of **9.9-16.2 km/s** relative to the ship. The paper's `v_out =
+w/(1+k)` gives **5.26-7.89 km/s**. These are different quantities -- one is the merged slug's bulk
+speed from momentum sharing, the other is what the nozzle converts thermal energy back into -- and
+both are correct for what they describe. But **effective Isp depends on which one leaves the
+vehicle**, and the paper does not distinguish them. Flagging rather than resolving: this is the
+tamper study's regime (`puffsat_tamper_isp_prd.md`), not this one's. **Cost: low** to state.
+**Worth: high** if the Isp claim rests on the smaller number, since the nozzle solve says the
+larger one is available.
