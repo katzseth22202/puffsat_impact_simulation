@@ -1304,3 +1304,65 @@ solid, but the **margin is not trustworthy at this level of care**. **Cost to se
 on the real isentrope through `eos_water`, and take `v(t)` and `L(t)` from the companion repo's
 expansion rather than assuming them). **Worth: high -- it converts a design intuition about nozzle
 pressure into a statement about a bracket that is already funded and half-built.**
+
+## Q-K. Design levers that keep the electrothermal loop open. **2026-08-22.**
+Given Q-F(b)'s finding that the loop is **closed** at 2000-5000 K with the paper's stated field,
+the follow-on question is whether geometry or a weaker magnet reopens it. Three levers, with very
+different economics. All at `T` = 3000 K, 213 kg slug, unless stated.
+
+**`B` is not a free parameter.** The paper sets it by pressure balance -- "static 10.6 MPa,
+ram-to-static 1.17, total ~23 MPa, **~7.6 T**". The field must stand off the plasma at the *hot*
+end. What *is* adjustable is the field the plume sees once it is **cool**, since the bore already
+expands 20 T -> 5 T. (Sanity check on the geometry: aspect 4 means `l = 8r` and `V = 8 pi r^3`, so
+660 m^3 gives `r` = 2.97 m and `l` = 23.8 m -- the paper's 3.0 m bore and 23 m length.)
+
+**Lever 1 -- the exit field. The cheapest, and the margin is 5%.**
+
+| T [K] | 2000 | 2500 | **3000** | 4000 | 5000 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `B` below which the loop is open [T] | 3.39 | 3.92 | **4.77** | 9.72 | 19.88 |
+
+The paper's exit field is **5 T** against a 4.77 T threshold at 3000 K -- **closed by ~5%**. A
+slightly longer or more divergent nozzle (20 T -> 4.5 T rather than 20 -> 5) opens it. Note how
+steeply the threshold climbs with temperature: **the plume is safe while hot**, and the exposure is
+only the last stretch as it cools through 2000-3000 K.
+
+**Lever 2 -- bag geometry. It works, and it is a bad trade.** At a fixed 5 T exit field:
+
+| V [m^3] | 200 | 400 | **660** | 1200 | 2500 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `beta` | 0.68 | 1.32 | **2.10** | 3.62 | 6.91 |
+| loop | open | open | **CLOSED** | CLOSED | CLOSED |
+| leak | 28.9% | 16.8% | **11.5%** | 7.4% | 4.4% |
+
+A **smaller** bag opens the loop but takes the leak from 11.5% to 29% -- trading a possible
+instability for a certain confinement failure, and running against the paper's own reason for the
+big bag. Reject.
+
+**Lever 3 -- more seed. The only lever that helps both.**
+
+| `x_K` | 0.5% | **1%** | 2% | 5% |
+| --- | ---: | ---: | ---: | ---: |
+| leak | 15.9% | **11.5%** | 8.4% | **5.5%** |
+| `beta` at 5 T | 2.15 | **2.10** | 2.03 | **1.94** |
+
+More seed means more electrons, hence more **Coulomb** collisions, hence a *lower* `beta`. So it
+improves retention **and** opens the loop. **The paper's "seed fraction is not a lever" is correct
+for retention alone** (`Rm ~ sqrt(seed)`, needing 69x to buy a temperature step) **but it has not
+noticed that seed is also a stability lever**, and there it pushes the right way for free.
+
+**Recommendation: more seed plus a little more expansion.** They act in the same direction and
+neither is expensive. A weaker magnet on its own does not work, because `B` is set at the hot end.
+
+**The caveat dominates the recommendation.** A 5% margin is far inside the uncertainty on
+`BETA_CRIT` itself, which is taken on authority (Q-G). If the true critical value is 1, everything
+here is closed and no geometry saves it; if it is 3, everything is already open and none of this
+matters. **This says the design sits on a boundary whose location is unknown** -- an argument for
+obtaining the Velikhov criterion, not for redesigning around an unsourced number.
+
+**It also reduces to a residence time, which is `T(t)`.** The threshold is 20 T at 5000 K and 4.8 T
+at 3000 K, so a plume that **leaves the field region before cooling below ~4000 K** never gives the
+instability time to grow. Field residence is `l/v` = 23.8/4350 ~ **5.5 ms**. Whether the plume is
+still above 4000 K at that point is exactly the cooling history the companion repo asked this repo
+for, and which is still unbuilt. **`T(t)` is now the item the most threads are waiting on:** Q-F,
+Q-K and item 10's quadrature all reduce to it.
