@@ -1138,11 +1138,48 @@ makes the column reproducible. Back-solving the paper's own `Rm = 361` at 15 000
 audit's conductivity gives `v L ~ 1.81e4 m^2/s`, which is what the regenerated table uses and
 labels as an inference, not a citation.
 
-**I could not do the literature validation.** `references.bib` is not in this repository or the
-companion clone, so `kerrebrock1964nonequilibrium`, `rosa1968mhd` and `messerle1995mhd` are names to
-me and nothing more. Checking this model against measured potassium-seeded conductivity at
-2000-3000 K -- the cliff regime, where it matters most -- **remains open and is the single most
-valuable thing left on this item.** I have deliberately not substituted remembered numbers for it.
+**`references.bib` located 2026-08-22** in `katzseth22202/Balloon-Pulse-Propulsion` (HEAD
+`515aca3`, the same commit the audit cites for the "four hundred times" fix). Two things follow, one
+useful and one much sharper than expected.
+
+**1. The literature is a weaker match than its filenames suggest.** The bib gives entries, not data --
+the two MHD sources are textbooks behind ISBNs (`rosa1968mhd`, `messerle1995mhd`), and
+`kerrebrock1964nonequilibrium` is **"I. Theory"**, whose own note records that its worked example is
+**argon** with a potassium seed. Argon is a monatomic noble gas with a Ramsauer minimum; water is a
+polar molecule whose permanent dipole makes it a far stronger electron scatterer, and `Q_en` is the
+input `sigma` is directly inverse in wherever neutrals dominate. So these sources **cannot validate
+`Q_en` for steam** -- they validate the seeding practice and the two-temperature law, not the
+cross-section. Still open, and now more sharply: what is `Q_en` for **H2O**, not for argon.
+
+**2. The `Rm` column cannot be converted to a conductivity at a single `v L` -- taken that way, four
+of its six rows are physically impossible.** The paper's table (`CONTEXT.md`) reads:
+
+| plume T | 15 000 | 6000 | 5000 | 4000 | 3000 | 2000 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| paper `Rm` | 361 | 400 | 238 | 76.5 | 9.2 | 0.1 |
+| implied `sigma` at `v L = 1.81e4` | 15872 | 17586 | 10464 | 3363 | 404 | 4.4 |
+| **Spitzer ceiling** [S/m] | 9954 | 2121 | 1644 | 1101 | 599 | 234 |
+| implied / ceiling | **1.6x** | **8.3x** | **6.4x** | **3.1x** | 0.68 | 0.02 |
+
+Spitzer conductivity is the value with **Coulomb collisions only**; adding neutrals can only lower
+it, and it is independent of `n_e` except through `ln Lambda`, so **no seed fraction can beat it**.
+An implied `sigma` above the ceiling is not a number that can be made right by a better model.
+
+**The likely resolution is benign, and it is still a finding.** Different rows are different *times*
+in one expansion, so `v` and `L` plausibly differ per row -- the table is a schedule, not an
+isotherm sweep. But then the `Rm` column is **not** a conductivity column, and converting it to one
+(which the 2026-08-21 audit did, and which I repeated) is invalid except at whichever single row the
+chosen `v L` belongs to. To stay under the ceiling, `v L` must vary by **at least 441x** across the
+six rows; against this module's `sigma`, by **13.5x**.
+
+**So the honest status of the "2.3x gap" is: not established.** It was computed by pinning `v L`
+from the 15 000 K row and applying it to the others. The comparison is only defensible row by row,
+with each row's own `v` and `L`.
+
+**What the paper needs to state, and it is small:** the `v` and `L` behind each row of
+`tab:seed_window`. Until it does, no gap between this model and that column is measurable in either
+direction -- including the ones I reported earlier in this file, which should be read as
+provisional.
 
 ## Q-H. Ablation is the plate's real exposure, and it is a diagnostic rather than a gate.
 2.7-13.6 mm/pulse at 45 km/s rising to 8.3-41.4 mm at 63 (upper bound, nothing credited to
