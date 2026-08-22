@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-recombination analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -159,6 +159,12 @@ data/results/cooling_history.csv: python/puffsat/expansion.py python/puffsat/eos
                                   python/puffsat/conductivity.py python/puffsat/tops.py
 	@mkdir -p data/results
 	PYTHONPATH=python uv run python -m puffsat.expansion
+
+## analysis-recombination: Q-M -- the freeze-out criterion. Races recombination against the
+## expansion along the cooling history and decides which branch of the ADR-0026 bracket the
+## nozzle actually follows. Prints the verdict; owns no artifact.
+analysis-recombination:
+	PYTHONPATH=python uv run python -m puffsat.recombination
 
 ## sweep-geometry-wide: design SS7's remaining r_foot/R nodes (0.8/0.9/1.0) at the same M = 40
 ## anchor -> data/results/sweep_geometry_wide.jsonl, plus a radial-domain convergence check

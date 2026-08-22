@@ -568,7 +568,8 @@ See [`impact_sim_conductivity_and_bag.md`](impact_sim_conductivity_and_bag.md) f
       **output** (5.5e4-9.7e4) rather than the guess Q-G could not source, and that the
       equilibrium/frozen bracket on exit temperature is **a factor 3**, which spans the whole
       cliff. So the answer to "is the plume still hot at the exit" is *yes on every leg in
-      equilibrium, and no on the cold leg if recombination freezes*.
+      equilibrium, and no on the cold leg if recombination freezes* -- and **Q-M then settled
+      which of those holds: equilibrium, by 2 to 5 decades. Yes on every leg.**
 - [ ] Fireball density, for the recombination-freeze check below 0.01 kg/m^3.
 - [x] ~~LTE check: item 1's Saha solve assumes it and nobody has verified it.~~ **Already done.**
       `python/puffsat/lte.py` (McWhirter) + `data/results/lte_validity.csv`; commit `4e89105`,
@@ -1473,7 +1474,14 @@ through its own surface.
 temperature and it spans the entire cliff, so it is now the largest single uncertainty on the
 nozzle side -- exactly as ADR-0026 found it to be on the plate side.
 
-## Q-M. Which branch of the frozen bracket is real? *(now the highest-value open item)*
+> **Settled the same day, in Q-M: the equilibrium branch.** Recombination beats the expansion by
+> 2.2 to 5.2 decades wherever the ionisation store still holds anything, so the equilibrium column
+> above is the answer and the frozen column is not reached in the nozzle. Two consequences flow
+> back into this section: the instability exposure Q-L narrowed to one corner is **closed**, and
+> item 10's leak is the equilibrium row alone, **0.11%-2.5%** -- which puts the paper's published
+> 4.4% above the model's whole range rather than inside it. See Q-M.
+
+## Q-M. Which branch of the frozen bracket is real? **ANSWERED 2026-08-22: equilibrium.**
 Everything above brackets rather than answers, and the bracket is a factor 3 in exit temperature,
 2.5x in leak, and the difference between "no exposure anywhere" and "the cold leg is exposed".
 **The criterion is a rate comparison and it is computable**: recombination rate against expansion
@@ -1482,6 +1490,69 @@ it, and both are currently quoting brackets because of it. **Cost: moderate** --
 three-body and radiative recombination coefficients for H and O, which are tabulated. **Worth:
 the highest on the list**, because a single calculation collapses a bracket that two separate
 studies are each carrying at full width.
+
+### Q-M answered 2026-08-22. **The bracket collapses to equilibrium. The nozzle does not freeze.**
+`python/puffsat/recombination.py`, `make analysis-recombination`. No new artifact -- the answer is
+a verdict, not a table.
+
+**Method.** Race the two clocks. `Da = tau_expansion / tau_recombination`, the classical Bray
+criterion; `Da >> 1` means the chemistry keeps up and the equilibrium branch is right. Run the
+*equilibrium* history and ask at every station whether the chemistry was fast enough to have
+produced it -- a self-consistency test, which is why no finite-rate solver was needed.
+
+| closing speed | binding `Da` (ionisation) | margin | verdict | `f_diss` at exit |
+| ---: | ---: | ---: | --- | ---: |
+| 75 km/s | 1.6e6 | 5.2 decades | **equilibrium** | 1.0000 |
+| 65 | 8.2e5 | 4.9 | **equilibrium** | 1.0000 |
+| 56.53 | 1.8e5 | 4.3 | **equilibrium** | 1.0000 |
+| 45.58 | 1.5e3 | 2.2 | **equilibrium** | 0.9931 |
+
+**The store returns, and it returns with orders of magnitude to spare.** Three-body recombination
+(`X+ + e + e -> X + e`) dominates the radiative channel by ~1e5 here, because the plume is dense
+-- 1e25 electrons/m^3, about a fifth of atmospheric number density. At 75 km/s the ionisation
+store falls 83% -> 54% of the reservoir value across the transit, every bit of it at `Da > 2e6`.
+
+**The statistic matters, and the obvious one inverts the answer.** `min Da` over the history is
+**0.0093** on the cold leg, which reads "frozen". That minimum sits at 5070 K, at a station
+holding **0.01% of the ionisation store**. A store that has already been returned cannot freeze.
+Weighting by what is actually still held gives 1.5e3, and the two differ by five orders of
+magnitude. Recorded because it is an easy way to get this exactly backwards.
+
+**A separate finding that fell out: the dissociation store never returns in the nozzle at all.**
+Equilibrium water is **fully dissociated at every station** (`f_diss` = 1.0000 to 0.9931), so
+there is no dissociation energy to give back on either branch, and the factor-3 bracket was
+purely the ionisation store all along. Its Damkohler number is marginal (`min Da_diss` = 1.3 to
+10.8) -- but it does not bind *here*, because the reaction equilibrium is not asking for it. It
+binds **downstream, in the fireball**, which is the still-open "does recombination freeze below
+0.01 kg/m^3" item. **That item now has its rate comparison already built.**
+
+**Consequences, and one of them cuts against the paper.**
+
+1. **Q-K's instability exposure is closed.** The only exposed corner was the cold leg on the
+   frozen branch (2 972 K). The equilibrium answer is 4 692 K, above the 4000 K line. **No leg is
+   exposed on either the hot or cold end.**
+2. **Item 10's leak is the equilibrium column: 0.11% to 2.5%**, not the 0.11-5.4% bracket.
+3. **The paper's published 4.4% is now *above* the model's whole range.** Q-L had it sitting
+   inside the bracket; with the bracket collapsed it does not. The model says the leak is roughly
+   **2x smaller** than published. That is a discrepancy in the *conservative* direction -- the
+   paper is under-claiming -- but it is a discrepancy and it should not be quietly absorbed.
+   Two readings: either the paper's 4.4% carries margin it does not state, or `v L` is smaller
+   than the nozzle solve says. **Routing back rather than resolving.**
+
+**What this does NOT settle: ADR-0026's plate bracket.** Everything above is the *nozzle*, whose
+transit is ~2 ms. The plate bounce is ~**1 microsecond**, a thousand times shorter, at a different
+density history. Both `Da` channels scale as density squared, so the plate is *not* simply worse,
+and it cannot be assumed either way -- but nothing here transfers to it. **The module now exists
+to check it**, which is a much smaller job than building it was, and it is the obvious next use.
+
+**Honest weak point.** The three-body atomic coefficient (`6.1e-26 T^-2 cm^6/s`, Baulch et al.)
+carries a factor 2-3, and steam's third-body efficiency differs from the argon/nitrogen the fit is
+anchored on. That uncertainty is ~0.5 decades against the 2.2-5.2 decades of margin, so it does
+not threaten the ionisation verdict -- but the *dissociation* numbers above sit inside it, which
+is exactly why they are reported as marginal rather than as an answer. The ionic coefficient's
+published form is quoted with `T` in **eV**; reading it as kelvin changes the rate by ~1e11 and
+inverts the verdict, so it is pinned in the tests by an independent Thomson estimate as well as by
+the literal.
 
 ## Q-N. The nozzle exhaust speed is not the momentum-sharing speed, and the paper uses one number.
 The solve gives an exhaust of **9.9-16.2 km/s** relative to the ship. The paper's `v_out =
