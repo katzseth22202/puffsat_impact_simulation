@@ -1118,10 +1118,33 @@ state flagged `at_risk` means "check the literature criterion", not "this filame
 
 **Consequence for Q-F.** If the instability does trigger, the effective conductivity is **lower**
 than a smooth calculation gives -- the *opposite* direction from the decoupling itself. So the two
-effects fight, and quoting the decoupling gain without the instability check would be
-one-sided. **What is still needed to close Q-F: `B(t)` and the expansion `u` from the companion
-repo.** With those the balance is ~60 lines and half a day; without them it would produce a `T_e`
-driven by invented numbers.
+effects fight, and quoting the decoupling gain without the instability check would be one-sided.
+
+### **The field is now known, and the loop is CLOSED. 2026-08-22.**
+I wrote above that closing the Hall link "needs several tesla" and left it there. The paper states
+the field: **~20 T at 1 m down the bore, 12 T at 3 m, 9 T at 6 m, 5 T at exit.** That is above the
+threshold everywhere.
+
+| T [K] | `beta` at 5 T | at 9 T | at 12 T | at 20 T | gain `S` | loop |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 2000 | 2.95 | 5.31 | 7.07 | 11.8 | 13.3 | **CLOSED** |
+| 3000 | 2.10 | 3.77 | 5.03 | 8.39 | 9.05 | **CLOSED** |
+| 4000 | 1.03 | 1.85 | 2.47 | 4.11 | 6.33 | **CLOSED** |
+| 5000 | 0.50 | 0.91 | 1.21 | 2.01 | 3.52 | **CLOSED** (at 20 T) |
+| 8000 | 0.38 | 0.68 | 0.90 | 1.50 | 0.12 | open (gain gone) |
+
+**So the electrothermal instability is a live concern in this design, not a hypothetical** -- and it
+is live at exactly 2000-5000 K, the band where the seed window's floor is decided. Above 5000 K the
+seed saturates and the loop opens on its own.
+
+This does **not** mean the plasma filaments: `BETA_CRIT = 2` is engineering practice and the real
+criterion is a dispersion relation whose sources are still unavailable (Q-G). The screen rules
+states *out*, never in, and it no longer rules these out. **This is now the most valuable open item
+on the seed side**, because it bears on the floor the whole leak schedule rests on.
+
+**What is still needed to close Q-F itself: the expansion `u`.** `B` is now known; `u` can be taken
+as `v_in/(1+k)` (7.89 km/s at 75 km/s, 5.26 at 50) per Q-G(b), so the balance is now writable. It
+was not before.
 
 ## Q-G. Both sides of the `sigma` comparison are weakly sourced. **PARTLY CLOSED, honestly.**
 **The model side is now explicit rather than hand-picked.** `Q_en = 1e-19 m^2` is a parameter of
@@ -1180,6 +1203,44 @@ with each row's own `v` and `L`.
 `tab:seed_window`. Until it does, no gap between this model and that column is measurable in either
 direction -- including the ones I reported earlier in this file, which should be read as
 provisional.
+
+### Q-G(b). `v` and `L` derived from the paper's own geometry. **2026-08-22.**
+They do not have to be guessed. `Balloon-Pulse-Propulsion`'s `CONTEXT.md` gives the bag as a
+**capsule 23 m long with a 3.0 m bore** (`pi r^2 l` = 650 m^3 against the stated 660), the slug as
+213 kg (0.323 kg/m^3), the slug ratio `k = 8.5`, and a snowplow transit of ~2.3 ms.
+
+- **Axial `v`** follows from `k`: momentum gives `v_out = v_in/(1+k)`. At 75 km/s that is
+  **7.89 km/s**; at 50 km/s, **5.26 km/s**. A 23 m transit at ~10 km/s mean is 2.3 ms, which is the
+  paper's own stated figure -- so the geometry closes on itself.
+- **Radial `v`** is the plume's sound speed, 1.7-3.8 km/s over 3000-15 000 K.
+- **`L`** is the field-gradient scale: 3.0 m (bore radius, the shortest escape path), ~6 m (plume at
+  exit -- the field falls 20 T to 5 T, so flux conservation puts the radius at 2x), or 23 m (column).
+
+**So `v L` lies in `[6.0e3, 1.8e5] m^2/s`**, and the audit's back-solved 1.81e4 sits inside it.
+
+**The cliff across that whole range is 2251-3317 K** -- a tight band, because the Saha exponential
+makes the cliff only logarithmically sensitive to `v L`.
+
+**The two legs barely differ.** 75 km/s gives 2251-3317 K; 50 km/s gives 2336-3317 K. `v_out`
+changes by only 1.5x between them and the cliff moves ~85 K. **Field retention is not a reason to
+prefer either leg.**
+
+**Two corners of the range each reproduce one of the paper's own numbers -- and they disagree.**
+
+| what it reproduces | `v L` needed | implied `L`, `v` |
+| --- | ---: | --- |
+| window floor ~3300 K | **6.0e3** | bore radius 3 m x sound speed 2 km/s |
+| `tab:bag_state` leak 4.4% at ~3500 K | **1.0e5** | column 23 m x 4.35 km/s |
+
+At `v L` = 1.0e5 the model gives **4.45% at 3500 K against the paper's 4.4%** -- essentially exact.
+But that same `v L` puts the cliff at 2377 K, not 3300 K. **The paper's floor and its leak imply
+`v L` values 17x apart.** Both cannot hold with one `v`, one `L`.
+
+**And a single `v L` still does not fit the whole column** (ratios 0.18-2.43 at `v L` = 1.0e5). The
+model is high at 15 000 K, low at 5000-6000 K, and **agrees to 10-30% at 2000-3000 K**. That the
+disagreement is worst in the middle and vanishes at the cool end supports the trajectory reading:
+each row is a different *time*, with its own density as well as its own `v` and `L`. It is also the
+reassuring shape -- the rows that agree are the ones that decide the floor.
 
 ## Q-H. Ablation is the plate's real exposure, and it is a diagnostic rather than a gate.
 2.7-13.6 mm/pulse at 45 km/s rising to 8.3-41.4 mm at 63 (upper bound, nothing credited to
