@@ -31,6 +31,16 @@ extension is consistent with what it extends.
 > moves from 0.79–0.82 to **0.78–0.82**; the shape of the result and every conclusion drawn from it
 > stand. The contour densities drop substantially (0.081 → 0.047 at 63 km/s) because that is the
 > density the plate can actually take.
+>
+> **The model underneath was then validated (2026-08-22).** Multiplying a 1D plane-wave stagnation
+> pressure by a 2D concave/flat ratio is only the true concave peak if a *flat* 2D plate sees the
+> plane-wave load to begin with. Measured against the confined run of the same kernel, it does:
+> **1.0011–1.0142×**, worst departure 1.4%, rising with `L/D` and `r_foot/R`. The sign is the
+> opposite of the intuitive one — a finite footprint sits slightly *above* plane-wave rather than
+> relieving below it — so the survivability model is marginally optimistic, by an amount too small
+> to matter against a 400 MPa floor drawn from a 400/700/900 band. The plane-wave denominator is
+> also confirmed shape-independent (nine runs agreeing to 1 part in 10⁴), which is what licenses
+> treating `focusing` as pure geometry.
 
 ## The velocity grid has two legs, because the halves are known to different degrees
 

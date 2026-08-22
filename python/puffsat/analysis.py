@@ -470,6 +470,9 @@ class GeoRow:
     restitution_confined: float
     peak_force: float
     peak_local_pressure: float  # peak local plate pressure of the free run (Rung S focusing factor)
+    # The same, from the confined (plane-wave) run: the denominator that makes the focusing model's
+    # premise measurable rather than assumed (see `test_focusing_model_assumes_a_flat_plate_...`).
+    peak_local_pressure_confined: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -494,7 +497,9 @@ class GeometryPoint:
 
 def read_geometry(path: Path = DEFAULT_GEOMETRY_PATH) -> list[GeoRow]:
     """Parse the geometry sweep JSONL (one JSON object per line; blank lines tolerated)."""
-    return read_jsonl_rows(GeoRow, path, defaults={"peak_local_pressure": 0.0})
+    return read_jsonl_rows(
+        GeoRow, path, defaults={"peak_local_pressure": 0.0, "peak_local_pressure_confined": 0.0}
+    )
 
 
 def reconcile_f(eta_capture: float, e_eff: float) -> float:

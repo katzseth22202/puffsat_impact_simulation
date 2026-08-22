@@ -921,13 +921,44 @@ Updated: ADR-0035 (correction block + the 0.040 schedule figure), design SS12.1,
 `frontier_contour_heavyplate.csv` (now carries `focusing` and `peak_mpa` columns so the flown
 pressure is auditable from the deliverable itself).
 
-## Q-I. Is the focusing model itself right? *(assumption underneath Q-D)*
+## Q-I. Is the focusing model itself right? **ANSWERED 2026-08-22: yes, to 1.4%.**
 `peak = c_stag rho v^2 * (P_local_concave / P_local_flat)` treats the **flat 2D** peak as equal to
-the **1D plane-wave** peak, then scales by the concave/flat ratio. That is the repo's existing
-assumption everywhere focusing appears, so Q-D's fix is a *consistency* fix regardless -- but the
-assumption is untested. The geometry sweep already records `peak_local_pressure` for the confined
-run, so the flat-2D-vs-1D check is nearly free. **Cost: ~1 h. Worth: it scales every survivability
-verdict in the repo.**
+the **1D plane-wave** peak, then scales by the concave/flat ratio. Q-D's fix is a *consistency* fix
+regardless, but this premise underneath it had never been checked, and it scales every
+survivability verdict in the repo.
+
+*Correction to my own scoping note:* I said the sweep "already records `peak_local_pressure` for
+the confined run". It did not -- the kernel **computes** it for both runs and the sweep recorded
+only the free one. Exposing it was still a one-field change (`GeoRecord.peak_local_pressure_confined`),
+so "nearly free" held, but the reason was wrong.
+
+**Seam** (agreed before writing the test): the free **flat** run against the **confined**
+(plane-wave) run of the *same kernel*, so scheme error is common-mode and divides out -- the
+construction ADR-0003 already uses for `eta_capture`. **Tolerance: 10%** on peak pressure, which
+sits well inside the SiC+Ti margin (400 MPa is the conservative floor of a 400/700/900 band).
+
+**Result: the flat plate runs 1.0011-1.0142x the plane-wave peak across the shape box** -- worst
+departure **1.4%**, inside even the stricter 5% bar that ADR-0003's cross-kernel check uses.
+
+Two things worth naming:
+- **The sign is the opposite of the obvious guess.** I predicted a finite footprint would relieve
+  sideways and push the local peak *below* plane-wave, making the model conservative. It does not:
+  flat sits slightly **above** plane-wave, rising monotonically with both `L/D` and `r_foot/R`, so
+  the survivability model is marginally **optimistic**. At <= 1.4% that is negligible -- but it is
+  not zero, and it is not the direction anyone would assume.
+- **The plane-wave denominator is genuinely shape-independent.** All nine confined runs agree to a
+  part in 10^4 despite differing in slab length and domain radius. That is what licenses treating
+  `focusing` as pure geometry, and it is an independent check on the confined boundary condition.
+  Kept as its own test.
+
+**So Q-D's fix rests on a validated premise.** Done red-green this time: the test was written
+first and failed on `KeyError: 'peak_local_pressure_confined'` before the field existed.
+
+**Still open (Seam B, not taken):** the *cross-kernel* leg -- whether the confined-2D peak matches
+the 1D Lagrangian `hydro1d` `peak_wall_pressure` that `c_stag` is actually measured from. Seam A
+cannot see a normalization error between the two kernels. ADR-0003 already cross-checks `1+e_eff`
+between them to ~5%, so this is a narrowing rather than an unknown. **Cost: ~half a day** (matched
+configs across two kernels, different units).
 
 ## Q-E. Does the ~5 m cloud length the contour delivers matter, given `e_eff` is read at `L = 10 m`?
 Measured and **answered no** at contour densities (spread 0.002-0.006), but the *reason* is that

@@ -570,6 +570,15 @@ struct GeoRecord {
     /// Peak *local* facesheet pressure of the free run — the concave focusing concentration the
     /// survivability frontier divides by its flat (`d/D = 0`) counterpart (Rung S, ADR-0010/0021).
     peak_local_pressure: f64,
+    /// The same quantity from the **confined** (plane-wave) run.
+    ///
+    /// Survivability is classified as `c_stag rho v^2 * focusing`, whose first factor is the 1D
+    /// plane-wave stagnation pressure and whose second is the 2D ratio `P_local(concave) /
+    /// P_local(flat)`. That product is the true concave peak only if a *flat* 2D plate sees the
+    /// plane-wave load to begin with. Recording the plane-wave peak next to the free one makes that
+    /// premise measurable rather than assumed, and because both come from this kernel the scheme
+    /// error is common-mode and divides out — the same construction `eta_capture` uses (ADR-0003).
+    peak_local_pressure_confined: f64,
 }
 
 /// Run one `eta_capture` case: a free dished bounce over its confined plane-wave denominator. The
@@ -647,6 +656,7 @@ fn run_eta_case_with_headroom(
         restitution_confined: confined.restitution_ratio(),
         peak_force: free.peak_force,
         peak_local_pressure: free.peak_local_pressure,
+        peak_local_pressure_confined: confined.peak_local_pressure,
     }
 }
 

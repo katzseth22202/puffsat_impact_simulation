@@ -176,6 +176,59 @@ def test_contour_leaves_no_survivable_density_unused() -> None:
         )
 
 
+def test_focusing_model_assumes_a_flat_plate_sees_the_plane_wave_load() -> None:
+    """The hidden premise under `focusing_at`, and therefore under every survivability verdict.
+
+    Survivability is classified as `peak = c_stag*rho*v^2 * focusing`, where the first factor is the
+    **1D plane-wave** stagnation pressure (`c_stag` is measured from the 1D kernel) and `focusing`
+    is the measured **2D** ratio `P_local(concave)/P_local(flat)`. Multiplying them only yields the
+    true concave peak if the flat 2D plate sees the plane-wave load in the first place --
+    `P_local(flat) == P_local(plane wave)`. Nothing had ever checked that.
+
+    Seam: the free flat run against the confined (plane-wave) run of the **same kernel**, so scheme
+    error is common-mode and cancels -- the same construction ADR-0003 uses for `eta_capture`.
+    Tolerance: 10% on peak pressure, which stays well inside the SiC+Ti margin (the 400 MPa
+    baseline is the conservative floor of a band running to 700/900 MPa).
+
+    **Measured 2026-08-22: the premise holds, to 1.4%.** The flat plate runs `1.0011-1.0142` x the
+    plane-wave peak across the box, rising with both `L/D` and `r_foot/R`. The direction is worth
+    naming because it is the opposite of the obvious guess: a finite footprint does *not* relieve
+    the local peak below plane-wave -- it sits slightly **above** it, so the survivability model is
+    marginally **optimistic** rather than conservative. At <= 1.4% that is negligible against a
+    400 MPa baseline drawn from a 400/700/900 band, but it is not zero and it is not the sign one
+    would assume."""
+    rows = [r for r in contour._geo() if abs(r["d_over_d"]) < 1e-9]
+    assert rows, "no flat geometry rows to check the focusing premise against"
+
+    worst = 0.0
+    for r in rows:
+        ratio = r["peak_local_pressure"] / r["peak_local_pressure_confined"]
+        worst = max(worst, abs(ratio - 1.0))
+        assert ratio == pytest.approx(1.0, rel=0.10), (
+            f"flat plate at L/D={r['l_over_d']}, r_foot/R={r['r_foot_over_r']} sees "
+            f"{ratio:.3f}x the plane-wave peak -- the focusing model's premise fails there"
+        )
+    # Drift guard, distinct from the 10% soundness gate above: the measured worst case is 1.4%, so
+    # anything past 3% means the kernel or the sweep has moved and the premise wants re-reading,
+    # even though the model would still be sound.
+    assert worst < 0.03, f"flat-vs-plane-wave departure drifted to {worst * 100:.1f}% (was 1.4%)"
+
+
+def test_the_plane_wave_peak_does_not_depend_on_the_cloud_shape() -> None:
+    """A physics check that fell out of measuring the premise above, and is worth keeping.
+
+    The confined run is the plane-wave limit, so its peak stagnation pressure is a function of the
+    incident Mach number and `gamma` alone -- not of how long or how wide the slug is. The nine
+    confined runs behind the flat geometry rows differ in both slab length and domain radius, so if
+    the denominator of `focusing` carried any shape dependence it would show up here as a spread.
+
+    It does not: all nine agree to a part in 10^4. That is what licenses treating `focusing` as pure
+    geometry, and it is an independent check on the confined boundary condition."""
+    peaks = [r["peak_local_pressure_confined"] for r in contour._geo() if abs(r["d_over_d"]) < 1e-9]
+    assert len(peaks) >= 9
+    assert max(peaks) - min(peaks) < 1e-4 * max(peaks)
+
+
 def test_eta_interpolation_reproduces_the_geometry_grid_nodes() -> None:
     """The interpolation must return the swept value at a swept point, or the contour is reporting
     an `eta_capture` the 2D track never computed."""
