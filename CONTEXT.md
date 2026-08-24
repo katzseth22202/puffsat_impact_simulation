@@ -235,6 +235,34 @@ the nozzle expansion that follows it.
 _Avoid_: confusing with the tamper's disqualified "mirror" framing (above) — different study,
 different object
 
+**Frozen (three distinct senses -- always say which)**:
+The word now carries three meanings in this repository and they are not interchangeable.
+1. **Frozen composition** -- `eos_water.frozen_composition` and `pressure_energy_frozen`: the
+   species mix held fixed at its initial value while `(rho, T)` move. A *modelling device*.
+2. **The frozen branch** (ADR-0026) -- the pessimistic half of the recombination bracket, run by
+   feeding sense 1 to the expansion. A *bracket edge*, and Q-M established it is not the real one
+   inside the nozzle.
+3. **Frozen flow** (Q-P) -- the physical finding that the exhaust leaves with its dissociation
+   energy unreturned, because recombination is outrun past the nozzle lip. A *result*, and the
+   only one of the three that is a claim about the world.
+_Avoid_: "the frozen case" unqualified; treating Q-M's collapse of sense 2 as bearing on sense 3
+(it does not -- sense 2 was about the nozzle, sense 3 is about what happens after it)
+
+**Freeze-out**:
+The moment a chemical store stops being returned because the expansion outruns the reaction, tested
+by the Damkohler number `Da = tau_expansion / tau_recombination`. **Always weighted by how much of
+the store is still held**: the smallest `Da` on a history sits at the thinnest, coldest station,
+which is usually holding nothing, and quoting it inverts the answer (`recombination.binding_damkohler`).
+_Avoid_: "min Da" as the verdict; "frozen" without saying which store (ionisation or dissociation)
+
+**Arrival radius**:
+The radius of the projectile's sweeping front as it *enters* the bag, distinct from the front's
+radius later and from the bore radius it may or may not reach. The snowplow's `lambda = rho A`
+assumes it is the bore radius; `k = 8.5` requires 74-97% of it (Q-Q). It is `aim`'s design
+quantity, not this repository's.
+_Avoid_: conflating with the `f(v)` study's **footprint** `r_foot` (that is the pulse arriving at
+the *plate*, a different object at the other end of the mission)
+
 **Recombination buffering**:
 The equilibrium plasma returning its ionisation store to the thermal pool as it expands, holding
 `gamma_eff` near 1.15 and *slowing* the temperature fall. The temperature history stays monotone

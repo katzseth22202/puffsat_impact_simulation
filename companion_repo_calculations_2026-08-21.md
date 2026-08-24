@@ -520,6 +520,23 @@ goes: 125 MJ/kg at the hottest pulse against 86 MJ/kg of thermal motion. Add it,
 
 ## Owed to `puffsat_impact_simulation` instead
 See [`impact_sim_conductivity_and_bag.md`](impact_sim_conductivity_and_bag.md) for both specs.
+
+> **State of play, 2026-08-24: every item routed to this repository is closed.** Eleven items,
+> each with a `make` target and tests. Five of them answered the question as asked; four turned up
+> something the item did not ask about and those are the ones worth reading -- **Q-L** (residence
+> is 1.7-2.8 ms, not 5.5, and `v L` is an output), **ADR-0038** (both halves of the old
+> instability screen were wrong, in opposite directions), **Q-P** (the exhaust leaves chemically
+> frozen, stranding 19-48% of the dissipated budget) and **Q-Q** (`k = 8.5` is a requirement on
+> the projectile's arrival radius, not an output of the snowplow).
+>
+> **Three things are routed back and none of them is settled here.** The paper's 4.4% leak sits
+> above the model's whole range (Q-M). Q-O -- whether the cold leg is electrothermally exposed --
+> needs a 2D resistive-MHD solve this repository does not have. Q-N asks which exhaust speed the
+> paper's Isp rests on, and Q-P made that question load-bearing rather than tidy.
+>
+> Everything still unchecked below belongs to `aim`: its modules, its regression tests against its
+> own tables, its paper edits, and its ADRs 0015-0017 (which are *not* this repository's ADRs of
+> the same numbers).
 - [x] **Study 1**: `sigma(T, rho, x_K)`. **DONE 2026-08-22.** `python/puffsat/conductivity.py`,
       `make analysis-conductivity`, 7 tests. Built test-first with the seams agreed in advance:
       `electron_density`, `sigma`, `magnetic_reynolds` public; collision frequencies private.
@@ -939,8 +956,13 @@ See [`impact_sim_conductivity_and_bag.md`](impact_sim_conductivity_and_bag.md) f
       exactly as an unslugged one does, because `(1+k)` in the mass cancels `1/(1+k)` in the
       drift speed. So the plate genuinely cannot buy its way out of the 46 km/s objection, and
       0015's argument holds with one fewer escape route. Add to Consequences.
-- [ ] `CONTEXT.md`: note that `f = 0.8` now has a second unmeasured companion, the leak
-      fraction, and that the leak decides a 3.7 kg versus 31 kg bag.
+- [ ] ~~`CONTEXT.md`: note that `f = 0.8` now has a second unmeasured companion, the leak
+      fraction~~ **-- premise superseded 2026-08-24. The leak is no longer unmeasured.** Q-L
+      solved it (0.11-2.5% on the equilibrium branch, residence-weighted) and Q-M collapsed the
+      bracket that made it a range. What is still true is the *consequence* -- the leak decides
+      a 3.7 kg versus 31 kg bag -- and the note worth writing now is the opposite one: **the
+      model's leak is roughly half the paper's published 4.4%**, which is the open discrepancy
+      recorded under Q-M, not an unmeasured quantity.
 
 ## Ranked by value if only some get done
 
