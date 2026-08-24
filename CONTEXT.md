@@ -1,12 +1,16 @@
 # PuffSat Impact Simulation
 
-Glossary for two studies in this repository:
+Glossary for two studies in this repository, plus the nozzle-side work they support:
 
 - the **per-collision study** that computes the paper's fudge factor `f(v)` — the
   momentum-transfer efficiency of a PuffSat gas pulse bouncing off the pusher plate.
   Full design: [`puffsat_impact_sim_design.md`](puffsat_impact_sim_design.md).
 - the **tamped-nozzle study** that computes effective Isp for a tamped head-on collision.
   Full requirements: [`puffsat_tamper_isp_prd.md`](puffsat_tamper_isp_prd.md).
+- the **nozzle-side work** owed to `aim_is_all_you_need`: the plume cooling history and the
+  field-leak inputs that depend on it. Not a study with its own deliverable — a set of
+  calculations that repository consumes. Working notes:
+  [`companion_repo_calculations_2026-08-21.md`](companion_repo_calculations_2026-08-21.md).
 
 They share the vehicle and the pusher plate, not the deliverable.
 
@@ -145,7 +149,9 @@ conserved through vaporisation, not by surviving. It is framed as a **piston**, 
 its backward momentum is credited, while its entropy production is one part of the
 ceiling-shortfall ledger. Whether gentle, pressure-mediated loading actually maximises the
 realization fraction is a design hypothesis the study tests, not a settled result (ADR-0030).
-_Avoid_: reflector, mirror (both imply reflected-speed is the figure of merit — it is not)
+_Avoid_: reflector, mirror (both imply reflected-speed is the figure of merit — it is not).
+This ban is scoped to the **tamper**; the bag's **magnetic mirror** (below) is a different
+object in a different study and keeps the word.
 
 **Ballistic capture fraction**:
 The share of the isotropic, pressure-free ballistic fireball model that outruns its own
@@ -198,3 +204,40 @@ carried-mass economy. Reported beside Isp, never combined with it: converting pr
 payload-equivalent needs program economics this repository does not model.
 _Avoid_: two-currency ledger (jargon, and it implied a combined figure of merit that is not
 constructed)
+
+## Language — nozzle-side work (owed to `aim_is_all_you_need`)
+
+**Leg**:
+A segment of the mission with its own closing-speed schedule — the growth push, the overtake.
+The unit a plume state is quoted *for*, so "which leg" always means "which mission segment",
+never a stage of the nozzle and never an end of the speed range.
+_Avoid_: "hot leg"/"cold leg" for the ends of the closing-speed range (say **hot end** / **cold
+end**, or name the speed); "leg" for a stage of the two-leg nozzle (say **nozzle stage** —
+"two-leg nozzle" survives only as the paper's proper noun for the device)
+
+**Synodic-period case**:
+A mission variant, named by how many synodic periods the transfer takes. Two are flown — the
+**2-synodic** and the **3-synodic** — and they differ in their closing-speed schedule, not in
+any hardware. Naming the case is required whenever a closing speed is quoted, because the same
+speed can be a mid-burn point on one case and an endpoint on the other.
+_Avoid_: quoting a closing speed without its case
+
+**Closing-speed schedule (`w(t)`)**:
+Closing speed against time through a leg, and hence how many pulses land near any given speed.
+Distinct from the set of anchor speeds a calculation is *evaluated at*: the anchors are a grid,
+the schedule is the weighting. This repository owns neither — both are `aim`'s.
+_Avoid_: treating the anchor list in `expansion.PLUME_STATES` as equally weighted design points
+
+**Magnetic mirror**:
+The field structure at the closed end of the bag that reverses the merged slug's axial motion so
+it leaves through the nozzle. Distinct from the **snowplow** field profile down the bore and from
+the nozzle expansion that follows it.
+_Avoid_: confusing with the tamper's disqualified "mirror" framing (above) — different study,
+different object
+
+**Recombination buffering**:
+The equilibrium plasma returning its ionisation store to the thermal pool as it expands, holding
+`gamma_eff` near 1.15 and *slowing* the temperature fall. The temperature history stays monotone
+decreasing throughout; the store lengthens the fall, it does not reverse it.
+_Avoid_: "recombination heating", "recombination heats the plasma" (both assert a non-monotonic
+`T(t)` this work does not find, and would be falsifiable as written)

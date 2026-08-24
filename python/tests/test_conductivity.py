@@ -10,11 +10,13 @@ estimate went wrong.
 
 from __future__ import annotations
 
+import math
 from itertools import pairwise
 
 import pytest
 
 from puffsat import conductivity
+from puffsat.eos_water import K_B
 
 
 def test_electron_density_follows_the_saha_law_where_the_seed_dominates() -> None:
@@ -218,9 +220,13 @@ def test_electrothermal_screen_needs_both_hall_drive_and_ionisation_gain() -> No
     The regime map is the opposite of the intuitive one, and the numbers below are measured rather
     than assumed. At the bag's 0.32 kg/m^3 the plasma is **strongly collisional**: `beta` is only
     0.42 at 3000 K in a 1 T field, and it *falls* with temperature (0.52 at 2500 K to 0.023 at
-    15 000 K) because Coulomb collisions grow faster than the mobility. So the hot end is safe on
-    **both** counts -- low gain and low Hall drive -- and the risk sits at the cool end, which is
-    exactly where the cliff and the Q-F question live.
+    15 000 K) because Coulomb collisions grow faster than the mobility.
+
+    **The hot end is safe on the Hall link alone, not on both** (ADR-0038). An earlier version of
+    this test asserted the gain was gone up there too. It is not -- that reading came from
+    differentiating only the seed, and once water's ionisation is allowed to respond the gain at
+    11 000 K is ~6.5, not ~0. The verdict is unchanged; the reason is not, and the reason is what
+    decides whether a design change that raises the temperature actually helps.
     """
     cool_strong_b = conductivity.electrothermal_screen(3000.0, 0.32, 0.01, b_field=6.0)
     cool_weak_b = conductivity.electrothermal_screen(3000.0, 0.32, 0.01, b_field=0.005)
@@ -228,10 +234,11 @@ def test_electrothermal_screen_needs_both_hall_drive_and_ionisation_gain() -> No
 
     assert cool_strong_b.at_risk, "cool + strongly magnetised is where the instability lives"
     assert not cool_weak_b.at_risk, "no Hall drive, no feedback"
-    assert not hot.at_risk, "seed saturated: the gain is gone"
-    # At the hot end *both* links are broken, not just the gain -- beta falls with temperature here.
-    assert hot.hall_parameter < cool_strong_b.hall_parameter
-    assert hot.ionisation_sensitivity < 1.0 < cool_strong_b.ionisation_sensitivity
+    assert not hot.at_risk, "collisional enough that the Hall link is broken"
+    # The hot end is carried by the Hall link only. The gain is *large* there, which is exactly
+    # the correction ADR-0038 records: water takes the seed's place as the sensitive species.
+    assert hot.hall_parameter < conductivity.BETA_CRIT < cool_strong_b.hall_parameter
+    assert hot.ionisation_sensitivity > 1.0, "water's ionisation is sensitive, not inert"
 
 
 def test_the_bag_is_collisional_enough_that_a_strong_field_is_needed_to_close_the_loop() -> None:
@@ -254,12 +261,178 @@ def test_seed_window_carries_the_instability_data_without_assuming_a_field() -> 
     assumed field. That keeps it free of a number this repository does not own, and it is the more
     useful form anyway: it is what the bag field has to be compared against.
 
-    The two columns move in opposite directions, which is the whole story of the screen. The gain
-    `S` falls with temperature as the seed saturates; the field needed to close the Hall link rises,
-    because Coulomb collisions make the plasma more collisional as it ionises."""
+    The field needed to close the Hall link rises monotonically, because Coulomb collisions make
+    the plasma more collisional as it ionises.
+
+    **The gain is not monotone** (ADR-0038). It falls as the seed saturates, bottoms out where
+    potassium is spent and water has not yet started, then climbs again as water ionises -- and
+    water at 13.6 eV against a hotter gas is just as sensitive as the seed at 4.34 eV against a
+    cool one. An earlier version asserted a monotone fall to <0.05, which was the seed-only
+    artifact rather than the physics."""
     rows = conductivity.seed_window(0.32, 0.01, 1.81e4)
-    assert all(a.ionisation_sensitivity > b.ionisation_sensitivity for a, b in pairwise(rows))
     assert all(a.b_field_for_beta_crit < b.b_field_for_beta_crit for a, b in pairwise(rows))
-    # Both links are only plausibly live at the cool end, which is where the cliff sits.
+
+    gains = [r.ionisation_sensitivity for r in rows]
+    trough = gains.index(min(gains))
+    assert 0 < trough < len(gains) - 1, "the gain must have an interior minimum, not an endpoint"
+    assert all(a > b for a, b in pairwise(gains[: trough + 1])), "falls as the seed saturates"
+    assert gains[-1] > gains[trough], "and recovers once water takes over"
+    # At the bag's density the trough never breaks the loop: the gain link is live throughout.
+    assert min(gains) > conductivity.SENSITIVITY_CRIT
     assert rows[0].ionisation_sensitivity > 10.0
-    assert rows[-1].ionisation_sensitivity < 0.05
+
+
+def test_critical_hall_parameter_diverges_as_the_plasma_approaches_equilibrium() -> None:
+    """The analytic limit that decides this whole question (ADR-0038).
+
+    Petit and Geffray put `(T_e - T_gas)` in the denominator of `s`, so `beta_cr -> infinity` as
+    the electron temperature falls to the gas temperature. Physically: with no electron heating
+    there is no drive, and no Hall parameter can make the runaway go.
+
+    This is why `BETA_CRIT = 2` does not transfer to this plume. Two is the `s -> 0` limit of
+    their fully-ionised form -- a *strongly* two-temperature plasma, which an MHD generator is and
+    a near-equilibrium nozzle plume is not.
+    """
+    e_i, f = conductivity.IP_K, 1.0
+    assert conductivity.critical_hall_parameter(4000.0, 4000.0, e_i, f) == math.inf
+    assert conductivity.critical_hall_parameter(3900.0, 4000.0, e_i, f) == math.inf
+
+    # Monotone: the closer to equilibrium, the harder it is to destabilise.
+    near = conductivity.critical_hall_parameter(4100.0, 4000.0, e_i, f)
+    far = conductivity.critical_hall_parameter(10000.0, 4000.0, e_i, f)
+    assert near > far > 2.0
+
+
+def test_critical_hall_parameter_reproduces_the_published_fully_ionised_limit() -> None:
+    """`beta_cr = 1.935 f + 0.065 + s` must collapse to their stated `beta_cr ~ 2 + s` at `f = 1`.
+
+    Worked independently at `T_e = 10 000 K`, `T_gas = 4000 K`, `E_i = 4.34 eV`:
+        k T_e            = 0.861733 eV
+        1.5 k T_e / E_i  = 0.297833
+        s = 2(0.861733)(10000/6000)/4.34 / 1.297833 = 0.510044
+        beta_cr = 1.935 + 0.065 + 0.510044 = 2.510044
+    """
+    beta_cr = conductivity.critical_hall_parameter(10000.0, 4000.0, conductivity.IP_K, 1.0)
+    assert beta_cr == pytest.approx(2.5100, rel=1e-3)
+    assert beta_cr == pytest.approx(2.0 + 0.5100, rel=1e-3)
+
+
+def test_electron_energy_balance_actually_balances() -> None:
+    """The residual test: at the returned `T_e`, Joule heating must equal elastic **plus**
+    inelastic loss.
+
+    This is the acceptance test for the solve itself, independent of whether the physics feeding
+    it is right -- if the fixed point has not converged, everything downstream is decoration.
+    """
+    temp, rho, x_k = 4596.0, 0.02522, 0.01
+    bal = conductivity.electron_energy_balance(temp, rho, x_k, 5.0, 6.0, 2.71e-3)
+    assert bal.converged
+    assert bal.t_e > bal.t_gas, "a driven plasma must sit above the gas temperature"
+
+    elastic = (
+        1.5
+        * conductivity.electron_density(temp, rho, x_k, bal.t_e)
+        * K_B
+        * conductivity.energy_relaxation_rate(temp, rho, x_k, bal.t_e)
+        * bal.elevation
+    )
+    inelastic = conductivity.inelastic_loss(temp, rho, x_k, bal.t_e)
+    assert elastic + inelastic == pytest.approx(bal.joule_heating, rel=1e-4)
+    # Both channels are live here: neither may be quietly zero at the station that decides the leg.
+    assert inelastic > 0.2 * elastic
+
+
+def test_a_vanishing_field_leaves_the_plume_in_equilibrium_and_unconditionally_stable() -> None:
+    """The off-limit. No field means no driving current, so no electron heating, so no instability
+    at any Hall parameter -- the `beta_cr -> infinity` branch reached through the physics rather
+    than by asserting it directly."""
+    loop = conductivity.electrothermal_loop(4596.0, 0.02522, 0.01, 1.0e-9, 6.0, 2.71e-3)
+    assert loop.balance.elevation == pytest.approx(0.0, abs=1e-6)
+    assert loop.critical_hall_parameter == math.inf
+    assert not loop.unstable
+    assert loop.e_folding_time == math.inf
+
+
+def test_the_cold_leg_exit_is_unstable_and_the_hot_legs_are_not() -> None:
+    """The verdict this module exists to deliver, at the nozzle exit of three closing speeds.
+
+    The separation is not marginal in either direction, which is what makes it reportable. On the
+    hot legs the plume is in equilibrium to within a few kelvin, `s` runs to 10^2-10^4 and
+    `beta_cr` with it, against a Hall parameter of order 1. On the cold leg the plume falls far
+    enough that Joule heating elevates the electrons ~1000 K, `beta_cr` drops to ~2, and `beta`
+    is above it -- with an e-folding time of microseconds against a 2.7 ms transit.
+    """
+    hot = conductivity.electrothermal_loop(16224.0, 0.02512, 0.01, 5.0, 6.0, 1.69e-3)
+    mid = conductivity.electrothermal_loop(11682.0, 0.02456, 0.01, 5.0, 6.0, 2.22e-3)
+    cold = conductivity.electrothermal_loop(4596.0, 0.02522, 0.01, 5.0, 6.0, 2.71e-3)
+
+    assert not hot.unstable and not mid.unstable
+    assert hot.critical_hall_parameter > 1000.0, "equilibrium plume: beta_cr runs away"
+    assert mid.critical_hall_parameter > 100.0
+
+    assert cold.unstable, "the cold leg is where the criterion actually bites"
+    assert cold.critical_hall_parameter < 3.0
+    assert cold.screen.hall_parameter > cold.critical_hall_parameter
+    # Microseconds against a millisecond transit: being there briefly is not a defence.
+    assert cold.e_folding_time < 1.0e-4
+    assert cold.e_folding_time * 100 < 2.71e-3
+
+
+def test_inelastic_loss_vanishes_at_equilibrium_and_reverses_below_it() -> None:
+    """Detailed balance, and it is the reason inelastic channels cannot rescue this plume.
+
+    The heavies' internal states are held at `T_gas` by heavy-heavy collisions, so electron-impact
+    excitation and super-elastic de-excitation cancel exactly when `T_e == T_gas`. Below it the
+    electrons *gain* energy from the excited population, so the sign must flip.
+
+    The consequence (ADR-0038): expanding the detailed-balance bracket for a small elevation gives
+    `(dE/k) dT / T^2`, which is **linear in the elevation exactly as the elastic channel is**. So
+    the inelastic-to-elastic ratio is a property of the state, not something that grows as the
+    plasma approaches equilibrium -- inelastic losses cannot be a rescue mechanism for a
+    near-equilibrium plasma.
+    """
+    temp, rho, x_k = 4596.0, 0.02522, 0.01
+    assert conductivity.inelastic_loss(temp, rho, x_k, temp) == pytest.approx(0.0, abs=1e-9)
+    assert conductivity.inelastic_loss(temp, rho, x_k, temp + 800.0) > 0.0
+    assert conductivity.inelastic_loss(temp, rho, x_k, temp - 400.0) < 0.0
+
+
+def test_the_alkali_resonance_dominates_and_water_has_no_target_left() -> None:
+    """Channel ranking, and it is set by the composition rather than by the cross-sections.
+
+    K 4s-4p is a resonance transition with oscillator strength ~1, so its cross-section is two to
+    three orders above the molecular channels. The water channels are carried for completeness but
+    the plume is 99.7-99.9998% dissociated wherever any of this matters (Q-M), so at the crossing
+    station `n_H2O` is ~2e-6 of the heavies and they contribute nothing measurable.
+    """
+    original = conductivity.INELASTIC_CHANNELS
+    try:
+        per_channel = {}
+        for channel in original:
+            conductivity.INELASTIC_CHANNELS = (channel,)
+            per_channel[channel.name] = conductivity.inelastic_loss(7569.0, 0.05810, 0.01, 8025.0)
+    finally:
+        conductivity.INELASTIC_CHANNELS = original
+
+    alkali = per_channel["K 4s-4p resonance"]
+    water = sum(v for k, v in per_channel.items() if k.startswith("H2O"))
+    assert alkali > 100.0 * water, "the alkali channel must dominate at the crossing station"
+
+
+def test_inelastic_channels_cool_the_electrons_but_do_not_save_the_cold_leg() -> None:
+    """The verdict on ADR-0038's cheapest open item: real, helpful, and not enough.
+
+    Including the channels drops the cold-leg exit elevation ~1055 K -> ~814 K and lifts `beta_cr`
+    from ~1.84 to ~2.07. `beta` is 4.63, so the station remains unstable by a factor >2, and the
+    unstable stretch of the leg is unchanged.
+    """
+    exit_state = conductivity.electrothermal_loop(4596.0, 0.02522, 0.01, 5.0, 6.0, 2.71e-3)
+    assert exit_state.balance.elevation < 900.0, "inelastic cooling must reduce the elevation"
+    assert exit_state.critical_hall_parameter > 2.0, "and must lift beta_cr"
+    assert exit_state.unstable, "but not far enough: beta is still well above beta_cr"
+    assert exit_state.screen.hall_parameter > 2.0 * exit_state.critical_hall_parameter
+
+    # The hot legs stay in equilibrium and stay stable by orders of magnitude.
+    hot = conductivity.electrothermal_loop(16224.0, 0.02512, 0.01, 5.0, 6.0, 1.69e-3)
+    assert not hot.unstable
+    assert hot.critical_hall_parameter > 1000.0

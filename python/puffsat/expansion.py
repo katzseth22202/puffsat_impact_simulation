@@ -435,7 +435,7 @@ CSV_HEADER = (
 )
 
 
-def _radius(area_ratio: float) -> float:
+def plume_radius(area_ratio: float) -> float:
     """Flux-tube radius [m]: `A/A*` is an area ratio, so the radius goes as its square root."""
     return THROAT_RADIUS * math.sqrt(area_ratio)
 
@@ -480,7 +480,7 @@ def history(
 
     out: list[HistoryRow] = []
     for row in sampled:
-        radius = _radius(row.area_ratio)
+        radius = plume_radius(row.area_ratio)
         kap_p, kap_r = _tops_kappa(row.rho, row.temp)
         rad = radiation_check(row.temp, row.rho, row.energy, kap_p, kap_r, radius)
         v_l = row.speed * radius
@@ -596,7 +596,7 @@ def write_cooling_history(rows: Sequence[HistoryRow], path: Path = DEFAULT_COOLI
         lines.append(
             f"{h.closing_speed:g},{h.branch},{r.time * 1e3:.6f},{r.x:.4f},{r.area_ratio:.5f},"
             f"{r.rho:.6e},{r.temp:.2f},{r.pressure:.6e},{r.speed:.2f},{r.mach:.4f},"
-            f"{_radius(r.area_ratio):.4f},{rad.optical_depth:.6e},{rad.regime},"
+            f"{plume_radius(r.area_ratio):.4f},{rad.optical_depth:.6e},{rad.regime},"
             f"{rad.cooling_time / max(h.transit_time, 1e-12):.4e},{h.v_l:.6e},"
             f"{h.sigma:.6e},{h.rm:.6e},{h.leak_fraction:.6f}"
         )

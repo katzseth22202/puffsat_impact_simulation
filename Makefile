@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-recombination analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-recombination analysis-electrothermal analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -159,6 +159,19 @@ data/results/cooling_history.csv: python/puffsat/expansion.py python/puffsat/eos
                                   python/puffsat/conductivity.py python/puffsat/tops.py
 	@mkdir -p data/results
 	PYTHONPATH=python uv run python -m puffsat.expansion
+
+## analysis-electrothermal: ADR-0038 -- the Velikhov criterion walked along the cooling history.
+## Decides which legs are exposed to the electrothermal instability, where an exposed leg crosses
+## into it, and how much of its transit it spends there. Reported under BOTH readings of the
+## current-layer thickness, because they disagree on the cold leg (ADR-0038 Addendum 3)
+## -> data/results/electrothermal_scan.csv
+analysis-electrothermal: data/results/electrothermal_scan.csv
+
+data/results/electrothermal_scan.csv: python/puffsat/electrothermal.py \
+                                      python/puffsat/conductivity.py \
+                                      python/puffsat/expansion.py python/puffsat/eos_water.py
+	@mkdir -p data/results
+	PYTHONPATH=python uv run python -m puffsat.electrothermal
 
 ## analysis-recombination: Q-M -- the freeze-out criterion. Races recombination against the
 ## expansion along the cooling history and decides which branch of the ADR-0026 bracket the

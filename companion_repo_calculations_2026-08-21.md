@@ -556,6 +556,36 @@ See [`impact_sim_conductivity_and_bag.md`](impact_sim_conductivity_and_bag.md) f
       (`n_e^2 + n_e(K - n_w) - K(n_w + n_K) = 0`), so a verified solver every EOS table depends on
       is left untouched. The one approximation is named in the docstring: water's own ionisation is
       not re-solved with the seed's electrons present, worth ~1.3% at 15 000 K.
+- [x] **The Velikhov criterion, and which legs it actually exposes. DONE 2026-08-24.** ADR-0038,
+      `python/puffsat/electrothermal.py` + `make analysis-electrothermal` ->
+      `data/results/electrothermal_scan.csv`, plus `electron_energy_balance`,
+      `critical_hall_parameter` and `electrothermal_loop` in `conductivity.py`. 13 tests.
+
+      **Not on anyone's list -- it was `BETA_CRIT = 2`, which Q-F(b) recorded as "engineering
+      practice taken on authority" and Q-K said was worth obtaining rather than designing around.**
+      Obtained (Petit and Geffray 2009, restating Velikhov 1962 via Petit and Valensi 1969), and
+      **both halves of the old screen were wrong, in opposite directions**: the ionisation gain was
+      differentiating the seed alone and read ~0 above 7000 K when the true value is 2-6, and
+      `beta_cr = 2` is the strongly two-temperature limit of a quantity that **diverges** as a
+      plasma approaches equilibrium -- which Q-M had just established this plume does.
+
+      | leg | `T` at exit | `T_e - T_g` | `beta_cr` | `beta` | unstable | e-folding |
+      | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+      | 75 km/s | 16 224 K | 0.4 K | 6 535 | 0.38 | none | -- |
+      | 65 | 14 151 | 1.2 | 1 851 | 0.58 | none | -- |
+      | 56.53 | 11 681 | 7.9 | 203.9 | 1.20 | none | -- |
+      | 45.58 | 4 597 | **813.5** | **2.07** | **4.63** | **1.70 of 2.71 ms** | **3.2 us** |
+
+      **What is settled: the hot legs are stable under every variant tested**, including with the
+      near-equilibrium term deleted entirely, so no remaining uncertainty reaches them. **Q-F closes
+      as a by-product** -- the electron elevation is now computed rather than swept (+0 K hot,
+      +814 K at the cold exit), and every leg exits above its own conductivity cliff.
+
+      **What is NOT settled, and it is the cold leg's whole verdict: see Q-O.** The gap is driven
+      entirely by the field-gradient current, whose layer thickness is estimated by a scaling. The
+      other defensible choice -- and the low plasma beta (0.016) argues for it -- makes **every**
+      station stable. Both readings ship; the conservative one is the default. **I don't know which
+      is right, and settling it is a 2D resistive-MHD solve this repo does not have.**
 - [ ] **Study 2**: does a projectile couple to a **droplet cloud** at 0.32 kg/m^3 the way it couples
       to a vapour? Decides whether `k = 8.5` survives if the leak turns out small and the bag becomes
       an unpressurised container. Note the bag does *not* become unnecessary: spreading 213 kg over
@@ -580,9 +610,15 @@ See [`impact_sim_conductivity_and_bag.md`](impact_sim_conductivity_and_bag.md) f
       burn envelope from `eos_water.pressure_energy`, so `src/plume_state.py` consumes a
       number instead of re-deriving one. `aim` supplies `w` and `rho = m_slug / V`; that repo
       supplies the solve. Cross-check already run: agrees with the hand table to 1-3% in `T`.
-- [ ] **Add an alkali species to `eos_water`.** There is no potassium in the species set
-      today, and item 3's seed Saha plus Study 1's `sigma` both need one. Build it once, in
-      the solver that already exists, not a second time here.
+- [x] **Add an alkali species to `eos_water`.** **Resolved 2026-08-22 -- differently from how it
+      is written here, and deliberately.** This asks for potassium *inside* `eos_water`'s Newton
+      solve. It was built as a **trace layer over** it instead (the checked item above), because
+      potassium's Saha closes exactly against water's electron field
+      (`n_e^2 + n_e(K - n_w) - K(n_w + n_K) = 0`) and doing it that way leaves a verified solver
+      that every EOS table depends on untouched. Same consumers served, smaller blast radius.
+      **The one approximation the shortcut buys is named:** water's own ionisation is not re-solved
+      with the seed's electrons present, worth ~1.3% at 15 000 K. If a consumer ever needs better
+      than that, this item comes back as originally written.
 - [x] **Answer whether `f ~ 0.818` transfers to the paper's plate.** **Answered 2026-08-21.**
       **Short version: the *feasibility* transfers, the *number* does not.** The paper's plate
       flies the whole growth push, but at `f ~ 0.75`, not `0.818`.
@@ -1055,7 +1091,20 @@ Measured and **answered no** at contour densities (spread 0.002-0.006), but the 
 future scenario flies `rho < 0.04`, the `L = 10 m` anchor stops being harmless (spread 0.0155 at
 0.04, 0.0517 at 0.01). **Cost: an assert. Worth: cheap insurance, no present error.**
 
-## Q-F. Kerrebrock's decoupling. **ANSWERED 2026-08-22: the cliff does not survive it.**
+## Q-F. Kerrebrock's decoupling. **CLOSED 2026-08-24: the elevation is computed, and the cliff is not reached.**
+> **Closed by ADR-0038.** The section below asks the right question and leaves it open -- "deciding
+> needs an electron energy balance (Joule heating against elastic loss), which needs an E-field and
+> is a real piece of work". It is now written (`conductivity.electron_energy_balance`), so the
+> elevation is an **output** rather than a sweep parameter: **+0 K on the hot legs, +814 K at the
+> cold exit.** Read against the table below -- which puts the cliff at 1841-2378 K for +1000 K and
+> 2341-2884 K for +500 K -- **every leg exits above its own cliff temperature, so the conductivity
+> cliff is not reached anywhere.** The factor-6 discrepancy against the paper's `Rm` column is
+> *not* explained by non-equilibrium electrons after all: the elevation that would explain it is
+> ~+1000 K and the computed one at bag conditions is ~0 K. **That discrepancy is now unexplained
+> and routed back** rather than attributed. The sweep below stands as written; only its status
+> changes, from an open possibility to a closed calculation.
+
+**The original entry, 2026-08-22, unchanged:**
 `sigma` carries an explicit electron temperature (default `T_e = T_gas`, reproducing equilibrium
 exactly), so the question could be asked rather than retrofitted. Raising `T_e` above the gas:
 
@@ -1078,7 +1127,37 @@ missing term.** Deciding needs an electron energy balance (Joule heating against
 which needs an E-field and is a real piece of work. `cliff_temperature(..., t_e_offset=)` exists to
 ask the question, not to answer it.
 
-### Q-F(b). Hall parameter and instability screen. **ESTABLISHED 2026-08-22.**
+### Q-F(b). Hall parameter and instability screen. **SUPERSEDED 2026-08-24 by ADR-0038.**
+> **Both halves of this screen were wrong, in opposite directions.** Kept in full because the
+> steady-state finding stands and because the two errors are instructive.
+>
+> **1. The gain `S` was differentiating the seed alone.** `ionisation_sensitivity` claimed to be
+> `d ln n_e / d ln T_e`, but `electron_density` evaluates *water's* contribution at the **gas**
+> temperature -- so above ~7000 K, where water supplies most of the electrons, the derivative saw
+> almost nothing move. The stabilising headline below, "the gain collapses above ~5000 K ... the
+> hot end is safe on **both** counts", **is an artifact and is not real**:
+>
+> | `T` [K] | 2000 | 3000 | 5000 | 8000 | 11 000 | 15 000 |
+> | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+> | `S`, seed only (the table below) | 13.3 | 9.05 | 3.51 | **0.11** | **0.01** | **0.00** |
+> | `S`, all sources (corrected) | 13.3 | 9.05 | 3.52 | **2.18** | **6.48** | **5.68** |
+>
+> Water at 13.6 eV against a hotter gas is as sensitive as potassium at 4.34 eV against a cooler
+> one -- `chi/(2kT) ~ 10` either way. The hot end is **not** stabilised by gain collapse.
+>
+> **2. `BETA_CRIT = 2` is the wrong constant for this plume, and it is wrong the other way.**
+> Two is the `s -> 0` limit of Velikhov's fully-ionised form, i.e. a *strongly* two-temperature
+> plasma. The real `beta_cr` carries `(T_e - T_gas)` in a **denominator**, so it **diverges as the
+> plasma approaches equilibrium** -- and Q-M established this plume *is* in equilibrium. Against
+> the published criterion the hot legs clear by 2-4 decades, not by a hair.
+>
+> **Net: the verdict is narrower and firmer than either error allowed.** The screen's own caveat
+> -- "it can only rule states *out*, never in" -- was the right instinct and is now discharged:
+> `conductivity.electrothermal_loop` is the published criterion and rules states in as well as out.
+> **What survives unchanged: the steady-state justification below.** `T_e` relaxing in ~1e-8 s
+> against a ~1e-3 s transit is what makes the balance algebraic, and ADR-0038 is built on it.
+
+**Q-F(b). Hall parameter and instability screen. *(original entry, 2026-08-22)***
 Before the two-temperature balance is worth writing, two things had to be checked: whether a
 steady-state treatment is even valid, and whether a *uniform* one is -- because the electrothermal
 (Velikhov) instability filaments a non-equilibrium seeded plasma into hot streamers, and if it
@@ -1129,7 +1208,29 @@ state flagged `at_risk` means "check the literature criterion", not "this filame
 than a smooth calculation gives -- the *opposite* direction from the decoupling itself. So the two
 effects fight, and quoting the decoupling gain without the instability check would be one-sided.
 
-### **The field is now known, and the loop is CLOSED. 2026-08-22.**
+### **The field is now known, and the loop is CLOSED. 2026-08-22.** **SUPERSEDED 2026-08-24.**
+> **This section's verdict is reversed, and the reversal is the main result of ADR-0038.** It
+> concluded "the electrothermal instability is a live concern in this design ... live at exactly
+> 2000-5000 K", using the bag's own density and `BETA_CRIT = 2`. Both inputs were wrong for the
+> question: at bag density the plume is in **equilibrium**, where `beta_cr` is thousands rather
+> than 2, so **the bag is not exposed at all**. The table below is arithmetically correct and
+> physically inapplicable.
+>
+> **What replaces it** (`make analysis-electrothermal` -> `data/results/electrothermal_scan.csv`,
+> the criterion walked along the cooling history rather than evaluated at assumed temperatures):
+>
+> | leg | `T` at exit | `T_e - T_g` | `beta_cr` | `beta` | unstable | e-folding |
+> | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+> | 75 km/s | 16 224 K | 0.4 K | 6 535 | 0.38 | none | -- |
+> | 65 | 14 151 | 1.2 | 1 851 | 0.58 | none | -- |
+> | 56.53 | 11 681 | 7.9 | 203.9 | 1.20 | none | -- |
+> | 45.58 | 4 597 | **813.5** | **2.07** | **4.63** | **1.70 of 2.71 ms** | **3.2 us** |
+>
+> **The exposure moved from "the whole cool end of every leg" to "the cold leg's second half".**
+> That is a real narrowing. But see Q-O: the cold-leg entry is **not robust** -- it rests on the
+> current-layer thickness, and the other defensible choice makes every station stable.
+
+**The original entry, 2026-08-22:**
 I wrote above that closing the Hall link "needs several tesla" and left it there. The paper states
 the field: **~20 T at 1 m down the bore, 12 T at 3 m, 9 T at 6 m, 5 T at exit.** That is above the
 threshold everywhere.
@@ -1369,6 +1470,24 @@ here is closed and no geometry saves it; if it is 3, everything is already open 
 matters. **This says the design sits on a boundary whose location is unknown** -- an argument for
 obtaining the Velikhov criterion, not for redesigning around an unsourced number.
 
+> **Resolved 2026-08-24 by ADR-0038 -- and the levers are re-scoped, not confirmed.** The
+> criterion was obtained (Petit and Geffray 2009, restating Velikhov 1962 via Petit and Valensi
+> 1969). The paragraph above was right that the design sat on a boundary whose location was
+> unknown, and right to refuse to redesign around it. But the boundary is not near 1-3 at all:
+> `beta_cr` carries `(T_e - T_gas)` in a denominator and runs to **200-6500** on the hot legs.
+>
+> **The consequence for this section is that all three levers act on the wrong variable.** Exit
+> field, bag geometry and seed fraction move `beta`; what binds is `(T_e - T_gas)`, i.e. **how
+> cold the plume gets before it leaves the field**. On the exposed leg `beta` is 4.63 against
+> `beta_cr` 2.07, and no achievable move in `beta` closes a factor 2.2 -- the seed lever's own
+> table above buys 10% in `beta` for 4x the seed.
+>
+> **The lever that does act on it is `k`.** Sharing momentum with less carried mass leaves the
+> plume hotter: `k ~ 4-5` on the cold tail puts the exit above ~11 000 K, where `beta_cr` is ~200
+> against `beta ~ 1.2`. Cost ~2-7% Isp on the bare-plate ballistic model -- **which is the tamper
+> study's model, not this one's, so that number needs checking in `aim` before it is quoted.**
+> Sizing it should wait on Q-O, which decides whether the cold leg is exposed at all.
+
 **It also reduces to a residence time, which is `T(t)`.** The threshold is 20 T at 5000 K and 4.8 T
 at 3000 K, so a plume that **leaves the field region before cooling below ~4000 K** never gives the
 instability time to grow. Field residence is `l/v` = 23.8/4350 ~ **5.5 ms**. Whether the plume is
@@ -1531,6 +1650,15 @@ binds **downstream, in the fireball**, which is the still-open "does recombinati
 1. **Q-K's instability exposure is closed.** The only exposed corner was the cold leg on the
    frozen branch (2 972 K). The equilibrium answer is 4 692 K, above the 4000 K line. **No leg is
    exposed on either the hot or cold end.**
+
+   > **Partly overturned 2026-08-24 by ADR-0038, against a criterion this answer did not have.**
+   > The "4000 K line" is Q-K's own `beta > 2` screen, and `beta_cr = 2` does not transfer to an
+   > equilibrium plume. Under the published criterion **the hot legs clear by 2-4 decades**, which
+   > is a much stronger statement than clearing a line by 700 K -- so this consequence *understated*
+   > its own case there. **The cold leg does not clear it.** Its exit sits at `beta/beta_cr = 2.2`
+   > and it is unstable over 1.70 ms of its 2.71 ms transit. Equilibrium made the cold leg *hotter*
+   > and it is still the exposed one, because what binds is the electron-gas temperature gap rather
+   > than the gas temperature itself. **Whether it is genuinely exposed is undecided -- see Q-O.**
 2. **Item 10's leak is the equilibrium column: 0.11% to 2.5%**, not the 0.11-5.4% bracket.
 3. **The paper's published 4.4% is now *above* the model's whole range.** Q-L had it sitting
    inside the bracket; with the bracket collapsed it does not. The model says the leak is roughly
@@ -1563,3 +1691,48 @@ vehicle**, and the paper does not distinguish them. Flagging rather than resolvi
 tamper study's regime (`puffsat_tamper_isp_prd.md`), not this one's. **Cost: low** to state.
 **Worth: high** if the Isp claim rests on the smaller number, since the nozzle solve says the
 larger one is available.
+
+## Q-O. What thickness does the driving current occupy? *(decides the cold leg, undecided here)*
+**Opened 2026-08-24 by ADR-0038 Addendum 3, on Seth's question about where a `T_e > T_g` gap comes
+from at all in a plume that is neither driven nor strongly two-temperature.** The question is well
+founded, and working it downgraded the cold-leg finding **from a result to a model-dependent
+possibility.**
+
+Addenda 1 and 2 of ADR-0038 eliminated every other candidate source of the gap. The expansion
+does not outrun electron-heavy equilibration (it loses by ~1e6). Three-body recombination
+depositing its released energy into the third electron is real -- 4.7e9 W/m^3 at the throat -- but
+spread over milliseconds against a nanosecond redistribution time it is worth **fractions of a
+kelvin**. Both would have *raised* `T_e` and so run against the design, and both are simply too
+small. So the gap is set entirely by the field-gradient current, `Q_joule = j^2/sigma` with
+`j = B/(mu0 L_eff)` -- and **`L_eff` is estimated by a scaling, not solved.**
+
+| station | `L_eff` reading | `L` [m] | `T_e - T_g` | `beta_cr` | `beta` | verdict |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| crossing (7569 K) | skin, `sqrt(t/(mu0 sigma))` -- shipped | 1.72 | 456 K | 3.86 | 3.93 | **unstable** |
+| crossing | full flux-tube radius | 4.21 | **77 K** | **18.1** | 3.93 | **stable** |
+| exit (4597 K) | skin -- shipped | 2.12 | 814 K | 2.07 | 4.63 | **unstable** |
+| exit | full flux-tube radius | 6.00 | **79 K** | **10.6** | 4.74 | **stable** |
+
+**A factor 3 in thickness flips every unstable station**, because it is 9x in `Q_joule`, hence 9x
+in the elevation, hence 9x in `s`. Reproduce both columns: `make analysis-electrothermal`.
+
+**A physical argument points the stable way, and it is not weak.** Plasma beta at the exit is
+`2 mu0 p / B^2` ~ **0.016** -- magnetic pressure exceeds gas pressure ~60x. A plume that cannot
+appreciably distort the field does not concentrate its current into a thin resistive skin; the
+diamagnetic current is small and spread over the pressure-gradient scale, which is the flux-tube
+radius. The skin estimate is retained as shipped because it is the *conservative* one, **not
+because it is believed.**
+
+**Cost to settle: this is the one genuinely expensive item on the list.** The current distribution
+in a low-plasma-beta magnetic nozzle is an MHD problem neither `expansion.py` nor this repository's
+kernels solve -- quasi-1D cannot see it, because the whole question is radial. It is a 2D
+axisymmetric resistive-MHD solve on a prescribed field, which is a new kernel rather than a new
+consumer of an existing one.
+
+**Worth: it decides whether a 2-7% Isp cost is owed.** If the cold leg is exposed, Q-K's `k` lever
+is the fix and has to be sized; if it is not, nothing is owed and ADR-0038's design consequence
+falls away entirely. Note the asymmetry -- **the hot legs are stable under every variant tested**,
+clearing even the `s = 0` floor, so no answer here reaches them. This bears on one leg only.
+
+**Honest statement of where it stands: I don't know.** The cold leg is the only exposed candidate;
+whether it is actually exposed is undecided, and the cheaper physical argument says it is not.

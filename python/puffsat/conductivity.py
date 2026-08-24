@@ -246,20 +246,52 @@ def ionisation_sensitivity(
     raises the local Joule heating, which raises `T_e`, which raises `n_e`. `S` is the gain of the
     last link, and it is the term this repository can compute without any literature.
 
-    Two limits matter and both fall out of the Saha balance already implemented:
+    **Every electron source must respond, not just the seed** (ADR-0038). The gain asks how the
+    *whole* electron population answers a temperature perturbation, so it differentiates water's
+    ionisation as well as potassium's. Differentiating only the seed -- which is what
+    `electron_density` does, deliberately and correctly for `sigma` -- reports `S ~ 0` wherever
+    water supplies the electrons, i.e. above ~7000 K, where the true gain is 5-7. That artifact
+    read as "the loop is broken at the hot end" and it is not: the hot end is protected by a low
+    Hall parameter instead.
 
-    - **Weak seed ionisation:** `n_e ~ T^0.75 exp(-chi/2kT)`, so `S -> 3/4 + chi/(2 k T_e)`, which
-      is ~11 at 2500 K. A gain that large is why seeded plasmas are unstable at all.
-    - **Saturated seed:** every potassium atom is ionised, so `T_e` cannot liberate more and `S`
-      collapses. The runaway is choked at source, independently of the Hall parameter.
+    Three regimes, all falling out of the Saha balance already implemented:
+
+    - **Weak seed ionisation:** `n_e ~ T^0.75 exp(-chi_K/2kT)`, so `S -> 3/4 + chi_K/(2 k T_e)`,
+      which is ~11 at 2500 K. A gain that large is why seeded plasmas are unstable at all.
+    - **Saturated seed, water not yet started (~5000-6500 K):** potassium cannot liberate more and
+      water is still too cold, so `S` dips below 1. A genuine, narrow stabilising window.
+    - **Water ionising:** `chi_H2O = 12.6-13.6 eV` against a hotter gas gives
+      `chi/(2 k T_e) ~ 10` again, so the gain comes *back*, peaking near 7 around 10 000 K.
 
     Central difference in `ln T_e` rather than the analytic exponent, so it stays correct through
-    the saturation knee where the closed form does not apply.
+    both knees where the closed form does not apply.
     """
     t_e = temp if t_e is None else t_e
-    hi = electron_density(temp, rho, x_k, t_e * (1.0 + rel_step))
-    lo = electron_density(temp, rho, x_k, t_e * (1.0 - rel_step))
+    hi = _n_e_all_sources_at(rho, x_k, t_e * (1.0 + rel_step))
+    lo = _n_e_all_sources_at(rho, x_k, t_e * (1.0 - rel_step))
     return (math.log(hi) - math.log(lo)) / (2.0 * rel_step)
+
+
+def _n_e_all_sources_at(rho: float, x_k: float, t_ion: float) -> float:
+    """`n_e` with **every** ionising balance -- water's as well as the seed's -- driven by `t_ion`.
+
+    `electron_density` holds water at the gas temperature and lets only the seed respond to `t_e`.
+    That is the right contract for `sigma`, whose non-equilibrium use in this repository is the
+    2000-5000 K band where the seed supplies the electrons. It is the wrong contract for the
+    electrothermal gain, which is why this exists separately rather than as a flag on that one.
+
+    **Approximation, and the reason this is private.** Perturbing `eos_water.composition` moves
+    dissociation as well as ionisation, and dissociation is a heavy-particle process that should
+    follow the gas rather than the electrons. It is second order for the gain -- dissociation
+    changes the neutral count, not the electron count -- but it means the two-temperature value
+    is an estimate. At `t_ion == temp` (the equilibrium case, which Q-M established is the one
+    the nozzle actually runs) there is no approximation at all.
+    """
+    n_w = water_composition((1.0 - x_k) * rho, t_ion).n_e
+    n_k = seed_number_density(rho, x_k)
+    k_saha = math.exp(ln_k_saha(IP_K, G_K_ION, G_K_NEUTRAL, t_ion))
+    b = k_saha - n_w
+    return 0.5 * (-b + math.sqrt(b * b + 4.0 * k_saha * (n_w + n_k)))
 
 
 #: Hall parameter above which the Hall-driven feedback is taken to be active. Engineering practice
@@ -317,6 +349,369 @@ def electrothermal_screen(
         hall_parameter=beta,
         ionisation_sensitivity=gain,
         at_risk=beta > BETA_CRIT and gain > SENSITIVITY_CRIT,
+    )
+
+
+#: Vacuum permeability [H/m].
+MU0 = 4.0e-7 * math.pi
+
+
+def energy_relaxation_rate(temp: float, rho: float, x_k: float, t_e: float | None = None) -> float:
+    """`delta nu` [s^-1] -- the rate at which electrons hand their excess energy to the heavies.
+
+    `delta = 2 m_e / M` is the fraction of an electron's energy lost per elastic collision, so the
+    electron energy relaxes as `1/(delta nu)`. The Coulomb and neutral channels see different
+    heavy masses, so each is weighted by its own collision rate rather than by a single mean `M`.
+
+    Inelastic channels (water's rotation and vibration) are **not** included, and they are faster.
+    Omitting them makes the relaxation slower, hence the electron temperature elevation *larger*
+    and the loop gain in `electrothermal_loop` *larger* -- so the omission is conservative.
+    """
+    t_e = temp if t_e is None else t_e
+    comp = water_composition((1.0 - x_k) * rho, temp)
+    n_e = electron_density(temp, rho, x_k, t_e)
+    nu_c = _nu_coulomb(n_e, t_e)
+    nu_n = _nu_electron_neutral(temp, rho, x_k, t_e, Q_EN)
+
+    n_o_ions = sum(comp.n_o_ions)
+    n_kp = max(0.0, n_e - comp.n_hp - sum((j + 1) * n for j, n in enumerate(comp.n_o_ions)))
+    ions = ((comp.n_hp, 1.008), (n_o_ions, 15.999), (n_kp, 39.0983))
+    neutrals = ((comp.n_h2o, 18.015), (comp.n_h, 1.008), (comp.n_o, 15.999))
+
+    def weighted(pairs: tuple[tuple[float, float], ...]) -> float:
+        total = sum(n for n, _ in pairs)
+        if total <= 0.0:
+            return 0.0
+        return sum(n * (2.0 * M_E / (m * AMU)) for n, m in pairs) / total
+
+    return weighted(ions) * nu_c + weighted(neutrals) * nu_n
+
+
+@dataclass(frozen=True)
+class InelasticChannel:
+    """One electron-impact excitation channel: a threshold, a cross-section, and its target."""
+
+    name: str
+    #: Excitation threshold [J].
+    threshold: float
+    #: Near-threshold momentum-independent cross-section [m^2]. **The weak input**, like `Q_EN`:
+    #: a single value stands in for an energy-dependent curve. Exposed so it can be swept.
+    cross_section: float
+    #: Which population the channel excites -- `"k_neutral"` or `"h2o"`.
+    target: str
+
+
+#: Electron-impact excitation channels, in the order they matter here.
+#:
+#: **K 4s-4p dominates**, which is the standard result for alkali-seeded plasmas: it is a resonance
+#: transition with an oscillator strength near 1, so its cross-section is 2-3 orders above the
+#: molecular channels, and its 1.61 eV threshold sits close enough to `k T_e` at 5000-8000 K to be
+#: reachable without being negligible in energy.
+#:
+#: **The water channels are carried but have almost no target.** The plume is 99.7-99.9998%
+#: dissociated across the band where any of this matters (Q-M), so `n_H2O` is 1e-6 to 3e-3 of the
+#: heavies. Rotation is additionally suppressed by its tiny quantum: the net transfer scales as
+#: `(dE/kT_e)^2` near equilibrium, and `dE ~ 0.005 eV` against `k T_e ~ 0.5 eV` costs four orders.
+INELASTIC_CHANNELS: tuple[InelasticChannel, ...] = (
+    InelasticChannel("K 4s-4p resonance", 1.61 * E_CHARGE, 3.0e-19, "k_neutral"),
+    InelasticChannel("H2O stretch nu1/nu3", 0.453 * E_CHARGE, 3.0e-21, "h2o"),
+    InelasticChannel("H2O bend nu2", 0.198 * E_CHARGE, 5.0e-21, "h2o"),
+    InelasticChannel("H2O rotation", 0.005 * E_CHARGE, 1.0e-18, "h2o"),
+)
+
+
+def neutral_seed_density(temp: float, rho: float, x_k: float, t_e: float | None = None) -> float:
+    """Un-ionised potassium [m^-3] -- the target for the dominant inelastic channel.
+
+    The seed's ions are whatever electrons water's own ionisation did not supply, so the neutral
+    remainder follows without a second Saha solve.
+    """
+    t_e = temp if t_e is None else t_e
+    n_k = seed_number_density(rho, x_k)
+    n_water_e = water_composition((1.0 - x_k) * rho, temp).n_e
+    n_kp = max(0.0, min(n_k, electron_density(temp, rho, x_k, t_e) - n_water_e))
+    return n_k - n_kp
+
+
+def inelastic_loss(temp: float, rho: float, x_k: float, t_e: float | None = None) -> float:
+    """Net electron energy loss to internal excitation [W/m^3]. Positive when `T_e > T_gas`.
+
+    For each channel, with a step cross-section above threshold and a Maxwellian at `T_e`:
+
+        k_exc = sigma_0 sqrt(8 k T_e / pi m_e) (1 + dE/k T_e) exp(-dE / k T_e)
+        Q     = n_e n_target dE k_exc [1 - exp((dE/k)(1/T_e - 1/T_gas))]
+
+    **The bracket is detailed balance and it is the whole story here.** The heavy species' internal
+    states are kept at `T_gas` by heavy-heavy collisions, so electron-impact excitation and
+    super-elastic de-excitation nearly cancel when `T_e` is close to `T_gas`; the bracket vanishes
+    identically at `T_e == T_gas` and goes negative below it (electrons *gain*).
+
+    The consequence is that inelastic losses **cannot rescue a near-equilibrium plasma from the
+    Velikhov criterion**: expanding the bracket for small elevations gives `(dE/k) dT / T^2`, so
+    the net inelastic loss is linear in the elevation exactly as the elastic channel is, and their
+    ratio is a property of the state rather than something that grows as the plasma equilibrates.
+    See ADR-0038.
+    """
+    t_e = temp if t_e is None else t_e
+    n_e = electron_density(temp, rho, x_k, t_e)
+    v_th = math.sqrt(8.0 * K_B * t_e / (math.pi * M_E))
+    targets = {
+        "k_neutral": neutral_seed_density(temp, rho, x_k, t_e),
+        "h2o": water_composition((1.0 - x_k) * rho, temp).n_h2o,
+    }
+    total = 0.0
+    for channel in INELASTIC_CHANNELS:
+        n_target = targets[channel.target]
+        if n_target <= 0.0:
+            continue
+        ratio = channel.threshold / (K_B * t_e)
+        k_exc = channel.cross_section * v_th * (1.0 + ratio) * math.exp(-ratio)
+        exponent = (channel.threshold / K_B) * (1.0 / t_e - 1.0 / temp)
+        total += n_e * n_target * channel.threshold * k_exc * (1.0 - math.exp(exponent))
+    return total
+
+
+@dataclass(frozen=True)
+class ElectronEnergyBalance:
+    """Steady two-temperature state: Joule heating against elastic transfer to the heavies."""
+
+    t_gas: float
+    t_e: float
+    sigma: float
+    #: Thickness the driving current actually occupies [m] -- see `electron_energy_balance`.
+    current_length_scale: float
+    joule_heating: float
+    converged: bool
+
+    @property
+    def elevation(self) -> float:
+        """`T_e - T_gas` [K]."""
+        return self.t_e - self.t_gas
+
+
+def _current_length_scale(
+    length_scale: float, transit_time: float, sigma_value: float, use_skin_depth: bool
+) -> float:
+    """Thickness the driving current occupies [m] -- the dominant lever on the verdict.
+
+    `use_skin_depth=True` (shipped) takes the smaller of the field-gradient scale and the
+    magnetic diffusion length `sqrt(t/(mu0 sigma))`, on the reasoning that where the field has
+    not diffused across the flow the current sits in a skin and `j` is correspondingly larger.
+
+    `use_skin_depth=False` puts the current across the full `length_scale` instead. That is the
+    *physical* reading at this plume's low plasma beta (`2 mu0 p / B^2 ~ 0.016`): a flow that
+    cannot appreciably distort the field does not concentrate its current into a resistive skin,
+    and the diamagnetic current is distributed over the pressure-gradient scale.
+
+    **This is not a tuning knob, it is ADR-0038 Addendum 3's open question.** A factor 3 in
+    thickness is 9x in `Q_joule`, hence 9x in the elevation, hence 9x in `s` -- enough to flip
+    every unstable station in this study. The skin choice is retained as the default because it
+    is the conservative one, not because it is known to be right.
+    """
+    if not use_skin_depth:
+        return length_scale
+    return min(length_scale, math.sqrt(transit_time / (MU0 * sigma_value)))
+
+
+def electron_energy_balance(
+    temp: float,
+    rho: float,
+    x_k: float,
+    b_field: float,
+    length_scale: float,
+    transit_time: float,
+    use_skin_depth: bool = True,
+    iterations: int = 200,
+    relaxation: float = 0.3,
+) -> ElectronEnergyBalance:
+    """Solve `Q_joule = Q_loss` for the electron temperature (ADR-0038).
+
+    Q-F(b) established that this balance is **algebraic, not an ODE**: the electron energy
+    relaxes in ~1e-8 s against a ~1e-3 s transit, so `T_e` tracks the local balance instantly.
+
+        Q_joule = j^2 / sigma,  j = |curl B| / mu0 ~ B / (mu0 L_eff)
+        Q_loss  = (3/2) n_e k_B (delta nu) (T_e - T_gas)
+
+    **The driving current is the field-gradient current, not `sigma u B`.** At the magnetic
+    Reynolds numbers here (~40-900) the field is largely frozen to the plasma, so the plasma-frame
+    field is small and the current is only what sustains the gradient. Taking `j = sigma u B`
+    instead -- the low-`Rm` generator form -- overstates the heating by ~3 orders of magnitude and
+    is the wrong regime; see ADR-0038.
+
+    **`L_eff` is the smaller of the field-gradient scale and how far the field has diffused.**
+    `sqrt(transit_time / (mu0 sigma))` is the magnetic diffusion length over the transit; where it
+    is shorter than `length_scale` the current sits in a skin and `j` is correspondingly larger.
+    Taking the minimum is conservative in the direction that matters.
+
+    Solved by damped fixed point because the feedback is negative -- hotter electrons raise
+    `sigma`, which both thickens the skin and cuts `j^2/sigma` -- so it contracts.
+
+    `length_scale` and `transit_time` have no defaults for the same reason `hall_parameter` has no
+    default `B`: this repository does not own the nozzle geometry.
+    """
+    if length_scale <= 0.0 or transit_time <= 0.0:
+        raise ValueError("length_scale and transit_time must be positive")
+
+    t_e = temp
+    sigma_value = sigma(temp, rho, x_k, t_e)
+    length_eff = _current_length_scale(length_scale, transit_time, sigma_value, use_skin_depth)
+    joule = 0.0
+    converged = False
+    for _ in range(iterations):
+        sigma_value = sigma(temp, rho, x_k, t_e)
+        length_eff = _current_length_scale(length_scale, transit_time, sigma_value, use_skin_depth)
+        joule = (b_field / (MU0 * length_eff)) ** 2 / sigma_value
+        elastic_per_kelvin = (
+            1.5
+            * electron_density(temp, rho, x_k, t_e)
+            * K_B
+            * energy_relaxation_rate(temp, rho, x_k, t_e)
+        )
+        # Inelastic is not linear in the elevation, so it cannot be folded into a per-kelvin
+        # coefficient; it is subtracted from the heating instead and the elastic channel closes.
+        inelastic = inelastic_loss(temp, rho, x_k, t_e)
+        target = temp + max(0.0, joule - inelastic) / elastic_per_kelvin
+        if abs(target - t_e) < 1.0e-6 * t_e:
+            t_e = target
+            converged = True
+            break
+        t_e += relaxation * (target - t_e)
+    return ElectronEnergyBalance(
+        t_gas=temp,
+        t_e=t_e,
+        sigma=sigma_value,
+        current_length_scale=length_eff,
+        joule_heating=joule,
+        converged=converged,
+    )
+
+
+#: Ionisation energy of the water-derived electron sources (H 13.598 eV, O 13.618 eV) [J].
+IP_WATER = 13.6 * 1.602176634e-19
+
+
+def mobility_sensitivity(temp: float, rho: float, x_k: float, t_e: float | None = None) -> float:
+    """`f = -(d mu/mu)/(d n_e/n_e)` -- how electron mobility answers a density perturbation.
+
+    Petit and Geffray's `f`. It has two clean limits and this interpolates between them by which
+    collision channel carries the momentum transfer:
+
+    - **Coulomb-dominated:** `nu ~ n_e`, so `mu ~ 1/n_e` and `f -> 1`. Substituting into
+      `beta_cr = 1.935 f + 0.065 + s` recovers their stated fully-ionised form `beta_cr ~ 2 + s`.
+    - **Neutral-dominated:** `nu` is set by the neutral density and does not see `n_e`, so
+      `f -> 0`.
+    """
+    t_e = temp if t_e is None else t_e
+    n_e = electron_density(temp, rho, x_k, t_e)
+    nu_c = _nu_coulomb(n_e, t_e)
+    nu_n = _nu_electron_neutral(temp, rho, x_k, t_e, Q_EN)
+    total = nu_c + nu_n
+    return nu_c / total if total > 0.0 else 0.0
+
+
+def ionisation_energy(temp: float, rho: float, x_k: float, t_e: float | None = None) -> float:
+    """`E_i` [J] -- the ionisation energy of whichever species is actually supplying electrons.
+
+    The seed at 4.34 eV below ~6000 K, water's 13.6 eV above it, blended by electron share. `E_i`
+    enters `critical_hall_parameter` inversely, so using water's value where the seed is supplying
+    the electrons would understate `s` by ~3x and wrongly call a stable state unstable.
+    """
+    t_e = temp if t_e is None else t_e
+    n_e = electron_density(temp, rho, x_k, t_e)
+    if n_e <= 0.0:
+        return IP_K
+    water_share = max(0.0, 1.0 - min(seed_number_density(rho, x_k), n_e) / n_e)
+    return (1.0 - water_share) * IP_K + water_share * IP_WATER
+
+
+def critical_hall_parameter(t_e: float, t_gas: float, e_i: float, f: float) -> float:
+    """`beta_cr` for the Velikhov instability -- Petit and Geffray (2009), eqns p. 1170.
+
+        s       = 2 k T_e^2 / [E_i (T_e - T_gas)] * 1 / (1 + 1.5 k T_e / E_i)
+        beta_cr = 1.935 f + 0.065 + s
+
+    **`(T_e - T_gas)` is in the denominator, so `beta_cr` diverges as the plasma approaches
+    thermal equilibrium.** That is the whole reason `BETA_CRIT = 2` does not transfer here: 2 is
+    the `s -> 0` limit of their fully-ionised form, i.e. a *strongly* two-temperature plasma. The
+    published criterion is explicitly for `T_e > T_gas` regimes.
+
+    Returns infinity at `T_e <= T_gas`: with no electron heating there is no drive, and the
+    instability cannot run at any Hall parameter.
+    """
+    if t_e <= t_gas:
+        return math.inf
+    s = (2.0 * K_B * t_e * t_e) / (e_i * (t_e - t_gas)) / (1.0 + 1.5 * K_B * t_e / e_i)
+    return 1.935 * f + 0.065 + s
+
+
+@dataclass(frozen=True)
+class ElectrothermalLoop:
+    """Velikhov stability at one state, against the published criterion rather than a constant."""
+
+    screen: ElectrothermalScreen
+    balance: ElectronEnergyBalance
+    ionisation_energy: float
+    mobility_sensitivity: float
+    critical_hall_parameter: float
+    #: Linear growth rate [s^-1], zero when `beta <= beta_cr`. Petit and Geffray's `g`.
+    growth_rate: float
+    unstable: bool
+
+    @property
+    def e_folding_time(self) -> float:
+        """Time for the perturbation to grow by `e` [s]; infinite when stable."""
+        return math.inf if self.growth_rate <= 0.0 else 1.0 / self.growth_rate
+
+
+def electrothermal_loop(
+    temp: float,
+    rho: float,
+    x_k: float,
+    b_field: float,
+    length_scale: float,
+    transit_time: float,
+    use_skin_depth: bool = True,
+) -> ElectrothermalLoop:
+    """Velikhov stability at one state, against Petit and Geffray (2009) (ADR-0038).
+
+        g = sigma E*^2 / [n_e (E_i + 1.5 k T_e)(1 + beta^2)] * (beta - beta_cr)
+
+    Unlike `electrothermal_screen`, this **can rule states in as well as out**, because it is the
+    published linearised criterion rather than a two-link necessary condition against a constant.
+    Three ingredients the screen does not have:
+
+    1. `T_e` from the self-consistent `electron_energy_balance`, which is what sets `beta_cr`;
+    2. `beta_cr` from the criterion itself, which diverges near equilibrium;
+    3. `E*` -- the field actually driving the current, `j/sigma`, taken from the same
+       field-gradient current the balance uses, **not** from `u x B`.
+
+    Returns `growth_rate = 0` when `beta <= beta_cr`. A nonzero rate is a linear growth rate, so
+    the thing to compare against is the *residence time*: this plasma's relaxation is microseconds
+    against a millisecond transit, so a state that is unstable at all is unstable many times over.
+    """
+    balance = electron_energy_balance(
+        temp, rho, x_k, b_field, length_scale, transit_time, use_skin_depth
+    )
+    screen = electrothermal_screen(temp, rho, x_k, b_field, balance.t_e)
+    e_i = ionisation_energy(temp, rho, x_k, balance.t_e)
+    f = mobility_sensitivity(temp, rho, x_k, balance.t_e)
+    beta_cr = critical_hall_parameter(balance.t_e, temp, e_i, f)
+
+    beta = screen.hall_parameter
+    growth = 0.0
+    if math.isfinite(beta_cr) and beta > beta_cr:
+        n_e = electron_density(temp, rho, x_k, balance.t_e)
+        e_star = b_field / (MU0 * balance.current_length_scale) / balance.sigma
+        denom = n_e * (e_i + 1.5 * K_B * balance.t_e) * (1.0 + beta * beta)
+        growth = balance.sigma * e_star * e_star / denom * (beta - beta_cr)
+    return ElectrothermalLoop(
+        screen=screen,
+        balance=balance,
+        ionisation_energy=e_i,
+        mobility_sensitivity=f,
+        critical_hall_parameter=beta_cr,
+        growth_rate=growth,
+        unstable=growth > 0.0,
     )
 
 
@@ -409,9 +804,13 @@ def main() -> None:
     except ValueError as exc:
         print(f"  no cliff in range: {exc}")
     print(
-        "  electrothermal screen: the loop needs beta > "
-        f"{BETA_CRIT:g} AND S > {SENSITIVITY_CRIT:g}; the gain collapses above ~5000 K, and at "
-        "this density the Hall link needs several tesla."
+        "  electrothermal screen (superseded, ADR-0038): the two-link form needs beta > "
+        f"{BETA_CRIT:g} AND S > {SENSITIVITY_CRIT:g}, but {BETA_CRIT:g} is the strongly "
+        "two-temperature limit and does not transfer to an equilibrium plume."
+    )
+    print(
+        "  the criterion that decides it is `electrothermal_loop` -- see `make "
+        "analysis-electrothermal`, which walks it along the cooling history."
     )
     print(f"python: wrote {DEFAULT_SEED_WINDOW_PATH}")
 
