@@ -61,6 +61,11 @@ __pycache__/
 # 20 rows; the evidence behind step 5's delta_f bound and 1h25m of CPU to regenerate.
 !/data/results/sweep_mesh_convergence.jsonl
 !/data/results/*.png
+# ...and the plume-state table, which is a CROSS-REPO deliverable rather than this study's
+# evidence: `aim_is_all_you_need`'s src/plume_state.py consumes it instead of re-deriving the
+# solve (routing document, "Added 2026-08-21"). A consumer in another repository cannot run
+# `make analysis-plume`, so this one has to exist in the tree. 171 rows.
+!/data/results/plume_state.csv
 # ...and, for the tamped-nozzle study (puffsat_tamper_isp_prd.md), the Rung 0 analytic ledger.
 # It is the single source of truth for every closed-form number that PRD quotes, so it is a cited
 # deliverable in the same sense as the frontier CSVs above — and it is pure algebra, so it costs

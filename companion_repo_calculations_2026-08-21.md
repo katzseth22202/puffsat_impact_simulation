@@ -606,10 +606,43 @@ See [`impact_sim_conductivity_and_bag.md`](impact_sim_conductivity_and_bag.md) f
       2026-08-17, checked directly at 45-63 km/s rather than inferred by bracketing.
 
 **Added 2026-08-21 by the audit:**
-- [ ] **Publish the plume-state table `aim` will cite.** `(w, rho) -> (T, f, P)` across the
-      burn envelope from `eos_water.pressure_energy`, so `src/plume_state.py` consumes a
-      number instead of re-deriving one. `aim` supplies `w` and `rho = m_slug / V`; that repo
-      supplies the solve. Cross-check already run: agrees with the hand table to 1-3% in `T`.
+- [x] **Publish the plume-state table `aim` will cite. DONE 2026-08-24.**
+      `python/puffsat/plume.py` + `make analysis-plume` -> `data/results/plume_state.csv`,
+      6 tests. **171 rows, `w` = 44-76 km/s on a 2 km/s grid with the four quoted anchors
+      inserted exactly, `rho` = 0.05-2.0 kg/m^3.** The CSV is **committed to the tree**, not
+      just gitignored output: a consumer in another repository cannot run `make`.
+
+      **The audit's 1-3% cross-check reproduces, and the sign of it is now explained.** The solve
+      runs *warmer* at every anchor, because the audit charged 54 MJ/kg for vaporisation plus
+      dissociation while `eos_water`'s bond energy is **50.9 MJ/kg** -- the ~3 MJ/kg difference
+      stays in the thermal pool. The gap widens toward the cold end because there is least energy
+      there for it to hide in.
+
+      | `w` [km/s] | dissipated | `T` solved | `T` hand | `f` solved | `f` hand | `P` [MPa] |
+      | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+      | 75 | 264.9 MJ/kg | 26 514 K | 26 200 | 0.5805 | 0.573 | 18.74 |
+      | 65 | 199.0 | 22 684 | 22 400 | 0.3798 | 0.371 | 14.00 |
+      | 56.53 | 150.5 | 19 708 | 19 400 | 0.2259 | 0.217 | 10.80 |
+      | 45.58 | 97.8 | 15 165 | 14 700 | 0.0616 | 0.053 | 7.20 |
+
+      **The table has to be two-dimensional, which the original item did not assume but `aim`
+      needs.** Dissipated energy depends only on `w` and `k`, never on density -- but Saha does,
+      so the same budget lands at a different temperature in a different bag. At 56.53 km/s,
+      `rho` 0.05 -> 1.0 moves the plume **16 857 -> 21 795 K** (and `f` 0.254 -> 0.206): denser
+      pushes recombination, spends less of the budget stripping electrons, leaves more as heat.
+      Since `aim` sets `rho = m_slug / V` and the enclosed volume is a live design variable
+      (item 4), a single row would not have served.
+
+      **One trap, and it is load-bearing.** `eos_water` references `e` to bound molecular H2O at
+      `T -> 0`, so the bond energy is **already inside `e`** -- the balance is `e(rho, T) =
+      e_dissipated` with nothing subtracted. Porting the audit's formula, which subtracts 54 MJ/kg
+      *first*, double-charges the bond: 11% low at the hot anchor (plausible-looking) and **4 672 K
+      instead of 15 165 K at the cold one.** Pinned by a test for exactly that reason.
+
+      **What did NOT change: `expansion.PLUME_STATES` still carries the hand temperatures**, so
+      the cooling history, Q-M and ADR-0038 are all anchored on them rather than on this solve.
+      Re-basing them would move `T(t)` by 1-3% and is a deliberate call, not a cleanup -- there is
+      a test asserting the two agree to 3.5%, which is what would start failing if they drift.
 - [x] **Add an alkali species to `eos_water`.** **Resolved 2026-08-22 -- differently from how it
       is written here, and deliberately.** This asks for potassium *inside* `eos_water`'s Newton
       solve. It was built as a **trace layer over** it instead (the checked item above), because
