@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -159,6 +159,12 @@ data/results/cooling_history.csv: python/puffsat/expansion.py python/puffsat/eos
                                   python/puffsat/conductivity.py python/puffsat/tops.py
 	@mkdir -p data/results
 	PYTHONPATH=python uv run python -m puffsat.expansion
+
+## analysis-coupling: Study 2 -- does a projectile couple to a droplet cloud the way it couples
+## to a vapour, and does the snowplow front span the bore at all? Analytic; prints a verdict and
+## the arrival radius k = 8.5 requires. Owns no artifact.
+analysis-coupling:
+	PYTHONPATH=python uv run python -m puffsat.coupling
 
 ## analysis-fireball: does recombination freeze below 0.01 kg/m^3? Continues the equilibrium
 ## expansion past the nozzle lip into the free jet and races atomic three-body recombination

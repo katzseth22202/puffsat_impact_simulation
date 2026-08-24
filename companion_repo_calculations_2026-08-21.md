@@ -586,10 +586,38 @@ See [`impact_sim_conductivity_and_bag.md`](impact_sim_conductivity_and_bag.md) f
       other defensible choice -- and the low plasma beta (0.016) argues for it -- makes **every**
       station stable. Both readings ship; the conservative one is the default. **I don't know which
       is right, and settling it is a 2D resistive-MHD solve this repo does not have.**
-- [ ] **Study 2**: does a projectile couple to a **droplet cloud** at 0.32 kg/m^3 the way it couples
-      to a vapour? Decides whether `k = 8.5` survives if the leak turns out small and the bag becomes
-      an unpressurised container. Note the bag does *not* become unnecessary: spreading 213 kg over
-      660 m^3 is a field requirement independent of heat.
+- [x] **Study 2: does a projectile couple to a droplet cloud at 0.32 kg/m^3 the way it couples to
+      a vapour? ANSWERED 2026-08-24: yes, with two orders of margin.** `python/puffsat/coupling.py`
+      + `make analysis-coupling`, 8 tests. Analytic, so it owns no artifact.
+
+      **The phase is free. `k` does not care.** Two ways a droplet cloud could have differed from a
+      vapour, and neither binds:
+
+      | droplet | `tau_drag` | `tau_vap` | transit / tau | verdict |
+      | ---: | ---: | ---: | ---: | --- |
+      | 1 um | 0.17 us | 0.0002 us | 13 850 | couples |
+      | 10 um | 1.66 | 0.0022 | 1 385 | couples |
+      | 100 um | 16.6 | 0.022 | **139** | couples |
+      | 1 mm | 166 | 0.22 | 13.9 | couples |
+
+      1. **Inertia** -- a droplet lags because it is not a fluid element. Relaxation is
+         `tau ~ (8/3) a rho_w / (C_d rho_g dv)`, linear in radius and inverse in relative speed.
+         **The limiting droplet is 13.8 mm.** Condensation makes sub-micron drops (4 orders of
+         margin); an injected spray makes tens to hundreds of microns (**2 orders**). Two is the
+         honest number, since a spray is what a designer would build.
+      2. **Discreteness** -- the front passing between the drops. It never does: a 3 m front over
+         23.8 m of bore intercepts **5.7e4 droplets even at 1 cm**, and 1e13 at 10 um.
+
+      Flash vaporisation is the other route to coupling and is ~1000x faster than drag, so drag is
+      the criterion. The margin is worst on the **cold, thin** corner, which is where it is quoted.
+
+      **The bag stays necessary regardless**, as the item says: spreading 213 kg over 660 m^3 is a
+      field requirement, not a heat one. **What this buys is that the bag need not be pressurised
+      or hot** -- one fewer thing the small leak has to sustain.
+
+      **But the study turned up a bigger question about `k` than the one it asked.** See **Q-Q**:
+      the snowplow's `lambda = rho A` assumes the sweeping front spans the full 3 m bore from
+      `x = 0`, and a compact 25 kg projectile is 0.187 m. **That is a vapour-case finding too.**
 - [x] **The cooling history `T(t)`, which item 10's quadrature consumes. BUILT 2026-08-22.**
       `python/puffsat/expansion.py` + `make analysis-expansion` -> `data/results/cooling_history.csv`.
       Quasi-1D steady isentropic expansion on `eos_water`, run on **both** branches of
@@ -1923,3 +1951,60 @@ survive a better species set unchanged; only where the line sits would move.
   set.** That is a real piece of work -- a new species set in `eos_water` plus a reaction network,
   not a consumer of an existing kernel. **Cost: high. Worth: it converts a 19-48% bracket into a
   number, and the bracket currently spans "a correction" to "half the budget".**
+
+## Q-Q. Does the snowplow front span the bore? `k = 8.5` is an input, not an output.
+**Opened 2026-08-24 while working Study 2**, and it is the more consequential half of that item.
+Reproduce: `make analysis-coupling`.
+
+**The paper's snowplow (item 11) is `m(x) = m_0 + rho A x` with `A` the full bore area.** That is
+not a derivation of `k`; it is the assumption that the sweeping front is 3 m in radius from the
+moment the projectile enters. The arithmetic then gives `k = rho A L / m = 8.69`, matching the
+paper's 8.5. **A compact 25 kg ice projectile is 0.187 m** -- 16x in radius, 260x in area.
+
+Integrating the honest version instead -- a front that has to grow, `dr/dx = c_exp/v`, with
+momentum shared inelastically -- falls short:
+
+| `w` [km/s] | `c_exp` | `k_eff` | of paper's | `r` at exit | transit |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 45.58 | 3 km/s | 1.48 | 0.17 | 2.32 m | 0.71 ms |
+| 45.58 | 5 | 3.85 | **0.44** | 3.00 | 1.04 |
+| 45.58 | 8 | 5.49 | 0.63 | 3.00 | 1.46 |
+| 75.00 | 5 | 1.52 | **0.18** | 2.37 | 0.44 |
+| 75.00 | 8 | 3.73 | 0.43 | 3.00 | 0.62 |
+
+**The shortfall is worst at high closing speed**, because `dr/dx = c_exp/v` gives a fast projectile
+less length to spread over. That is the wrong direction for the mission.
+
+### Why this is a requirement rather than a refutation
+**The paper's own stated transit corroborates the full-bore sweep and contradicts the compact
+projectile.** Full-bore gives `L(1 + k/2)/v_0` = 2.79 ms against the paper's stated ~2.3 ms and
+this repository's independently-solved 2.71 ms (Q-L). The compact-front integration gives
+**0.4-1.5 ms** -- too fast, and inconsistent with a number two separate calculations already agree
+on. So the projectile is **not** arriving compact. Something spans the bore.
+
+**Stated constructively, which is the useful form:** for `k = 8.5`, the projectile must arrive
+spanning
+
+| `c_exp` | arrival radius needed | as `r/R_bore` |
+| ---: | ---: | ---: |
+| 0 (no spreading) | 2.92 m | **0.97** |
+| 3 km/s | 2.38-2.50 | 0.79-0.83 |
+| 5 km/s | 2.23-2.38 | **0.74-0.79** |
+
+**74% to 97% of the bore radius.** And that is plausible: this repository's own design SS7 gives
+the plate-side pulse a footprint box of `r_foot/R` = 0.3-1.0 at `R` = 5 m, i.e. **1.5 to 5 m**, so
+the upper half of the pulse's own delivery box clears it. **"PuffSat" means a puffed cloud, not a
+slug of ice** -- the compact reading was mine, and it is probably not what the design intends.
+
+### What is actually owed
+**A stated projectile arrival radius, and the delivery dispersion around it.** `k = 8.5` is
+currently load-bearing for the vehicle (item 10's bag sizing, the whole Isp story) and rests on a
+geometric premise nobody has written down. **Cost to settle: zero simulation** -- it is a statement
+about what the design means, exactly like Q-A. **Worth: high**, because the sensitivity is steep:
+at `c_exp` = 5 km/s, arriving at 0.74 of the bore delivers 95% of `k` and arriving at 0.19 m
+delivers 44%. There is no shallow region in between.
+
+**What this repository cannot settle.** Whether a real front spreads at 3, 5 or 8 km/s is a
+2D hydro question, and `c_exp` is treated here as a parameter rather than solved. It matters much
+less than the arrival radius does -- across the whole 3-8 km/s range the required arrival radius
+only moves 0.97 to 0.74 of the bore -- so the arrival radius is the thing to ask `aim` for.
