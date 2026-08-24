@@ -1851,6 +1851,64 @@ the thermal energy at all and frozen flow costs it nothing. If it rests on the n
 speed, this is a 19-48% haircut on the energy available to produce it. **Q-N asked which number
 the paper uses and did not resolve it. It now matters more than it did.**
 
+### Does more mass buy it back? Three levers, all weak.
+**Raised by Seth 2026-08-24** -- "larger mass would lead to more collisions and more energy
+recovery, right?" **The direction is right and the mechanism is not**, and the mechanism is what
+sets how weak the lever is. At fixed density a bigger blob has the *same* collision rate per
+particle -- that is `n sigma v`, and `n` is the density. What it has is more **time**: it is
+physically larger and takes longer to thin out. So:
+
+    Da ~ tau_exp * n^2 ~ (R/u) (M/R^3)^2 = M^(1/3) rho^(5/3) / u    =>    rho_freeze ~ M^(-1/5)
+
+**A cube root, then a fifth root.** Reproduce all three tables:
+`uv run python audit/freeze_scaling_check.py`.
+
+**(1) Bigger bag, same density** -- self-similar scale-up, which is the **fixed-`k` case**: more
+slug mass means proportionally more projectile mass and the whole vehicle grows together.
+
+| mass x | `rho` at freeze | store held | stranded | gain vs baseline |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.01e-2 | 91.7% | 46.7 MJ/kg | -- |
+| 8 | 6.45e-3 | 88.1% | 44.9 | 1.8 |
+| **64** | 4.11e-3 | **84.7%** | **43.1** | **3.6** |
+
+The `M^(-1/5)` law holds numerically: 64x mass moved the freeze density 2.46x against a predicted
+2.30x. **64x the mass buys back 3.6 MJ/kg of 50.9.**
+
+**(2) Same bag, more mass in it** -- higher density. **The strongest of the three, by ~4x per kg.**
+Two effects stack: `tau_rec ~ rho^-2` directly, *and* a denser start at equal specific energy is a
+**lower-entropy** start, so the plume runs colder at any density downstream and returns more of the
+store on the way.
+
+| `rho_0` | mass x | store held | stranded | gain vs baseline |
+| ---: | ---: | ---: | ---: | ---: |
+| 0.323 | 1 | 93.6% | 47.7 MJ/kg | -- |
+| 1.0 | 3.1 | 79.4% | 40.5 | 7.2 |
+| **3.0** | **9.3** | **67.5%** | **34.4** | **13.3** |
+
+**But this is not free and it fights Study 2's premise.** A denser bag at fixed slug mass is a
+*smaller* bag, and the routing document already records that spreading 213 kg over 660 m^3 is a
+**field requirement independent of heat**. Raising the density instead by adding slug mass at fixed
+volume raises `k`, which moves the whole momentum-sharing and Isp story.
+
+**(3) A longer nozzle** -- aimed at the trigger itself rather than at the rates, since the freeze
+begins where the field lets go. Same opening rate (7.9 m of bore per unit `A/A*`), carried further.
+
+| exit `A/A*` | bore | `B` at exit | store held | stranded |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 | 23.8 m | 5.00 T | 91.7% | 46.7 MJ/kg |
+| 8 | 55.5 m | 2.50 T | 91.7% | 46.7 |
+| 16 | 119 m | 1.25 T | 86.4% | 44.0 |
+| 32 | **246 m** | 0.62 T | 81.2% | 41.4 |
+
+**Doubling the nozzle changes nothing at all** -- the freeze simply tracks the new lip. It takes
+**246 m of bore to buy back 5.3 MJ/kg.**
+
+**Why all three are weak, in one line: recombination needs `rho^2` and the clock only gives `R`.**
+The geometry is against it, and no achievable scale closes that gap. **What would actually move
+this is the missing OH chemistry below, not scale** -- the scaling laws are geometric and would
+survive a better species set unchanged; only where the line sits would move.
+
 ### Honest weak points, and one of them points the wrong way for the design
 - **`eos_water` carries no OH.** The real dominant path is `H + OH + M -> H2O + M`, and the model
   has only `H` to work with. The code comments say plainly that using `n_H` **overestimates** the

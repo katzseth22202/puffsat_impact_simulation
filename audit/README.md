@@ -8,6 +8,7 @@ Each is cited by name from the item it supports. Run from the repo root:
 uv run python audit/plate_transfer_check.py    # does f ~ 0.818 transfer to the paper's 25 kg / 5 m plate?
 uv run python audit/wide_footprint_check.py    # design §7's remaining r_foot/R nodes (needs `make sweep-geometry-wide`)
 uv run python audit/focusing_check.py          # Q-D: the contour omits the focusing factor the frontier applies
+uv run python audit/freeze_scaling_check.py     # Q-P: does more slug mass buy back the frozen store? (three levers, all weak)
 ```
 
 **These are exploratory reductions, not library code.** They read committed results and the
