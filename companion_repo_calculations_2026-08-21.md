@@ -600,7 +600,26 @@ See [`impact_sim_conductivity_and_bag.md`](impact_sim_conductivity_and_bag.md) f
       cliff. So the answer to "is the plume still hot at the exit" is *yes on every leg in
       equilibrium, and no on the cold leg if recombination freezes* -- and **Q-M then settled
       which of those holds: equilibrium, by 2 to 5 decades. Yes on every leg.**
-- [ ] Fireball density, for the recombination-freeze check below 0.01 kg/m^3.
+- [x] **Fireball density, for the recombination-freeze check below 0.01 kg/m^3. ANSWERED
+      2026-08-24: it freezes, at the lip, with the store full.** `python/puffsat/fireball.py` +
+      `make analysis-fireball` -> `data/results/fireball_freeze.csv`, 6 tests. **Q-P below carries
+      the finding and the consequence; this is the summary.**
+
+      Q-M found the dissociation store never returns inside the nozzle and said its marginal
+      Damkohler number would bind downstream instead. It does, **immediately** downstream:
+
+      | leg | `rho` at freeze | `T` | `f_diss` still held | stranded | of the dissipated budget |
+      | --- | ---: | ---: | ---: | ---: | ---: |
+      | 75 km/s | 2.35e-2 | 16 063 K | **1.0000** | 50.9 MJ/kg | **19.2%** |
+      | 65 | 2.29e-2 | 13 974 | **1.0000** | 50.9 | **25.6%** |
+      | 56.53 | 2.10e-2 | 11 271 | **1.0000** | 50.9 | **33.9%** |
+      | 45.58 | 1.01e-2 | 3 908 | 0.9170 | 46.7 | **47.7%** |
+
+      The three hot legs cross `Da = 1` at the **first station past the nozzle lip** (exit `rho` is
+      ~2.5e-2), at 100% of the store held. The cold leg gets ~0.4 decades further out because it is
+      cold enough for the rate to be fast. **The paper's own 0.01 kg/m^3 threshold is where the
+      cold leg lands, to within 1%** -- which reads as confirmation of where the paper drew it, not
+      as a coincidence worth leaning on.
 - [x] ~~LTE check: item 1's Saha solve assumes it and nobody has verified it.~~ **Already done.**
       `python/puffsat/lte.py` (McWhirter) + `data/results/lte_validity.csv`; commit `4e89105`,
       2026-08-17, checked directly at 45-63 km/s rather than inferred by bracketing.
@@ -1678,6 +1697,12 @@ purely the ionisation store all along. Its Damkohler number is marginal (`min Da
 binds **downstream, in the fireball**, which is the still-open "does recombination freeze below
 0.01 kg/m^3" item. **That item now has its rate comparison already built.**
 
+> **Settled 2026-08-24, and it binds sooner than "downstream" suggested: at the lip.** See Q-P.
+> The three hot legs cross `Da = 1` at the **first station past the nozzle exit**, with **100% of
+> the dissociation store still held**, stranding 50.9 MJ/kg -- 19-34% of the dissipated budget.
+> This is the mirror image of the ionisation case above: there the smallest `Da` sat on a spent
+> store and the freeze was an artifact; here the store is full when it freezes.
+
 **Consequences, and one of them cuts against the paper.**
 
 1. **Q-K's instability exposure is closed.** The only exposed corner was the cold leg on the
@@ -1725,6 +1750,12 @@ tamper study's regime (`puffsat_tamper_isp_prd.md`), not this one's. **Cost: low
 **Worth: high** if the Isp claim rests on the smaller number, since the nozzle solve says the
 larger one is available.
 
+> **2026-08-24: this now matters more, because Q-P changed what is at stake.** The nozzle exhaust
+> leaves **chemically frozen**, carrying 19-48% of the dissipated energy away as inert bond
+> enthalpy. If the paper's Isp rests on `w/(1+k)`, that costs it nothing -- it never claimed the
+> thermal energy. If it rests on the nozzle exhaust speed, the frozen-flow loss is charged against
+> exactly that claim. **The question is unchanged and the answer is now load-bearing.**
+
 ## Q-O. What thickness does the driving current occupy? *(decides the cold leg, undecided here)*
 **Opened 2026-08-24 by ADR-0038 Addendum 3, on Seth's question about where a `T_e > T_g` gap comes
 from at all in a plume that is neither driven nor strongly two-temperature.** The question is well
@@ -1769,3 +1800,68 @@ clearing even the `s = 0` floor, so no answer here reaches them. This bears on o
 
 **Honest statement of where it stands: I don't know.** The cold leg is the only exposed candidate;
 whether it is actually exposed is undecided, and the cheaper physical argument says it is not.
+
+## Q-P. The exhaust leaves chemically frozen, and that is a frozen-flow loss nobody has charged.
+**Answered 2026-08-24** while closing the fireball item. `python/puffsat/fireball.py`,
+`make analysis-fireball`. This is the downstream half of Q-M: that answer established the nozzle
+stays in equilibrium and noted the dissociation store's Damkohler number was marginal and would
+bind further out. It binds **at the lip.**
+
+**Method, and it is the same self-consistency test Q-M used.** Continue the equilibrium isentrope
+past `A/A* = 4` into the free jet, and ask at every station whether atomic three-body recombination
+was fast enough to have produced the composition equilibrium claims. Inside the field the answer is
+yes (Q-M). One station outside, it is no.
+
+**Two things happen at the lip, and the first is the trigger.** The paper's bore opens `A/A*` 1 to
+4 over 23.8 m -- about **7.9 m of travel per unit area ratio.** A 45-degree free jet covers the same
+unit in **0.75 m.** So the local expansion time steps down ~8x at the boundary (2.66 ms just inside
+to 0.33 ms just outside) and `Da` falls from ~35 to ~1.8 in a single step. **The magnetic nozzle
+was holding the plume in a slow expansion; the freeze begins where the field lets go.** Then the
+rates finish it: three-body recombination is a density-*cubed* process, so each further decade of
+density costs two decades of rate while `tau_exp` grows only slowly.
+
+| leg | `rho` at freeze | `T` | `f_diss` held | stranded | of dissipated budget |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 75 km/s | 2.35e-2 kg/m^3 | 16 063 K | **1.0000** | 50.9 MJ/kg | **19.2%** |
+| 65 | 2.29e-2 | 13 974 | **1.0000** | 50.9 | **25.6%** |
+| 56.53 | 2.10e-2 | 11 271 | **1.0000** | 50.9 | **33.9%** |
+| 45.58 | 1.01e-2 | 3 908 | 0.9170 | 46.7 | **47.7%** |
+
+**This is the case `binding_damkohler` was built to tell apart, and it comes out the other way.**
+In Q-M the smallest `Da` sat at a station holding 0.01% of the store, and the freeze was an
+artifact. Here the crossing station holds **100%** on three legs of four. The freeze is real and
+it strands the bond energy.
+
+**The verdict is robust to the one free parameter.** `tan theta` scales the clock linearly, so
+`Da ~ 1/tan theta`. Over **5 to 75 degrees -- a 43x range in `tan`** -- the cold leg's freeze
+density moves only 12x (1.9e-3 to 2.2e-2) and the stranded energy moves **40.3 to 50.0 MJ/kg**, a
+24% spread. On the hot legs `theta` does not move the answer at all, because the crossing is
+already at the first station past the lip. So the freeze *density* is conditional on the jet
+geometry and the *freeze* is not.
+
+### What this means, stated at the strength it deserves
+**It is not, by itself, a contradiction of the paper.** It is a constraint on one specific claim:
+that the nozzle converts the dissipated thermal energy into directed exhaust. **19% to 48% of that
+energy leaves as inert chemical enthalpy instead** -- classic frozen-flow loss, and it is not
+charged anywhere in the ledger I have seen.
+
+**Whether it costs the paper anything depends on Q-N**, and the two questions are now coupled. If
+the paper's Isp rests on `v_out = w/(1+k)` -- the momentum-sharing speed -- then it never claimed
+the thermal energy at all and frozen flow costs it nothing. If it rests on the nozzle exhaust
+speed, this is a 19-48% haircut on the energy available to produce it. **Q-N asked which number
+the paper uses and did not resolve it. It now matters more than it did.**
+
+### Honest weak points, and one of them points the wrong way for the design
+- **`eos_water` carries no OH.** The real dominant path is `H + OH + M -> H2O + M`, and the model
+  has only `H` to work with. The code comments say plainly that using `n_H` **overestimates** the
+  rate where OH is scarce -- so the true freeze is *earlier* than modelled, not later. The finding
+  is conservative in the direction that matters, but the number is soft.
+- **The three-body atomic coefficient carries a factor 2-3** (Q-M's own recorded weak point).
+  A factor 3 in rate moves the freeze density by ~1.7x, well inside the `theta` bracket.
+- **Past the crossing the equilibrium history is not the real one.** Composition holds near where
+  it froze and the temperature stops being buffered, so the real plume runs *colder* than the
+  curve past that point. That does not move where the freeze starts, which is all that is claimed.
+- **What would settle it properly: a finite-rate calculation with OH, H2 and O2 in the species
+  set.** That is a real piece of work -- a new species set in `eos_water` plus a reaction network,
+  not a consumer of an existing kernel. **Cost: high. Worth: it converts a 19-48% bracket into a
+  number, and the bracket currently spans "a correction" to "half the budget".**
