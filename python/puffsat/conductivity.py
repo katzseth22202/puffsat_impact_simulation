@@ -111,10 +111,13 @@ def _nu_electron_neutral(temp: float, rho: float, x_k: float, t_e: float, q_en: 
     """Electron-neutral collision frequency [s^-1], `nu = n_n q_en <v_th>`.
 
     `<v_th> = sqrt(8 k T_e / pi m_e)` is the mean electron thermal speed. Neutrals are counted from
-    the water solve (H2O, H, O) plus un-ionised potassium.
+    the water solve -- H2O, OH, H2, O2, H, O -- plus un-ionised potassium. The three molecular
+    intermediates matter here: through the seed window they hold up to ~5% of the heavy particles,
+    and leaving them out would count that fraction as no collision partner at all, overstating
+    `sigma` exactly where the conductivity cliff is being located.
     """
     comp = water_composition((1.0 - x_k) * rho, temp)
-    n_neutral = comp.n_h2o + comp.n_h + comp.n_o
+    n_neutral = comp.n_neutral_heavy
     v_th = math.sqrt(8.0 * K_B * t_e / (math.pi * M_E))
     return n_neutral * q_en * v_th
 
@@ -376,7 +379,14 @@ def energy_relaxation_rate(temp: float, rho: float, x_k: float, t_e: float | Non
     n_o_ions = sum(comp.n_o_ions)
     n_kp = max(0.0, n_e - comp.n_hp - sum((j + 1) * n for j, n in enumerate(comp.n_o_ions)))
     ions = ((comp.n_hp, 1.008), (n_o_ions, 15.999), (n_kp, 39.0983))
-    neutrals = ((comp.n_h2o, 18.015), (comp.n_h, 1.008), (comp.n_o, 15.999))
+    neutrals = (
+        (comp.n_h2o, 18.015),
+        (comp.n_oh, 17.007),
+        (comp.n_h2, 2.016),
+        (comp.n_o2, 31.998),
+        (comp.n_h, 1.008),
+        (comp.n_o, 15.999),
+    )
 
     def weighted(pairs: tuple[tuple[float, float], ...]) -> float:
         total = sum(n for n, _ in pairs)

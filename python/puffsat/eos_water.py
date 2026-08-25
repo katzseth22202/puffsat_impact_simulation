@@ -8,20 +8,25 @@ CoolProp only reaches ~1300 K, so this is built from first principles (statistic
 no external data. See `puffsat_impact_sim_design.md` §3-4, §7, and Zel'dovich & Raizer, *Physics of
 Shock Waves and High-Temperature Hydrodynamic Phenomena*, Ch. III.
 
-Model (reduced species set): H2O, H, O, H+, O ions O+ .. O8+ (the full Saha ladder), e- in
-chemical + ionization equilibrium at each `(rho, T)`. Dissociation H2O <=> 2H + O by law of mass
-action; each ionization stage by the Saha equation; closed by H:O = 2:1 element conservation and
-charge neutrality. The multi-stage oxygen ladder (2026-07, Jupiter-retrograde 69 km/s scenario)
+Model (species set): H2O, OH, H2, O2, H, O, H+, O ions O+ .. O8+ (the full Saha ladder), e- in
+chemical + ionization equilibrium at each `(rho, T)`. Dissociation H2O <=> 2H + O and each diatomic
+AB <=> A + B by law of mass action; each ionization stage by the Saha equation; closed by
+H:O = 2:1 element conservation and charge neutrality. The multi-stage oxygen ladder
+(2026-07, Jupiter-retrograde 69 km/s scenario)
 extends the original single-stage model: below ~30 kK only the first stages are populated and the
 two models agree, but at ~2.4 GJ/kg stagnation (69 km/s) oxygen climbs to O4+..O6+ and the
 ~0.4-2.3 GJ/kg of multi-ionization energy is the dominant specific-heat sink — without the ladder
 the table would overshoot the stagnation temperature severely.
 
-Simplification (first-pass, documented): the molecular intermediates OH, H2, O2 are omitted, so the
-single effective reaction H2O <=> 2H + O carries all the dissociation. This reshapes the
-~2000-6000 K *transition* but preserves both endpoints (cold molecular vapor; hot ionized
-plasma) and the total energy invested -- what sets `e_eff`. Adding the intermediates is the natural
-refinement if the transition region is ever load-bearing.
+Molecular intermediates OH, H2, O2 (added 2026-08-25): the transition region became load-bearing.
+The original model carried the single effective reaction H2O <=> 2H + O, which preserves both
+endpoints (cold molecular vapor; hot ionized plasma) and the total energy invested -- what sets
+`e_eff` -- but reshapes the ~2000-6000 K transition. Q-P put a freeze point at 3908 K, inside that
+band, and made the water-reformation partner (`H + OH + M -> H2O + M`) a rate-limiting density that
+had to be proxied by `n_H`. So the three intermediates are now carried explicitly. They add **no
+unknowns**: each is fixed by mass action off the same `(n_H, n_O)` the solve already carries, and
+they enter only through the element-conservation residuals and the energy sum. Both endpoints are
+unmoved -- see `test_hot_endpoint_is_unmoved_by_the_intermediates`.
 
 Energy reference: bound molecular H2O at T -> 0 has e = 0, so dissociation and ionization only *add*
 energy. Every `e` on the grid is therefore strictly positive -- required by the Rust table loader,
@@ -30,7 +35,8 @@ which interpolates `ln e` (ADR-0007).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import math
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -97,6 +103,82 @@ _THETA_VIB = tuple(_CM_TO_K * v for v in _VIB_CM)
 _EXP_CAP = 700.0  # clamp exp() arguments to avoid float overflow during the Newton iteration
 
 
+# --- Molecular intermediates: OH, H2, O2 --------------------------------------------------------
+#
+# Added 2026-08-25, because the 2000-6000 K transition became load-bearing (Q-P). They introduce no
+# new unknowns: given `(n_H, n_O)` each is fixed by mass action, `n_AB = n_A n_B / K_AB`. What they
+# change is the element bookkeeping and the energy sum.
+#
+# Dissociation energies at 0 K come from the *same* NIST-JANAF 0 K heats of formation that set
+# `D_AT` (H 216.035, O 246.844, OH 37.278, H2 0, O2 0 kJ/mol), so the set is internally consistent:
+#   D0(OH) = dHf(H) + dHf(O) - dHf(OH) = 425.60 kJ/mol, and `D_AT - D0(OH)` = 492.1 kJ/mol is
+#           water's *first* O-H bond -- the cross-check that no sign or dissociation limit is wrong.
+#   D0(H2) = 2 dHf(H) = 432.07 kJ/mol;  D0(O2) = 2 dHf(O) = 493.69 kJ/mol.
+# Spectroscopic constants: Herzberg, *Molecular Spectra and Molecular Structure* I. Ground
+# electronic terms only, matching the H2O and O-ladder treatment -- O2's low-lying a(1)Delta_g and
+# b(1)Sigma_g+ are not summed, which slightly understates O2 in a band where it never exceeds a few
+# percent of the oxygen.
+
+
+@dataclass(frozen=True)
+class Diatomic:
+    """A diatomic intermediate AB and the equilibrium `AB <=> A + B` that sets its density."""
+
+    name: str
+    mass: float  # molecular mass [kg]
+    degeneracy: float  # ground-term electronic degeneracy of AB
+    d0: float  # dissociation energy from v=0 [J per molecule]
+    theta_rot: float  # rotational temperature hcB/k [K]
+    symmetry: float  # rotational symmetry number (2 for homonuclear)
+    theta_vib: float  # vibrational temperature hc*omega_e/k [K]
+    mass_a: float  # atom A mass [kg]
+    degeneracy_a: float  # atom A ground-term degeneracy
+    mass_b: float  # atom B mass [kg]
+    degeneracy_b: float  # atom B ground-term degeneracy
+
+
+OH = Diatomic(
+    name="OH",
+    mass=M_O + M_H,
+    degeneracy=4.0,  # X 2Pi: Lambda-doubling (2) x spin (2)
+    d0=425.60e3 / N_A,
+    theta_rot=_CM_TO_K * 18.911,
+    symmetry=1.0,
+    theta_vib=_CM_TO_K * 3737.76,
+    mass_a=M_H,
+    degeneracy_a=G_H,
+    mass_b=M_O,
+    degeneracy_b=G_O,
+)
+H2 = Diatomic(
+    name="H2",
+    mass=2.0 * M_H,
+    degeneracy=1.0,  # X 1Sigma_g+
+    d0=432.07e3 / N_A,
+    theta_rot=_CM_TO_K * 60.853,
+    symmetry=2.0,
+    theta_vib=_CM_TO_K * 4401.21,
+    mass_a=M_H,
+    degeneracy_a=G_H,
+    mass_b=M_H,
+    degeneracy_b=G_H,
+)
+O2 = Diatomic(
+    name="O2",
+    mass=2.0 * M_O,
+    degeneracy=3.0,  # X 3Sigma_g-
+    d0=493.69e3 / N_A,
+    theta_rot=_CM_TO_K * 1.4377,
+    symmetry=2.0,
+    theta_vib=_CM_TO_K * 1580.19,
+    mass_a=M_O,
+    degeneracy_a=G_O,
+    mass_b=M_O,
+    degeneracy_b=G_O,
+)
+INTERMEDIATES = (OH, H2, O2)
+
+
 @dataclass(frozen=True)
 class Composition:
     """Equilibrium number densities [m^-3] at a single `(rho, T)`.
@@ -110,11 +192,28 @@ class Composition:
     n_hp: float
     n_o_ions: tuple[float, ...]
     n_e: float
+    #: Molecular intermediates. Defaulted to zero so a hand-built atoms-only `Composition` stays
+    #: constructible, but `composition()` always fills them.
+    n_oh: float = 0.0
+    n_h2: float = 0.0
+    n_o2: float = 0.0
 
     @property
     def n_op(self) -> float:
         """Singly-ionized oxygen density [m^-3] (the first rung of the ladder)."""
         return self.n_o_ions[0]
+
+    @property
+    def n_neutral_heavy(self) -> float:
+        """All neutral heavy particles [m^-3] -- every collision partner that is not an ion or an
+        electron. This is the third-body density for three-body recombination and the neutral
+        target density for electron-neutral collisions."""
+        return self.n_h2o + self.n_oh + self.n_h2 + self.n_o2 + self.n_h + self.n_o
+
+    @property
+    def n_total(self) -> float:
+        """Every particle [m^-3], electrons included -- the ideal-mixture pressure count."""
+        return self.n_neutral_heavy + self.n_hp + sum(self.n_o_ions) + self.n_e
 
 
 def _ln_trans(mass: float, temp: float) -> float:
@@ -168,73 +267,211 @@ def _ln_ko_ladder(temp: float) -> tuple[float, ...]:
     )
 
 
-def _densities(
-    x: Vec, ln_kd: float, ln_kh: float, ln_ko: tuple[float, ...]
-) -> tuple[float, float, float, float, tuple[float, ...], float]:
-    """Reconstruct `(n_H2O, n_H, n_O, n_Hp, n_O_ions, n_e)` from log-densities `x = [ln n_H,
-    ln n_O, ln n_e]` via mass action (n_H2O) and the chained Saha ladder (each O stage carries one
-    more `ln K_k - ln n_e` factor). Kept in log form so the cold limit, where the equilibrium
-    constants are ~1e-300, never underflows."""
+def _z_rot_linear(theta_rot: float, symmetry: float, temp: float) -> float:
+    """Classical rigid-rotor partition function of a linear molecule, `T / (sigma Theta_rot)`.
+
+    Valid for `T >> Theta_rot`; the stiffest case here is H2 at 87.6 K, so the whole regime of
+    interest (>= ~400 K) is classical to better than a percent.
+    """
+    return float(temp / (symmetry * theta_rot))
+
+
+def _z_vib_mode(theta_vib: float, temp: float) -> float:
+    """Harmonic-oscillator partition function of one mode, referenced to `v = 0`."""
+    return float(1.0 / (1.0 - np.exp(-theta_vib / temp)))
+
+
+def _e_vib_mode(theta_vib: float, temp: float) -> float:
+    """Mean vibrational energy of one harmonic mode [J], excluding zero-point."""
+    return float(theta_vib * K_B / (np.exp(theta_vib / temp) - 1.0))
+
+
+def ln_k_diatomic(d: Diatomic, temp: float) -> float:
+    """ln of `K = n_A n_B / n_AB` [ln m^-3] for the dissociation `AB <=> A + B`.
+
+    Same law of mass action as `ln_k_dissoc`, one bond instead of three: the ratio of the atoms'
+    translational-electronic partition functions to the molecule's, times `exp(-D0/kT)`. `D0` is
+    measured from `v = 0` and `_z_vib_mode` is referenced there too, so the two conventions agree.
+    """
+    ln_a = _ln_trans(d.mass_a, temp) + float(np.log(d.degeneracy_a))
+    ln_b = _ln_trans(d.mass_b, temp) + float(np.log(d.degeneracy_b))
+    ln_ab = _ln_trans(d.mass, temp) + float(
+        np.log(
+            d.degeneracy
+            * _z_rot_linear(d.theta_rot, d.symmetry, temp)
+            * _z_vib_mode(d.theta_vib, temp)
+        )
+    )
+    return float(ln_a + ln_b - ln_ab - d.d0 / (K_B * temp))
+
+
+@dataclass(frozen=True)
+class _EqConstants:
+    """Every equilibrium constant at one temperature, in log form.
+
+    Bundled because the intermediates took the threaded-constant count from four to seven, and the
+    same set is needed by `_densities`, `_residual` and both initial guesses.
+    """
+
+    ln_kd: float  # H2O <=> 2H + O
+    ln_kh: float  # H <=> H+ + e-
+    ln_ko: tuple[float, ...]  # the O ionization ladder
+    ln_k_mol: tuple[float, ...]  # one per entry of INTERMEDIATES, in that order
+
+
+def _constants(temp: float) -> _EqConstants:
+    """All equilibrium constants at `temp`."""
+    return _EqConstants(
+        ln_kd=ln_k_dissoc(temp),
+        ln_kh=ln_k_saha(IP_H, G_HP, G_H, temp),
+        ln_ko=_ln_ko_ladder(temp),
+        ln_k_mol=tuple(ln_k_diatomic(d, temp) for d in INTERMEDIATES),
+    )
+
+
+def _densities(x: Vec, c: _EqConstants) -> Composition:
+    """Reconstruct the full composition from log-densities `x = [ln n_H, ln n_O, ln n_e]`.
+
+    Everything else follows by mass action from the three unknowns: `n_H2O` from the atomization
+    constant, each intermediate `n_AB = n_A n_B / K_AB`, and each O ion by one more link of the
+    chained Saha ladder (`ln K_k - ln n_e` per stage). Kept in log form so the cold limit, where
+    the equilibrium constants are ~1e-300, never underflows.
+    """
     ln_nh, ln_no, ln_ne = float(x[0]), float(x[1]), float(x[2])
     n_h = float(np.exp(min(ln_nh, _EXP_CAP)))
     n_o = float(np.exp(min(ln_no, _EXP_CAP)))
     n_e = float(np.exp(min(ln_ne, _EXP_CAP)))
-    n_h2o = float(np.exp(min(2.0 * ln_nh + ln_no - ln_kd, _EXP_CAP)))
-    n_hp = float(np.exp(min(ln_kh + ln_nh - ln_ne, _EXP_CAP)))
+    n_h2o = float(np.exp(min(2.0 * ln_nh + ln_no - c.ln_kd, _EXP_CAP)))
+    n_hp = float(np.exp(min(c.ln_kh + ln_nh - ln_ne, _EXP_CAP)))
+    # Intermediates, in INTERMEDIATES order: OH from (H, O), H2 from (H, H), O2 from (O, O).
+    ln_ab = (ln_nh + ln_no, 2.0 * ln_nh, 2.0 * ln_no)
+    n_oh, n_h2, n_o2 = (
+        float(np.exp(min(ln_ab[i] - c.ln_k_mol[i], _EXP_CAP))) for i in range(len(INTERMEDIATES))
+    )
     n_o_ions = []
     ln_stage = ln_no
     for k in range(N_O_STAGES):
-        ln_stage = ln_stage + ln_ko[k] - ln_ne
+        ln_stage = ln_stage + c.ln_ko[k] - ln_ne
         n_o_ions.append(float(np.exp(min(ln_stage, _EXP_CAP))))
-    return n_h2o, n_h, n_o, n_hp, tuple(n_o_ions), n_e
+    return Composition(
+        n_h2o=n_h2o,
+        n_h=n_h,
+        n_o=n_o,
+        n_hp=n_hp,
+        n_o_ions=tuple(n_o_ions),
+        n_e=n_e,
+        n_oh=n_oh,
+        n_h2=n_h2,
+        n_o2=n_o2,
+    )
 
 
-def _residual(x: Vec, ln_kd: float, ln_kh: float, ln_ko: tuple[float, ...], n_f: float) -> Vec:
+#: Precomputed logs used inside the residual. It is evaluated four times per Newton iteration (the
+#: finite-difference Jacobian), so the scalar work there is worth keeping out of numpy.
+_LN2 = math.log(2.0)
+_LN_CHARGE = tuple(math.log(k + 1.0) for k in range(N_O_STAGES))
+
+
+def _ln_sum(terms: Sequence[float]) -> float:
+    """`ln(sum_i exp(terms_i))`, evaluated without leaving log space.
+
+    Plain-`math` shifted sum rather than `np.logaddexp.reduce`: the arrays here are 3-10 elements
+    and numpy's per-call overhead dominated the equilibrium solve once the intermediates doubled
+    the number of reductions.
+    """
+    top = max(terms)
+    if top == -math.inf:
+        return -math.inf
+    return top + math.log(sum(math.exp(t - top) for t in terms))
+
+
+def _residual(x: Vec, c: _EqConstants, n_f: float) -> Vec:
     """Equilibrium residual at log-densities `x = [ln n_H, ln n_O, ln n_e]`.
 
-    Three independent, well-conditioned constraints (the naive H+O number pair degenerates when H2O
-    dominates -- both then merely say `n_H2O = n_f`):
-    - **O nuclei** conservation (pins `n_H2O` ~ `n_f` in the cold limit),
-    - **H:O = 2:1** stoichiometry as a *ratio* (pins the atomic split independent of `n_H2O`),
+    Three independent, well-conditioned constraints (the naive H+O number pair degenerates when
+    H2O dominates -- both then merely say `n_H2O = n_f`):
+    - **O nuclei** conservation, now counting the O carried by OH and O2 as well (pins `n_H2O` ~
+      `n_f` in the cold limit),
+    - **H:O = 2:1** stoichiometry as a ratio over the non-H2O species only, **in log form**. H2O
+      is 2:1 by construction, so `N_H = 2 N_O` holds if and only if it holds with H2O's
+      contribution removed from both sides -- an exact restatement, and the one that stays
+      conditioned when H2O carries essentially all the nuclei. The intermediates are what make it
+      a real constraint rather than an identity: OH is 1:1, H2 is 2:0, O2 is 0:2. Log form is not
+      cosmetic here: at 50 K the trace pool is ~1e-100 in O2 against ~1e-166 in H2, and the linear
+      ratio is a division of two underflowing numbers.
     - **charge neutrality** `n_e = n_H+ + sum_k (k+1) n_O(k+1)+`, written in log form as
       `ln n_e - ln(sum of charge-weighted ion terms)`. Each ion term carries its own `-j ln n_e`
       Saha chain, so in the weak-ionization limit this reduces to the classic
       `2 ln n_e = ln(K_H n_H + K_O n_O)` with slope 2 in `ln n_e` -- well-conditioned everywhere.
     """
     ln_nh, ln_no, ln_ne = float(x[0]), float(x[1]), float(x[2])
-    n_h2o, n_h, n_o, _, n_o_ions, _ = _densities(x, ln_kd, ln_kh, ln_ko)
-    # Charge balance in log form: terms ln(charge_j * n_ion_j) with the -j*ln_ne chains explicit.
-    charge_terms = [ln_kh + ln_nh - ln_ne]  # H+ (charge 1)
+    ln_h2o = 2.0 * ln_nh + ln_no - c.ln_kd
+    ln_hp = c.ln_kh + ln_nh - ln_ne
+    ln_oh, ln_h2, ln_o2 = (
+        ln_nh + ln_no - c.ln_k_mol[0],
+        2.0 * ln_nh - c.ln_k_mol[1],
+        2.0 * ln_no - c.ln_k_mol[2],
+    )
+
+    # The O ladder, one Saha link per stage; kept as logs for both the charge sum and the O count.
+    ln_stages: list[float] = []
     ln_stage = ln_no
     for k in range(N_O_STAGES):
-        ln_stage = ln_stage + ln_ko[k] - ln_ne
-        charge_terms.append(float(np.log(k + 1.0)) + ln_stage)
-    ln_charge = float(np.logaddexp.reduce(np.array(charge_terms)))
-    n_o_all = n_o + sum(n_o_ions)
+        ln_stage = ln_stage + c.ln_ko[k] - ln_ne
+        ln_stages.append(ln_stage)
+    ln_charge = _ln_sum([ln_hp, *(_LN_CHARGE[k] + t for k, t in enumerate(ln_stages))])
+
+    # Nuclei carried by everything except H2O, in log form.
+    ln_h_free = _ln_sum([ln_nh, ln_hp, ln_oh, _LN2 + ln_h2])
+    ln_o_free = _ln_sum([ln_no, *ln_stages, ln_oh, _LN2 + ln_o2])
+
+    n_o_total = math.exp(min(ln_h2o, _EXP_CAP)) + math.exp(min(ln_o_free, _EXP_CAP))
     return np.array(
         [
-            (n_h2o + n_o_all) / n_f - 1.0,  # O nuclei
-            (n_h + float(np.exp(min(ln_kh + ln_nh - ln_ne, _EXP_CAP)))) / n_o_all
-            - 2.0,  # H:O stoichiometry
+            n_o_total / n_f - 1.0,  # O nuclei
+            ln_h_free - ln_o_free - _LN2,  # H:O, H2O's exact 2:1 divided out
             ln_ne - ln_charge,  # charge neutrality, log-stable
         ]
     )
 
 
-def _cold_init(ln_nf: float, ln_kd: float, ln_kh: float, ln_ko: tuple[float, ...]) -> Vec:
+def _cold_init(ln_nf: float, c: _EqConstants) -> Vec:
     """Molecular/weakly-ionized init: H2O <=> 2H + O with n_H = 2 n_O (so 4 n_O^3 = K_d n_f)
     capped at full dissociation, then n_e from single-stage charge neutrality capped at the
-    full-stripping ceiling (10 e- per formula unit)."""
-    ln_no = min(ln_nf, (ln_kd + ln_nf - np.log(4.0)) / 3.0)
+    full-stripping ceiling (10 e- per formula unit).
+
+    Deliberately still the atoms-only guess: the intermediates shift where the atomic densities
+    land but not by orders of magnitude in log space, which is the accuracy a Newton start needs.
+    """
+    ln_no = min(ln_nf, (c.ln_kd + ln_nf - np.log(4.0)) / 3.0)
     ln_nh = min(np.log(2.0) + ln_nf, np.log(2.0) + ln_no)
     ln_ne = min(
-        0.5 * float(np.logaddexp(ln_kh + ln_nh, ln_ko[0] + ln_no)),
+        0.5 * float(np.logaddexp(c.ln_kh + ln_nh, c.ln_ko[0] + ln_no)),
         float(np.log(10.0)) + ln_nf,
     )
     return np.array([ln_nh, ln_no, ln_ne])
 
 
-def _hot_init(ln_nf: float, ln_kh: float, ln_ko: tuple[float, ...]) -> Vec:
+def _molecular_init(ln_nf: float, c: _EqConstants) -> Vec:
+    """Init for the transition band, where the *intermediates* hold the broken water.
+
+    The cold init assumes water goes straight to atoms, so in the 1500-4000 K band -- where the
+    first O-H bond (492 kJ/mol) is breaking but the second (426 kJ/mol) is not -- it can start
+    several decades off in `ln n_O`. Here the products are taken to be OH + H instead:
+    `H2O <=> OH + H` has `K = K_d / K_OH`, and with `n_OH = n_H` that gives `n_H^2 = K n_f`.
+    """
+    ln_k_first = c.ln_kd - c.ln_k_mol[0]  # H2O <=> OH + H
+    ln_nh = min(np.log(2.0) + ln_nf, 0.5 * (ln_k_first + ln_nf))
+    # n_O then follows from OH equilibrium with n_OH ~ n_H: n_O = n_OH K_OH / n_H = K_OH.
+    ln_no = min(ln_nf, c.ln_k_mol[0])
+    ln_ne = min(
+        0.5 * float(np.logaddexp(c.ln_kh + ln_nh, c.ln_ko[0] + ln_no)),
+        float(np.log(10.0)) + ln_nf,
+    )
+    return np.array([ln_nh, ln_no, ln_ne])
+
+
+def _hot_init(ln_nf: float, c: _EqConstants) -> Vec:
     """Hot-plasma init (Jupiter-retrograde regime): a mean-charge fixed point on the Saha ladder.
 
     Guess `n_e = q n_f`; a stage is 'climbed' when its Saha constant exceeds `n_e`; the H+
@@ -245,8 +482,8 @@ def _hot_init(ln_nf: float, ln_kh: float, ln_ko: tuple[float, ...]) -> Vec:
     f_hp = 0.5
     for _ in range(30):
         ln_ne = float(np.log(q)) + ln_nf
-        k_dom = sum(1 for lk in ln_ko if lk > ln_ne)
-        f_hp = float(np.exp(ln_kh - np.logaddexp(ln_kh, ln_ne)))
+        k_dom = sum(1 for lk in c.ln_ko if lk > ln_ne)
+        f_hp = float(np.exp(c.ln_kh - np.logaddexp(c.ln_kh, ln_ne)))
         q_new = max(2.0 * f_hp + float(k_dom), 1e-3)
         if abs(q_new - q) < 1e-3 * q:
             q = q_new
@@ -255,18 +492,16 @@ def _hot_init(ln_nf: float, ln_kh: float, ln_ko: tuple[float, ...]) -> Vec:
     ln_ne = float(np.log(q)) + ln_nf
     # Neutral H from the ionized fraction; neutral O backed down the k_dom Saha links.
     ln_nh = float(np.log(2.0)) + ln_nf + float(np.log(max(1.0 - f_hp, 1e-12)))
-    ln_no = ln_nf - sum(ln_ko[j] - ln_ne for j in range(k_dom))
+    ln_no = ln_nf - sum(c.ln_ko[j] - ln_ne for j in range(k_dom))
     return np.array([ln_nh, ln_no, ln_ne])
 
 
-def _newton_polish(
-    x0: Vec, ln_kd: float, ln_kh: float, ln_ko: tuple[float, ...], n_f: float
-) -> tuple[Vec, float]:
+def _newton_polish(x0: Vec, c: _EqConstants, n_f: float) -> tuple[Vec, float]:
     """LM-damped Newton (log-space) from `x0`; returns `(x, max |residual|)`."""
     x = x0.copy()
     eps = 1e-6
     lam = 1e-10
-    r = _residual(x, ln_kd, ln_kh, ln_ko, n_f)
+    r = _residual(x, c, n_f)
     for _ in range(400):
         if float(np.max(np.abs(r))) < 1e-11:
             break
@@ -274,7 +509,7 @@ def _newton_polish(
         for k in range(3):
             xp = x.copy()
             xp[k] += eps
-            jac[:, k] = (_residual(xp, ln_kd, ln_kh, ln_ko, n_f) - r) / eps
+            jac[:, k] = (_residual(xp, c, n_f) - r) / eps
         # LM-regularized step (J^T J + lam I) delta = -J^T r: robust if J is near-singular.
         jtj = jac.T @ jac
         delta = np.linalg.solve(jtj + lam * np.eye(3), -jac.T @ r)
@@ -282,38 +517,72 @@ def _newton_polish(
         if step > 2.0:  # cap the log-density step so a far init cannot overshoot into overflow
             delta *= 2.0 / step
         x = x + delta
-        r = _residual(x, ln_kd, ln_kh, ln_ko, n_f)
+        r = _residual(x, c, n_f)
     return x, float(np.max(np.abs(r)))
 
 
 def _solve_log_densities(temp: float, n_f: float) -> Vec:
-    """Solve `[ln n_H, ln n_O, ln n_e]`: Newton from the cold init, falling back to the hot
-    ladder init (the two inits bracket the molecular and stripped regimes)."""
-    ln_kd = ln_k_dissoc(temp)
-    ln_kh = ln_k_saha(IP_H, G_HP, G_H, temp)
-    ln_ko = _ln_ko_ladder(temp)
+    """Solve `[ln n_H, ln n_O, ln n_e]` by Newton from each of three physics-based inits.
+
+    The three bracket the three regimes the EOS spans -- bound molecular water, the intermediate
+    band where OH holds the broken water, and the stripped plasma -- and the first that converges
+    wins. The molecular init is the one the added species made necessary.
+    """
+    c = _constants(temp)
     ln_nf = float(np.log(n_f))
 
-    x, res = _newton_polish(_cold_init(ln_nf, ln_kd, ln_kh, ln_ko), ln_kd, ln_kh, ln_ko, n_f)
-    if res < 1e-8:
-        return x
-    x, res = _newton_polish(_hot_init(ln_nf, ln_kh, ln_ko), ln_kd, ln_kh, ln_ko, n_f)
-    if res < 1e-8:
-        return x
+    best: tuple[Vec, float] | None = None
+    for init in (_cold_init(ln_nf, c), _molecular_init(ln_nf, c), _hot_init(ln_nf, c)):
+        x, res = _newton_polish(init, c, n_f)
+        if res < 1e-8:
+            return x
+        if best is None or res < best[1]:
+            best = (x, res)
+    assert best is not None
     raise RuntimeError(
-        f"equilibrium solve did not converge at T={temp} K, n_f={n_f} m^-3 (max residual {res:.2e})"
+        f"equilibrium solve did not converge at T={temp} K, n_f={n_f} m^-3 "
+        f"(best max residual {best[1]:.2e})"
     )
 
 
 def composition(rho: float, temp: float) -> Composition:
     """Equilibrium composition at `(rho [kg/m^3], temp [K])`."""
     n_f = rho / M_H2O  # H2O formula units per m^3 (conserves H:O = 2:1)
-    ln_kd = ln_k_dissoc(temp)
-    ln_kh = ln_k_saha(IP_H, G_HP, G_H, temp)
-    ln_ko = _ln_ko_ladder(temp)
-    x = _solve_log_densities(temp, n_f)
-    n_h2o, n_h, n_o, n_hp, n_o_ions, n_e = _densities(x, ln_kd, ln_kh, ln_ko)
-    return Composition(n_h2o=n_h2o, n_h=n_h, n_o=n_o, n_hp=n_hp, n_o_ions=n_o_ions, n_e=n_e)
+    return _densities(_solve_log_densities(temp, n_f), _constants(temp))
+
+
+def _intermediate_densities(comp: Composition) -> tuple[float, ...]:
+    """The intermediates' densities in `INTERMEDIATES` order, so the two sums below stay aligned
+    with the species table rather than repeating `n_oh, n_h2, n_o2` by hand."""
+    return (comp.n_oh, comp.n_h2, comp.n_o2)
+
+
+def _intermediate_thermal_energy(comp: Composition, temp: float) -> float:
+    """Thermal energy of the diatomic intermediates [J/m^3].
+
+    Each carries translational `3/2 kT` + rotational `kT` (linear, classical) + one vibrational
+    mode. That is `5/2 kT` of sensible heat plus vibration, against the `3/2 kT` of an atom -- so
+    the intermediates are also a (small) specific-heat sink in their own right, not only a store
+    of bond energy.
+    """
+    total = 0.0
+    for d, n in zip(INTERMEDIATES, _intermediate_densities(comp), strict=True):
+        total += n * (2.5 * K_B * temp + _e_vib_mode(d.theta_vib, temp))
+    return total
+
+
+def _bond_energy_held(comp: Composition, n_f: float) -> float:
+    """Chemical energy stored as broken H2O bonds [J/m^3], net of the bonds the intermediates hold.
+
+    Fully atomizing the water costs `n_f D_AT`; intact H2O owes none of it, and every intermediate
+    hands part of it back. Reduces to the old `(n_f - n_H2O) D_AT` when the intermediates vanish,
+    and gives the right answer at the one state that can be checked by hand: all-OH-plus-H is
+    `n_f (D_AT - D0_OH)` = water's first O-H bond, 492 kJ/mol.
+    """
+    held = (n_f - comp.n_h2o) * D_AT
+    for d, n in zip(INTERMEDIATES, _intermediate_densities(comp), strict=True):
+        held -= n * d.d0
+    return held
 
 
 def pressure_energy(rho: float, temp: float) -> tuple[float, float]:
@@ -326,18 +595,17 @@ def pressure_energy(rho: float, temp: float) -> tuple[float, float]:
     comp = composition(rho, temp)
     n_f = rho / M_H2O
 
-    n_o_ions_total = sum(comp.n_o_ions)
-    n_total = comp.n_h2o + comp.n_h + comp.n_o + comp.n_hp + n_o_ions_total + comp.n_e
-    p = n_total * K_B * temp
+    p = comp.n_total * K_B * temp
 
-    n_monatomic = comp.n_h + comp.n_o + comp.n_hp + n_o_ions_total + comp.n_e
+    n_monatomic = comp.n_h + comp.n_o + comp.n_hp + sum(comp.n_o_ions) + comp.n_e
     e_thermal = 1.5 * K_B * temp * n_monatomic  # translational, all single particles
     # H2O carries translational (3/2 kT) + rotational (3/2 kT, nonlinear) + vibrational.
     e_thermal += comp.n_h2o * (3.0 * K_B * temp + _e_vib(temp))
+    e_thermal += _intermediate_thermal_energy(comp, temp)
     # Chemical energy vs bound H2O: ionization potentials (each O stage carries its *cumulative*
-    # ladder energy) + the dissociated fraction's bond energy.
+    # ladder energy) + the bond energy not currently paid back by a bond.
     e_ionization_o = sum(n * E_O_CUM[k] for k, n in enumerate(comp.n_o_ions))
-    e_chem = comp.n_hp * IP_H + e_ionization_o + (n_f - comp.n_h2o) * D_AT
+    e_chem = comp.n_hp * IP_H + e_ionization_o + _bond_energy_held(comp, n_f)
 
     e = (e_thermal + e_chem) / rho
     return p, e
@@ -394,14 +662,24 @@ class FrozenComposition:
     y_hp: float
     y_o_ions: tuple[float, ...]
     y_e: float
+    y_oh: float = 0.0
+    y_h2: float = 0.0
+    y_o2: float = 0.0
 
     @property
     def y_op(self) -> float:
         """Singly-ionized oxygen fraction (the first rung of the ladder)."""
         return self.y_o_ions[0]
 
+    @property
+    def y_intermediates(self) -> tuple[float, ...]:
+        """Intermediate fractions in `INTERMEDIATES` order."""
+        return (self.y_oh, self.y_h2, self.y_o2)
 
-PURE_H2O_FROZEN = FrozenComposition(1.0, 0.0, 0.0, 0.0, (0.0,) * N_O_STAGES, 0.0)
+
+PURE_H2O_FROZEN = FrozenComposition(
+    y_h2o=1.0, y_h=0.0, y_o=0.0, y_hp=0.0, y_o_ions=(0.0,) * N_O_STAGES, y_e=0.0
+)
 """Undissociated molecular water with the chemistry switched off (freeze-before-the-plate)."""
 
 
@@ -416,6 +694,9 @@ def frozen_composition(rho_ref: float, t_ref: float) -> FrozenComposition:
         y_hp=comp.n_hp / n_f,
         y_o_ions=tuple(n / n_f for n in comp.n_o_ions),
         y_e=comp.n_e / n_f,
+        y_oh=comp.n_oh / n_f,
+        y_h2=comp.n_h2 / n_f,
+        y_o2=comp.n_o2 / n_f,
     )
 
 
@@ -430,11 +711,19 @@ def pressure_energy_frozen(rho: float, temp: float, y: FrozenComposition) -> tup
     n_f = rho / M_H2O
     y_o_ions_total = sum(y.y_o_ions)
     y_mono = y.y_h + y.y_o + y.y_hp + y_o_ions_total + y.y_e
-    p = n_f * (y.y_h2o + y_mono) * K_B * temp
+    y_inter = sum(y.y_intermediates)
+    p = n_f * (y.y_h2o + y_mono + y_inter) * K_B * temp
 
     e_thermal = n_f * (1.5 * K_B * temp * y_mono + y.y_h2o * (3.0 * K_B * temp + _e_vib(temp)))
+    # The frozen intermediates keep their sensible heat (5/2 kT + vibration) even though their
+    # bond energy is locked -- the composition is frozen, not the thermal degrees of freedom.
+    for d, frac in zip(INTERMEDIATES, y.y_intermediates, strict=True):
+        e_thermal += n_f * frac * (2.5 * K_B * temp + _e_vib_mode(d.theta_vib, temp))
     e_ionization_o = sum(frac * E_O_CUM[k] for k, frac in enumerate(y.y_o_ions))
-    e_chem = n_f * (y.y_hp * IP_H + e_ionization_o + (1.0 - y.y_h2o) * D_AT)
+    e_bond = (1.0 - y.y_h2o) * D_AT - sum(
+        frac * d.d0 for d, frac in zip(INTERMEDIATES, y.y_intermediates, strict=True)
+    )
+    e_chem = n_f * (y.y_hp * IP_H + e_ionization_o + e_bond)
     return p, (e_thermal + e_chem) / rho
 
 

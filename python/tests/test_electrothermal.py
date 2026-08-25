@@ -66,7 +66,10 @@ def test_the_cold_leg_crosses_once_and_stays_unstable_to_the_exit() -> None:
     crossing = electrothermal.crossing(rows)
     assert crossing is not None
     assert crossing.area_ratio == pytest.approx(1.968, rel=1e-3), "crosses mid-nozzle"
-    assert crossing.temp == pytest.approx(7569.0, rel=1e-3)
+    # Re-baselined 2026-08-25 (7569 -> 7622 K, +0.7%) for the OH/H2/O2 species set. The crossing
+    # *station* is unchanged -- same area ratio to four figures -- so what moved is the EOS's
+    # temperature at that station, not where the leg goes unstable.
+    assert crossing.temp == pytest.approx(7621.5, rel=1e-3)
 
     dwell = electrothermal.unstable_dwell(rows)
     assert dwell == pytest.approx(rows[-1].time - crossing.time), "one crossing: dwell is the tail"

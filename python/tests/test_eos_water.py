@@ -132,9 +132,12 @@ def test_frozen_fractions_conserve_elements_and_charge() -> None:
     """The frozen fractions inherit the equilibrium invariants: O nuclei sum to 1 per formula
     unit, H:O stays 2:1, and the gas is electrically neutral."""
     y = ew.frozen_composition(1.0, 12_000.0)
-    np.testing.assert_allclose(y.y_h2o + y.y_o + y.y_op, 1.0, rtol=1e-8)
-    np.testing.assert_allclose(2.0 * y.y_h2o + y.y_h + y.y_hp, 2.0, rtol=1e-8)
-    np.testing.assert_allclose(y.y_e, y.y_hp + y.y_op, rtol=1e-6)
+    n_o = y.y_h2o + y.y_o + sum(y.y_o_ions) + y.y_oh + 2.0 * y.y_o2
+    n_h = 2.0 * y.y_h2o + y.y_h + y.y_hp + y.y_oh + 2.0 * y.y_h2
+    np.testing.assert_allclose(n_o, 1.0, rtol=1e-8)
+    np.testing.assert_allclose(n_h, 2.0, rtol=1e-8)
+    charge = y.y_hp + sum((k + 1) * n for k, n in enumerate(y.y_o_ions))
+    np.testing.assert_allclose(y.y_e, charge, rtol=1e-6)
     # The reference state is chosen hot enough to be meaningfully dissociated.
     assert y.y_h2o < 0.5
 
@@ -233,3 +236,130 @@ def test_frozen_sound_speed_is_ideal_mixture_like() -> None:
         cs = ew.sound_speed_frozen(1.0, temp, y)
         gamma = cs * cs * 1.0 / p
         assert 1.0 < gamma <= 5.0 / 3.0 + 1e-6
+
+
+# --- Molecular intermediates: OH, H2, O2 (2026-08-25) -------------------------------------------
+#
+# Q-P showed the 2000-6000 K transition region is load-bearing: the cold leg's exhaust freezes at
+# 3908 K, and the water-reformation rate is limited by OH, which the atoms-only species set could
+# only proxy with `n_H`. These pin the three added equilibria against their closed forms, check the
+# element bookkeeping the extra species change, and -- the point of the exercise -- check that both
+# endpoints the original model got right are still right.
+
+
+def test_diatomic_constant_matches_closed_form() -> None:
+    """`ln_k_diatomic` reproduces `K = z_A z_B / z_AB * exp(-D0/kT)` for OH <=> H + O."""
+    temp = 3000.0
+    d = ew.OH
+    z_a = (2.0 * np.pi * ew.M_H * ew.K_B * temp / ew.H_PLANCK**2) ** 1.5 * ew.G_H
+    z_b = (2.0 * np.pi * ew.M_O * ew.K_B * temp / ew.H_PLANCK**2) ** 1.5 * ew.G_O
+    z_rot = temp / (d.symmetry * d.theta_rot)
+    z_vib = 1.0 / (1.0 - np.exp(-d.theta_vib / temp))
+    z_ab = (
+        (2.0 * np.pi * d.mass * ew.K_B * temp / ew.H_PLANCK**2) ** 1.5
+        * d.degeneracy
+        * z_rot
+        * z_vib
+    )
+    expected = z_a * z_b / z_ab * np.exp(-d.d0 / (ew.K_B * temp))
+    np.testing.assert_allclose(np.exp(ew.ln_k_diatomic(d, temp)), expected, rtol=1e-12)
+
+
+def test_first_oh_bond_of_water_is_the_difference_of_two_independent_sources() -> None:
+    """`D_AT - D0(OH)` must be water's first O-H bond, ~492 kJ/mol.
+
+    `D_AT` and `D0_OH` come from the same JANAF 0 K heats of formation but enter the code by
+    different routes, so this is the check that a sign or a wrong dissociation limit cannot hide.
+    """
+    first_bond_kj = (ew.D_AT - ew.OH.d0) * ew.N_A / 1e3
+    assert 488.0 < first_bond_kj < 496.0, first_bond_kj
+    # And the two O-H bonds must sum back to the atomization energy.
+    np.testing.assert_allclose(first_bond_kj + ew.OH.d0 * ew.N_A / 1e3, ew.D_AT * ew.N_A / 1e3)
+
+
+def test_intermediates_peak_in_the_transition_band_and_vanish_at_both_ends() -> None:
+    """OH is a real population between ~2000 and ~6000 K, and negligible outside it.
+
+    This is the whole reason the species set was extended: at 400 K everything is bound H2O and at
+    15 kK everything is atoms, so the original two-endpoint model was right at both ends and wrong
+    only in between -- which is exactly where the cold leg's exhaust freezes.
+    """
+    rho = 0.32
+    n_f = rho / ew.M_H2O
+    y_oh = {t: ew.composition(rho, t).n_oh / n_f for t in (400.0, 2000.0, 3000.0, 4000.0, 15_000.0)}
+    assert y_oh[400.0] < 1e-8
+    assert y_oh[15_000.0] < 1e-3
+    assert max(y_oh[2000.0], y_oh[3000.0], y_oh[4000.0]) > 0.02
+    # The band is a peak, not a plateau: OH is 2+ decades down at both ends of the sweep.
+    assert y_oh[15_000.0] < 0.01 * max(y_oh[2000.0], y_oh[3000.0], y_oh[4000.0])
+
+
+def test_element_conservation_holds_with_the_intermediates_carrying_nuclei() -> None:
+    """H:O = 2:1 and the O-nucleus count, summed over *all* species including OH, H2, O2."""
+    rho = 0.32
+    n_f = rho / ew.M_H2O
+    for temp in (400.0, 1500.0, 2500.0, 3500.0, 5000.0, 9000.0, 25_000.0):
+        c = ew.composition(rho, temp)
+        n_h_nuclei = 2.0 * c.n_h2o + c.n_oh + 2.0 * c.n_h2 + c.n_h + c.n_hp
+        n_o_nuclei = c.n_h2o + c.n_oh + 2.0 * c.n_o2 + c.n_o + sum(c.n_o_ions)
+        np.testing.assert_allclose(n_o_nuclei, n_f, rtol=1e-8, err_msg=f"O nuclei at {temp} K")
+        np.testing.assert_allclose(n_h_nuclei, 2.0 * n_f, rtol=1e-8, err_msg=f"H:O at {temp} K")
+
+
+def test_hot_endpoint_is_unmoved_by_the_intermediates() -> None:
+    """Across the whole `f(v)` stagnation regime the intermediates hold a negligible *energy* share.
+
+    They do not vanish there -- at 0.32 kg/m^3 and 15 kK about 1.4e-3 of the oxygen is still in a
+    molecule, because `n_H n_O` is enormous even when the Boltzmann factor is not -- but what the
+    restitution depends on is the specific energy, and the bond energy they hold back is under
+    0.1% of it everywhere the tables are used. This is the check that the extension refines the
+    transition band without disturbing the shipped regime.
+    """
+    n_f_per_rho = 1.0 / ew.M_H2O
+    for rho in (0.032, 0.32, 3.2):
+        for temp in (15_000.0, 20_000.0, 30_000.0, 40_000.0):
+            c = ew.composition(rho, temp)
+            _, e = ew.pressure_energy(rho, temp)
+            e_bond_held = (c.n_oh * ew.OH.d0 + c.n_h2 * ew.H2.d0 + c.n_o2 * ew.O2.d0) / rho
+            assert e_bond_held / e < 5e-3, f"rho={rho}, T={temp}: {e_bond_held / e:.2e}"
+            assert (c.n_oh + c.n_h2 + c.n_o2) / (rho * n_f_per_rho) < 2e-2
+
+
+def test_chemical_energy_reduces_to_the_atomization_form_when_intermediates_vanish() -> None:
+    """Where OH, H2, O2 are absent the generalized chemical energy must equal `(n_f - n_H2O) D_AT`.
+
+    The generalization is `n_f D_AT - n_H2O D_AT - sum n_i D0_i`; this pins the reduction, so a
+    misplaced term shows up as a hot-state energy error rather than silently rescaling `e_eff`.
+    """
+    n_f = 1.0e25
+    atoms_only = ew.Composition(
+        n_h2o=0.1 * n_f, n_h=1.8 * n_f, n_o=0.9 * n_f, n_hp=0.0, n_o_ions=(0.0,) * 8, n_e=0.0
+    )
+    np.testing.assert_allclose(
+        ew._bond_energy_held(atoms_only, n_f), (n_f - atoms_only.n_h2o) * ew.D_AT, rtol=1e-12
+    )
+    # And the one state that can be checked against a hand number: all the water as OH + H is
+    # water's *first* O-H bond, 492 kJ/mol, not the full 918 the atoms-only form would charge.
+    all_oh = ew.Composition(
+        n_h2o=0.0, n_h=n_f, n_o=0.0, n_hp=0.0, n_o_ions=(0.0,) * 8, n_e=0.0, n_oh=n_f
+    )
+    np.testing.assert_allclose(
+        ew._bond_energy_held(all_oh, n_f) * ew.N_A / (n_f * 1e3), 492.1, rtol=1e-3
+    )
+
+
+def test_intermediates_split_water_earlier_but_hold_the_atoms_longer() -> None:
+    """The physical signature of the added species, in the direction that matters for the freeze.
+
+    Breaking H2O to OH + H costs 492 kJ/mol, not the full 918, so water comes apart at a *lower*
+    temperature than the atoms-only model said -- while the O-H bond that survives keeps the gas
+    from being fully atomic until hotter. At 2500 K the free-atom fraction must therefore sit
+    below the bound-H2O deficit: some of the broken water is held as OH, not as atoms.
+    """
+    rho, temp = 0.32, 2500.0
+    n_f = rho / ew.M_H2O
+    c = ew.composition(rho, temp)
+    broken = 1.0 - c.n_h2o / n_f
+    free_o = (c.n_o + sum(c.n_o_ions)) / n_f
+    assert broken > free_o, "intermediates must hold part of the broken water"
+    assert c.n_oh > c.n_o, "OH is the reservoir doing the holding at 2500 K"
