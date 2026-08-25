@@ -146,15 +146,18 @@ def atom_three_body_coefficient(temp: float) -> float:
     return float(K_ATOM_THREE_BODY * temp**ATOM_THREE_BODY_EXPONENT)
 
 
-def atom_recombination_time(temp: float, n_third_body: float, n_atom: float) -> float:
+def atom_recombination_time(temp: float, n_third_body: float, n_partner: float) -> float:
     """Time [s] to re-form molecules from atoms, returning the dissociation store.
 
-    `tau = 1 / (K n_M n_atom)`: a three-body reaction is second order in the colliding partners
+    `tau = 1 / (K n_M n_partner)`: a three-body reaction is second order in the colliding partners
     and first order in the third body, so this channel is *quadratically* sensitive to the
     expansion -- it slows by 100x for every 10x the plume thins. That is why the dissociation
     store, not the ionisation store, is the one that can freeze.
+
+    `n_partner` is the density an H atom has to find. Which density that is, is the bracket:
+    see `freeze_station`.
     """
-    rate = atom_three_body_coefficient(temp) * n_third_body * n_atom
+    rate = atom_three_body_coefficient(temp) * n_third_body * n_partner
     return math.inf if rate <= 0.0 else 1.0 / rate
 
 
@@ -166,24 +169,33 @@ class FreezeStation:
     temp: float
     rho: float
     n_e: float
-    n_atom: float
+    n_h: float
+    n_oh: float
     n_third: float
     tau_expansion: float
     tau_ionisation: float
-    tau_dissociation: float
+    #: Water reformation with an OH always available -- the optimistic edge, and what shipped
+    #: before 2026-08-25 under the name `tau_dissociation`.
+    tau_dissociation_h_limited: float
+    #: Water reformation limited by the equilibrium OH density -- the conservative edge.
+    tau_dissociation_oh_limited: float
     da_ionisation: float
-    da_dissociation: float
+    da_dissociation_h_limited: float
+    da_dissociation_oh_limited: float
     verdict_ionisation: str
-    verdict_dissociation: str
+    verdict_dissociation_h_limited: str
+    verdict_dissociation_oh_limited: str
     #: Ionisation energy still held here, as a fraction of the reservoir's store. A station with
     #: nothing left cannot freeze anything, however small its `Da`.
     ionisation_store_fraction: float
-    #: Dissociated fraction. Equilibrium water stays fully dissociated across the whole nozzle at
-    #: these densities, so this store has nothing to return here -- it returns in the fireball.
-    dissociated_fraction: float
+    #: Bond energy still held here, as a fraction of full atomization. **Not the dissociated
+    #: fraction**, which counts OH as broken while it is paying for half a bond; see
+    #: `eos_water.bond_energy_held`. Equilibrium water is fully atomized across the whole nozzle
+    #: at these densities, so this store has nothing to return there -- it returns in the fireball.
+    bond_energy_fraction: float
     #: How many decades the dissociation rate coefficient could be wrong before the verdict
-    #: changes. The rate is the least certain input, so this is the number that says whether the
-    #: answer is robust or merely arithmetic.
+    #: changes, on the optimistic edge. The rate is the least certain input, so this is the number
+    #: that says whether the answer is robust or merely arithmetic.
     margin_decades: float
 
 
@@ -192,42 +204,65 @@ def freeze_station(
     temp: float,
     rho: float,
     n_e: float,
-    n_atom: float,
+    n_h: float,
+    n_oh: float,
     n_third: float,
     tau_expansion: float,
     ionisation_store_fraction: float = 1.0,
-    dissociated_fraction: float = 1.0,
+    bond_energy_fraction: float = 1.0,
 ) -> FreezeStation:
     """Race both recombination channels against the expansion at one state.
 
     The ionisation store returns by whichever ionic channel is faster -- three-body dominates in
     this density range by orders of magnitude, but both are summed so the model stays right if a
-    thinner case is ever run. The dissociation store returns only through the three-body atomic
-    channel.
+    thinner case is ever run.
+
+    **The dissociation store returns through `H + OH + M -> H2O + M`, and that is bracketed.**
+    The reformation flux is `k [H][OH][M]`, so the pseudo-first-order clock an H atom runs on is
+    `1/(k [OH][M])` -- it needs to find an OH. Two things can be true about how much OH there is:
+
+    - **`n_h` (optimistic).** OH formation (`H + O + M -> OH + M`) is fast compared with water
+      formation, so an OH is effectively always available and the H-atom density sets the pace.
+      This is the edge that shipped before 2026-08-25, when the species set had no OH at all and
+      the code substituted `n_H` while recording that it *over*estimates the rate.
+    - **`n_oh` (conservative).** OH never rises above its equilibrium value, so the scarce partner
+      sets the pace. Equilibrium OH is 2e-5 of `n_H` on the hot legs and ~4e-2 on the cold one, so
+      this edge is 30x to 50000x slower.
+
+    The truth is between, and locating it inside the bracket is a finite-rate network calculation
+    with OH, H2 and O2 as *evolved* species rather than equilibrium ones -- which is the work Q-P
+    already named as what would settle this properly. What is new is that both edges are now
+    computed rather than one being assumed.
     """
     alpha_ion = three_body_recombination(temp, n_e) + radiative_recombination(temp)
     tau_ion = math.inf if alpha_ion * n_e <= 0.0 else 1.0 / (alpha_ion * n_e)
-    tau_atom = atom_recombination_time(temp, n_third, n_atom)
+    tau_h = atom_recombination_time(temp, n_third, n_h)
+    tau_oh = atom_recombination_time(temp, n_third, n_oh)
 
     da_ion = tau_expansion / tau_ion
-    da_atom = tau_expansion / tau_atom
+    da_h = tau_expansion / tau_h
+    da_oh = tau_expansion / tau_oh
     return FreezeStation(
         time=time,
         temp=temp,
         rho=rho,
         n_e=n_e,
-        n_atom=n_atom,
+        n_h=n_h,
+        n_oh=n_oh,
         n_third=n_third,
         tau_expansion=tau_expansion,
         tau_ionisation=tau_ion,
-        tau_dissociation=tau_atom,
+        tau_dissociation_h_limited=tau_h,
+        tau_dissociation_oh_limited=tau_oh,
         da_ionisation=da_ion,
-        da_dissociation=da_atom,
+        da_dissociation_h_limited=da_h,
+        da_dissociation_oh_limited=da_oh,
         verdict_ionisation=verdict(da_ion),
-        verdict_dissociation=verdict(da_atom),
+        verdict_dissociation_h_limited=verdict(da_h),
+        verdict_dissociation_oh_limited=verdict(da_oh),
         ionisation_store_fraction=ionisation_store_fraction,
-        dissociated_fraction=dissociated_fraction,
-        margin_decades=math.log10(da_atom / DA_EQUILIBRIUM) if da_atom > 0.0 else -math.inf,
+        bond_energy_fraction=bond_energy_fraction,
+        margin_decades=math.log10(da_h / DA_EQUILIBRIUM) if da_h > 0.0 else -math.inf,
     )
 
 
@@ -257,21 +292,19 @@ def scan(
     out: list[FreezeStation] = []
     for prev, row in pairwise(rows):
         comp = eos_water.composition(row.rho, row.temp)
-        n_third = comp.n_h2o + comp.n_h + comp.n_o + comp.n_hp + sum(comp.n_o_ions) + comp.n_e
         out.append(
             freeze_station(
                 time=row.time,
                 temp=row.temp,
                 rho=row.rho,
                 n_e=comp.n_e,
-                # H atoms are the partner that has to find an OH; the water-reformation channel is
-                # limited by them, and `eos_water` carries no OH so this is the closest proxy the
-                # species set allows. It is an *over*estimate of the rate where OH is scarce.
-                n_atom=comp.n_h,
-                n_third=n_third,
+                n_h=comp.n_h,
+                n_oh=comp.n_oh,
+                n_third=comp.n_total,
                 tau_expansion=expansion_time(prev.time, prev.rho, row.time, row.rho),
                 ionisation_store_fraction=_ionisation_store(row.rho, row.temp) / reservoir_store,
-                dissociated_fraction=1.0 - comp.n_h2o / (row.rho / eos_water.M_H2O),
+                bond_energy_fraction=eos_water.bond_energy_held(row.rho, row.temp)
+                / eos_water.FULL_ATOMIZATION_ENERGY,
             )
         )
     return out
@@ -281,7 +314,7 @@ def main() -> None:
     """Report the freeze verdict on every leg of the burn envelope."""
     print(
         f"{'w':>7} {'T_exit':>8} {'binding Da_ion':>15} {'margin':>8} {'verdict':>13} "
-        f"{'f_diss exit':>12} {'min Da_diss':>12}"
+        f"{'bond held':>10} {'min Da (H)':>11} {'min Da (OH)':>12}"
     )
     for speed, temp_0 in expansion.PLUME_STATES:
         st = scan(speed, temp_0)
@@ -289,8 +322,9 @@ def main() -> None:
         print(
             f"{speed:7.2f} {st[-1].temp:8.0f} {binding:15.3g} "
             f"{math.log10(binding / DA_EQUILIBRIUM):8.2f} {verdict(binding):>13} "
-            f"{st[-1].dissociated_fraction:12.4f} "
-            f"{min(s.da_dissociation for s in st):12.2f}"
+            f"{st[-1].bond_energy_fraction:10.4f} "
+            f"{min(s.da_dissociation_h_limited for s in st):11.2f} "
+            f"{min(s.da_dissociation_oh_limited for s in st):12.4f}"
         )
 
 

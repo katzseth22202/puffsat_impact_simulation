@@ -60,7 +60,7 @@ def test_the_expansion_clock_steps_down_at_the_lip_and_the_aggregate_hides_it() 
     outside = [s for s in clean if not s.inside]
 
     assert inside[-1].tau_expansion > 5.0 * outside[0].tau_expansion, "the local step at the lip"
-    assert inside[-1].da_dissociation > 10.0 * outside[0].da_dissociation
+    assert inside[-1].da_dissociation_h_limited > 10.0 * outside[0].da_dissociation_h_limited
 
     rows = fireball.history(COLD_ANCHOR)
 
@@ -87,8 +87,8 @@ def test_the_dissociation_store_freezes_just_below_the_papers_own_threshold() ->
 
     assert freeze is not None, "the cold anchor must freeze"
     assert freeze.rho == pytest.approx(1.1e-2, rel=0.25), "freezes near the paper's 0.01 kg/m^3"
-    assert freeze.dissociated_fraction > 0.85, "with the store still substantially held"
-    assert freeze.da_dissociation < 1.0
+    assert freeze.bond_energy_fraction > 0.85, "with the store still substantially held"
+    assert freeze.da_dissociation_h_limited < 1.0
 
 
 def test_the_verdict_survives_the_jet_divergence_it_is_conditional_on() -> None:
@@ -105,7 +105,7 @@ def test_the_verdict_survives_the_jet_divergence_it_is_conditional_on() -> None:
     assert narrow is not None and wide is not None
     assert wide.rho > narrow.rho, "a wider jet freezes at higher density"
     assert wide.rho / narrow.rho < 10.0, "less than a decade over a 4x range in tan"
-    assert min(narrow.dissociated_fraction, wide.dissociated_fraction) > 0.80
+    assert min(narrow.bond_energy_fraction, wide.bond_energy_fraction) > 0.80
 
 
 def test_nothing_freezes_inside_the_nozzle_which_is_what_q_m_already_found() -> None:
@@ -118,7 +118,9 @@ def test_nothing_freezes_inside_the_nozzle_which_is_what_q_m_already_found() -> 
     stations = fireball.scan(COLD_ANCHOR)
     inside = [s for s in stations if s.inside]
     assert inside, "the scan must cover the nozzle as well as the fireball"
-    assert all(s.da_dissociation > 1.0 for s in inside), "Q-M's equilibrium verdict must hold"
+    assert all(s.da_dissociation_h_limited > 1.0 for s in inside), (
+        "Q-M's equilibrium verdict must hold"
+    )
 
 
 def test_the_stranded_energy_is_reported_against_the_budget_that_produced_it() -> None:
@@ -133,6 +135,48 @@ def test_the_stranded_energy_is_reported_against_the_budget_that_produced_it() -
     assert freeze is not None
 
     stranded = fireball.stranded_energy(freeze)
-    assert stranded == pytest.approx(0.92 * eos_water.D_AT / eos_water.M_H2O, rel=0.15)
+    assert stranded == pytest.approx(0.92 * eos_water.FULL_ATOMIZATION_ENERGY, rel=0.15)
     # Against the 45.58 km/s budget it is a large fraction, not a correction.
     assert stranded / plume.dissipated_energy(45.58e3) > 0.3
+
+
+def test_the_oh_bracket_is_zero_width_on_the_hot_legs() -> None:
+    """The finding of 2026-08-25, and it is that the apologised-for proxy did not matter.
+
+    `recombination` rated water reformation with `n_H` because the species set had no OH, and said
+    in a comment that this *over*estimates the rate. It does, by 30x to 50000x. But the stranded
+    energy is `bond_energy_fraction * FULL_ATOMIZATION_ENERGY` at the freeze station, and on the
+    hot legs that fraction is already 1.0000 at the optimistic edge -- the store is fully held when
+    the clock runs out either way. So a five-decade error in the rate moves the answer by nothing.
+
+    Where a bracket exists at all is the cold leg, and it is narrow: see the test below.
+    """
+    for temp_0 in (26_200.0, 22_400.0):
+        stations = fireball.scan(temp_0)
+        optimistic = fireball.freeze_state(stations)
+        conservative = fireball.freeze_state(stations, oh_limited=True)
+        assert optimistic is not None and conservative is not None
+        # The conservative edge freezes far earlier -- at the first station, inside the nozzle.
+        assert conservative.rho > 5.0 * optimistic.rho
+        # And it buys nothing, because there was nothing left to return by then either way.
+        assert fireball.stranded_energy(conservative) == pytest.approx(
+            fireball.stranded_energy(optimistic), rel=1e-3
+        )
+
+
+def test_the_cold_leg_is_the_only_leg_with_a_bracket_and_it_is_narrow() -> None:
+    """On the cold anchor the optimistic edge does return part of the store, so the edges differ.
+
+    They differ by less than the jet-divergence bracket the answer already carried: `theta` over
+    15-60 degrees moves the optimistic edge 0.83 -> 0.94 of the store, and the conservative edge
+    sits at 0.999. So the OH question is a smaller uncertainty than the geometry one, which is
+    what makes Q-P's published range survive.
+    """
+    stations = fireball.scan(COLD_ANCHOR)
+    optimistic = fireball.freeze_state(stations)
+    conservative = fireball.freeze_state(stations, oh_limited=True)
+    assert optimistic is not None and conservative is not None
+
+    assert optimistic.bond_energy_fraction < conservative.bond_energy_fraction
+    assert conservative.bond_energy_fraction > 0.99, "nothing comes back on the slow edge"
+    assert 0.85 < optimistic.bond_energy_fraction < 0.95

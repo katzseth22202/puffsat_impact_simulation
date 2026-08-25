@@ -29,6 +29,20 @@ linearly, so `Da ~ 1/tan theta`: a wider jet expands faster and freezes at highe
 verdict is reported across a 15-60 degree bracket for that reason -- the freeze *density* is
 conditional on the angle, the freeze itself is not.
 
+**The reformation partner is bracketed, and the bracket turns out not to matter (2026-08-25).**
+`H + OH + M -> H2O + M` was rated with `n_H`, because the species set had no OH and the code said
+plainly that this *over*estimates the rate. `eos_water` now carries OH, and the proxy was wrong by
+30x on the cold leg and 50000x on the hot ones. It changes almost nothing: the stranded energy is
+whatever the store still holds when the clock runs out, and on the hot legs it holds **100% at both
+edges**. Only the cold anchor has a real bracket -- 0.83-0.94 of the store on the optimistic edge
+against 0.999 on the conservative one -- and that is narrower than the jet-divergence bracket the
+answer already carried. What settles the middle is still a finite-rate network with OH, H2 and O2
+as *evolved* species; what this shows is that the answer is not waiting on it.
+
+**And the store is now measured as held bond energy, not as `1 - n_H2O/n_f`.** With OH, H2 and O2
+in the set the old measure overcharges -- it calls a gas fully dissociated when half of it is OH,
+which is paying for half a bond. See `eos_water.bond_energy_held`.
+
 **This is a self-consistency test, like Q-M's.** The equilibrium history is run and asked at every
 station whether the chemistry could have produced it. Where the answer is no, equilibrium is not
 the real history below that point -- the composition holds near where it froze and the temperature
@@ -73,7 +87,9 @@ class FireballRow:
     rho: float
     temp: float
     speed: float
-    dissociated_fraction: float
+    #: Bond energy still held here as a fraction of full atomization -- the share of the store
+    #: that would be stranded if the chemistry froze at this station.
+    bond_energy_fraction: float
 
 
 @cache
@@ -96,6 +112,52 @@ def history(
     return list(_cached_history(temp_0, half_angle_deg, rho_0, steps, expansion_ratio))
 
 
+@cache
+def _isentrope(
+    temp_0: float, rho_0: float, steps: int, expansion_ratio: float
+) -> tuple[tuple[FireballRow, ...], tuple[expansion.NozzlePoint, ...]]:
+    """The angle-independent half of the history: the isentrope and the in-nozzle stations.
+
+    Split out and memoized because `theta` only enters the *free-jet clock*. `main` sweeps three
+    divergence angles per leg, and without this split each one re-solves the same nozzle from
+    scratch -- the EOS Newton solve is the hot spot in this package, so that was three quarters of
+    the run time doing nothing.
+    """
+    points = expansion.nozzle_history(
+        rho_0,
+        temp_0,
+        rho_0 / expansion_ratio,
+        eos_water.pressure_energy,
+        eos_water.sound_speed,
+        steps,
+    )
+    throat = expansion._at_throat(points)
+    supersonic = (throat, *(pt for pt in points if pt.mach > throat.mach))
+
+    inside = expansion.cooling_history(
+        rho_0,
+        temp_0,
+        eos_water.pressure_energy,
+        eos_water.sound_speed,
+        expansion.AREA_RATIO_EXIT,
+        expansion.FIELD_LENGTH,
+        steps=steps,
+    )
+    rows = tuple(
+        FireballRow(
+            time=r.time,
+            radius=expansion.plume_radius(r.area_ratio),
+            area_ratio=r.area_ratio,
+            rho=r.rho,
+            temp=r.temp,
+            speed=r.speed,
+            bond_energy_fraction=_bond_fraction(r.rho, r.temp),
+        )
+        for r in inside
+    )
+    return rows, supersonic
+
+
 def _history(
     temp_0: float,
     half_angle_deg: float,
@@ -112,39 +174,8 @@ def _history(
         raise ValueError(f"half_angle_deg must be in (0, 90), got {half_angle_deg}")
     tan_theta = math.tan(math.radians(half_angle_deg))
 
-    points = expansion.nozzle_history(
-        rho_0,
-        temp_0,
-        rho_0 / expansion_ratio,
-        eos_water.pressure_energy,
-        eos_water.sound_speed,
-        steps,
-    )
-    throat = expansion._at_throat(points)
-    supersonic = [throat, *(pt for pt in points if pt.mach > throat.mach)]
-
-    inside = expansion.cooling_history(
-        rho_0,
-        temp_0,
-        eos_water.pressure_energy,
-        eos_water.sound_speed,
-        expansion.AREA_RATIO_EXIT,
-        expansion.FIELD_LENGTH,
-        steps=steps,
-    )
-
-    rows = [
-        FireballRow(
-            time=r.time,
-            radius=expansion.plume_radius(r.area_ratio),
-            area_ratio=r.area_ratio,
-            rho=r.rho,
-            temp=r.temp,
-            speed=r.speed,
-            dissociated_fraction=_dissociated(r.rho, r.temp),
-        )
-        for r in inside
-    ]
+    nozzle_rows, supersonic = _isentrope(temp_0, rho_0, steps, expansion_ratio)
+    rows = list(nozzle_rows)
 
     # The free jet: continue from the lip on the same isentrope, with the jet clock.
     for pt in (p for p in supersonic if p.area_ratio > expansion.AREA_RATIO_EXIT):
@@ -159,16 +190,20 @@ def _history(
                 rho=pt.rho,
                 temp=pt.temp,
                 speed=pt.speed,
-                dissociated_fraction=_dissociated(pt.rho, pt.temp),
+                bond_energy_fraction=_bond_fraction(pt.rho, pt.temp),
             )
         )
     return rows
 
 
-def _dissociated(rho: float, temp: float) -> float:
-    """Fraction of the water no longer bound as H2O -- the share of the store still held."""
-    comp = eos_water.composition(rho, temp)
-    return 1.0 - comp.n_h2o / (rho / eos_water.M_H2O)
+def _bond_fraction(rho: float, temp: float) -> float:
+    """Share of the full atomization energy still held as broken bonds.
+
+    **Replaces `1 - n_H2O/n_f` (2026-08-25).** Once OH, H2 and O2 are in the species set that
+    measure overcharges: it calls a gas "dissociated" when it is half OH, which is paying for half
+    a bond. At 0.32 kg/m^3 and 3000 K the two differ by a factor of 3.
+    """
+    return eos_water.bond_energy_held(rho, temp) / eos_water.FULL_ATOMIZATION_ENERGY
 
 
 @dataclass(frozen=True)
@@ -217,12 +252,18 @@ class FreezeRow:
         return self.station.tau_expansion
 
     @property
-    def da_dissociation(self) -> float:
-        return self.station.da_dissociation
+    def da_dissociation_h_limited(self) -> float:
+        """The optimistic edge: an OH is always available. What shipped before 2026-08-25."""
+        return self.station.da_dissociation_h_limited
 
     @property
-    def dissociated_fraction(self) -> float:
-        return self.station.dissociated_fraction
+    def da_dissociation_oh_limited(self) -> float:
+        """The conservative edge: OH never exceeds its equilibrium density."""
+        return self.station.da_dissociation_oh_limited
+
+    @property
+    def bond_energy_fraction(self) -> float:
+        return self.station.bond_energy_fraction
 
 
 def scan(
@@ -238,30 +279,37 @@ def scan(
     out: list[FreezeRow] = []
     for prev, row in pairwise(rows):
         comp = eos_water.composition(row.rho, row.temp)
-        n_third = comp.n_h2o + comp.n_h + comp.n_o + comp.n_hp + sum(comp.n_o_ions) + comp.n_e
         station = recombination.freeze_station(
             time=row.time,
             temp=row.temp,
             rho=row.rho,
             n_e=comp.n_e,
-            n_atom=comp.n_h,
-            n_third=n_third,
+            n_h=comp.n_h,
+            n_oh=comp.n_oh,
+            n_third=comp.n_total,
             tau_expansion=recombination.expansion_time(prev.time, prev.rho, row.time, row.rho),
-            dissociated_fraction=row.dissociated_fraction,
+            bond_energy_fraction=row.bond_energy_fraction,
         )
         out.append(FreezeRow(row=row, prev=prev, station=station))
     return out
 
 
-def freeze_state(stations: list[FreezeRow]) -> FreezeRow | None:
-    """The first station where the expansion outruns atomic recombination (`Da < 1`).
+def freeze_state(stations: list[FreezeRow], oh_limited: bool = False) -> FreezeRow | None:
+    """The first station where the expansion outruns water reformation (`Da < 1`).
 
     `Da = 1` rather than `recombination.DA_FROZEN`: the deliverable is *where the equilibrium
     assumption stops holding*, which is where the two clocks are equal. `DA_FROZEN = 0.1` is a
     decade further out and describes a store that is already stranded rather than one that is
     beginning to strand.
+
+    `oh_limited` selects the edge of the bracket (see `recombination.freeze_station`). The default
+    is the optimistic one, so the shipped headline stays the one that is hardest to argue with.
     """
-    return next((s for s in stations if s.da_dissociation < 1.0), None)
+
+    def damkohler(s: FreezeRow) -> float:
+        return s.da_dissociation_oh_limited if oh_limited else s.da_dissociation_h_limited
+
+    return next((s for s in stations if damkohler(s) < 1.0), None)
 
 
 def stranded_energy(station: FreezeRow) -> float:
@@ -271,42 +319,56 @@ def stranded_energy(station: FreezeRow) -> float:
     reason the question is worth asking: it is charged against the same dissipated budget an Isp
     claim is built on.
     """
-    return station.dissociated_fraction * eos_water.D_AT / eos_water.M_H2O
+    return station.bond_energy_fraction * eos_water.FULL_ATOMIZATION_ENERGY
 
 
 def main() -> None:
     """The verdict, across the burn envelope and across the divergence bracket."""
     angles = (15.0, DIVERGENCE_HALF_ANGLE_DEG, 60.0)
     lines = [
-        "closing_speed_km_s,half_angle_deg,freeze_rho_kg_m3,freeze_temp_K,freeze_time_s,"
-        "dissociated_fraction,tau_expansion_s,tau_dissociation_s,stranded_MJ_kg,"
+        "closing_speed_km_s,half_angle_deg,partner,freeze_rho_kg_m3,freeze_temp_K,freeze_time_s,"
+        "bond_energy_fraction,tau_expansion_s,tau_dissociation_s,stranded_MJ_kg,"
         "stranded_fraction_of_budget"
     ]
     print(f"python: fireball freeze-out, jet divergence {angles[0]:g}-{angles[-1]:g} deg")
     print(
-        f"  {'w [km/s]':>9} {'theta':>6} {'rho_freeze':>11} {'T [K]':>7} {'t [ms]':>8} "
-        f"{'f_diss':>7} {'stranded':>10} {'of budget':>10}"
+        "  partner H = an OH is always available (optimistic); OH = equilibrium OH (conservative)"
+    )
+    print(
+        f"  {'w [km/s]':>9} {'theta':>6} {'partner':>8} {'rho_freeze':>11} {'T [K]':>7} "
+        f"{'t [ms]':>8} {'bond held':>10} {'stranded':>10} {'of budget':>10}"
     )
     for speed, temp_0 in expansion.PLUME_STATES:
         budget = 0.5 * SLUG_RATIO * (speed * 1e3) ** 2 / (1.0 + SLUG_RATIO) ** 2
         for angle in angles:
-            station = freeze_state(scan(temp_0, angle))
-            if station is None:
-                print(f"  {speed:9.2f} {angle:6.0f}   equilibrium holds to the end of the range")
-                continue
-            stranded = stranded_energy(station)
-            print(
-                f"  {speed:9.2f} {angle:6.0f} {station.rho:11.4e} {station.temp:7.0f} "
-                f"{station.station.time * 1e3:8.3f} {station.dissociated_fraction:7.4f} "
-                f"{stranded / 1e6:9.1f}M {stranded / budget:10.1%}"
-            )
-            lines.append(
-                f"{speed:g},{angle:g},{station.rho:.6e},{station.temp:.1f},"
-                f"{station.station.time:.6e},"
-                f"{station.dissociated_fraction:.6f},{station.tau_expansion:.6e},"
-                f"{station.station.tau_dissociation:.6e},{stranded / 1e6:.3f},"
-                f"{stranded / budget:.6f}"
-            )
+            stations = scan(temp_0, angle)
+            for label, oh_limited in (("H", False), ("OH", True)):
+                station = freeze_state(stations, oh_limited=oh_limited)
+                if station is None:
+                    print(
+                        f"  {speed:9.2f} {angle:6.0f} {label:>8}   equilibrium holds to the end "
+                        f"of the range"
+                    )
+                    continue
+                stranded = stranded_energy(station)
+                tau = (
+                    station.station.tau_dissociation_oh_limited
+                    if oh_limited
+                    else station.station.tau_dissociation_h_limited
+                )
+                print(
+                    f"  {speed:9.2f} {angle:6.0f} {label:>8} {station.rho:11.4e} "
+                    f"{station.temp:7.0f} {station.station.time * 1e3:8.3f} "
+                    f"{station.bond_energy_fraction:10.4f} "
+                    f"{stranded / 1e6:9.1f}M {stranded / budget:10.1%}"
+                )
+                lines.append(
+                    f"{speed:g},{angle:g},{label},{station.rho:.6e},{station.temp:.1f},"
+                    f"{station.station.time:.6e},"
+                    f"{station.bond_energy_fraction:.6f},{station.tau_expansion:.6e},"
+                    f"{tau:.6e},{stranded / 1e6:.3f},"
+                    f"{stranded / budget:.6f}"
+                )
     DEFAULT_SCAN_PATH.parent.mkdir(parents=True, exist_ok=True)
     DEFAULT_SCAN_PATH.write_text("\n".join(lines) + "\n")
     print(f"python: wrote {DEFAULT_SCAN_PATH}")

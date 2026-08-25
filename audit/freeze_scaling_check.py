@@ -30,12 +30,12 @@ def freeze(temp_0, rho_0):
     rows = fireball._history(temp_0, 45.0, rho_0, 320, fireball.EXPANSION_RATIO)
     for prev, row in pairwise(rows[::4]):
         c = eos_water.composition(row.rho, row.temp)
-        n3 = c.n_h2o + c.n_h + c.n_o + c.n_hp + sum(c.n_o_ions) + c.n_e
         st = rc.freeze_station(
-            time=row.time, temp=row.temp, rho=row.rho, n_e=c.n_e, n_atom=c.n_h, n_third=n3,
+            time=row.time, temp=row.temp, rho=row.rho, n_e=c.n_e,
+            n_h=c.n_h, n_oh=c.n_oh, n_third=c.n_total,
             tau_expansion=rc.expansion_time(prev.time, prev.rho, row.time, row.rho),
-            dissociated_fraction=row.dissociated_fraction)
-        if st.da_dissociation < 1.0:
+            bond_energy_fraction=row.bond_energy_fraction)
+        if st.da_dissociation_h_limited < 1.0:
             return st
     return None
 
@@ -43,12 +43,12 @@ def freeze(temp_0, rho_0):
 def show(label, value, st):
     """`stranded` is what freezes in; `returned` is what recombination gave back before it did.
     The lever's worth is the *difference* between a row's `stranded` and the baseline row's."""
-    held = st.dissociated_fraction
+    held = st.bond_energy_fraction
     print(f"  {label:>12} {value:>10} {st.rho:11.4e} {held:11.4f} "
           f"{held * BOND / 1e6:9.1f}M {(1 - held) * BOND / 1e6:9.1f}M")
 
 
-HEAD = f"  {'':>12} {'':>10} {'rho_freeze':>11} {'f_diss held':>11} {'stranded':>10} {'returned':>10}"
+HEAD = f"  {'':>12} {'':>10} {'rho_freeze':>11} {'bond held':>11} {'stranded':>10} {'returned':>10}"
 
 print("(1) BIGGER BAG, SAME DENSITY -- self-similar scale-up, the fixed-k case")
 print("    Da ~ M^(1/3): more *time*, not more collisions.")
@@ -77,5 +77,7 @@ expansion.AREA_RATIO_EXIT, expansion.FIELD_LENGTH = A0, L0
 
 print()
 print("None of the three is a rescue. Recombination needs rho^2 and the clock only gives R,")
-print("so the geometry is against it. What would actually move this is the missing OH")
-print("chemistry, not scale -- the scaling laws above are geometric and would survive it.")
+print("so the geometry is against it. The OH chemistry this line used to point at as the")
+print("thing that would move it is now built (Q-P(b), 2026-08-25), and it did not: the")
+print("conservative edge strands the whole 50.9M on every leg. The scaling laws above are")
+print("geometric and survived it unchanged, as predicted -- only the level moved.")

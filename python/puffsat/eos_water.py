@@ -611,6 +611,24 @@ def pressure_energy(rho: float, temp: float) -> tuple[float, float]:
     return p, e
 
 
+#: Bond energy of one kilogram of fully atomized water [J/kg] -- `D_AT / M_H2O` = 50.9 MJ/kg.
+#: The ceiling on what the dissociation store can strand, and the denominator `fireball` charges
+#: the freeze against.
+FULL_ATOMIZATION_ENERGY = D_AT / M_H2O
+
+
+def bond_energy_held(rho: float, temp: float) -> float:
+    """Chemical energy still locked in broken H2O bonds [J/kg] at equilibrium `(rho, temp)`.
+
+    **Not `(1 - n_H2O/n_f) * D_AT/M_H2O`, which is what this replaced.** That form charges the
+    full atomization energy for every formula unit that is not intact water, and with OH, H2 and
+    O2 in the species set that is wrong by a lot: a gas half in OH has handed back roughly half
+    its bond energy while still reading as "fully dissociated". What is stranded is the energy no
+    bond is currently paying for, which is exactly `_bond_energy_held`.
+    """
+    return _bond_energy_held(composition(rho, temp), rho / M_H2O) / rho
+
+
 def _sound_speed_fd(
     pe: Callable[[float, float], tuple[float, float]], rho: float, temp: float
 ) -> float:

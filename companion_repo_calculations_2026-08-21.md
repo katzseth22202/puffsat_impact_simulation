@@ -1999,11 +1999,54 @@ The geometry is against it, and no achievable scale closes that gap. **What woul
 this is the missing OH chemistry below, not scale** -- the scaling laws are geometric and would
 survive a better species set unchanged; only where the line sits would move.
 
+### Q-P(b). The OH species set is built, and the answer barely moves. **2026-08-25.**
+Reproduce: `make analysis-fireball`. The weak point below said `eos_water` carries no OH, that
+`n_H` is used instead, and that this **over**estimates the reformation rate -- so the true freeze
+is *earlier* than modelled and the finding is conservative but soft. All three clauses are now
+tested rather than asserted, and the last one is the one that changes.
+
+**The proxy was wrong by five decades and it did not matter.** Equilibrium OH is `2e-5` of `n_H`
+on the hot legs and `4e-2` on the cold one, so the shipped rate was 30x to 50 000x too fast. Both
+edges are now computed -- `n_H` (an OH is always waiting) and equilibrium `n_OH` (OH never exceeds
+equilibrium) -- and the truth is between them.
+
+| leg | stranded, `n_H` edge | stranded, `n_OH` edge | of budget |
+| --- | ---: | ---: | ---: |
+| 75 km/s | 50.9 MJ/kg | **50.9** | 19.2% either edge |
+| 65 | 50.9 | **50.9** | 25.6% either edge |
+| 56.53 | 50.9 | **50.9** | 33.8% either edge |
+| 45.58 | 42.4-47.7 (theta 15-60) | **50.9** | **43.3-52.0%** |
+
+**Why the bracket is zero-width on three legs of four.** The stranded energy is whatever the store
+still holds when the clock runs out, and on the hot legs it holds **100% at the optimistic edge
+already**. A rate that is five decades slower freezes the store earlier, and earlier is still
+"all of it". The answer only has room to move where recombination was actually returning
+something, which is the cold anchor alone.
+
+**So Q-P's headline survives: 19-48% becomes 19-52%,** and the widening is entirely the cold leg.
+The OH question is a *smaller* uncertainty than the jet-divergence `theta` the answer already
+carried at full width. That is worth stating plainly because the weak-points list below implied
+the opposite -- that the missing OH was the soft spot. It was not; the geometry is.
+
+**One accounting error was found and fixed in the same pass, and it ran the other way.** The
+stranded energy was `(1 - n_H2O/n_f) * D_AT`, which charges full atomization for every formula
+unit that is not intact water. With OH, H2 and O2 in the set that overcharges -- a gas half in OH
+has handed back half its bond energy while still reading as fully dissociated. At 0.32 kg/m^3 and
+3000 K the two differ by **3x**. Now `eos_water.bond_energy_held`, which is the energy no bond is
+currently paying for. This is why the cold leg's 45-degree number reads 46.9% here against Q-P's
+47.7%: same physics, honest denominator.
+
+**What is still owed is unchanged and is now better bounded.** A finite-rate network with OH, H2
+and O2 as *evolved* rather than equilibrium species would locate the answer inside the bracket.
+It is worth much less than it was yesterday: on three legs the bracket has no width, and on the
+fourth it is 43.3% against 52.0% of budget. **Cost: high. Worth: low-to-moderate now, where
+before it was the item that would "convert a 19-48% bracket into a number".**
+
 ### Honest weak points, and one of them points the wrong way for the design
-- **`eos_water` carries no OH.** The real dominant path is `H + OH + M -> H2O + M`, and the model
-  has only `H` to work with. The code comments say plainly that using `n_H` **overestimates** the
-  rate where OH is scarce -- so the true freeze is *earlier* than modelled, not later. The finding
-  is conservative in the direction that matters, but the number is soft.
+- ~~**`eos_water` carries no OH.**~~ **CLOSED 2026-08-25 -- see Q-P(b) above.** It does now, the
+  proxy was wrong by 30x to 50 000x, and the answer moved from 19-48% to 19-52% of budget because
+  the store is already fully held at the freeze on three legs of four. The direction was right and
+  the softness was overstated.
 - **The three-body atomic coefficient carries a factor 2-3** (Q-M's own recorded weak point).
   A factor 3 in rate moves the freeze density by ~1.7x, well inside the `theta` bracket.
 - **Past the crossing the equilibrium history is not the real one.** Composition holds near where

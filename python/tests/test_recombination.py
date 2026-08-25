@@ -19,7 +19,7 @@ import math
 
 import pytest
 
-from puffsat import recombination
+from puffsat import eos_water, recombination
 
 
 def test_radiative_recombination_matches_the_published_case_b_coefficient() -> None:
@@ -155,11 +155,12 @@ def test_freeze_station_flips_to_frozen_when_the_expansion_outruns_the_chemistry
         temp=6000.0,
         rho=0.1,
         n_e=5.0e21,
-        n_atom=5.0e24,
+        n_h=5.0e24,
+        n_oh=5.0e24,
         n_third=1.0e25,
         tau_expansion=1.4e-3,
     )
-    assert slow.verdict_dissociation == "equilibrium"
+    assert slow.verdict_dissociation_h_limited == "equilibrium"
     assert slow.margin_decades > 0.5
 
     fast = recombination.freeze_station(
@@ -167,15 +168,18 @@ def test_freeze_station_flips_to_frozen_when_the_expansion_outruns_the_chemistry
         temp=6000.0,
         rho=0.1,
         n_e=5.0e21,
-        n_atom=5.0e24,
+        n_h=5.0e24,
+        n_oh=5.0e24,
         n_third=1.0e25,
         tau_expansion=1.4e-9,
     )
-    assert fast.verdict_dissociation == "frozen"
+    assert fast.verdict_dissociation_h_limited == "frozen"
     assert fast.margin_decades < 0.0
 
     # Da is a pure ratio, so a millionfold faster expansion is a millionfold smaller Da.
-    assert fast.da_dissociation == pytest.approx(slow.da_dissociation * 1e-6, rel=1e-9)
+    assert fast.da_dissociation_h_limited == pytest.approx(
+        slow.da_dissociation_h_limited * 1e-6, rel=1e-9
+    )
 
 
 def test_binding_damkohler_ignores_stations_whose_store_is_already_spent() -> None:
@@ -199,3 +203,85 @@ def test_binding_damkohler_needs_at_least_one_station_holding_the_store() -> Non
     would be a false pass. It has to refuse rather than return a default."""
     with pytest.raises(ValueError):
         recombination.binding_damkohler([(1.0e5, 1e-9)], threshold=0.01)
+
+
+# --- The OH bracket (2026-08-25) ----------------------------------------------------------------
+#
+# `H + OH + M -> H2O + M` was rated with `n_atom = n_H`, because the species set had no OH and the
+# code said so: an *over*estimate of the rate wherever OH is scarce. It is scarce -- equilibrium OH
+# is 2e-5 of n_H on the hot legs and 4e-2 on the cold one -- so the shipped rate was 30x to 50000x
+# too fast. Now that both densities exist the race is run at both edges and the answer is a bracket.
+
+
+def test_the_two_edges_of_the_bracket_are_the_two_partner_densities() -> None:
+    """`Da` is linear in the partner density, so the bracket's width *is* the `n_OH/n_H` ratio.
+
+    The H-limited edge assumes an OH is always waiting (OH formation never limits); the OH-limited
+    edge assumes OH never rises above its equilibrium value. Neither is the truth, which needs a
+    reaction network -- what the bracket buys is that the truth is between two computed numbers
+    instead of past one.
+    """
+    station = recombination.freeze_station(
+        time=1.0e-3,
+        temp=6000.0,
+        rho=0.1,
+        n_e=5.0e21,
+        n_h=5.0e24,
+        n_oh=5.0e20,
+        n_third=1.0e25,
+        tau_expansion=1.4e-3,
+    )
+    ratio = 5.0e20 / 5.0e24
+    assert station.da_dissociation_oh_limited == pytest.approx(
+        station.da_dissociation_h_limited * ratio, rel=1e-9
+    )
+    assert station.tau_dissociation_oh_limited == pytest.approx(
+        station.tau_dissociation_h_limited / ratio, rel=1e-9
+    )
+
+
+def test_the_conservative_edge_can_freeze_where_the_optimistic_one_does_not() -> None:
+    """The bracket has to be able to straddle the verdict, or it is not doing any work.
+
+    Same state, same expansion: with an OH always available the chemistry keeps up; with only the
+    equilibrium OH it does not. That is the entire content of the finding, at one station.
+    """
+    station = recombination.freeze_station(
+        time=1.0e-3,
+        temp=6000.0,
+        rho=0.1,
+        n_e=5.0e21,
+        n_h=5.0e24,
+        n_oh=5.0e19,
+        n_third=1.0e25,
+        tau_expansion=1.4e-3,
+    )
+    assert station.verdict_dissociation_h_limited == "equilibrium"
+    assert station.verdict_dissociation_oh_limited == "frozen"
+
+
+def test_the_held_bond_energy_is_not_the_dissociated_fraction() -> None:
+    """The store is what no bond is paying for, and OH pays for half of one.
+
+    Charging `(1 - n_H2O/n_f) * D_AT` was right when the only alternatives to H2O were free atoms.
+    With the intermediates it overcharges: at 0.32 kg/m^3 and 3000 K the old measure calls the gas
+    14.4% dissociated and would strand 7.3 MJ/kg, while the bonds actually missing are worth
+    2.5 MJ/kg -- a factor of 3.
+    """
+    rho, temp = 0.32, 3000.0
+    held = eos_water.bond_energy_held(rho, temp)
+    n_f = rho / eos_water.M_H2O
+    old_measure = (
+        (1.0 - eos_water.composition(rho, temp).n_h2o / n_f) * eos_water.D_AT / (eos_water.M_H2O)
+    )
+    assert held < 0.4 * old_measure
+    assert held / eos_water.FULL_ATOMIZATION_ENERGY == pytest.approx(0.049, abs=0.005)
+
+
+def test_a_fully_atomised_gas_still_strands_the_whole_ceiling() -> None:
+    """The generalisation must not move the case it generalises: where nothing is molecular, the
+    held bond energy is the full atomization energy and the old form was right."""
+    rho, temp = 2.354e-2, 16_062.0
+    assert eos_water.bond_energy_held(rho, temp) == pytest.approx(
+        eos_water.FULL_ATOMIZATION_ENERGY, rel=1e-3
+    )
