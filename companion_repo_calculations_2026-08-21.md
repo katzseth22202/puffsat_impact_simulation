@@ -2179,6 +2179,11 @@ is the expression above.
 exhaust at all** above `k = 19.4`, and `two_wave_growth._K_SEARCH_MAX` is **80**. The chain
 optimiser's search box currently extends deep into territory the chemistry forbids.
 
+> **Amended 2026-08-25 when the surface was built.** That `k` boundary assumes `phi = 1` and is
+> **too pessimistic** -- the toll is self-limiting, because a plume that never dissociates cannot
+> strand the store. The real bound on `k` is the paper's own **ignition bill**, not the bond bill,
+> and it binds first. See the outcome under "`puffsat_impact_simulation` delivers" below.
+
 **One of the paper's own worked numbers moves directly.** `sec:two_leg_nozzle`: "a gas converting
 all of that to directed motion expands at `sqrt(2u)` = 17 km/s." With the toll paid it is
 **14.1 km/s, -19%**.
@@ -2255,23 +2260,53 @@ against a nozzle at a value it may not.
 Settled by Seth 2026-08-25 ("go with your recommendation"). It follows the boundary the
 plume-state table already uses (`9d7906c`: this repo publishes, `aim` cites).
 
-### `puffsat_impact_simulation` delivers
+### `puffsat_impact_simulation` delivers -- **DONE 2026-08-25**
 
-**A published `eta_chem(w, k)` surface plus a closed-form fit**, because the toll depends on `k`
-through the fireball's own density and freeze point, which only the solver knows.
+`python/puffsat/toll.py`, `make analysis-toll`, `data/results/eta_chem.csv`, 11 tests.
+81 nodes: `w` = 40-80 km/s on nine values including every anchor the paper and `aim` quote,
+`k` = 0.5-20. Chained from `plume.dissipated_energy` -> `expansion.temperature_at` ->
+`fireball.scan`, with no new physics, so there is no second copy of any of them to keep in step.
 
-- [ ] extend the fixed four-leg `expansion.PLUME_STATES` to a **`(w, k)` grid**. `w` = 40-80 km/s
-      covering both cadence cases and both legs; `k` = 0.5-20, which brackets `aim`'s search box
-      up to where the chemistry forbids exhaust entirely.
-- [ ] per node: stagnation state, how much actually dissociates *at that state* (do **not** assume
-      full atomization at the cold, high-`k` corner -- that is the one place my scratch numbers
-      charge a toll the plume may not owe), where the store freezes, and `phi` = the held bond
-      fraction there.
-- [ ] emit `eta_chem` and `e_avail`, a fit good to a few percent, and the `k` at which `eta_chem`
-      reaches zero for each `w`.
-- [ ] a `make` target and `data/results/` artifact, modelled on `analysis-fireball`.
-- [ ] tests: the closed form reproduces the solver where `phi -> 1`; `eta_chem -> 1` as
-      `E_B -> 0`; monotone falling in `k` and rising in `w`.
+**`eta_chem` over the grid** (multiply `sqrt(1+k)` by this, never the momentum term):
+
+| `w` [km/s] | `k=0.5` | `k=1` | `k=2` | `k=4` | `k=6` | **`k=8.5`** | `k=12` | `k=16` | `k=20` |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 45.58 | 0.963 | 0.950 | 0.924 | 0.869 | 0.810 | **0.754** | 0.707 | 0.686 | 0.688 |
+| 56.53 | 0.976 | 0.968 | 0.951 | 0.917 | 0.881 | **0.835** | 0.766 | 0.728 | 0.693 |
+| 61.83 | 0.980 | 0.973 | 0.959 | 0.931 | 0.902 | **0.864** | 0.808 | 0.751 | 0.721 |
+| 65.13 | 0.982 | 0.976 | 0.963 | 0.938 | 0.912 | **0.879** | 0.829 | 0.770 | 0.732 |
+| 75.00 | 0.986 | 0.982 | 0.972 | 0.954 | 0.934 | **0.910** | 0.874 | 0.832 | 0.787 |
+
+**Two things came out other than the ones the item asked for, and both change how `aim` must
+read this table.**
+
+**1. `eta_chem` is not monotone in `k`, and the `k_max` boundary in the spec above is wrong.**
+That boundary was computed at `phi = 1`; it says 40 km/s has no exhaust above `k` = 14.7, while
+the solve reads **0.70 at `k` = 20**. Both are right about their own question. **The toll is
+self-limiting:** a cold, dilute plume never fully dissociates, so it cannot strand a store it
+never built. `phi` falls to **0.38** at (40 km/s, `k` = 20), and `eta` turns and rises again.
+Charging the full bill there would have invented energy the plume never held -- which is exactly
+the failure the item warned itself about, and it is a factor of `0.70` rather than a rounding.
+
+**2. That recovery is a trap, and the surface now ships a gate against it.** Every node whose
+`phi` falls meaningfully below 1 is a node that **fails the paper's own 85.1 MJ/kg ignition
+bill** -- it never becomes a conducting plasma, and a magnetic nozzle has nothing to grip. That
+is "mass the field fails to grip", a *different* term of `eta_jet` which this module does not
+compute. 71 of the 81 nodes ignite. **`aim` must read `ignites` before `eta`**, or its optimiser
+will walk into the cold corner and read a flattering number off a plume the field cannot hold.
+
+**Can `aim` skip the solver?** Yes, inside the igniting region, with a stated margin. `phi <= 1`
+and `eta` falls with `phi`, so `eta_chem(w, k, 1)` is a **floor** that can never overstate the
+surface. Across the 71 igniting nodes `phi` bottoms at **0.859** and the floor understates by at
+most **0.057**. It is not exact -- the cold anchor (45.58, `k` = 8.5) has `phi` = 0.927 because
+the plume is cool enough at the lip that some water re-forms, so the real ceiling is **0.754**
+against the floor's 0.731. Conservative in the direction that matters.
+
+*Assumption stated rather than buried:* the surface holds the bag **density** at the flown
+0.323 kg/m^3, i.e. the bag is resized with `k`. That matches the paper, which sweeps bag radius
+as a live design variable (`tab:bag_sizing`). Holding bag *volume* fixed instead would make the
+plume density scale with `(1+k)`; `toll.density_sensitivity` exists to price that and has not
+been run.
 
 ### `aim_is_all_you_need` delivers
 

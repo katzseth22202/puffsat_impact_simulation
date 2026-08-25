@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-toll analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -175,6 +175,18 @@ data/results/fireball_freeze.csv: python/puffsat/fireball.py python/puffsat/reco
                                   python/puffsat/expansion.py python/puffsat/eos_water.py
 	@mkdir -p data/results
 	PYTHONPATH=python uv run python -m puffsat.fireball
+
+## analysis-toll: the eta_chem(w, k) surface `aim_is_all_you_need` consumes (Q-R). The ceiling
+## frozen chemistry puts on the magnetic nozzle's GROSS jet -- it multiplies sqrt(1+k) and NOT the
+## momentum term beta carries with it. Committed to the tree (not just gitignored output) because a
+## consumer in another repository cannot regenerate it -> data/results/eta_chem.csv
+analysis-toll: data/results/eta_chem.csv
+
+data/results/eta_chem.csv: python/puffsat/toll.py python/puffsat/plume.py \
+                           python/puffsat/fireball.py python/puffsat/expansion.py \
+                           python/puffsat/eos_water.py
+	@mkdir -p data/results
+	PYTHONPATH=python uv run python -m puffsat.toll
 
 ## analysis-plume: the plume-state table `aim_is_all_you_need` cites -- (w, rho) -> (T, f, P)
 ## across the burn envelope, solved on eos_water instead of that repo's own single-species Saha.

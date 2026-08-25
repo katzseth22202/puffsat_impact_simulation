@@ -271,11 +271,16 @@ def scan(
     half_angle_deg: float = DIVERGENCE_HALF_ANGLE_DEG,
     stride: int = 4,
     steps: int = 320,
+    rho_0: float = expansion.BAG_RHO,
+    expansion_ratio: float = EXPANSION_RATIO,
 ) -> list[FreezeRow]:
-    """Race atomic recombination against the free expansion at every station."""
-    rows = list(_cached_history(temp_0, half_angle_deg, expansion.BAG_RHO, steps, EXPANSION_RATIO))[
-        ::stride
-    ]
+    """Race atomic recombination against the free expansion at every station.
+
+    `rho_0` and `expansion_ratio` are parameters rather than module constants because `toll.py`
+    sweeps `(w, k)` and needs both: the reservoir density is a design variable, and integrating
+    three decades past a freeze that happens at the lip is most of the cost of a grid.
+    """
+    rows = list(_cached_history(temp_0, half_angle_deg, rho_0, steps, expansion_ratio))[::stride]
     out: list[FreezeRow] = []
     for prev, row in pairwise(rows):
         comp = eos_water.composition(row.rho, row.temp)
