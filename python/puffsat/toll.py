@@ -41,6 +41,23 @@ from pathlib import Path
 
 from puffsat import eos_water, expansion, fireball, plume
 
+#: Minimum stagnation temperature [K] for a node to count as a realistic operating point
+#: (Seth, 2026-08-25). **This is the gate `aim` should use**, and it is better than the energy bill
+#: below because it is stated in the variable that actually controls conductivity.
+#:
+#: **Why 10 000 K is the right height, and not too high.** Conductivity is not what fails at the
+#: cold corner -- the 1% potassium seed keeps supplying electrons long after the water stops, so
+#: `sigma` is still 1480 S/m at 10 000 K and 403 S/m even at 4500 K. What fails is *dissociation*:
+#: below ~10 000 K the plume never breaks up, and the excluded nodes sit at `phi` = 0.38-0.75, a
+#: barely-dissociated mush. The gate separates that corner cleanly, and every node it admits has
+#: `phi >= 0.777`, which is the region where the closed form is a tight floor.
+#:
+#: **What it does NOT do.** It is not a stability gate. ADR-0038's electrothermal verdict flips
+#: between `T_0` = 15 170 and 19 710 K -- *above* this line and above the flown cold anchor -- so
+#: the design already operates on the unstable side at its cold end. That is Q-O, still open, and
+#: folding it in here would hide it.
+MIN_STAGNATION_TEMP = 10_000.0
+
 #: The paper's ignition bill [J/kg of merged mass]: vaporizing the slug, dissociating it and
 #: heating it to 15 000 K (`sec:watering_it_down`). A collision that does not clear this does not
 #: produce a conducting plume, and a magnetic nozzle has nothing to grip. It is **not** the same
@@ -112,6 +129,46 @@ def zero_slug_ratio(closing_speed: float, bond_fraction: float = 1.0) -> float:
     return closing_speed**2 / (2.0 * bond_fraction * E_BOND) - 1.0
 
 
+def stagnation_temperature(closing_speed: float, slug_ratio: float, rho_bag: float) -> float:
+    """Stagnation temperature [K] for one `(w, k)`.
+
+    The cheap half of a node: no freeze solve, so `admissible_slug_ratios` can bisect on it.
+    """
+    return expansion.temperature_at(
+        rho_bag, plume.dissipated_energy(closing_speed, slug_ratio), eos_water.pressure_energy
+    )
+
+
+def admissible_slug_ratios(
+    closing_speed: float,
+    rho_bag: float = plume.BAG_RHO,
+    min_temp: float = MIN_STAGNATION_TEMP,
+) -> tuple[float, float] | None:
+    """The `(k_lo, k_hi)` interval where the plume clears `min_temp`, or `None` if none does.
+
+    **This is what replaces `two_wave_growth._K_SEARCH_MAX = 80`.** The dissipated energy per kg
+    goes as `k/(1+k)^2`, which *peaks at k = 1* and falls away on both sides, so the admissible set
+    is a closed interval rather than everything below a maximum -- the paper says so too
+    (`sec:two_leg_nozzle`), and gives [0.098, 10.21] at 45.58 km/s for its own 85.1 MJ/kg bill.
+    Too much slug spreads a fixed energy too thin; too little dissipates almost nothing.
+
+    Bisected on each side of the `k = 1` peak, on the cheap stagnation solve only.
+    """
+    if stagnation_temperature(closing_speed, 1.0, rho_bag) < min_temp:
+        return None
+
+    def bisect(lo: float, hi: float) -> float:
+        for _ in range(60):
+            mid = 0.5 * (lo + hi)
+            if stagnation_temperature(closing_speed, mid, rho_bag) >= min_temp:
+                lo = mid
+            else:
+                hi = mid
+        return 0.5 * (lo + hi)
+
+    return bisect(1.0, 1.0e-6), bisect(1.0, 1.0e4)
+
+
 @dataclass(frozen=True)
 class TollPoint:
     """One node of the surface: what `aim` gets back for a `(w, k)` it supplies."""
@@ -138,6 +195,17 @@ class TollPoint:
     def lights(self) -> bool:
         """Whether the collision dissipates enough to pay the bond bill at all."""
         return self.available > 0.0
+
+    @property
+    def conducts(self) -> bool:
+        """Whether the stagnation state clears `MIN_STAGNATION_TEMP` -- the recommended gate.
+
+        Slightly *looser* than `ignites`: it admits three nodes at 72-75 MJ/kg that the paper's
+        85.1 bill rejects. That bill is defined as heating to 15 000 K, which is a design target
+        rather than a floor, and this EOS puts those nodes at 10 000-11 000 K with `sigma` of
+        1500-2200 S/m. Admitting them is deliberate; both flags ship so a consumer can disagree.
+        """
+        return self.temp_0 >= MIN_STAGNATION_TEMP
 
     @property
     def ignites(self) -> bool:
@@ -248,7 +316,16 @@ def main() -> None:
     for w, rows in by_speed.items():
         print(f"  {w / 1e3:9.2f} | " + " ".join(f"{p.bond_fraction:7.4f}" for p in rows))
 
-    print("\n  does it ignite? (dissipated >= 85.1 MJ/kg -- the gate that actually binds cold)")
+    print(
+        f"\n  admissible k interval (T_0 >= {MIN_STAGNATION_TEMP:.0f} K)"
+        f" -- replaces aim's flat k <= 80"
+    )
+    for w in SPEEDS:
+        span = admissible_slug_ratios(w)
+        shown = f"[{span[0]:.3f}, {span[1]:6.2f}]" if span else "empty -- no k lights this speed"
+        print(f"    w = {w / 1e3:5.2f} km/s -> k in {shown}")
+
+    print("\n  does it ignite? (dissipated >= 85.1 MJ/kg -- the paper's own bill, for comparison)")
     print(f"  {'w [km/s]':>9} |{header}")
     for w, rows in by_speed.items():
         print(f"  {w / 1e3:9.2f} | " + " ".join(f"{('y' if p.ignites else 'NO'):>7}" for p in rows))
@@ -266,7 +343,7 @@ def main() -> None:
 
     lines = [
         "closing_speed_km_s,slug_ratio,rho_bag_kg_m3,dissipated_MJ_kg,temp_0_K,"
-        "rho_freeze_kg_m3,temp_freeze_K,bond_fraction,available_MJ_kg,eta_chem,ignites"
+        "rho_freeze_kg_m3,temp_freeze_K,bond_fraction,available_MJ_kg,eta_chem,conducts,ignites"
     ]
     for p in points:
         rf = f"{p.rho_freeze:.6e}" if p.rho_freeze is not None else ""
@@ -275,7 +352,7 @@ def main() -> None:
             f"{p.closing_speed / 1e3:g},{p.slug_ratio:g},{p.rho_bag:g},"
             f"{p.dissipated / 1e6:.4f},{p.temp_0:.1f},{rf},{tf},"
             f"{p.bond_fraction:.6f},{p.available / 1e6:.4f},{p.eta:.6f},"
-            f"{int(p.ignites)}"
+            f"{int(p.conducts)},{int(p.ignites)}"
         )
     DEFAULT_TABLE_PATH.parent.mkdir(parents=True, exist_ok=True)
     DEFAULT_TABLE_PATH.write_text("\n".join(lines) + "\n")

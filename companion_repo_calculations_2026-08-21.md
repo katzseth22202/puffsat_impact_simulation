@@ -2302,6 +2302,49 @@ most **0.057**. It is not exact -- the cold anchor (45.58, `k` = 8.5) has `phi` 
 the plume is cool enough at the lip that some water re-forms, so the real ceiling is **0.754**
 against the floor's 0.731. Conservative in the direction that matters.
 
+**3. The gate is now a temperature, not an energy bill, and it yields a `k` interval.** Seth,
+2026-08-25: constrain `k` to where the plume is realistically hot. **`T_0 >= 10 000 K`**, and the
+question asked with it -- *is that too high, given the potassium seed?* -- turns out to be the
+right question with a clean answer: **no, and conductivity is not what fails down there at all.**
+
+| `T_0` | `sigma` at stagnation | `T` at nozzle exit | exit `sigma` | leak |
+| ---: | ---: | ---: | ---: | ---: |
+| 15 170 K (flown cold anchor) | 7229 S/m | 5359 K | 555 | 0.6% |
+| 10 000 | 1480 | 4415 | 473 | **0.9%** |
+| 4 514 (coldest grid node) | 403 | -- | -- | -- |
+
+**The seed does exactly what it was put there to do**: it keeps supplying electrons long after the
+water stops, so `sigma` never falls off a cliff -- 1480 S/m at the gate and still 403 S/m at
+4500 K. And the **dissociation buffer** holds the exit temperature up: dropping `T_0` from 15 170
+to 10 000 K moves the exit only 5359 -> 4415 K, and the leak 0.6% -> 0.9%. So 10 000 K is
+comfortable, not marginal.
+
+**What actually fails below the gate is dissociation.** The seven excluded nodes sit at
+`phi` = 0.38-0.75 -- a barely-broken mush. Everything admitted has `phi >= 0.777`, which is
+precisely the region where the closed-form floor is tight. The gate and the deliverable's validity
+region coincide, which is a good sign rather than a coincidence.
+
+**The usable output is a per-speed `k` interval**, and it is what should replace
+`two_wave_growth._K_SEARCH_MAX = 80`. `k/(1+k)^2` peaks at `k = 1`, so the admissible set is a
+closed interval on both sides -- the paper says so too and gives [0.098, 10.21] at 45.58 km/s for
+its own 85.1 MJ/kg bill; the 10 kK gate reads **[0.081, 12.29]**, slightly looser, which is the
+expected direction since that bill targets 15 000 K.
+
+| `w` [km/s] | 45.58 | 56.53 | 61.83 | 65.13 | 75.00 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `k_max` | **12.29** | 20.06 | 24.40 | 27.31 | **36.88** |
+
+**So the binding numbers for the two legs Seth specified:** `k_overtake <= 12.29`, set by the
+3-synodic burn's cold end at 45.58 km/s; `k_headon <= 36.88` at 75 km/s. **The flown `k` = 8.5 is
+comfortably inside both, and the head-on leg has headroom the overtake does not** -- which is the
+direction the impulse-per-projectile optimum wanted to go anyway.
+
+**One caveat, stated because folding it in would hide it.** This is **not** a stability gate.
+ADR-0038's electrothermal verdict flips between `T_0` = 19 710 (stable) and 15 170 K (unstable),
+which is *above* this line **and above the flown cold anchor**. The design already operates on the
+unstable side at its cold end; that is Q-O, still undecided, and no `T_0` gate that admits the
+paper's own cold anchor can protect against it.
+
 *Assumption stated rather than buried:* the surface holds the bag **density** at the flown
 0.323 kg/m^3, i.e. the bag is resized with `k`. That matches the paper, which sweeps bag radius
 as a live design variable (`tab:bag_sizing`). Holding bag *volume* fixed instead would make the
@@ -2310,16 +2353,116 @@ been run.
 
 ### `aim_is_all_you_need` delivers
 
-- [ ] move the recovery scaling inside `sqrt(1+k)` in `nozzle_analysis._sigma` and
-      `_sigma_overtaking`, so `eta_jet = eta_chem * eta_geom` multiplies the gross jet and the
-      momentum term stays untouched;
-- [ ] cap `_K_SEARCH_MAX` by the `eta_chem = 0` boundary rather than a flat 80;
-- [ ] re-optimise **two** slug ratios against **30-year growth** -- `k_headon` and `k_overtake`,
-      each one number for the whole chain, with the overtake's value serving its whole falling
-      speed range on both cadence cases;
+**Written to be self-contained.** Everything needed to do this work is in this subsection; nothing
+above it has to be read first, though the rest of Q-R is the argument for why.
+
+#### Where the input comes from
+
+Three repositories are involved and it is easy to think there are two:
+
+- `github.com/katzseth22202/aim_is_all_you_need` -- **this work.** The trajectories, the adaptive
+  2S/3S cadence, and the growth chain.
+- `github.com/katzseth22202/Balloon-Pulse-Propulsion` -- **the paper.** `templateArxiv.tex`, where
+  `tab:space_mortgage_growth`, `tab:two_leg_growth` and `sec:jet_efficiency` live.
+- `puffsat_impact_simulation` -- **the solvers.** It produced the input below.
+
+The input is **`data/results/eta_chem.csv`** in `puffsat_impact_simulation`, committed to the tree
+(not gitignored) precisely because this repository cannot regenerate it. Regenerate there with
+`make analysis-toll`. Columns:
+
+    closing_speed_km_s, slug_ratio, rho_bag_kg_m3, dissipated_MJ_kg, temp_0_K,
+    rho_freeze_kg_m3, temp_freeze_K, bond_fraction, available_MJ_kg, eta_chem,
+    conducts, ignites
+
+81 rows: `w` = 40, 45.58, 50, 56.53, 61.83, 65.13, 70, 75, 80 km/s crossed with
+`k` = 0.5, 1, 2, 4, 6, 8.5, 12, 16, 20. **Filter on `conducts` = 1** (74 rows); `ignites` is the
+paper's own stricter 85.1 MJ/kg bill, carried for comparison, and the two disagree about only
+three nodes at 72-75 MJ/kg.
+
+**You may skip the CSV entirely inside the admissible region.** `eta_chem(w, k, phi)` with
+`phi = 1` is a **floor** that can never overstate the surface:
+
+    eta_chem = sqrt(1 - 2 * E_B * (1 + k) / w^2)      E_B = 50.94e6 J/kg, w in m/s
+
+Across the 74 admitted nodes it understates the solved value by at most **0.057**. Use the CSV
+when that slack matters, the formula otherwise.
+
+#### The one thing most likely to be got wrong
+
+`eta_chem` scales the **gross jet only**. `nozzle_analysis._sigma` and `_sigma_overtaking` write
+
+    beta = (sqrt(1+k) - 1) / k        # head-on, momentum debit
+    beta = (1 + sqrt(1+k)) / k        # overtake, momentum bonus
+
+and multiply the whole expression by `recovery`. The `-1` and `+1` are the merged slug's bulk
+drift -- **pure momentum conservation, which no chemistry can touch** (Seth, 2026-08-25). So:
+
+    beta_headon   = (eta_chem * eta_geom * sqrt(1+k) - 1) / k
+    beta_overtake = (1 + eta_chem * eta_geom * sqrt(1+k)) / k
+
+**Three efficiencies are in play and they are not interchangeable.** `eta_jet` (the paper's
+`sec:jet_efficiency`) scales the gross jet *before* the momentum debit and has a floor at
+`sqrt(m_rp)`. `e_2` / `recovery` scales the net *after* the debit and has no floor. `eta_chem` is a
+*component of* `eta_jet` -- the paper already defines `eta_jet^2` to include "frozen ionization or
+dissociation energy" -- so **do not also charge it as a separate energy term; that double-counts.**
+Write `eta_jet = eta_chem * eta_geom` and sweep `eta_geom` for the four remaining contributions
+(divergence, exhaust-speed spread, radiative escape, mass the field fails to grip).
+
+Consequence to expect: the head-on leg regains a forward-thrust floor at `eta_jet = 1/sqrt(1+k)`,
+which is **0.324 at `k` = 8.5**, and is levered worse than the overtake because it must buy the
+debit back out of a shrinking jet.
+
+#### The checklist
+
+- [ ] move the `recovery` scaling inside `sqrt(1+k)` in `nozzle_analysis._sigma` and
+      `_sigma_overtaking`, per the two expressions above;
+- [ ] **replace `two_wave_growth._K_SEARCH_MAX = 80` with the per-speed interval below.**
+      *(An earlier draft of this item said to cap it at the `eta_chem = 0` boundary. That was
+      written before the surface was built and is **wrong** -- that boundary assumes `phi = 1`
+      and is far too pessimistic, because a plume that never dissociates cannot strand the store.
+      The real bound is the stagnation-temperature gate.)* Admissible `k` is a **closed interval**,
+      not a ceiling, because `k/(1+k)^2` peaks at `k = 1`:
+
+      | `w` [km/s] | 40 | 45.58 | 50 | 56.53 | 61.83 | 65.13 | 70 | 75 | 80 |
+      | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+      | `k_min` | 0.112 | 0.081 | 0.066 | 0.050 | 0.041 | 0.037 | 0.031 | 0.027 | 0.024 |
+      | `k_max` | 8.96 | **12.29** | 15.23 | 20.06 | 24.40 | 27.31 | 31.86 | **36.88** | 42.25 |
+
+      Gate is `T_0 >= 10 000 K` (Seth, 2026-08-25). Compare the paper's own [0.098, 10.21] at
+      45.58 km/s for its 85.1 MJ/kg bill -- same shape, slightly tighter, as expected.
+- [ ] re-optimise **two** slug ratios against **30-year growth** -- `k_headon` and `k_overtake`.
+      Seth, 2026-08-25: `k` may differ between legs but **cannot be reconfigured per pulse**, so
+      each is one number for the whole chain and must serve every closing speed its leg sees.
+      **The coldest pulse binds:** `k_overtake <= 12.29` from the 3-synodic burn's cold end at
+      45.58 km/s; `k_headon <= 36.88` at 75 km/s. The flown `k` = 8.5 is inside both, and the
+      head-on leg has headroom the overtake does not.
 - [ ] regenerate `tab:space_mortgage_growth` and `tab:two_leg_growth`, with the `e` axes relabelled
-      as `eta_geom` and the chemistry ceiling shown, so a reader can see which rows are reachable;
-- [ ] revisit ADR 0014/0015 on the matched-pair point above.
+      as `eta_geom` and the chemistry ceiling shown, so a reader can see which rows are reachable.
+      **Expect the two tables to move by different amounts:** the first keeps a *plate* on the
+      growth push and a plate owes no chemistry, so the toll reaches only `e_2` at ~75 km/s where
+      `eta_chem` is 0.910; the second puts a nozzle on both legs and also eats 0.754-0.835 on the
+      growth push.
+- [ ] revisit **ADR 0014/0015**. ADR 0015 compares nozzle against plate at matched quality
+      `f = e_1`. That is now doubtful for two independent reasons: its stated premise (that
+      `f = 0.8` sits outside the validated envelope) was already addressed -- `puffsat_impact_sim`
+      measured `f` inside the growth push's own speed range -- and `f` and `e_1` **cannot be swept
+      as a matched pair**, because they have different physical ceilings. `f` is a plate
+      restitution carrying ADR-0026's frozen bracket; `e_1` is a nozzle recovery carrying the
+      `eta_chem` ceiling above.
+
+#### What this input does *not* cover, so do not read it as a clean bill
+
+- **It is not a stability gate.** ADR-0038 (in `puffsat_impact_sim`) finds the electrothermal
+  verdict flips between `T_0` = 19 710 K (stable) and 15 170 K (unstable) -- above the 10 kK gate
+  **and above the paper's own flown cold anchor**. The design already runs on the unstable side at
+  its cold end. That is Q-O, undecided, and no `T_0` gate that admits the cold anchor can protect
+  against it.
+- **`eta_geom` is still entirely unmeasured.** `eta_chem` bounds one of the five contributions to
+  `eta_jet`. The other four are not bounded by anything in either repository.
+- **The bag is assumed resized with `k`**, holding plume density at the flown 0.323 kg/m^3, which
+  matches the paper's treatment of bag radius as a live design variable (`tab:bag_sizing`). Holding
+  bag *volume* fixed instead would make density scale with `(1+k)` and move the freeze;
+  `toll.density_sensitivity` exists to price that and **has not been run**.
 
 **Not owed by either repo, and worth saying:** the middle of Q-P(b)'s bracket still needs a
 finite-rate network with OH, H2 and O2 as evolved species. Q-P(b) showed the bracket has no width

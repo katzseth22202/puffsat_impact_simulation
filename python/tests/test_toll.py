@@ -171,3 +171,62 @@ def test_the_closed_form_is_conservative_wherever_the_plume_ignites() -> None:
     cold = toll.toll_point(45.58e3, 8.5)
     assert cold.bond_fraction == pytest.approx(0.927, abs=0.01)
     assert cold.eta == pytest.approx(0.754, abs=0.005)
+
+
+def test_the_temperature_gate_separates_the_mush_and_the_seed_is_why_it_can_sit_at_10_kK() -> None:
+    """Seth's gate, 2026-08-25, and the check that 10 000 K is not set too high.
+
+    The worry was that a 10 kK floor might be stricter than the potassium seed requires. It is not,
+    and conductivity is not what fails down there at all: the seed holds `sigma` at 1480 S/m at
+    10 000 K and still 403 S/m at 4500 K. What fails is dissociation -- the excluded nodes are a
+    barely-broken mush at `phi` = 0.38-0.75, while everything admitted sits at `phi >= 0.777`,
+    which is the region where the closed-form floor is tight.
+    """
+    admitted = toll.toll_point(56.53e3, 8.5)
+    assert admitted.conducts and admitted.bond_fraction > 0.99
+
+    mush = toll.toll_point(40.0e3, 20.0)
+    assert not mush.conducts
+    assert mush.temp_0 < 6000.0
+    assert mush.bond_fraction < 0.5
+
+
+def test_admissible_k_is_a_closed_interval_because_the_energy_peaks_at_k_equals_one() -> None:
+    """The bound that replaces `aim`'s flat `_K_SEARCH_MAX = 80`.
+
+    `k/(1+k)^2` peaks at `k = 1`, so too much slug spreads a fixed energy too thin and too little
+    dissipates almost nothing -- the admissible set is an interval, not a ceiling. The paper says
+    the same in `sec:two_leg_nozzle` and gives [0.098, 10.21] at 45.58 km/s against its own
+    85.1 MJ/kg bill; the 10 kK gate is slightly looser at [0.081, 12.29], which is the expected
+    direction because that bill targets 15 000 K.
+    """
+    span = toll.admissible_slug_ratios(45.58e3)
+    assert span is not None
+    lo, hi = span
+    assert lo == pytest.approx(0.081, abs=0.005)
+    assert hi == pytest.approx(12.29, abs=0.1)
+    assert lo < 1.0 < hi, "the peak must be inside the interval"
+
+    for k in (lo * 1.05, 1.0, hi * 0.95):
+        assert toll.stagnation_temperature(45.58e3, k, plume.BAG_RHO) >= toll.MIN_STAGNATION_TEMP
+    for k in (lo * 0.9, hi * 1.1):
+        assert toll.stagnation_temperature(45.58e3, k, plume.BAG_RHO) < toll.MIN_STAGNATION_TEMP
+
+    # The interval widens with closing speed, so the *coldest* pulse a leg sees is what binds it.
+    fast = toll.admissible_slug_ratios(75.0e3)
+    assert fast is not None and fast[1] > hi
+
+
+def test_the_flown_slug_ratio_is_inside_every_admissible_interval_it_has_to_serve() -> None:
+    """`k` = 8.5 must clear the coldest pulse of every leg it flies, which is the real constraint.
+
+    Seth, 2026-08-25: `k` may differ between the head-on and overtake legs but cannot be
+    reconfigured per pulse, so each leg carries one value that has to serve its whole falling
+    speed range. The 3-synodic overtake ends at 45.58 km/s and that is what binds.
+    """
+    overtake = toll.admissible_slug_ratios(45.58e3)
+    headon = toll.admissible_slug_ratios(75.0e3)
+    assert overtake is not None and headon is not None
+    overtake_bound, headon_bound = overtake[1], headon[1]
+    assert overtake_bound > 8.5, "the flown k must clear the coldest pulse of the slowest cycle"
+    assert headon_bound > overtake_bound, "and the head-on leg has room the overtake does not"
