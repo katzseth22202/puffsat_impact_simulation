@@ -2113,3 +2113,180 @@ delivers 44%. There is no shallow region in between.
 2D hydro question, and `c_exp` is treated here as a parameter rather than solved. It matters much
 less than the arrival radius does -- across the whole 3-8 km/s range the required arrival radius
 only moves 0.97 to 0.74 of the bore -- so the arrival radius is the thing to ask `aim` for.
+
+---
+
+# Q-R. The recombination loan defaults, and it lands on the growth tables
+
+**Opened 2026-08-25 by Seth, after Q-P(b).** This is the first item that reaches all the way to
+the paper's headline numbers. It is specified here in full because the work splits across two
+repositories and the *insertion point* matters more than the magnitude.
+
+## The paper names this gap three times and defers the number to us
+
+> **`sec:watering_it_down`:** "Breaking water into its atoms takes 50.4 MJ/kg, about 60% of the
+> whole ignition bill... It comes back only if the atoms find each other again as the plume cools
+> and expands. **They do, and quickly.** ... The energy is a loan rather than a cost."
+>
+> **same section, closing line:** "One condition sits under all of it. Recombination freezes if the
+> fireball is thinner than about 0.01 kg/m^3, **and we have not computed the density a real pulse
+> produces.** That number belongs with the radiation-hydrodynamic calculation already owed."
+>
+> **`sec:two_leg_nozzle`:** "**Both tables also assume the dissociation energy comes back during
+> expansion**, which `sec:watering_it_down` argues for and which fails if the fireball is thinner
+> than 0.01 kg/m^3."
+
+**Q-P computed that number.** The freeze is at **1.1e-2 to 2.4e-2 kg/m^3** with **90-100% of the
+loan still outstanding**. Q-P(b) then showed the answer is insensitive to the one rate the model
+was apologising for. **The loan defaults.**
+
+**Why the paper's argument misfires, which matters because the argument is not sloppy.** Its rate
+check is correct: at 1 kg/m^3 three-body recombination really is ~0.01 us against a hundreds-of-us
+expansion. But at 1 kg/m^3 the plume is *fully atomised and has nothing to give back yet*. It only
+has something to return once it has cooled, and by then it sits at ~0.02 kg/m^3 and past the
+nozzle lip, where the local expansion clock steps down 8x in one step (Q-P). **The rate was
+checked at the wrong station**, not estimated wrongly.
+
+## It is not a new term. It is a computed floor under `eta_jet`
+
+`sec:jet_efficiency` already says so:
+
+> "The square `eta_jet^2` is the fraction of available collision energy represented by coherent
+> axial momentum. The single number therefore includes plume divergence, exhaust-speed spread,
+> radiative escape, **frozen ionization or dissociation energy**, and mass the field fails to grip."
+
+So nothing in the model changes. What changes is that one of the five contributions is now
+*computed* rather than swept, and it puts a ceiling on a parameter the growth tables run to 0.90.
+Charging it as a separate energy term instead would **double-count**.
+
+    eta_chem(w, k) = sqrt(1 - 2 E_B phi(w,k) (1+k) / w^2)
+
+`E_B` = 50.94 MJ/kg (this repo's atomization energy; the paper's 50.4 agrees to 1%), `phi` = the
+bond fraction still held at the freeze, which Q-P measures at 0.90-1.00. Derivation: `aim`'s ideal
+gross exhaust momentum is `m w sqrt(1+k)`, which is the whole collision energy `½ m w^2` placed on
+one axis. Paying the toll first reduces the gas speed to `sqrt(w^2/(1+k) - 2 E_B)`, and the ratio
+is the expression above.
+
+| `w` [km/s] | `k=1` | `k=2` | `k=4` | `k=6` | **`k=8.5`** | `k=12` | `k=16` | `k=20` |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 75.00 (head-on depart) | 0.982 | 0.972 | 0.954 | 0.934 | **0.910** | 0.874 | 0.832 | 0.787 |
+| 65.13 (2S overtake top) | 0.976 | 0.963 | 0.938 | 0.912 | **0.879** | 0.829 | 0.769 | 0.704 |
+| 56.53 (3S overtake top) | 0.968 | 0.951 | 0.917 | 0.881 | **0.835** | 0.765 | 0.677 | 0.575 |
+| 45.58 (3S overtake end) | 0.950 | 0.924 | 0.869 | 0.810 | **0.731** | 0.602 | 0.408 | **0.000** |
+
+**And that is before divergence, spread, radiative escape and grip** -- the other four things
+`eta_jet` is defined to carry. Also note the last cell: at 45.58 km/s the plume produces **no
+exhaust at all** above `k = 19.4`, and `two_wave_growth._K_SEARCH_MAX` is **80**. The chain
+optimiser's search box currently extends deep into territory the chemistry forbids.
+
+**One of the paper's own worked numbers moves directly.** `sec:two_leg_nozzle`: "a gas converting
+all of that to directed motion expands at `sqrt(2u)` = 17 km/s." With the toll paid it is
+**14.1 km/s, -19%**.
+
+## The insertion point, and this is the part that is easy to get wrong
+
+**Seth's observation, 2026-08-25, and it is correct: the centre-of-mass momentum term is pure
+momentum conservation and chemistry cannot touch it.** It penalises the head-on leg and helps the
+overtake, unchanged either way. `aim` writes the impulse per slug kg as
+
+    _sigma            beta = (sqrt(1+k) - 1) / k      # head-on, momentum debit
+    _sigma_overtaking beta = (1 + sqrt(1+k)) / k      # overtake, momentum bonus
+
+and multiplies the whole thing by `recovery`. **The toll must scale `sqrt(1+k)` only** -- the gross
+jet -- **not the `-1` or the `+1`:**
+
+    beta_headon   = (eta_chem * eta_geom * sqrt(1+k) - 1) / k
+    beta_overtake = (1 + eta_chem * eta_geom * sqrt(1+k)) / k
+
+Multiplying `recovery` into `beta` as a whole, which is what the code does today, scales the
+momentum term too. That is defensible for the *geometric* losses the paper's `e_2` was defined to
+absorb ("recovery scales what is left after that debit, so it has no such floor"), and it is
+**wrong for the chemistry**, which acts on the jet before the debit. Consequences:
+
+- the head-on leg regains a floor: forward thrust vanishes at `eta sqrt(1+k) = 1`, i.e.
+  `eta > 1/sqrt(1+k)` -- **0.324 at `k` = 8.5**, 0.447 at `k` = 4;
+- the head-on leg is levered worse than the overtake, because it must buy the debit back out of a
+  shrinking jet. At `eta_geom` = 0.8 and `k` = 8.5 the impulse per projectile kg falls **-17.7% at
+  75 km/s and -26.8% at 61.83**, against **-13.1% at 56.53 and -21.5% at 45.58**;
+- but the asymmetry runs the lucky way overall: the leg with the worst toll is the one where the
+  CM term *helps*.
+
+## Which table this damages, and which ADR is exposed
+
+- **`tab:space_mortgage_growth`** keeps a *plate* on the growth push, so the toll reaches only
+  `e_2` at ~75 km/s, where it is mildest (`eta_chem` <= 0.910).
+- **`tab:two_leg_growth`** puts a nozzle on both legs and therefore also eats the 30-47% toll of
+  the growth push.
+
+**So the toll differentially penalises the two-leg nozzle -- the option `sec:two_leg_nozzle`
+concludes is "the better one over most of the range".**
+
+**`aim` ADR 0015 is the decision at risk, for a second independent reason.** It compares nozzle
+against plate **at matched quality, `f = e_1`**, on the argument that `f = 0.8` is the least
+defensible number in that repo. Two things now bear on it. First, the premise was already
+addressed here -- this repository measured `f` inside the growth push's own speed range (the
+routing list's rank `-1` item, still open). Second, and new: **`f` and `e_1` cannot be swept as a
+matched pair, because they have different physical ceilings.** `f` is a plate restitution and
+carries the frozen-chemistry bracket through ADR-0026; `e_1` is a nozzle recovery and carries the
+`eta_chem` ceiling above. Matching them numerically compares the plate at a value it can reach
+against a nozzle at a value it may not.
+
+## The `k` constraint, as Seth specified it 2026-08-25
+
+- **`k` may differ between the two legs** (head-on departure vs overtake growth push) -- the two
+  are different devices in different configurations.
+- **`k` may NOT be reconfigured per pulse.** So each leg carries **one** `k` for the whole chain,
+  and it must serve every closing speed that leg sees.
+- The overtake burn's closing speed **falls** through the burn as the craft accelerates, and falls
+  again on the slower cadence: 65.13 -> ~54 on 2S, 56.53 -> 45.58 on 3S.
+- **45.58 km/s is only reached on the rarer 3S cycle** -- 7 of 11 flown cycles are 2S, 4 are 3S
+  (`aim` ADR 0011: the policy falls back to 3S when the 2S deep-space-manoeuvre proxy exceeds
+  50 m/s). It is an endpoint, not an operating point; do not let it carry worst-case weight it has
+  not earned, and do not quote a closing speed without its cadence case.
+- *Seth's note, recorded with my reading flagged:* "as we accelerate on the overtake, the top
+  56 km/s is worse than the bottom 45 km/s." I read this as **the compromise cost, not the toll**:
+  a single `k` chosen so the cold end still lights sits near `k*(45.58)` = 9.2, which leaves the
+  *hot* end of the burn furthest from its own optimum (`k*(56.53)` = 14.7). The toll itself is
+  worse at the cold end. If a different reading was meant, it changes which end the sweep should
+  be anchored on.
+
+## The split, and what each repository delivers
+
+Settled by Seth 2026-08-25 ("go with your recommendation"). It follows the boundary the
+plume-state table already uses (`9d7906c`: this repo publishes, `aim` cites).
+
+### `puffsat_impact_simulation` delivers
+
+**A published `eta_chem(w, k)` surface plus a closed-form fit**, because the toll depends on `k`
+through the fireball's own density and freeze point, which only the solver knows.
+
+- [ ] extend the fixed four-leg `expansion.PLUME_STATES` to a **`(w, k)` grid**. `w` = 40-80 km/s
+      covering both cadence cases and both legs; `k` = 0.5-20, which brackets `aim`'s search box
+      up to where the chemistry forbids exhaust entirely.
+- [ ] per node: stagnation state, how much actually dissociates *at that state* (do **not** assume
+      full atomization at the cold, high-`k` corner -- that is the one place my scratch numbers
+      charge a toll the plume may not owe), where the store freezes, and `phi` = the held bond
+      fraction there.
+- [ ] emit `eta_chem` and `e_avail`, a fit good to a few percent, and the `k` at which `eta_chem`
+      reaches zero for each `w`.
+- [ ] a `make` target and `data/results/` artifact, modelled on `analysis-fireball`.
+- [ ] tests: the closed form reproduces the solver where `phi -> 1`; `eta_chem -> 1` as
+      `E_B -> 0`; monotone falling in `k` and rising in `w`.
+
+### `aim_is_all_you_need` delivers
+
+- [ ] move the recovery scaling inside `sqrt(1+k)` in `nozzle_analysis._sigma` and
+      `_sigma_overtaking`, so `eta_jet = eta_chem * eta_geom` multiplies the gross jet and the
+      momentum term stays untouched;
+- [ ] cap `_K_SEARCH_MAX` by the `eta_chem = 0` boundary rather than a flat 80;
+- [ ] re-optimise **two** slug ratios against **30-year growth** -- `k_headon` and `k_overtake`,
+      each one number for the whole chain, with the overtake's value serving its whole falling
+      speed range on both cadence cases;
+- [ ] regenerate `tab:space_mortgage_growth` and `tab:two_leg_growth`, with the `e` axes relabelled
+      as `eta_geom` and the chemistry ceiling shown, so a reader can see which rows are reachable;
+- [ ] revisit ADR 0014/0015 on the matched-pair point above.
+
+**Not owed by either repo, and worth saying:** the middle of Q-P(b)'s bracket still needs a
+finite-rate network with OH, H2 and O2 as evolved species. Q-P(b) showed the bracket has no width
+on three legs of four, so this is not blocking -- but at the cold, high-`k` corner, where `phi`
+stops being 1.0, it would start to matter again.
