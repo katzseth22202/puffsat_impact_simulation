@@ -431,13 +431,47 @@ DEFAULT_COOLING_PATH = Path("data/results/cooling_history.csv")
 
 CSV_HEADER = (
     "closing_speed_km_s,branch,time_ms,x_m,area_ratio,rho,temp_k,pressure_pa,speed_m_s,mach,"
-    "radius_m,optical_depth,radiation_regime,t_rad_over_t_transit,v_l,sigma_s_m,rm,leak_fraction"
+    "radius_m,optical_depth,radiation_regime,t_rad_over_t_transit,v_l,sigma_s_m,rm,"
+    "leak_fraction,gamma_t"
 )
 
 
 def plume_radius(area_ratio: float) -> float:
     """Flux-tube radius [m]: `A/A*` is an area ratio, so the radius goes as its square root."""
     return THROAT_RADIUS * math.sqrt(area_ratio)
+
+
+@dataclass(frozen=True)
+class IsentropicExponents:
+    """The two exponents of an isentrope, measured between adjacent stations rather than assumed.
+
+    `gamma_pressure` (`Gamma_1`) governs the sound speed; **`gamma_temperature` (`Gamma_3`) is the
+    one the field-retention question turns on** (Q-J), because what decides whether `Rm` rises or
+    collapses through the push is how fast `T` falls as the plume thins, not how fast `p` does.
+    Quoting the pressure exponent for that argument overstates it by ~0.06.
+    """
+
+    #: `dln p / dln rho`.
+    gamma_pressure: float
+    #: `1 + dln T / dln rho`, so an ideal constant-`gamma` gas returns its own `gamma`.
+    gamma_temperature: float
+
+
+def isentropic_exponents(lo: CoolingRow, hi: CoolingRow) -> IsentropicExponents:
+    """Local isentropic exponents across one station pair.
+
+    A **diagnostic of the real EOS**, not an input to it: nothing in this module assumes a
+    `gamma`. Reading it back out is how the chemistry's buffering becomes a number -- 5/3 means
+    no store is being returned, and the further below it the exponent sits the harder the
+    chemistry is working to hold the temperature up.
+    """
+    if lo.rho == hi.rho:
+        raise ValueError("stations must differ in density")
+    span = math.log(hi.rho / lo.rho)
+    return IsentropicExponents(
+        gamma_pressure=math.log(hi.pressure / lo.pressure) / span,
+        gamma_temperature=1.0 + math.log(hi.temp / lo.temp) / span,
+    )
 
 
 @dataclass(frozen=True)
@@ -588,17 +622,36 @@ def radiated_fraction(samples: Sequence[tuple[float, float]]) -> float:
 
 
 def write_cooling_history(rows: Sequence[HistoryRow], path: Path = DEFAULT_COOLING_PATH) -> None:
-    """Write the cooling history the companion repo's quadrature consumes."""
+    """Write the cooling history the companion repo's quadrature consumes.
+
+    `gamma_t` is carried per station because Q-J's field-retention question reduces to it: an
+    exponent near 1.15 means the chemistry is buffering and `Rm` rises through the push, one near
+    5/3 means it is spent and `Rm` collapses. It is blank on the first station of each branch,
+    which has no predecessor to difference against.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [CSV_HEADER]
+    previous: HistoryRow | None = None
     for h in rows:
         r, rad = h.row, h.radiation
+        same_curve = (
+            previous is not None
+            and previous.branch == h.branch
+            and previous.closing_speed == h.closing_speed
+            and previous.row.rho != r.rho
+        )
+        gamma_t = (
+            f"{isentropic_exponents(previous.row, r).gamma_temperature:.5f}"
+            if same_curve and previous is not None
+            else ""
+        )
+        previous = h
         lines.append(
             f"{h.closing_speed:g},{h.branch},{r.time * 1e3:.6f},{r.x:.4f},{r.area_ratio:.5f},"
             f"{r.rho:.6e},{r.temp:.2f},{r.pressure:.6e},{r.speed:.2f},{r.mach:.4f},"
             f"{plume_radius(r.area_ratio):.4f},{rad.optical_depth:.6e},{rad.regime},"
             f"{rad.cooling_time / max(h.transit_time, 1e-12):.4e},{h.v_l:.6e},"
-            f"{h.sigma:.6e},{h.rm:.6e},{h.leak_fraction:.6f}"
+            f"{h.sigma:.6e},{h.rm:.6e},{h.leak_fraction:.6f},{gamma_t}"
         )
     path.write_text("\n".join(lines) + "\n")
 

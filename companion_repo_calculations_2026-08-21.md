@@ -1461,7 +1461,47 @@ problem, and it is **measured** where the `f` collapse was supposed. **Cost to t
 re-radiation + the vapor curtain is a real modelling task, not a re-run.** **Worth: high -- this,
 not restitution, is the strongest plate-side objection, and the paper currently under-argues it.**
 
-## Q-J. The magnetic nozzle's field retention is coupled to the frozen-recombination bracket.
+## Q-J. Field retention vs the frozen bracket. **ANSWERED 2026-08-24: the coupling is real, the buffer holds on the hot legs, and it does not reach 4000 K.**
+> **Settled on the real isentrope, as this section asked for.** Q-J costed itself at "~1 h (run it
+> on the real isentrope through `eos_water`, and take `v(t)` and `L(t)` from the companion repo's
+> expansion rather than assuming them)". All three now exist, and `data/results/cooling_history.csv`
+> already carried the answer -- it needed reading, not computing. `expansion.isentropic_exponents`
+> makes the exponent an output rather than an assumption; `gamma_t` is now a column.
+>
+> **The mechanism below is right and the split point is right.** `Rm` along the push:
+>
+> | branch | leg | `Rm` throat -> exit | `gamma_T` | leak at exit |
+> | --- | --- | ---: | ---: | ---: |
+> | equilibrium | 75 km/s | **588 -> 1056, rises** | 1.155-1.212 | 0.09% |
+> | equilibrium | 65 | **388 -> 683, rises** | 1.163-1.193 | 0.15% |
+> | equilibrium | 56.53 | **250 -> 361, rises** | 1.189-1.225 | 0.28% |
+> | equilibrium | 45.58 | 85 -> 36, **falls** | **1.295-1.657** | 2.78% |
+> | frozen | 75 | 441 -> 62, collapses | 1.667 | 1.61% |
+> | frozen | 45.58 | 47 -> 10, collapses | 1.667 | 9.69% |
+>
+> **Both of the toy's columns are confirmed** -- an exponent near 1.2 makes `Rm` rise through the
+> push, one near 1.3 or above makes it collapse -- and Q-M established that **equilibrium is the
+> real branch**, so the hot legs land in the good column. The design intuition this section started
+> from is vindicated: the dissociation buffer does hold the field, without any pressure lever.
+>
+> **One claim here is wrong, and it is the one about where the buffer reaches.** This section says
+> `gamma_eff` sits "at 1.11-1.16 through the 4000-8000 K band". **In that band the real value is
+> 1.30-1.66** -- essentially monatomic. The buffering is a property of chemistry *actively
+> returning* a store, and by 4000-8000 K there is none left to return: dissociation is complete
+> (**Q-P**, from the other direction) and ionisation is spent. **So the cold leg is not buffered,
+> its `Rm` falls rather than rises, and it is the one leg where this section's good news does not
+> apply.** That is the third independent question on which the cold leg is the exposed one, after
+> Q-K and Q-O.
+>
+> **The margins were untrustworthy exactly as this section warned.** The toy put the bad column at
+> **89% leak**; the real frozen branch is 1.6-9.7%, an order of magnitude less. Directions solid,
+> magnitudes not -- which is what it predicted about itself.
+>
+> **The coupling claim stands and is now load-bearing in a second place.** The same bracket that
+> sets `e_eff` on the plate decides whether the nozzle keeps its field, and Q-M resolved it. Worth
+> stating in the paper as one question, still.
+
+**The original entry, 2026-08-22:**
 **Opened 2026-08-22, from a design question of Seth's:** *should the nozzle push while the gas is
 still reasonably hot, by keeping the initial steam pressure down?* The direction is right, the
 mechanism named is not, and the steam may already solve it without the lever.

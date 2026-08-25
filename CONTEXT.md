@@ -265,7 +265,13 @@ the *plate*, a different object at the other end of the mission)
 
 **Recombination buffering**:
 The equilibrium plasma returning its ionisation store to the thermal pool as it expands, holding
-`gamma_eff` near 1.15 and *slowing* the temperature fall. The temperature history stays monotone
-decreasing throughout; the store lengthens the fall, it does not reverse it.
+the isentropic exponent `gamma_T = 1 + dlnT/dlnrho` near 1.15 and *slowing* the temperature fall.
+The temperature history stays monotone decreasing throughout; the store lengthens the fall, it does
+not reverse it. **It is a property of chemistry actively returning a store, so it is local, not a
+constant of the plume:** measured at 1.155-1.225 on the hot legs, but **1.30-1.66 on the cold leg**,
+where dissociation is already complete and ionisation spent so there is nothing left to give back
+(Q-J, Q-P). Quote it with the leg. The exponent to quote is `gamma_T`, not `dlnp/dlnrho`, which
+runs ~0.06 higher and overstates the retention argument.
 _Avoid_: "recombination heating", "recombination heats the plasma" (both assert a non-monotonic
-`T(t)` this work does not find, and would be falsifiable as written)
+`T(t)` this work does not find, and would be falsifiable as written); quoting 1.15 as if it held
+everywhere

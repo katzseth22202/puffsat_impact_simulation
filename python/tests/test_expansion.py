@@ -283,3 +283,41 @@ def test_radiated_fraction_is_the_dwell_weighted_loss_not_a_station_average() ->
 
     faster_late = [(0.0, 10.0e-3), (1.0e-3, 10.0e-3), (1.0e-3, 5.0e-3), (2.0e-3, 5.0e-3)]
     assert expansion.radiated_fraction(faster_late) == pytest.approx(0.3)
+
+
+def test_the_isentropic_exponents_show_where_the_buffer_runs_out() -> None:
+    """Q-J: the design question is whether the plume cools slowly enough to hold its field, and
+    the quantity that decides it is `gamma_T = 1 + dlnT/dlnrho`, not the pressure exponent.
+
+    On the hot legs the equilibrium plume sits at **1.155-1.225** -- chemistry returning its store
+    is absorbing energy that would otherwise appear as cooling, which is the buffering CONTEXT.md
+    names. **On the cold leg it runs to 1.66**, essentially the monatomic value, because by
+    4000-8000 K dissociation is already complete (Q-P) and ionisation is spent, so there is no
+    store left to return. Q-J assumed 1.11-1.16 held down through that band; it does not.
+    """
+    hot = expansion.history(75.0, 26200.0, frozen=False, steps=96, stride=8)
+    cold = expansion.history(45.58, 14700.0, frozen=False, steps=96, stride=8)
+
+    hot_gamma = [
+        expansion.isentropic_exponents(a.row, b.row).gamma_temperature for a, b in pairwise(hot)
+    ]
+    cold_gamma = [
+        expansion.isentropic_exponents(a.row, b.row).gamma_temperature for a, b in pairwise(cold)
+    ]
+
+    assert max(hot_gamma) < 1.25, "the hot leg is buffered throughout"
+    assert min(hot_gamma) > 1.10
+    assert max(cold_gamma) > 1.45, "the cold leg loses the buffer and approaches monatomic"
+
+
+def test_a_frozen_expansion_is_monatomic_because_nothing_is_left_to_react() -> None:
+    """The limit that makes the exponent readable: with the composition held fixed, water in this
+    range is fully dissociated and barely ionised, so it is a monatomic gas and `gamma = 5/3`.
+
+    This is what the equilibrium cold leg is converging toward, which is the whole finding.
+    """
+    rows = expansion.history(56.53, 19400.0, frozen=True, steps=96, stride=8)
+    gammas = [
+        expansion.isentropic_exponents(a.row, b.row).gamma_temperature for a, b in pairwise(rows)
+    ]
+    assert all(g == pytest.approx(5.0 / 3.0, rel=5e-3) for g in gammas)
