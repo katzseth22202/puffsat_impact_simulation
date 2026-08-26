@@ -109,6 +109,12 @@ Q-F's own table puts the conductivity cliff at 1841–2378 K for a +1000 K eleva
 2341–2884 K for +500 K — below every exit temperature on either figure — so **the cliff is not
 reached on any leg**.
 
+**Amended 2026-08-26 (ADR-0039): the margin is wider than this says.** Those figures are at the
+retired `v L` = 1.81e4; at the solved 7.4e4 the cliff falls to 1946 K (+500 K) and 1446 K
+(+1000 K), and to 1383 K at the top of the flown band. A faster expansion holds the field to a
+lower temperature, so every number here moves *away* from the exit temperatures and the verdict
+strengthens. Nothing in this ADR's argument changes.
+
 ## Consequences
 
 1. **Q-F(b)'s "the loop is CLOSED at 2000–5000 K … a live concern in this design"** — superseded.

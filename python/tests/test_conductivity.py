@@ -126,6 +126,71 @@ def test_the_cliff_temperature_depends_on_a_product_the_paper_never_states() -> 
         assert 1500.0 < t < 15000.0
 
 
+def test_the_reference_v_l_is_the_solved_expansion_exit_not_a_back_solved_table() -> None:
+    """Deferred item D9: `REF_V_L` moved off the retired 1.81e4 back-solve.
+
+    `v L` is an **output** -- `expansion.HistoryRow.v_l` is the local flow speed times the local
+    flux-tube radius -- so the value this module reports the seed window at has to be a station of
+    the solved expansion, not a number reverse-engineered from the paper's own `Rm` column. The
+    stated leg's nozzle exit is 7.44e4, quoted 7.4e4, and the four flown legs span 5.5e4-9.7e4
+    between them.
+
+    The retired value is kept, and this test is what stops it drifting back in.
+    """
+    assert conductivity.REF_V_L == 7.4e4
+    assert conductivity.RETIRED_V_L == 1.81e4
+    lo, hi = conductivity.V_L_BAND
+    assert lo < conductivity.REF_V_L < hi, "the stated leg must sit inside the flown band"
+    assert lo > conductivity.RETIRED_V_L, "the retired value is below every flown leg's exit"
+
+
+def test_the_cliff_at_the_stated_expansion_is_2450_k_and_the_band_barely_moves_it() -> None:
+    """Deferred item D9/P1: the number the paper prints, and its sensitivity.
+
+    Two claims, and the second is the one that matters. At the stated `v L` the cliff is 2450 K
+    (2449 K at the paper's rounded `rho` = 0.32, 2450 K at the flown 0.323 -- 1 K apart, well below
+    anything this model resolves). Across the *whole* flown band it moves only 2386-2524 K, so the
+    leak limit at 3800 K binds by ~1300 K no matter which leg is flown.
+    """
+    stated = conductivity.cliff_temperature(0.32, 0.01, conductivity.REF_V_L)
+    assert stated == pytest.approx(2449.0, abs=2.0)
+    assert conductivity.cliff_temperature(0.323, 0.01, conductivity.REF_V_L) == pytest.approx(
+        2450.0, abs=2.0
+    )
+    lo, hi = conductivity.V_L_BAND
+    cold = conductivity.cliff_temperature(0.32, 0.01, hi)
+    warm = conductivity.cliff_temperature(0.32, 0.01, lo)
+    assert cold == pytest.approx(2386.0, abs=3.0)
+    assert warm == pytest.approx(2524.0, abs=3.0)
+    assert warm - cold < 150.0, "the whole band spans less than 150 K of cliff"
+    assert 3800.0 - warm > 1250.0, "the leak limit still binds well before the field lets go"
+
+
+def test_interpolating_the_six_tabulated_conductivities_overstates_the_cliff() -> None:
+    """Deferred item D9: *why* 2570 K was wrong, kept executable so it is not re-derived.
+
+    `tab:seed_window` samples every 1000 K while `sigma` climbs 60x between its first two rows, and
+    the crossing lies inside that first interval. Log-interpolating the table and solving `Rm = 1`
+    on the interpolant therefore guesses high -- by about 120 K at the stated `v L`, which is the
+    whole of the 2570-versus-2450 discrepancy.
+
+    The tabulated values are not the problem: they are the same `sigma` the solver uses. Asking six
+    points for a crossing inside their first interval is.
+    """
+    for v_l in (conductivity.RETIRED_V_L, conductivity.REF_V_L, *conductivity.V_L_BAND):
+        solved = conductivity.cliff_temperature(0.32, 0.01, v_l)
+        guessed = conductivity.interpolated_cliff_temperature(0.32, 0.01, v_l)
+        assert guessed > solved, "interpolation must err high, never low"
+        assert 40.0 < guessed - solved < 130.0
+
+    stated = conductivity.REF_V_L
+    assert conductivity.interpolated_cliff_temperature(0.32, 0.01, stated) == pytest.approx(
+        2566.0, abs=3.0
+    )
+    # The crossing really is inside the table's first interval, which is the reason for all of it.
+    assert conductivity.SEED_WINDOW_TEMPS[0] < 2449.0 < conductivity.SEED_WINDOW_TEMPS[1]
+
+
 def test_no_cliff_is_reported_rather_than_extrapolated_when_rm_never_reaches_one() -> None:
     """A small `v L` never holds the field at any temperature in the window, so there is no cliff to
     report. Returning the range edge would look like an answer; raising says what is true.
@@ -143,7 +208,7 @@ def test_seed_window_caps_the_leak_where_the_field_is_not_held() -> None:
     not held. The ionised fraction is capped the same way: the seed cannot supply more electrons
     than it has atoms, which is exactly the saturation the first hand estimate missed.
     """
-    rows = conductivity.seed_window(0.32, 0.01, 1.81e4)
+    rows = conductivity.seed_window(0.32, 0.01, conductivity.REF_V_L)
     assert [r.temp for r in rows] == list(conductivity.SEED_WINDOW_TEMPS)
     for r in rows:
         assert 0.0 <= r.leak_fraction <= 1.0
@@ -275,7 +340,7 @@ def test_seed_window_carries_the_instability_data_without_assuming_a_field() -> 
     water at 13.6 eV against a hotter gas is just as sensitive as the seed at 4.34 eV against a
     cool one. An earlier version asserted a monotone fall to <0.05, which was the seed-only
     artifact rather than the physics."""
-    rows = conductivity.seed_window(0.32, 0.01, 1.81e4)
+    rows = conductivity.seed_window(0.32, 0.01, conductivity.REF_V_L)
     assert all(a.b_field_for_beta_crit < b.b_field_for_beta_crit for a, b in pairwise(rows))
 
     gains = [r.ionisation_sensitivity for r in rows]

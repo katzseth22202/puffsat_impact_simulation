@@ -142,7 +142,8 @@ data/results/lte_validity.csv: data/results/frozen_probe_heavyplate.jsonl data/r
 	PYTHONPATH=python $(PY) -m puffsat.lte
 
 ## analysis-conductivity: Study 1 -- sigma(T, rho, x_K) for the potassium-seeded plasma, the
-## regenerated tab:seed_window, and the conductivity cliff as an output -> data/results/seed_window.csv
+## regenerated tab:seed_window at the solved v*L, and the conductivity cliff as an output --
+## solved beside interpolated across the flown v*L band (ADR-0039) -> data/results/seed_window.csv
 analysis-conductivity: data/results/seed_window.csv
 
 data/results/seed_window.csv: python/puffsat/conductivity.py python/puffsat/eos_water.py

@@ -149,12 +149,33 @@ def sigma(
 
 #: The six temperatures the paper's `tab:seed_window` reports.
 SEED_WINDOW_TEMPS: tuple[float, ...] = (2000.0, 3000.0, 5000.0, 8000.0, 11000.0, 15000.0)
-#: Reference conditions. `rho` and `x_K` are the paper's slug bag values; `v_l` is **not** the
-#: paper's -- it never states one (audit Q-G) -- and is the product implied by back-solving its own
-#: `Rm = 361` row at 15 000 K against the audit's hand-computed conductivity. Stated, not hidden.
+#: Reference conditions. `rho` and `x_K` are the paper's slug bag values.
 REF_RHO = 0.32
 REF_X_K = 0.01
-REF_V_L = 1.81e4
+
+#: The expansion product `v L` this table is reported at [m^2/s] -- an **output of the solved
+#: expansion**, not a back-solve of the paper. `expansion.HistoryRow.v_l` is `speed x flux-tube
+#: radius` at every station; this is its **nozzle-exit** value on the 56.53 km/s equilibrium leg
+#: (7.44e4, quoted 7.4e4), which is the leg the paper states. Run `make analysis-expansion` and read
+#: the last station of `data/results/cooling_history.csv` to reproduce it.
+REF_V_L = 7.4e4
+#: The band the four flown legs actually span at the nozzle exit, low to high: 5.54e4 at 45.58 km/s
+#: on the frozen branch, 9.72e4 at 75 km/s on the equilibrium branch. Quoted to two digits because
+#: the cliff moves only 2386-2524 K across the whole of it, so nothing rests on the middle.
+V_L_BAND: tuple[float, float] = (5.5e4, 9.7e4)
+#: Retired (2026-08-26, deferred item D9). It came from back-solving the paper's own `Rm = 361` row
+#: at 15 000 K, and it encodes a conductivity this module contradicts: `361 / (mu0 x 1.81e4)` is
+#: `15 872 S/m`, against the `6993 S/m` computed here. Those are the same 2.3x gap that
+#: `test_blended_conductivity_reproduces_the_audit_hand_calculation` records against the audit's
+#: corrected hand blend of ~6950 S/m -- so at this `v L` the module gives `Rm = 159`, not 361, and
+#: the constant and the row it was fitted to cannot both be right. Superseded because `v L` is now
+#: an output of the solved expansion instead of a fit to a table. Kept named so `main` prints the
+#: cliff it implied (2859 K) beside the one that holds.
+#:
+#: (It happens to equal the *throat-end* `v L` of the 56.53 km/s equilibrium leg to three digits.
+#: That is a coincidence -- a fit to a hand estimate has no reason to land on a station -- and
+#: nothing is built on it.)
+RETIRED_V_L = 1.81e4
 DEFAULT_SEED_WINDOW_PATH = Path("data/results/seed_window.csv")
 
 #: Vacuum permeability [H/m].
@@ -170,7 +191,9 @@ def magnetic_reynolds(sigma_value: float, v_l: float) -> float:
 
     There is deliberately **no default** for `v_l`. The paper's `tab:seed_window` reports an `Rm`
     column without stating either quantity, so any default here would be inventing the input that
-    makes the column reproducible. The caller must say what expansion it means.
+    makes the column reproducible. The caller must say what expansion it means. `REF_V_L` is what
+    `main` says it means, and it is an output of the solved expansion rather than an invention --
+    but it is a module constant the caller can see, not a default hidden in this signature.
     """
     return MU_0 * sigma_value * v_l
 
@@ -209,6 +232,49 @@ def cliff_temperature(
     for _ in range(80):
         mid = 0.5 * (lo + hi)
         if excess(mid) < 0.0:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+def interpolated_cliff_temperature(
+    rho: float,
+    x_k: float,
+    v_l: float,
+    temps: tuple[float, ...] = SEED_WINDOW_TEMPS,
+) -> float:
+    """The cliff a reader gets from **the six tabulated `sigma` values alone** [K].
+
+    Kept deliberately, and only for contrast: this is the wrong answer, and it is the wrong answer
+    that `tab:seed_window` invites. Log-interpolating `sigma` between the table's rows and solving
+    `Rm = 1` on the interpolant overstates the crossing by +51 to +117 K across the flown `v L`
+    band, because the table samples every 1000 K while `sigma` climbs 60x between its first two
+    rows -- the shape of the steepest part of the curve is simply not in it.
+
+    The tabulated values themselves are not at fault: they *are* the `sigma` the solver uses, at the
+    six temperatures the table reports. What fails is asking a six-point table for a crossing that
+    lies inside its first interval. Use
+    `cliff_temperature`, which bisects the continuous `sigma`; this exists so `main` can print the
+    two side by side and nobody re-derives the interpolated one by hand.
+    """
+    log_sigma = [math.log(sigma(t, rho, x_k)) for t in temps]
+
+    def interpolated(t: float) -> float:
+        for i in range(len(temps) - 1):
+            if temps[i] <= t <= temps[i + 1]:
+                frac = (t - temps[i]) / (temps[i + 1] - temps[i])
+                return math.exp(log_sigma[i] + frac * (log_sigma[i + 1] - log_sigma[i]))
+        raise ValueError(f"{t:.0f} K is outside the tabulated window")
+
+    lo, hi = temps[0], temps[-1]
+    if magnetic_reynolds(interpolated(lo), v_l) > 1.0 or (
+        magnetic_reynolds(interpolated(hi), v_l) < 1.0
+    ):
+        raise ValueError(f"Rm = 1 is not bracketed by the tabulated window at v*L = {v_l:g}")
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if magnetic_reynolds(interpolated(mid), v_l) < 1.0:
             lo = mid
         else:
             hi = mid
@@ -794,8 +860,33 @@ def write_seed_window(rows: list[SeedWindowRow], path: Path = DEFAULT_SEED_WINDO
     path.write_text("\n".join(lines) + "\n")
 
 
+def _report_cliff_band() -> None:
+    """Print the conductivity cliff across the flown `v L` band, solved beside interpolated.
+
+    Both rows are printed on purpose (deferred item D9). The paper quoted 2570 K for years because
+    it came from the interpolated row; printing the two together is what stops that recurring.
+    """
+    lo, hi = V_L_BAND
+    products = ((RETIRED_V_L, "retired"), (lo, "band lo"), (REF_V_L, "stated"), (hi, "band hi"))
+    print(f"  cliff (Rm = 1) at rho = {REF_RHO} kg/m^3, x_K = {REF_X_K}:")
+    print(f"    {'v L [m^2/s]':>12} {'solved':>9} {'interpolated':>13} {'error':>7}  leg")
+    for v_l, label in products:
+        try:
+            solved = cliff_temperature(REF_RHO, REF_X_K, v_l)
+            guess = interpolated_cliff_temperature(REF_RHO, REF_X_K, v_l)
+        except ValueError as exc:
+            print(f"    {v_l:12.3g} no cliff in range: {exc}")
+            continue
+        print(f"    {v_l:12.3g} {solved:8.0f}K {guess:12.0f}K {guess - solved:+6.0f}K  {label}")
+    print(
+        "    solved bisects the continuous sigma; interpolated log-interpolates the six rows "
+        "above and is wrong:\n    the crossing lies inside the table's first interval. "
+        "Do not quote the interpolated column."
+    )
+
+
 def main() -> None:
-    """Regenerate the seed window and report the cliff, for a stated `v L`."""
+    """Regenerate the seed window and report the cliff, at the solved `v L` and across its band."""
     rows = seed_window(REF_RHO, REF_X_K, REF_V_L)
     write_seed_window(rows)
     print(
@@ -809,10 +900,7 @@ def main() -> None:
             f"{r.sigma:12.4g} {r.rm:10.4g} {r.leak_fraction:7.3f} "
             f"{r.ionisation_sensitivity:8.2f} {r.b_field_for_beta_crit:8.2f}T"
         )
-    try:
-        print(f"  cliff (Rm = 1) at {cliff_temperature(REF_RHO, REF_X_K, REF_V_L):.0f} K")
-    except ValueError as exc:
-        print(f"  no cliff in range: {exc}")
+    _report_cliff_band()
     print(
         "  electrothermal screen (superseded, ADR-0038): the two-link form needs beta > "
         f"{BETA_CRIT:g} AND S > {SENSITIVITY_CRIT:g}, but {BETA_CRIT:g} is the strongly "
