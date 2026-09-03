@@ -21,7 +21,7 @@ code that produced them. Every figure here came from a run, not from recall; the
 | **N3** | **Partly.** `eps_b` = 1.5 is a tautology no run can move; `beta(z)` = 0.013–0.073 delivered; a new realizability finding. Liner mass fraction deferred. | **yes** (P6, P7) |
 | **N4** | **Flown case answered; near-Sun declined for cause.** The radiative bracket is 10x wide, not 1.0–3.6%. Two of the paper's own numbers disagree by 10x. | **yes** (P4, P5) |
 | **N5** | **Answered as a constraint on windings**, not a yes or no: ≥ 36 coils. Residence times deferred. | **yes** (P8) |
-| **N6** | **Answered, and it overturns the single-station check.** `M_A` never crosses 1 inside the column. A field window exists that fixes it. | **yes** (P3, P9) |
+| **N6** | **Answered, and it overturns the single-station check.** `M_A` never crosses 1 inside the column; detachment is downstream, 1.4-2.0 exit radii out. | **yes** (P3, P9) |
 | **N7** | **The sign correction delivered**; the realised snowplow value still owed. | **yes** (P10) |
 
 **Ten paper edits fall out, P1–P10.** P1, P3 and P4 are the ones that change a claim rather than a
@@ -345,12 +345,33 @@ conservation ties the exit field to the flare, the fix is geometric: **`A/A*` be
 gives every leg containment *and* detachment**, against the flown 4. The lower bound is set by
 detachment on the coldest equilibrium leg, the upper by containment on the hottest.
 
-**The cost, which is not optional.** One static field cannot be strong for the collision and weak
-for the expansion at the same station, and the paper requires it static in time. A field weakened to
-the release ceiling sits **3–8x under the collision's snowplow pressure** there, so the snowplow gets
-past. Whether that is affordable in ablation is a collision-phase calculation nobody has done.
+**The cost, now computed — and it withdraws the recommendation.** One static field cannot be
+strong for the collision and weak for the expansion at the same station, and the paper requires it
+static in time. Flaring past the flown 4 therefore weakens the field the *collision* sees, and the
+front already fills the bore for the last three quarters of its crossing
+(`sec:needle_through_fog`). With the front expanding adiabatically to pressure balance,
 
-**Reproduce:** `make analysis-nozzle-detachment`.
+    r_front/r_bore = beta^{1/(2 gamma)} = (A/A*_new / 4)^{0.6}  >  1 for any flare past 4,
+
+and the bore's own growth cancels out — a flared bore does not rescue it, because the wall grows as
+`sqrt(A/A*)` while the front grows as `sqrt(A/A*) x (A/A*/4)^{0.6}`. **So the collision front lands
+on the liner in both readings of P7**, by 86% in radius at the recommended 11.3.
+
+That is disqualifying rather than merely costly. The shocked layer runs at **94 600 K** (the
+paper's own figure, cited to this repository), radiating **4.5 TW/m²** against graphite's
+13.1 MW/m² at sublimation — **346 000x** past what the liner can shed. And the paper's booked
+4.9 kg/pulse of ablation is, in the currency that matters here, a limit of **0.46% of pulse energy
+reaching the liner**; 1% would already be double the booking.
+
+**So do not flare to buy detachment.** The window is real but unaffordable.
+
+**And it is unnecessary**, which is the resolution. P3 above already establishes that the paper's
+downstream argument survives: `M_A` crosses 1 **1.4–2.0 exit radii past the exit** at the flown
+flare. The nozzle does not have to achieve detachment inside itself, so it does not have to buy a
+window that costs the liner. **The flown `A/A*` = 4 is the right design; the correction to the
+paper is P3's — say the crossing is downstream — and not a change of flare.**
+
+**Reproduce:** `make analysis-nozzle-detachment`, `make analysis-nozzle-snowplow`.
 
 ---
 
@@ -436,9 +457,10 @@ payload boost ratio** on leg 1, not a slug ratio.
 
 **Two questions this work generated that were not in the seven:**
 
-1. **Is the escaping snowplow affordable?** P9's field window buys detachment by letting the
-   collision-phase snowplow past the weakened exit field, 3–8x over. That is a collision-phase
-   ablation calculation.
+1. ~~**Is the escaping snowplow affordable?**~~ **Answered, and it withdrew P9's fix.** No: the
+   front lands on the liner in both bore readings, and contact is 346 000x past what graphite
+   sheds. The resolution is that the fix was never needed — detachment happens downstream at the
+   flown flare. Folded into P9 above. `make analysis-nozzle-snowplow`.
 2. **What happens when sub-Alfvénic plasma is forced against a wall?** If a physical diverging
    nozzle takes over downstream, the plasma does work against field lines that want to curve back —
    currents into the wall, reaction forces on the last coil. Real MHD, not modelled here.
@@ -455,11 +477,12 @@ Every figure above was produced by running the code on 2026-09-03, not by recall
 | `make analysis-nozzle-field` | P6, P8; the power-law fit, the winding sweep, realizability, the column-length lever |
 | `make analysis-nozzle-detachment` | P3, P9; `M_A(z)`, `beta(z)`, the field window, liner ablation depth |
 | `make analysis-nozzle-jet` | P2; the adiabatic conversion, `eta_jet` per leg, the adiabaticity check |
+| `make analysis-nozzle-snowplow` | P9's withdrawal; the liner budget as a share of pulse energy, and the containment sweep |
 | `make analysis-expansion` | P5's radiative bracket (`data/results/cooling_history.csv`) |
 | `cargo test --release -p euler2d --test merge_expansion -- --nocapture report` | P1; `alpha`, the spherical control, the `cos(theta)` histogram |
 
 Artifacts: `data/results/nozzle_baselines.csv`, `nozzle_field_ripple.csv`,
-`nozzle_detachment.csv`, `nozzle_jet.csv`.
+`nozzle_detachment.csv`, `nozzle_jet.csv`, `nozzle_snowplow.csv`.
 
 **Errors made and caught while doing this work**, recorded because each would have shipped a wrong
 number and because the tests that caught them are the reason to trust the rest: a transverse mean

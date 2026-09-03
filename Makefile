@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-nozzle-ledger analysis-nozzle-field analysis-nozzle-detachment analysis-nozzle-jet analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-toll analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-nozzle-ledger analysis-nozzle-field analysis-nozzle-detachment analysis-nozzle-jet analysis-nozzle-snowplow analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-toll analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -192,6 +192,14 @@ analysis-nozzle-detachment: data/results/cooling_history.csv
 analysis-nozzle-jet:
 	@mkdir -p data/results
 	PYTHONPATH=python uv run python -m puffsat.jet
+
+## analysis-nozzle-snowplow: is P9's field weakening affordable? Turns the paper's booked liner
+## ablation into a share of pulse energy (0.46%), then asks whether an un-contained collision
+## front stays off the wall. It does not, in either reading of the bore
+## -> data/results/nozzle_snowplow.csv
+analysis-nozzle-snowplow:
+	@mkdir -p data/results
+	PYTHONPATH=python uv run python -m puffsat.snowplow
 
 ## analysis-coupling: Study 2 -- does a projectile couple to a droplet cloud the way it couples
 ## to a vapour, and does the snowplow front span the bore at all? Analytic; prints a verdict and
