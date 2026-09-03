@@ -24,8 +24,13 @@ code that produced them. Every figure here came from a run, not from recall; the
 | **N6** | **Answered, and it overturns the single-station check.** `M_A` never crosses 1 inside the column; detachment is downstream, 1.4-2.0 exit radii out. | **yes** (P3, P9) |
 | **N7** | **The sign correction delivered**; the realised snowplow value still owed. | **yes** (P10) |
 
-**Ten paper edits fall out, P1–P10.** P1, P3 and P4 are the ones that change a claim rather than a
-number. P2 is the only one that makes the paper *stronger*.
+**Ten items fall out, P1–P10.** Nine are edits; **P9 is a warning against a change** — it records
+a fix that looks right, was recommended here, and turned out to cost the liner, so that nobody
+re-derives it. P1, P3 and P4 change a claim rather than a number. **P2 is the one that makes the
+paper stronger**, and it retires the sentence the paper flags as its own largest gap.
+
+**If you read only three:** P2 (the largest remaining uncertainty is now bounded), P3 (the one
+number a consistent calculation contradicts), and P1 (an assumption the flown geometry breaks).
 
 **Three of the asks were themselves mistaken**, and those corrections are in
 [What the ask got wrong](#what-the-ask-got-wrong). They matter because two of them would have sent
@@ -90,7 +95,7 @@ puts the difference into `v_par`. With flux conservation tying `B_exit/B_throat`
 | ---: | ---: | ---: | ---: |
 | 2.0 | 0.544 | 0.589 | 0.738 |
 | **4.0 (flown)** | **0.772** | **0.701** | **0.879** |
-| **11.3 (see P9)** | **0.919** | **0.765** | **0.959** |
+| 11.3 — *what more flare would buy; **not** a recommendation, see P9* | 0.919 | 0.765 | 0.959 |
 | 20.0 | 0.954 | 0.780 | 0.977 |
 
 **`alpha_0` enters only through `(1 - alpha_0)`, which is at most 1**, so a deep enough flare
@@ -273,12 +278,12 @@ small exactly where the gradient is steep. The latter is blocked on P7.
 **Locate:** `eq:bore_from_length` (`r = sqrt(V/(pi \ell))`) against the expansion's area ratio.
 
 `eq:bore_from_length` gives a **constant 3.02 m cylinder** for a 23 m column of 660 m³. The
-expansion model runs an **area ratio of 1 → 4**, and P9 wants 11.3–14.8. A flux tube that expands
-fourfold has twice the radius; a cylinder does not have room for it.
+expansion model runs an **area ratio of 1 → 4**. A flux tube that expands fourfold has twice the
+radius; a cylinder does not have room for it.
 
-**Which is real decides three things:** whether the cheap fix to P6 exists (small coils need a
-converging bore), what the flare in P2 can actually be, and whether P9's field window is reachable.
-**State the bore's shape.**
+**Which is real decides two things:** whether the cheap fix to P6 exists (small coils need a
+converging bore), and what the flare in P2 can actually be. It does *not* decide P9 — the collision
+front lands on the liner in either reading. **State the bore's shape.**
 
 ---
 
@@ -322,7 +327,7 @@ deepens ripple. A trap found here is real; the absence of one is not proof.
 
 ---
 
-### P9. A field window exists that fixes P3, and the flown flare is not in it
+### P9. A field window exists that would fix P3 — **do not use it**, and do not change the flare
 
 **Do this in the same pass as P3** — it is the other half of the same finding.
 
