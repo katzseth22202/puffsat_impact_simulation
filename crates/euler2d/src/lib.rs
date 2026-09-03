@@ -7,6 +7,8 @@
 //!
 //! - [`state`] — conserved/primitive state and the γ-law gas.
 //! - [`riemann`] — the HLLC interface flux for each dimensional sweep (Toro §10.4).
+//! - [`merge`] — the merged fireball free-expansion IVP behind N1 (ADR-0008 effective-γ).
+//! - [`moments`] — mass-weighted velocity moments of the merged fireball (N1, N7).
 //! - [`kernel`] — the finite-volume Godunov solver ([`kernel::Grid2D`]), built test-first against
 //!   Sod (D0), then Sedov/Noh + order-of-accuracy (D1), then the flat-plate bounce (D2).
 //!
@@ -14,6 +16,8 @@
 
 pub mod bounce;
 pub mod kernel;
+pub mod merge;
+pub mod moments;
 pub mod plate;
 pub mod riemann;
 pub mod state;

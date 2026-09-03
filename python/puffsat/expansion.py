@@ -661,7 +661,7 @@ def main() -> None:
     all_rows: list[HistoryRow] = []
     print(
         f"{'w':>7} {'branch':>11} {'T_exit':>8} {'t':>7} {'min t_rad/t':>12} "
-        f"{'v L':>9} {'leak_exit':>10} {'leak_avg':>9}"
+        f"{'radiated':>9} {'v L':>9} {'leak_exit':>10} {'leak_avg':>9}"
     )
     for speed, temp_0 in PLUME_STATES:
         for frozen in (False, True):

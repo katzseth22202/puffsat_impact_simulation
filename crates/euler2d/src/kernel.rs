@@ -222,6 +222,28 @@ impl Grid2D {
         self.nr
     }
 
+    /// The effective-γ this grid was built with (ADR-0008).
+    #[must_use]
+    pub fn gamma(&self) -> f64 {
+        self.gamma
+    }
+
+    /// Volume of any cell in radial band `ir`: `2π r dr dz` cylindrical, `dr dz` Cartesian.
+    ///
+    /// Exposed for the mass-weighted diagnostics in [`crate::moments`], which need the physical
+    /// cell volume rather than the index count — an axisymmetric mesh weights an outer annulus far
+    /// more heavily than an inner one, and a moment that ignored that would be wrong by the aspect
+    /// ratio of the fireball it was measuring.
+    #[must_use]
+    pub fn cell_volume(&self, ir: usize) -> f64 {
+        let base = self.dr * self.dz;
+        if self.axisymmetric {
+            2.0 * std::f64::consts::PI * self.r_center(ir) * base
+        } else {
+            base
+        }
+    }
+
     /// Set the initial condition cell-by-cell from a primitive-state function of `(iz, ir)`.
     pub fn init(&mut self, f: impl Fn(usize, usize) -> Prim) {
         for iz in 0..self.nz {

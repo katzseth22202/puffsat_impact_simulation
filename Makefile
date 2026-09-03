@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-toll analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-nozzle-ledger analysis-nozzle-field analysis-nozzle-detachment analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-toll analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -160,6 +160,30 @@ data/results/cooling_history.csv: python/puffsat/expansion.py python/puffsat/eos
                                   python/puffsat/conductivity.py python/puffsat/tops.py
 	@mkdir -p data/results
 	PYTHONPATH=python uv run python -m puffsat.expansion
+
+## analysis-nozzle-ledger: Rung 0 of the N1-N7 nozzle asks -- the analytic reference ledger that
+## owns every closed-form number the asks quote: eq:reflection_baseline and its per-leg signed
+## drift, the eps_b tautology, the standoff field profile, and the passive-structure power balance
+## -> data/results/nozzle_baselines.csv
+analysis-nozzle-ledger:
+	@mkdir -p data/results
+	PYTHONPATH=python uv run python -m puffsat.nozzle_ledger
+
+## analysis-nozzle-field: Rung 1 -- Biot-Savart magnetostatics of the graded column. Answers N5's
+## off-axis question (does |B| have a local minimum the on-axis profile cannot see?) by sweeping
+## the winding family, and supplies p_design(z) for N3
+## -> data/results/nozzle_field_ripple.csv
+analysis-nozzle-field:
+	@mkdir -p data/results
+	PYTHONPATH=python uv run python -m puffsat.field
+
+## analysis-nozzle-detachment: Rung 2 -- M_A(z) along the column (N6), beta = p_actual/p_design
+## (N3/Rung 5), and whether a physical wall could take over downstream. Reads the solved cooling
+## history, so it depends on analysis-expansion
+## -> data/results/nozzle_detachment.csv
+analysis-nozzle-detachment: data/results/cooling_history.csv
+	@mkdir -p data/results
+	PYTHONPATH=python uv run python -m puffsat.detachment
 
 ## analysis-coupling: Study 2 -- does a projectile couple to a droplet cloud the way it couples
 ## to a vapour, and does the snowplow front span the bore at all? Analytic; prints a verdict and
