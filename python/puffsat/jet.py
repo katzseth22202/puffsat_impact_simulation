@@ -1,5 +1,32 @@
 """N2 -- `eta_jet`, and whether the flare actually turns the pancake (both legs).
 
+**RETIRED 2026-09-05. This module's physical model does not apply, and its headline number is
+withdrawn.** Keep reading only for the history; `extension.py` owns `eta_geom` now.
+
+Everything below rests on `mu = v_perp^2/(2B)` being an invariant a particle carries through the
+nozzle, and the docstring's own "what this is not" section listed "the expansion is collisionless
+enough for `mu` to mean anything" as an untested assumption. It was untested, and it is false:
+`continuum.py` puts the Knudsen number at 2.5e-7 at the most collisionless station anywhere in the
+solved expansion, so a parcel collides between two and ten million times in transit and no
+particle remembers its own `mu`. The paper's reply R1 found this from the outside first.
+
+What replaces it is the ordinary continuum decomposition -- a de Laval nozzle whose walls are
+magnetic, which is what a field 15-75x over-strength for the flow actually is:
+
+    eta_geom = <cos theta> / sqrt(1 + <v_th^2>/u^2)
+
+with the divergence traced through the real field and the thermal term read off the solved Mach
+number. See `extension.py` and `docs/nozzle_replies_answered.md` P11-P12. The corrected
+`eta_geom` is 0.58-0.86 as flown, against the 0.70-0.88 this module reported.
+
+**What survives.** The *mirror* half (`loss_cone_fraction`, `reflected_fraction`, `mean_sin2_pitch`)
+is leg 1's reflection question and is a different calculation; it is also a collisionless argument
+and should be re-derived before it is quoted again -- see `residence.py`, which retires the loss
+cone for the same reason. `ETA_CHEM` and `TARGET_ETA_JET` are data and are still current.
+
+---
+
+
 Rung 4 found the merged plume is a **pancake**: `alpha = <v_z^2>/<v^2>` = 0.088 against the 1/3
 `eq:reflection_baseline` assumes, because the bag became a 23 m column for launch-fairing reasons
 and free expansion follows the short axis. That halves the *mirror* baseline, to 0.237.

@@ -96,7 +96,7 @@ W_HEAD_ON_MS = 75_000.0
 
 BORE_RADIUS_M = 3.0
 """Throat/bore *radius* [m]. Confirmed a radius, not a diameter: the paper's 28 m^2 cross-section
-and `r = sqrt(660/(pi*23)) = 3.02` both agree. Matches `expansion.THROAT_RADIUS`."""
+and `r = sqrt(660/(pi*23)) = 3.02` both agree. Matches `expansion.CHAMBER_RADIUS`."""
 
 COLUMN_LENGTH_M = 23.0
 """Column length [m] as the *paper* states it. Note `expansion.FIELD_LENGTH` is 23.8 m here; the

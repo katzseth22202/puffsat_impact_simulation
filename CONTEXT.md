@@ -228,6 +228,21 @@ Distinct from the set of anchor speeds a calculation is *evaluated at*: the anch
 the schedule is the weighting. This repository owns neither — both are `aim`'s.
 _Avoid_: treating the anchor list in `expansion.PLUME_STATES` as equally weighted design points
 
+**Chamber / exit / throat (settled 2026-09-05, reply R7)**:
+The two repositories used **throat** for *opposite ends of the same magnet*, which made
+cross-repo statements about `M_A` and `beta` unreadable. Settled here:
+
+- **Chamber** — the strong-field, upstream end (20 T as flown, 12 T under the paper's cap), where
+  the plume is at rest and `A/A*` = 1. `expansion.CHAMBER_RADIUS`, formerly `THROAT_RADIUS`.
+- **Exit** — the weak-field, downstream end (5 T), where the plume leaves at Mach 2.4–3.4. This is
+  what the paper calls "the throat".
+- **Throat** — reserved for its gas-dynamic meaning, the sonic station where `A/A*` = 1. In this
+  nozzle that **coincides with the chamber**, which is exactly why the paper's usage collides:
+  its "throat" is a supersonic exit.
+
+_Avoid_: "throat" for the 5 T end (say **exit**); "throat" at all in cross-repo text unless the
+sonic station is meant
+
 **Magnetic mirror**:
 The field structure at the closed end of the bag that reverses the merged slug's axial motion so
 it leaves through the nozzle. Distinct from the **snowplow** field profile down the bore and from

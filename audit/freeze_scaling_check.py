@@ -20,7 +20,7 @@ import puffsat.recombination as rc
 from puffsat import eos_water, expansion, fireball, plume
 
 COLD = 45.58e3
-R0, L0, A0 = expansion.THROAT_RADIUS, expansion.FIELD_LENGTH, expansion.AREA_RATIO_EXIT
+R0, L0, A0 = expansion.CHAMBER_RADIUS, expansion.FIELD_LENGTH, expansion.AREA_RATIO_EXIT
 BOND = eos_water.D_AT / eos_water.M_H2O  # 50.9 MJ/kg, the whole store
 
 
@@ -54,9 +54,9 @@ print("(1) BIGGER BAG, SAME DENSITY -- self-similar scale-up, the fixed-k case")
 print("    Da ~ M^(1/3): more *time*, not more collisions.")
 print(HEAD)
 for lam in (1.0, 2.0, 4.0):
-    expansion.THROAT_RADIUS, expansion.FIELD_LENGTH = R0 * lam, L0 * lam
+    expansion.CHAMBER_RADIUS, expansion.FIELD_LENGTH = R0 * lam, L0 * lam
     show("mass x", f"{lam**3:.0f}", freeze(14700.0, expansion.BAG_RHO))
-expansion.THROAT_RADIUS, expansion.FIELD_LENGTH = R0, L0
+expansion.CHAMBER_RADIUS, expansion.FIELD_LENGTH = R0, L0
 
 print()
 print("(2) SAME BAG, MORE MASS IN IT -- higher density. The strongest of the three.")

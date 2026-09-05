@@ -54,6 +54,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -254,12 +255,61 @@ def fit_profile(stations: tuple[tuple[float, float], ...] = GRADED_STATIONS) -> 
     )
 
 
-def design_field(z: float, fit: ProfileFit | None = None) -> float:
+@dataclass(frozen=True)
+class CappedProfile:
+    """A `ProfileFit` with a flat shelf where it asks for more than the magnet is built to.
+
+    The paper's ADR-0012 caps the peak field at 12 T on the grounds that the profile demands its
+    strongest field in the first three metres, where the collision front has not yet reached the
+    wall and so nothing needs standing off. Flattening is exactly `min(B_profile(z), cap)`, since
+    the profile is monotone decreasing: it holds the cap out to the station where the profile
+    falls through it, then follows the profile.
+
+    Exposed here rather than paper-side because R2, R5 and R10 all ask for runs on the *current*
+    winding, which is the capped one, and because a flat shelf has no background gradient to
+    swamp ripple -- R10's own caveat, and the reason a depth criterion has to be applied there
+    rather than assumed.
+    """
+
+    base: ProfileFit
+    cap_t: float
+
+    @property
+    def z_ref_m(self) -> float:
+        return self.base.z_ref_m
+
+    @property
+    def shelf_end_m(self) -> float:
+        """Station where the shelf meets the profile [m] -- where `B_profile` falls to the cap."""
+        if self.base.field(self.base.z_ref_m) <= self.cap_t:
+            return self.base.z_ref_m
+        return float((self.cap_t / self.base.b0_t) ** (1.0 / self.base.exponent))
+
+    def field(self, z: float) -> float:
+        """`B(z)` [T], flat at the cap inboard of `shelf_end_m`."""
+        return min(self.base.field(z), self.cap_t)
+
+
+#: Anything that can supply the design `B(z)`: a bare power-law fit or a capped one.
+Profile = ProfileFit | CappedProfile
+
+ADR0012_CAP_T = 12.0
+"""Peak-field cap the paper flies (its ADR-0012). 9 T if R9's sound-speed spreading holds."""
+
+
+def capped_profile(
+    cap_t: float = ADR0012_CAP_T, stations: tuple[tuple[float, float], ...] = GRADED_STATIONS
+) -> CappedProfile:
+    """The flown profile with ADR-0012's shelf on it."""
+    return CappedProfile(base=fit_profile(stations), cap_t=cap_t)
+
+
+def design_field(z: float, fit: Profile | None = None) -> float:
     """The design `B(z)` [T] the winding is fitted to reproduce."""
     return (fit or fit_profile()).field(z)
 
 
-def design_pressure(z: float, fit: ProfileFit | None = None) -> float:
+def design_pressure(z: float, fit: Profile | None = None) -> float:
     """`p_design(z) = B(z)^2/(2 mu0)` [Pa] -- what Rung 5 divides the solved expansion by.
 
     Beta against this profile is 1 at every station by construction, because the profile *is* the
@@ -272,7 +322,7 @@ def design_pressure(z: float, fit: ProfileFit | None = None) -> float:
 # ---- Fitting a winding to the design profile -----------------------------------------------------
 
 
-def _extended_design_field(z: float, fit: ProfileFit, length: float) -> float:
+def _extended_design_field(z: float, fit: Profile, length: float) -> float:
     """The design profile continued past both ends of the column, so the winding can overhang.
 
     Held flat at the first station's value inboard and at the exit value outboard. The overhang
@@ -289,6 +339,8 @@ def build_winding(
     length: float = COLUMN_LENGTH_M,
     overhang: float = 0.25,
     stations: tuple[tuple[float, float], ...] = GRADED_STATIONS,
+    profile: Profile | None = None,
+    radius_at: Callable[[float], float] | None = None,
 ) -> CoilStack:
     """Discretise the thin-solenoid current density into `n_coils` rings, then fit one scalar gain.
 
@@ -307,6 +359,11 @@ def build_winding(
     The single scalar gain absorbs the finite-length end correction, which is a uniform factor
     deep inside a long solenoid. It is one parameter fitted to many targets, so it cannot
     manufacture structure.
+
+    `profile` overrides the power-law fit -- pass `capped_profile()` for the winding the paper
+    now flies. `radius_at` overrides the constant coil radius with a contour `r(z)`, which is what
+    ADR-0011's flare is; the surface-current lumping is unchanged by it, because `K = B/mu0` is a
+    statement about the sheet's current per unit length and not about where the sheet sits.
     """
     if n_coils < 2:
         raise ValueError("need at least two coils")
@@ -314,12 +371,13 @@ def build_winding(
     z_lo, z_hi = -pad, length + pad
     z_coils = np.linspace(z_lo, z_hi, n_coils)
     dz = (z_hi - z_lo) / (n_coils - 1)
-    fit = fit_profile(stations)
+    fit: Profile = profile if profile is not None else fit_profile(stations)
     currents = [_extended_design_field(float(z), fit, length) / MU0 * dz for z in z_coils]
+    radius_of = radius_at if radius_at is not None else (lambda _z: coil_radius)
 
     trial = CoilStack(
         tuple(
-            Coil(z_m=float(z), radius_m=coil_radius, current_a=i)
+            Coil(z_m=float(z), radius_m=radius_of(float(z)), current_a=i)
             for z, i in zip(z_coils, currents, strict=True)
         )
     )
@@ -340,6 +398,7 @@ def profile_error(
     n: int = 200,
     z_min: float = 0.0,
     stations: tuple[tuple[float, float], ...] = GRADED_STATIONS,
+    profile: Profile | None = None,
 ) -> float:
     """Worst relative error of a built winding against the design profile, on axis, past `z_min`.
 
@@ -347,7 +406,7 @@ def profile_error(
     where the design profile demands a gradient shorter than the coil radius. See
     `chamber_realizability`.
     """
-    fit = fit_profile(stations)
+    fit: Profile = profile if profile is not None else fit_profile(stations)
     worst = 0.0
     for z in np.linspace(z_min, length, n):
         target = fit.field(float(z))

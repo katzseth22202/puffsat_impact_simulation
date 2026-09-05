@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-nozzle-ledger analysis-nozzle-field analysis-nozzle-detachment analysis-nozzle-jet analysis-nozzle-snowplow analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-toll analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
+.PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-nozzle-ledger analysis-nozzle-field analysis-nozzle-detachment analysis-nozzle-jet analysis-nozzle-snowplow analysis-continuum analysis-nozzle-fluxtube analysis-nozzle-extension analysis-nozzle-residence analysis-nozzle-front analysis-nozzle-phi analysis-replies analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-toll analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
 
@@ -200,6 +200,61 @@ analysis-nozzle-jet:
 analysis-nozzle-snowplow:
 	@mkdir -p data/results
 	PYTHONPATH=python uv run python -m puffsat.snowplow
+
+## ---------------------------------------------------------------------------------------------
+## The R1-R15 replies (`docs/nozzle_replies_answered.md`). Run `make analysis-replies` for the lot.
+## ---------------------------------------------------------------------------------------------
+
+## analysis-continuum: R1's premise -- is the nozzle expansion collisionless enough for
+## `mu = v_perp^2/2B` to mean anything? Knudsen number and collisions-per-parcel on the solved
+## cooling history, on the longest (most collisionless-favourable) mean free path
+## -> data/results/continuum_check.csv
+analysis-continuum: data/results/cooling_history.csv
+	@mkdir -p data/results
+	PYTHONPATH=python uv run python -m puffsat.continuum
+
+## analysis-nozzle-fluxtube: R2 and R5 -- flux-tube accounting against the real Biot-Savart solve
+## rather than a paraxial expansion. What share of the plume misses the winding, and the
+## divergence angle inside it and downstream of the last coil
+## -> data/results/nozzle_fluxtube.csv
+analysis-nozzle-fluxtube:
+	@mkdir -p data/results
+	PYTHONPATH=python uv run python -m puffsat.fluxtube
+
+## analysis-nozzle-extension: R11 and R1's headline -- `M_A(z)` through a prescribed magnetic
+## extension on the solved expansion, and the continuum `eta_geom` that replaces the retired
+## `mu`-conservation model. Slow: it re-solves the isentrope for every leg/branch/extension
+## -> data/results/nozzle_extension.csv
+analysis-nozzle-extension:
+	@mkdir -p data/results
+	PYTHONPATH=python uv run python -m puffsat.extension
+
+## analysis-nozzle-residence: R10 -- the ripple depth criterion, corrected for the regime. A
+## collisional plasma has no loss cone, so the test is choking (`R < A/A*(M)`), not trapping
+## -> data/results/nozzle_residence.csv
+analysis-nozzle-residence:
+	@mkdir -p data/results
+	PYTHONPATH=python uv run python -m puffsat.residence
+
+## analysis-nozzle-front: R9 -- how fast the snowplow front spreads and where it first touches
+## the wall, with the spreading speed closed on the shocked layer's own state rather than fixed.
+## Sets ADR-0012's field cap
+## -> data/results/nozzle_front.csv
+analysis-nozzle-front:
+	@mkdir -p data/results
+	PYTHONPATH=python uv run python -m puffsat.front
+
+## analysis-nozzle-phi: R12 -- `phi`, the share of the pulse's radiation emitted while the plume
+## is still inside the nozzle. Quadrature over the cooling history and its free-jet continuation
+## -> data/results/nozzle_phi.csv
+analysis-nozzle-phi: data/results/cooling_history.csv
+	@mkdir -p data/results
+	PYTHONPATH=python uv run python -m puffsat.radiance
+
+## analysis-replies: every run behind `docs/nozzle_replies_answered.md`, in dependency order.
+analysis-replies: analysis-continuum analysis-nozzle-fluxtube analysis-nozzle-residence \
+                  analysis-nozzle-front analysis-nozzle-phi analysis-nozzle-extension
+	@echo "all R1-R15 runs complete; see docs/nozzle_replies_answered.md"
 
 ## analysis-coupling: Study 2 -- does a projectile couple to a droplet cloud the way it couples
 ## to a vapour, and does the snowplow front span the bore at all? Analytic; prints a verdict and

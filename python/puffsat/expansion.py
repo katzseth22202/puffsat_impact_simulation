@@ -418,8 +418,20 @@ PLUME_STATES: tuple[tuple[float, float], ...] = (
 )
 #: Flown bag: 213 kg over 660 m^3.
 BAG_RHO = 0.323
-#: Throat radius [m] -- the paper's 3.0 m bore, where the field is 20 T.
-THROAT_RADIUS = 3.0
+#: Chamber radius [m] -- the paper's 3.0 m bore, at the strong-field end.
+#:
+#: **Renamed from `THROAT_RADIUS` (R7).** The two repositories used "throat" for opposite ends of
+#: the same magnet: here it meant the gas-dynamic throat, the sonic station where `A/A*` = 1, which
+#: sits at the *chamber*; in the paper it means the downstream exit, where the plume leaves at 5 T.
+#: `CHAMBER_RADIUS` is unambiguous in both vocabularies, so this side adopts it. "Throat" is kept
+#: in this module for the sonic station only, which is what it means in nozzle gas dynamics --
+#: see `_at_throat`.
+CHAMBER_RADIUS = 3.0
+
+#: `THROAT_RADIUS` was **removed** rather than aliased. An alias would still have read correctly
+#: while silently no longer *controlling* anything: `audit/freeze_scaling_check.py` rebinds this
+#: constant to scale the geometry, and against an alias that rebinding would have been a no-op
+#: that changed the audit's answer without failing. A missing name fails loudly instead.
 #: `A/A* = B*/B`: the paper's `20 T -> 5 T` nozzle. Flux conservation, no further assumption.
 AREA_RATIO_EXIT = 4.0
 #: Field-region length [m]: the 23 m capsule (`8 pi r^3 = 660 m^3` at aspect 4 gives 23.8 m).
@@ -438,7 +450,7 @@ CSV_HEADER = (
 
 def plume_radius(area_ratio: float) -> float:
     """Flux-tube radius [m]: `A/A*` is an area ratio, so the radius goes as its square root."""
-    return THROAT_RADIUS * math.sqrt(area_ratio)
+    return CHAMBER_RADIUS * math.sqrt(area_ratio)
 
 
 @dataclass(frozen=True)
