@@ -33,20 +33,31 @@ same: neither had the divergence traced against a real field solve.
 | **R8** | **Declined, with the physical reason.** Nothing is needed for detachment; a wall cannot act where the pointing loss happens; and R8's own thermal gate puts the bell past the station where the field lines have already turned. | **yes** (P14) |
 | **R9** | **Answered, and both of the paper's front numbers are confirmed from our EOS.** The cone construction is validated. | **yes** (P18) |
 | **R10** | **P8's constraint withdrawn.** The loss cone is a collisionless object and does not apply; the correct criterion is choking, and it binds at the chamber. | **yes** (P17) |
-| **R11** | **Answered, and it clears — on one leg.** The hot leg clears 0.775 with a 10.9 m extension. The cold leg cannot clear it at any length. | **yes** (P14) |
+| **R11** | **Answered, and it clears everywhere above ~56 km/s.** Leg 2 (75 km/s) clears with a 10.9 m extension and on one branch with none. Leg 1's cold tail cannot clear at any length. | **yes** (P14) |
 | **R12** | **Answered — and `phi` is the wrong quantity to multiply by.** 0.99 flat on the frozen branch, 0.04–0.85 on the equilibrium one, and anti-correlated with the total radiated. The passive-structure claim does not fail. | **yes** (P21) |
 | **R13** | **Confirmed as the binding item**, quantitatively, and then **deferred with a cost.** | **yes** (P15) |
 | **R14** | **Do not adopt 672.9 m³.** Our pair was never derived as a pair, and there is a four-way consistent solution neither repo found. | **yes** (P20) |
 | **R15** | **The liner**, on both questions — and **yes**, P9's 5 T is a bore-referenced standoff number, so the larger version is back on the table. | **yes** (P19) |
 
-**Eleven items fall out, P11–P21**, plus one small one (P22).
+**Twelve items fall out, P11–P21 and P23**, plus one small one (P22). P23 was raised by
+Seth mid-batch and is not a reply to any R-item.
 
 **If you read only three:** **P12** (the corrected `eta_geom`, which is the number R1 asked for and
-is better than R1's), **P15** (the cold leg cannot be fixed by any nozzle, which decides whether
+is better than R1's), **P15** (where the chain actually fails, which is a much smaller place than
 R13 gets built), and **P19** (the standoff wall, which unblocks ADR-0013 and is a one-line answer).
 
 **Two of the replies rest on arithmetic their own amendments retire** — R4 entirely and R10's
 threshold — and those are in [What the replies got wrong](#what-the-replies-got-wrong).
+
+**Two things we need back before the last question can be closed**, both owned by
+`aim_is_all_you_need` rather than by either of us:
+
+1. **What fraction of leg 1's pulses land below ~56 km/s** (the closing-speed schedule). That is
+   the difference between the chemistry shortfall being a footnote and being the design driver.
+   See P15.
+2. **Which figure of merit the growth tables maximise**, and whether `k` may vary per pulse.
+   Momentum per projectile and momentum per kg expended want `k` moved in opposite directions.
+   See P23.
 
 ---
 
@@ -211,15 +222,15 @@ legs, both branches. `M_A` at the end of each prescribed extension:
 | extension | add-on | total `L` | `A/A*` | `B_exit` | `M_A` at its exit | crossing inside? |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | none | — | 23.8 m | 2.40 | 5.00 T | 0.44–0.72 | no |
-| **hot-favourable** | 10.9 m | 34.6 m | 6.31 | 1.90 T | **0.75–1.24** | **hot leg yes, cold leg no** |
+| **hot-favourable** | 10.9 m | 34.6 m | 6.31 | 1.90 T | **0.75–1.24** | **leg 2 yes, leg 1's cold end no** |
 | hot-pessimistic | 12.3 m | 36.0 m | 6.96 | 1.72 T | 0.80–1.31 | hot yes, cold no |
 | cold-favourable | 23.9 m | 47.5 m | 13.44 | 0.89 T | 1.12–1.88 | **both** |
 | cold-pessimistic | 30.3 m | 53.8 m | 17.88 | 0.67 T | 1.30–2.19 | both |
 
 **R11's central claim holds: an extension does move the crossing inside the flare.** The lengths
-are close to R11's own — its 10.9 m case reaches `M_A` = 1.23–1.24 on the hot leg, so the crossing
-lands comfortably inside. Its cold cases are needed only if the crossing must land inside on the
-*cold* leg, which needs about 24 m.
+are close to R11's own — its 10.9 m case reaches `M_A` = 1.23–1.24 at 75 km/s, so the crossing
+lands comfortably inside. Its cold cases are needed only if the crossing must land inside at
+45.58 km/s, which needs about 24 m.
 
 #### 2. Is the collision front contained past the bag?
 
@@ -261,20 +272,20 @@ at 30.3 m.
 
 | leg | branch | no extension | 10.9 m extension | vs the swept 0.775 |
 | --- | --- | ---: | ---: | --- |
-| 45.58 | equilibrium | 0.425 | 0.630 | **misses at every length** |
-| 45.58 | frozen | 0.438 | 0.671 | **misses at every length** |
-| 75.00 | equilibrium | 0.724 | **0.813** | clears with the short extension |
-| 75.00 | frozen | **0.782** | **0.873** | clears with *no* extension |
+| **leg 1, cold end** (45.58) | equilibrium | 0.425 | 0.630 | **misses at every length** |
+| **leg 1, cold end** (45.58) | frozen | 0.438 | 0.671 | **misses at every length** |
+| **leg 2** (75.00) | equilibrium | 0.724 | **0.813** | clears with the short extension |
+| **leg 2** (75.00) | frozen | **0.782** | **0.873** | clears with *no* extension |
 
-**The hot leg clears, and the short extension is enough** — 10.9 m of add-on at under 2 T, which
+**Leg 2 clears, and the short extension is enough** — 10.9 m of add-on at under 2 T, which
 is cheap per metre. On the frozen branch it clears without any extension at all, which is new.
 
-**The cold leg misses at every length**, and no nozzle can fix it: `eta_chem` = 0.731 caps it
-below 0.775 before geometry enters. See **P15** — this is R13's point, now demonstrated rather
-than argued.
+**Leg 1's cold end misses at every length**, and no nozzle can fix it: `eta_chem` = 0.731 caps it
+below 0.775 before geometry enters. See **P15**, which locates exactly where that starts — and it
+is *not* the whole leg.
 
 **What to write.** `sec:jet_efficiency`'s original claim that detachment happens inside the nozzle
-is **restorable, on the hot leg, with a 10.9 m magnetic extension**. P3's correction becomes a
+is **restorable above about 56 km/s with a 10.9 m magnetic extension**. P3's correction becomes a
 design change rather than a retraction, exactly as R11 hoped. The 30.3 m case should be dropped.
 
 #### And this retires R8. **Declined, with the physical reason.**
@@ -326,47 +337,129 @@ supersonic (`M` = 2.4–3.4) is not being super-Alfvénic (`M_A` = 0.44–0.72).
 **What we are and are not claiming.** This is geometry plus our own `beta` and `M_A`, not an MHD
 solve — we have not proved a bell impossible. But R8 asked what would settle whether the paper can
 carry a staged nozzle, and the answer is that it should not try: **the structure is not needed for
-detachment and cannot act where the pointing loss occurs.** R8 comes off the critical path, and
-`sec:watering_it_down` should not spend words on a bell.
+detachment and cannot act where the pointing loss occurs.** R8 comes off the critical path.
+
+#### What the paper should say, and it should say it
+
+**Seth's call, 2026-09-05: this belongs in the paper**, not only in a reply document. A physical
+bell is the obvious thing for a reader to propose — a magnetic nozzle that sprays looks like it
+wants a wall — and the paper should foreclose it explicitly rather than leave the reader to
+re-derive R8. Suggested substance, for `sec:jet_efficiency` or `sec:two_leg_nozzle`:
+
+> A physical bell downstream of the winding is the natural remedy for the divergence loss, and it
+> does not work here. It is not needed for detachment: the plume crosses `M_A` = 1 on its own
+> 1.2 to 1.7 exit radii past the last coil. And it cannot supply the exhaust direction it would be
+> built for, because the loss happens *before* that crossing, while the plume is still
+> sub-Alfvénic and tied to the field. At `beta` = 0.03 to 0.15 the field exceeds plasma pressure
+> by six to thirty times, so plasma cannot cross field lines to reach a wall; the plume's own
+> bounding flux tube turns back at 6.3 m, inside the 7.0 m a graphite bell would have to start at
+> to survive the exit temperature. The condition that lets the wall survive is the condition that
+> places it beyond the region where it could act. The remedy is to bend the field lines rather
+> than to obstruct them, which is what the magnetic extension does.
+
+**Three points to keep if the wording changes**, because each closes a different escape:
+
+1. **Detachment needs nothing.** Otherwise a reader assumes the bell is load-bearing.
+2. **The loss is upstream of detachment.** Otherwise a reader assumes a bell placed after
+   detachment could still fix the aim — it cannot, the aim is already set.
+3. **The thermal gate and the geometry gate point the same way.** Otherwise a reader proposes a
+   more refractory wall material, which does not help: the problem is where the wall must sit, not
+   what it is made of.
 
 **Reproduce:** `make analysis-nozzle-extension`.
 
 ---
 
-### P15. R13 is right, and here is the proof: the cold leg cannot be fixed by any nozzle
+### P15. R13 is right — and the failure is confined to below ~56 km/s, not to "the cold leg"
 
-**This is the item that decides what to build next, and it is the strongest single result here.**
+**This is the item that decides what to build next, and the second half of it narrows the problem
+a long way.**
 
-R13 argues that the cold-leg shortfall is a water problem rather than a nozzle problem. That was an
-argument; it is now arithmetic. The chain is `eta_jet = eta_geom x eta_chem`, and
-`eq:eta_chem` charges the cold leg **0.731**. So even a perfect nozzle gives
+#### The proof R13 wanted
+
+The chain is `eta_jet = eta_geom x eta_chem`, and `eq:eta_chem` charges 45.58 km/s **0.731**. So
+even a perfect nozzle gives
 
     eta_jet(45.58 km/s, water)  <=  1.000 x 0.731  =  0.731  <  0.775
 
-**The cold leg misses the paper's own swept target before any nozzle exists.** Our extension sweep
-reaches `eta_geom` = 0.976 on that leg — within 2.4% of perfect — and still lands at
-`eta_jet` = 0.713.
+**That misses the paper's own swept target before any nozzle exists.** Our extension sweep reaches
+`eta_geom` = 0.976 there — within 2.4% of perfect — and still lands at `eta_jet` = 0.713. R13's
+claim was an argument; it is now arithmetic.
 
-So the paper's own sentence is exactly right and should be promoted from an aside to the
-conclusion of `sec:jet_efficiency`: *"Both of argon's gains therefore land on the leg where water
-is weakest."* And R1's amended box is right that "the cold-leg shortfall this item reports is a
-chemistry problem, not a nozzle one" — with the caveat that on the **hot** leg it is a nozzle
-problem, and that one the nozzle can solve.
+#### But "the cold leg" is the wrong unit, and the correct one is much smaller
 
-**What we are not delivering, and what it would take.** R13's four sub-asks need an argon EOS —
-an `eos_argon` beside `eos_water` with an Ar I–III Saha ladder — and then the whole
-expansion / detachment / fireball chain re-run on it. That is a new species, not a new
-calculation, so it is out of this batch's scope by construction. Costed in
-[Deferred, with cost](#deferred-with-cost). **We recommend it be the next thing built**, because
-it is the only remaining lever on the binding leg, and because sub-ask 3 (the radiated share,
-which goes as `T^4` and multiplies every liner figure in R12) could take the gain back and nobody
-knows.
+**Naming first, because it changes the conclusion.** 45.58 km/s and 75 km/s are not two ends of
+one range — they are **different legs**, as this repository's own `CONTEXT.md` insists and as the
+N-batch's correction 3 already told us:
+
+- **Leg 1**, the overtake / growth push. Closing speed **falls** through it, so it *sweeps* a range.
+  45.58 km/s is its cold **end**, and specifically the cold end of the **slowest three-synodic
+  cadence** — the extreme corner of the whole envelope, not a typical operating point.
+- **Leg 2**, the head-on departure burn at ~75 km/s. A single point, and **never affected**.
+
+Computed across the range, with `k` = 8.52 and water:
+
+| closing speed | `eta_chem` | `eta_jet` at `eta_geom` = 0.93 | verdict |
+| ---: | ---: | ---: | --- |
+| 45.58 | 0.730 | 0.679 | misses |
+| 50 | 0.782 | 0.728 | misses |
+| 55 | 0.824 | 0.767 | misses, barely |
+| **56.5** | 0.835 | **0.776** | **clears** |
+| 65 | 0.878 | 0.816 | clears |
+| **70** | 0.896 | **0.833** | **clears** |
+| **75** | 0.910 | **0.846** | **clears** |
+
+**The crossover, by how good the nozzle is:**
+
+| nozzle | clears 0.775 above |
+| --- | ---: |
+| no extension | 71.8 km/s |
+| **10.9 m extension, equilibrium branch** | **56.3 km/s** |
+| best extension, frozen branch | **51.2 km/s** |
+| a hypothetical perfect nozzle | **49.3 km/s** |
+
+**49.3 km/s is the hard floor**: below it, water chemistry alone fails 0.775 whatever the nozzle
+does. Between 49 and 56 km/s the nozzle decides. **Above 56 km/s there is no problem at all**, and
+leg 2 clears by a wide margin.
+
+**This reframes what the extension buys.** It does not merely raise a number from 0.68 to 0.83 —
+**it moves the crossover speed from 71.8 km/s down to about 56**, converting roughly 16 km/s of
+the flight envelope from failing to passing. That is a better justification for 10.9 m of magnet
+than an efficiency delta.
+
+#### What is now owed, and it is not ours
+
+The remaining question is no longer "does the chain work". It is **"how many of leg 1's pulses
+land below ~56 km/s?"** That is the closing-speed **schedule**, which this repository explicitly
+does not own (`CONTEXT.md`: "This repository owns neither — both are `aim`'s"). Until `aim` states
+the fraction of leg 1's pulses in the cold tail, nobody can say what this costs the mission.
+
+**Ask for that fraction.** If it is small, the whole item is a footnote and argon is optional. If
+it is large, argon is the design.
+
+#### What the paper should say
+
+The paper's own sentence is right and should be promoted from an aside to the conclusion of
+`sec:jet_efficiency` — *"Both of argon's gains therefore land on the leg where water is
+weakest"* — with the qualification that it is **leg 1's cold tail below about 56 km/s**, not
+leg 1 as a whole and not leg 2 at all. R1's amended box is likewise right that "the shortfall this
+item reports is a chemistry problem, not a nozzle one", and the qualification is the same.
+
+#### What we are not delivering, and what it would take
+
+R13's four sub-asks need an argon EOS — an `eos_argon` beside `eos_water` with an Ar I–III Saha
+ladder — and then the whole expansion / detachment / fireball chain re-run on it. That is a new
+species, not a new calculation, so it is out of this batch's scope by construction. Costed in
+[Deferred, with cost](#deferred-with-cost). **We still recommend it be the next thing built** —
+but note that P23 finds argon and the low-`k` lever spend the same currency, and that sub-ask 3
+(the radiated share, which goes as `T^4` and multiplies every liner figure in R12) could take the
+gain back on either.
 
 **A caution on sub-ask 1.** R13 asks for "`eta_chem` for argon, stated". The recombination
 argument in the paper's `CONTEXT.md` is sound as far as it goes — three-body electron-ion
 recombination at `n_e^2` with `alpha ~ T_e^-4.5` is nanoseconds at 0.32 kg/m³ against a ~100 µs
 expansion — **but it is evaluated at the bag density, and the plume is 13× thinner by the exit**.
-Three-body recombination goes as `n_e^2`, so that is a 170× slowdown, and the paper's own
+Three-body recombination goes as `n_e^2`, so that is a 170× slowdown, and this repository's own
 `fireball.py` result on water is that recombination *freezes* below 0.01 kg/m³. Argon will almost
 certainly still win that race, but `eta_chem` = 1.000 should not be printed until it has been run.
 
@@ -714,6 +807,100 @@ both vocabularies and costs the paper one search-and-replace of "throat" to "exi
 
 ---
 
+### P23. Lowering `k` does relieve the dissociation toll — and the paper already sits on the momentum optimum
+
+**Raised by Seth, 2026-09-05, and it is the obvious lever nobody had priced.** If the bond bill is
+a fixed 50.9 MJ/kg, spread the same collision energy over *less* mass and the bill is a smaller
+slice of it. `toll.py`'s closed form says so directly:
+
+    eta_chem = sqrt(1 - 2 phi E_B (1 + k) / w^2)
+
+`k` enters only through `(1 + k)`, so **the lever is real and it is strong.** At 45.58 km/s:
+
+| `k` | `eta_chem` | `eta_jet` at 0.93 | vs 0.775 | `T_stag` |
+| ---: | ---: | ---: | --- | ---: |
+| 2.0 | 0.924 | 0.859 | clears | 24 515 K |
+| 4.0 | 0.869 | 0.808 | clears | 20 726 K |
+| **5.2** | **0.833** | **0.775** | **clears, exactly** | ~19 500 K |
+| 6.0 | 0.810 | 0.754 | misses | 18 017 K |
+| **8.52 (flown)** | **0.730** | **0.679** | **misses** | 15 147 K |
+
+**Dropping `k` from 8.52 to about 5.2 clears the target at the coldest point in the envelope.**
+That is the honest headline, and it is a cheaper-sounding fix than an argon programme.
+
+#### Three costs, and the first one is decisive
+
+**1. The paper is already within 0.3% of the momentum optimum.** `toll.py`'s own bound for gross
+exhaust momentum is `m w sqrt(1+k) x eta_chem`. Substituting the closed form, that is
+`m w sqrt((1+k) - 2 phi E_B (1+k)^2/w^2)`, which has a maximum at
+
+    (1 + k)* = w^2 / (4 phi E_B)     ->   k* = 9.20 at 45.58 km/s
+
+**The paper flies 8.52.** Momentum at `k` = 8.52 is 2.2529 in those units against 2.2531 at the
+optimum — the design is sitting on the peak. Moving to `k` = 5.2 costs about **9% of the delivered
+momentum**.
+
+So the lever improves `eta_jet` by shrinking what `eta_jet` is a ratio *of*. **You clear 0.775 by
+making the target easier, not by delivering more push.** That is worth saying plainly, because a
+table of `eta_jet` values cannot show it.
+
+**2. The margin over the *physical* floor gets worse, not better.** `sec:mass_interest`'s
+forward-thrust floor is `1/sqrt(1+k)`, which **rises** as `k` falls: 0.324 at `k` = 8.52 against
+0.401 at `k` = 5.2. So the ratio of `eta_jet` to the floor — which is the threshold that actually
+means something physically — goes from **2.10× down to 1.93×** while the headline number improves.
+The 0.775 is a swept design point; the floor is physics.
+
+**3. It costs radiation, because the whole mechanism is "make the plasma hotter".** Run on the
+solved expansion at each `k`'s own stagnation temperature:
+
+| `k` | `T_stag` | in-nozzle radiated, equilibrium | frozen |
+| ---: | ---: | ---: | ---: |
+| 8.52 | 15 147 K | 4.31 MJ/kg (1.00×) | 1.08 MJ/kg (1.00×) |
+| 6.00 | 18 017 K | **12.71 MJ/kg (2.95×)** | 1.56 MJ/kg (1.45×) |
+| 4.00 | 20 726 K | 8.44 MJ/kg (1.96×) | 1.97 MJ/kg (1.83×) |
+| 2.00 | 24 515 K | 4.91 MJ/kg (1.14×) | 2.45 MJ/kg (2.27×) |
+
+**1.5× to 3× more radiation onto the liner.** At `k` = 6 the equilibrium branch reaches
+12.71 MJ/kg, which is the same load as P21's current worst case — a liner near 3340 K against
+graphite's 3900 K. Affordable, but it spends the margin P21 just established. (The equilibrium
+column is non-monotone because the radiated share peaks at the opacity crossover, which the
+plume's temperature walks across as `k` moves; the frozen column is clean and monotone.)
+
+#### The structural point, and it is the useful one
+
+**Argon and low-`k` are the same trade.** Both work by putting more energy on fewer particles;
+both raise the plume temperature; both pay in `T^4` radiation onto the liner. **There is one
+currency here and both remaining levers spend it.** So they are not independent options to be
+stacked — pricing them together is the right way to look at it, and R13's sub-ask 3 is the gate
+on both.
+
+#### The one thing we cannot settle, and it is the crux
+
+Two figures of merit point in **opposite directions**, and which one governs is `aim`'s growth
+model, not ours:
+
+| figure of merit | scales as | wants |
+| --- | --- | --- |
+| momentum per **projectile thrown** (if cadence, aiming or tracking is the scarce thing) | `sqrt(1+k) x eta_chem` | **`k` = 9.2** — the flown value |
+| momentum per **kg of total mass expended** (if propellant mass is scarce) | `eta_chem / sqrt(1+k)` | **`k` as small as possible** |
+| `eta_jet` as the growth tables charge it | `eta_geom x eta_chem` | `k` small |
+
+Per kg expended, `k` = 2 delivers **2.25×** what `k` = 8.52 does. Per projectile, it delivers
+**0.71×**. **We are not going to adjudicate that** — the mass-interest architecture exists
+precisely because propellant mass is meant to be cheap, which argues one way, and the cadence and
+aiming constraints argue the other.
+
+**And note the optimum is speed-dependent**, `k* = w^2/(4 phi E_B) - 1`, so it is **9.2 at
+45.58 km/s and 26.6 at 75 km/s**. A single flown `k` across the envelope is a compromise, and if
+`k` is a per-pulse dial — it is just bag mass over projectile mass — then the cold tail and the
+departure burn want it moved in *opposite* directions.
+
+**What we need back.** Which figure of merit the growth tables are actually maximising, and
+whether `k` is allowed to vary per pulse. With those two answers this becomes a one-line
+optimisation; without them it is a genuine fork.
+
+---
+
 ## What the replies got wrong
 
 Three items, and two of them are retired by the replies' own amendment box.
@@ -796,7 +983,8 @@ Every figure above was produced by running the code on 2026-09-05.
 | `make analysis-nozzle-extension` | P12, P13, P14; the continuum `eta_geom`, the cap, the extension sweep |
 | `make analysis-nozzle-residence` | P17; the choking criterion and the coil counts |
 | `make analysis-nozzle-front` | P18, P19's question 2; the shock closure and the contact stations |
-| `make analysis-nozzle-phi` | P21; the radiated-share quadrature |
+| `make analysis-nozzle-phi` | P21; the radiated-share quadrature, and P23's radiative cost of low `k` |
+| `puffsat.toll` (closed form) + `puffsat.radiance` | P15's crossover speeds and P23's `k` sweep |
 | `make analysis-replies` | all of the above, in dependency order |
 
 Artifacts: `data/results/continuum_check.csv`, `nozzle_fluxtube.csv`, `nozzle_extension.csv`,
