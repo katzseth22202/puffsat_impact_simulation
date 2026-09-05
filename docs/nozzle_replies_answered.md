@@ -65,6 +65,57 @@ threshold — and those are in [What the replies got wrong](#what-the-replies-go
 
 ---
 
+## Handback checklist — what to edit in the paper, in order
+
+**Read this first if you are the agent working this in the paper repository.** Every row is a
+paper-side edit. The three marked **prose ready** carry suggested wording that can be lifted
+directly; the rest state the numbers and leave the sentence to you.
+
+### Must change — a claim in the paper is wrong or unsupported
+
+| # | edit | where |
+| --- | --- | --- |
+| **P11** | Withdraw the `mu`-conversion mechanism. The expansion is collisional (`Kn` = 2.5e-7). Do this before any other edit — several others depend on it. | `sec:jet_efficiency` |
+| **P12** | Replace `eta_geom` with **0.58–0.86 as flown**. State that the thermal term is already 0.86–0.97, so the remaining loss is **pointing, not conversion**, and it happens entirely past the last coil. | `sec:jet_efficiency` |
+| **P25** | **Distinguish the target from the threshold.** 0.775 is a calibration to the solenoid literature; **0.324** (`1/sqrt(1+k)`) is the number that actually binds. As written, a reader cannot tell them apart. | `sec:jet_efficiency`, `tab:mass_interest_growth` caption |
+| **P15** | Qualify the chemistry shortfall as **leg 1's cold tail below ~56 km/s**, not "the cold leg" and not leg 2. Leg 2 clears everywhere. | `sec:jet_efficiency`, `sec:watering_it_down` |
+| **P17** | Withdraw P8's ">= 36 coils". The correct criterion is choking, and it gives >= 12–18. | `sec:jet_efficiency`'s residence paragraph |
+| **P20** | **Do not adopt 672.9 m³** — it breaks the 660 m³ that `PV = nR_gT` fixes. Use 660 m³ / 23.78 m / 2.972 m, which rounds to every figure already quoted. | `tab:axial_bag`, `sec:needle_through_fog` |
+
+### Should add — new material, and two of these Seth asked for by name
+
+| # | edit | status |
+| --- | --- | --- |
+| **P26** | **Why our regime beats the literature's 0.34**, as a *regime* argument rather than a geometry one: their plumes are collisionless, ours is a fluid, and a fluid cannot be magnetically trapped at all. **Also delete the "we are asking a solenoid for what solenoids already deliver" comfort line** — it cannot survive alongside this argument. | **prose ready** |
+| **P14** | **Why a physical bell is not the answer**, with the three points that must survive rewording. | **prose ready** |
+| **P15** | Promote *"Both of argon's gains land on the leg where water is weakest"* from an aside to a conclusion, qualified to below ~56 km/s. | **prose ready** |
+| **P25** | One sentence on why the departure burn needs a slug: a plate *decelerates* head-on, and only added mass can eject more momentum than arrived. | numbers given |
+| **P24** | State the impulse cost of missing 0.775, not just the efficiency cost — they differ by half again on the overtake leg (12.4% vs 8.7%). | numbers given |
+
+### Good news to state — the paper is stronger than it currently claims
+
+| # | edit |
+| --- | --- |
+| **P13** | ADR-0012's 12 T cap **improves** `eta_geom` by +0.06 to +0.15, against the "under 0.005" its own table reports. Restate its `eta_geom` column. |
+| **P14** | `sec:jet_efficiency`'s original claim that detachment happens **inside** the nozzle is restorable above ~56 km/s with a **10.9 m** extension. Drop R11's 30.3 m case. |
+| **P18** | Both front numbers (94 600 K, 21.1 km/s) are confirmed from our EOS to 0.03% and 0.1%. ADR-0012's cone construction is validated. The cap is **10.9 T** at the liner, or **8.3 T** if the sound-speed spread holds. |
+| **P19** | ADR-0013 should be **accepted**: the standoff wall is the liner. And P9's 5 T *is* a bore-referenced standoff number, so the `1/r`-graded profile is back on the table. |
+| **P21** | The passive-structure claim **does not fail anywhere**. R12's `phi` = 1.0 equilibrium case does not arise. |
+
+### Blocked on `aim_is_all_you_need`, not on us
+
+Three asks, listed in full above. Briefly: **what fraction of leg 1's pulses fall below ~56 km/s**;
+**which figure of merit the growth tables maximise** and whether `k` may vary per pulse; and
+**which efficiency multiplies which term** in `sqrt(1+k) x eta_jet ± 1`.
+
+### Parked, by Seth's call (2026-09-05)
+
+**R13, the argon case.** Confirmed as the binding item and recommended as the next build (P15), and
+P23 finds it shares a currency with the low-`k` lever. **Not started.** Seth picks it up when the
+paper hands back.
+
+---
+
 ## What the paper should change
 
 ### P11. R1 is right: the expansion is collisional, and `jet.py` modelled the wrong regime
