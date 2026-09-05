@@ -236,9 +236,19 @@ def downstream_crossing(exit_mach_alfven: float) -> float:
 class AblationCase:
     """Could a physical diverging wall survive here -- asked as depth per pulse, not as a flux?
 
-    Raised by Seth 2026-09-03, twice, and the second time corrected the first answer. The gas
-    dynamics were never the obstacle: every exit is supersonic, and a diverging wall on supersonic
-    flow is exactly what a de Laval nozzle is. The obstacle is heat.
+    Raised by Seth 2026-09-03, twice, and the second time corrected the first answer.
+
+    **CORRECTED 2026-09-05 (reply R8). This docstring used to say "the gas dynamics were never the
+    obstacle: every exit is supersonic, and a diverging wall on supersonic flow is exactly what a
+    de Laval nozzle is. The obstacle is heat." That was the wrong Mach number.** Being *supersonic*
+    (`M` = 2.4-3.4) is not being *super-Alfvenic* (`M_A` = 0.44-0.72): a diverging wall works on
+    ordinary supersonic gas, and this gas is magnetically dominated. At `beta` = 0.033-0.154 the
+    field is 6-30x over-strength, so plasma cannot cross field lines to reach a wall, and
+    `fluxtube.downstream_fan` finds the plume's own bounding tube turns at 6.34 m -- inside the
+    7.0 m the paper's R8 needs its bell to start at for graphite to survive the 16 224 K exit.
+    **The gas dynamics were the obstacle all along.** The ablation numbers below stand and are
+    still worth having; what they establish is that a wall would *survive*, which turns out not
+    to be the question. See `docs/nozzle_replies_answered.md` P14 and `extension.py`.
 
     **But the first screen asked the wrong question.** Comparing the incident flux against what
     graphite re-radiates at sublimation is a *steady-state* test, and these pulses last about two

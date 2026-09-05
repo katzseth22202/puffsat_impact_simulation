@@ -30,7 +30,7 @@ same: neither had the divergence traced against a real field solve.
 | **R5** | **Answered geometrically.** 17.0% / 14.0% / 0% against R5's 12.9% / 11.6% / 0%. The wall-interaction half stays deferred. | **yes** (P16) |
 | **R6** | Conceded. P5 is a required edit at two sites, not a clarification. | **yes**, paper-side already done |
 | **R7** | **Done**, and with a counter-suggestion the paper should take. | **yes** (P22, small) |
-| **R8** | **Very likely moot**, as R11 predicted — but not for R11's reason. | see P14 |
+| **R8** | **Declined, with the physical reason.** Nothing is needed for detachment; a wall cannot act where the pointing loss happens; and R8's own thermal gate puts the bell past the station where the field lines have already turned. | **yes** (P14) |
 | **R9** | **Answered, and both of the paper's front numbers are confirmed from our EOS.** The cone construction is validated. | **yes** (P18) |
 | **R10** | **P8's constraint withdrawn.** The loss cone is a collisionless object and does not apply; the correct criterion is choking, and it binds at the chamber. | **yes** (P17) |
 | **R11** | **Answered, and it clears — on one leg.** The hot leg clears 0.775 with a 10.9 m extension. The cold leg cannot clear it at any length. | **yes** (P14) |
@@ -277,23 +277,57 @@ than argued.
 is **restorable, on the hot leg, with a 10.9 m magnetic extension**. P3's correction becomes a
 design change rather than a retraction, exactly as R11 hoped. The 30.3 m case should be dropped.
 
-#### And this very likely retires R8
+#### And this retires R8. **Declined, with the physical reason.**
 
-R11 predicted it would, and it does — plus a second, independent reason R11 did not have.
+R11 predicted it would, and it does — for R11's reason and for two stronger ones it did not have.
 
-R11's reason: a controlled magnetic flare sets exhaust direction with no wall, so the
-sub-Alfvénic-wall question never arises. Confirmed on the hot leg.
+**First, separate the two jobs, because R8 conflates them.**
 
-**The independent reason is P12's turned-tube result.** By 1.4 exit radii, 38–50% of the traced
-flux tubes have *turned* — the vacuum field is curving back toward its return path. A physical
-bell placed out there would not be turning free plasma; it would be sitting in a region where the
-field lines already point backward. So R8's favourable argument ("constraining the plume keeps
-`rho` up, lowers `v_A`, raises `M_A`, so a bell might detach sooner") is competing against a
-geometry that is running out at the same station. **A bell has to be short to be useful, and a
-short bell buys little.**
+- **Detachment needs no structure at all.** Free expansion crosses `M_A` = 1 on its own at
+  1.24–1.73 exit radii. That is P3, unchanged. Nothing — bell, flare, or otherwise — is *required*
+  for the plume to let go. What P3 killed was the claim that it lets go *inside* the nozzle, which
+  is a wording fix and not a hardware problem.
+- **Pointing is the whole job**, and **it finishes before detachment.** `<cos theta>` is 0.999
+  inside the magnet, 0.997 at the exit, and 0.57–0.93 by the time `M_A` reaches 1. All of the
+  damage is done in the sub-Alfvénic stretch.
 
-We are not declaring R8 dead — that needs the MHD we have deferred — but it should drop off the
-critical path. **Nothing in the paper needs to wait on it.**
+**Second, a wall cannot act in that stretch, for two independent reasons.**
+
+1. **The plume is glued to field lines there.** `beta` = 0.033–0.154 means the field is 6–30×
+   over-strength. To be steered by a wall, plasma has to *cross* field lines, which at that `beta`
+   it cannot. This is R8's own stated difficulty, now quantified.
+2. **The wall would sit outside the plume's magnetic envelope entirely.** Traced on R8's own
+   geometry, the plume's **outermost flux tube reaches 6.34 m and turns** — 5% past the 6.03 m
+   exit — against R8's *smallest* proposed bell radius of **7.0 m**. The bell is not a surface the
+   plume slides along; it is a surface the plume would have to break out through.
+
+**Third, R8's own thermal gate pushes the bell the wrong way.** Its table has graphite *not*
+surviving at the magnet exit (16 224 K on the equilibrium branch) and surviving only from 7.0 m
+outward, once the gas has expanded and cooled. So the wall is *required* to sit past exactly the
+station where the field lines have already turned and the fanning has already happened. **The gate
+that lets the wall survive is the gate that makes it useless.**
+
+**The squeeze.** A bell is either close in — where it must fight a 6–30× over-strength field, and
+where its own thermal table forbids it — or far out, where the plume is free but has already
+fanned to 0.62–0.74. Both ends fail, and the ablation work in `detachment.py` establishes only
+that a wall would *survive*, which turns out not to be the question.
+
+**The flare wins by working with the coupling instead of against it.** The plume is glued to field
+lines, so bend the field lines. A magnetic extension holds it inside a controlled 15° cone to
+`M_A` = 1 and releases it at `<cos theta>` = **0.983**, with no interface, no wall erosion over
+eleven cycles, and no MHD question outstanding.
+
+**A correction we owe on our own side.** `detachment.py`'s ablation docstring said "the gas
+dynamics were never the obstacle: every exit is supersonic, and a diverging wall on supersonic
+flow is exactly what a de Laval nozzle is. The obstacle is heat." **That was the wrong Mach
+number**, and it is the sentence that made the bell look attractive to both repositories. Being
+supersonic (`M` = 2.4–3.4) is not being super-Alfvénic (`M_A` = 0.44–0.72). Corrected in place.
+
+**What we are and are not claiming.** This is geometry plus our own `beta` and `M_A`, not an MHD
+solve — we have not proved a bell impossible. But R8 asked what would settle whether the paper can
+carry a staged nozzle, and the answer is that it should not try: **the structure is not needed for
+detachment and cannot act where the pointing loss occurs.** R8 comes off the critical path, and
+`sec:watering_it_down` should not spend words on a bell.
 
 **Reproduce:** `make analysis-nozzle-extension`.
 
@@ -745,7 +779,7 @@ The amendment box handles the levels and not the weighting. Nothing in P12 depen
 | item | why | what it needs |
 | --- | --- | --- |
 | **R13, argon** | **a new species, not a new calculation** | an `eos_argon` beside `eos_water`: Ar I–III Saha ladder with the ionisation potentials and statistical weights, a frozen-composition variant for the ADR-0026 bracket, and a sound speed. Then the whole `expansion` → `detachment` → `fireball` → `radiance` chain re-run on it, plus `conductivity` for sub-ask 4's field leak. The Saha machinery exists and is tested; the species does not. **Recommended as the next build** — see P15. |
-| **R8, the full MHD** | out of reach, and probably unnecessary | prescribed-inflow BC, an inward-normal immersed wall for `r = r_w(z)` (the IBM only does upward-facing `z = z_s(r)`), table EOS wired into `state.rs`/`riemann.rs`, and radiation the 2D track lacks. **P14 makes it very likely moot**, and P12's turned-tube result says a wall placed past ~1.5 exit radii would be pushing on field lines that have already curved back. |
+| **R8, the full MHD** | **not deferred — declined, with the physical reason** (P14) | Would still need a prescribed-inflow BC, an inward-normal immersed wall for `r = r_w(z)` (the IBM only does upward-facing `z = z_s(r)`), table EOS wired into `state.rs`/`riemann.rs`, and radiation the 2D track lacks. **We are not asking for it**, because the answer does not turn on it: no structure is needed for detachment, and a wall cannot act in the sub-Alfvénic stretch where the pointing loss occurs. Reopen only if the magnetic extension is refused on cost. |
 | **R4 / R5, the wall-interaction half** | same machinery | as above. Reduced in value by [What the replies got wrong](#what-the-replies-got-wrong) item 1, but still owed. |
 | **The `1/r`-graded profile of R15's third question** | a new field grading | not modelled here. It is a re-derivation of the 20/12/9/5 T profile against a flared wall, then this document's whole chain re-run on it. Cheap in machinery, not free in runs. See P19. |
 
