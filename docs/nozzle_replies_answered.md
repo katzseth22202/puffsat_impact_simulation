@@ -39,8 +39,8 @@ same: neither had the divergence traced against a real field solve.
 | **R14** | **Do not adopt 672.9 m³.** Our pair was never derived as a pair, and there is a four-way consistent solution neither repo found. | **yes** (P20) |
 | **R15** | **The liner**, on both questions — and **yes**, P9's 5 T is a bore-referenced standoff number, so the larger version is back on the table. | **yes** (P19) |
 
-**Twelve items fall out, P11–P21 and P23**, plus one small one (P22). P23 was raised by
-Seth mid-batch and is not a reply to any R-item.
+**Thirteen items fall out, P11–P21 and P23–P24**, plus one small one (P22). P23 and P24 were
+raised by Seth mid-batch and are not replies to any R-item.
 
 **If you read only three:** **P12** (the corrected `eta_geom`, which is the number R1 asked for and
 is better than R1's), **P15** (where the chain actually fails, which is a much smaller place than
@@ -56,8 +56,12 @@ threshold — and those are in [What the replies got wrong](#what-the-replies-go
    the difference between the chemistry shortfall being a footnote and being the design driver.
    See P15.
 2. **Which figure of merit the growth tables maximise**, and whether `k` may vary per pulse.
-   Momentum per projectile and momentum per kg expended want `k` moved in opposite directions.
-   See P23.
+   Momentum per projectile and momentum per kg expended want `k` moved in opposite directions,
+   and P24 finds the two legs pushed apart by a drift term that changes sign between them.
+   See P23 and P24.
+3. **Which efficiency multiplies which term** in `sqrt(1+k) x eta_jet ± 1`. Our `eta_geom` is an
+   expansion-frame quantity and the `sqrt(1+k)` bound includes the drift's energy; the drift is
+   turned by a magnetic wall rather than by the flare. See P24.
 
 ---
 
@@ -898,6 +902,121 @@ departure burn want it moved in *opposite* directions.
 **What we need back.** Which figure of merit the growth tables are actually maximising, and
 whether `k` is allowed to vary per pulse. With those two answers this becomes a one-line
 optimisation; without them it is a genuine fork.
+
+---
+
+### P24. The drift's bounce is real, already modelled, and worth a third of the overtake's impulse
+
+**Raised by Seth, 2026-09-05, as a check on whether the chain accounts for two competing effects
+of the merged centre of mass. It does — and stating them explicitly changes how close to 0.775
+the design actually is.**
+
+#### The two effects, and where each already lives
+
+| effect | where it is in this repository | size at `k` = 8.52 |
+| --- | --- | ---: |
+| **The drift steals energy from the fireball.** Energy in bulk centre-of-mass motion is not available to the expansion. | `nozzle_ledger.drift_fraction(k)` = `f_d` = `1/(1+k)`; `reflection_baseline` uses `u = sqrt(1-f_d) v_g` for the thermal part | **10.5% of the pulse** |
+| **The drift can be bounced.** On the overtake it points prograde — the wrong way — so reversing it is impulse the nozzle gets for free. | the sign flip in `nozzle_ledger.passthrough_floor` (`-sqrt(f_d)` on the overtake), so `nozzle_work = base + sqrt(f_d)`; and `toll.py`'s untolled `±1` | **+1.000 in units of `m w`** |
+
+**Both scale with `f_d = 1/(1+k)`, so both grow as `k` falls** — which is exactly why they matter
+to P23's lever and had to be checked before it.
+
+#### The drift is transferred perfectly, not merely efficiently
+
+This is the part worth stating in the paper. The drift momentum is `M V = m w` **by momentum
+conservation alone**. It never passes through the nozzle as energy, so `eta_chem` cannot charge it
+and `eta_geom` cannot misaim it. It enters the impulse twice and neither entry is tolled: once as
+the incoming momentum `p_in` (the `±1`), and once as energy inside the `sqrt(1+k)` bound. The only
+thing required of the hardware is that the plume be **turned at all** — not turned well.
+
+#### Impulse per projectile, in units of `m w`
+
+Ship frame, impulse = `p_in - p_out`, with `p_in` = `+m w` on the overtake (prograde, the wrong
+way) and `-m w` head-on:
+
+| `k` | overtake @ 45.58: jet | + drift | **total** | drift's share | head-on @ 75: jet | − drift | **total** |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2.00 | 1.600 | +1.0 | **2.600** | 38% | 1.684 | −1.0 | **0.684** |
+| 4.00 | 1.943 | +1.0 | **2.943** | 34% | 2.132 | −1.0 | **1.132** |
+| 5.20 | 2.077 | +1.0 | **3.077** | 32% | 2.346 | −1.0 | **1.346** |
+| **8.52 (flown)** | 2.253 | +1.0 | **3.253** | **31%** | 2.807 | −1.0 | **1.807** |
+| 12.00 | 2.171 | +1.0 | **3.171** | 32% | 3.153 | −1.0 | **2.153** |
+
+#### What this does to "how far short are we"
+
+**Nearly a third of the overtake's impulse never passes through the nozzle.** So the shortfall in
+`eta_jet` is *not* the shortfall in delivered impulse:
+
+| | at 45.58 km/s, `eta_geom` = 0.93 |
+| --- | ---: |
+| `eta_jet` reached | 0.679 against a 0.775 target — **12.4% short** |
+| overtake impulse reached | 3.095 against 3.391 — **8.7% short** |
+
+**The efficiency number overstates the miss by about half again.** P15's crossover analysis is
+still the right way to size the problem, but when the paper says "misses 0.775" it should also say
+what that costs in impulse, because on the leg where the miss happens they are different numbers.
+
+#### And it changes P23's verdict on lowering `k`
+
+Seth's question was whether the bounce compensates enough to avoid lowering `k` as far. **On the
+overtake leg it substantially does; on the head-on leg it makes things worse.**
+
+| `k` move | overtake impulse | (jet term alone) | **head-on impulse** |
+| --- | ---: | ---: | ---: |
+| 8.52 → 6.00 | 0.967× | 0.952× | **0.815×** |
+| 8.52 → 5.20 | **0.946×** | 0.922× | **0.745×** |
+| 8.52 → 4.00 | 0.905× | 0.862× | **0.627×** |
+| 8.52 → 2.00 | 0.799× | 0.710× | **0.379×** |
+
+The `+1` cushions about a third of the overtake's loss — dropping to `k` = 5.2 costs 5.4% rather
+than 7.8%. **But the `−1` on the head-on leg amplifies it instead**, because shrinking the jet term
+subtracts against a fixed debit: the same move costs **25.5%** there.
+
+**So a single flown `k` cannot serve both legs.** Cutting `k` to clear 0.775 on leg 1's cold tail
+would cost leg 2 a quarter of its impulse, and leg 2 has no problem to solve. This is now the
+strongest argument for the per-pulse `k` question P23 asks `aim` — the two legs do not merely
+prefer different `k`, they are pushed apart by a term that changes sign between them.
+
+#### A mechanism correction we owe on leg 1, in the same family as P17
+
+**The "cup closed at the ship end" is not a loss-cone mirror. It is a magnetic wall.** A mirror
+holds particles by `mu` conservation, and P11 shows there is no `mu`; `(J x B) . B = 0`, so the
+field exerts no force along a field line on an isotropic fluid. What actually stops the plume is
+**magnetic pressure**: at low `beta` the field is a wall the flow cannot push through.
+
+The good news is that the conclusion survives the mechanism change, and with room:
+
+| `k` | `T_stag` | stagnation pressure | `B` needed to stand it off | vs the 12 T chamber | `beta` |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 2.00 | 24 515 K | 16.21 MPa | 6.38 T | **1.9×** | 0.283 |
+| 4.00 | 20 726 K | 11.83 MPa | 5.45 T | 2.2× | 0.206 |
+| **8.52** | 15 147 K | 7.19 MPa | 4.25 T | **2.8×** | 0.125 |
+| 12.00 | 10 503 K | 4.71 MPa | 3.44 T | 3.5× | 0.082 |
+
+**The wall holds on every row**, and — usefully — the retired loss-cone picture pointed the same
+way (its required mirror ratio rises from 1.45 to 2.11 across the same span), so this is a
+correction to the *reason*, not to the answer. But note the third cost of lowering `k` that this
+exposes: **the margin falls from 2.8× to 1.9× in field**, because a lower `k` is a hotter, higher
+pressure plume pushing harder on the wall that has to turn it.
+
+#### Is the bounce elastic?
+
+Seth's own caution — "assume the reflection is not that efficient". At `beta` = 0.08–0.28 the field
+is a **spring**: it is compressed by the arriving plume and pushes back, storing and returning the
+energy, so the reflection itself should be close to elastic. **The loss channel is not the bounce,
+it is the dwell** — a plume held at the closed end radiates for longer, and that is `phi` (P21),
+which has not been computed for the reflection specifically. That is the thing to check before
+calling the bounce free, and it is cheap: it is the same quadrature with a longer residence.
+
+#### One loose end we cannot close from here
+
+Our `eta_geom` is computed in the **expansion frame** — `expansion.py` starts "from the plume at
+rest" — so it describes the thermal jet. `aim` multiplies it onto `sqrt(1+k)`, which is built from
+the **total** energy including the drift. Whether the same `eta_geom` should apply to the drift's
+share of that energy is not answerable here: the drift is turned by the magnetic wall, and the
+thermal jet is turned by the de Laval flare, and those are different devices with different
+efficiencies. **Confirm which factor multiplies which term**, or the chain is charging a nozzle
+efficiency against momentum that never entered the nozzle.
 
 ---
 
