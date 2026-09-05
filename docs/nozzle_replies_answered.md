@@ -39,8 +39,8 @@ same: neither had the divergence traced against a real field solve.
 | **R14** | **Do not adopt 672.9 m³.** Our pair was never derived as a pair, and there is a four-way consistent solution neither repo found. | **yes** (P20) |
 | **R15** | **The liner**, on both questions — and **yes**, P9's 5 T is a bore-referenced standoff number, so the larger version is back on the table. | **yes** (P19) |
 
-**Thirteen items fall out, P11–P21 and P23–P24**, plus one small one (P22). P23 and P24 were
-raised by Seth mid-batch and are not replies to any R-item.
+**Fifteen items fall out, P11–P21 and P23–P26**, plus one small one (P22). P23–P26 were raised
+by Seth mid-batch and are not replies to any R-item.
 
 **If you read only three:** **P12** (the corrected `eta_geom`, which is the number R1 asked for and
 is better than R1's), **P15** (where the chain actually fails, which is a much smaller place than
@@ -1017,6 +1017,160 @@ share of that energy is not answerable here: the drift is turned by the magnetic
 thermal jet is turned by the de Laval flare, and those are different devices with different
 efficiencies. **Confirm which factor multiplies which term**, or the chain is charging a nozzle
 efficiency against momentum that never entered the nozzle.
+
+---
+
+### P25. 0.775 is a calibration to the literature, not a threshold — and the plate never beats the nozzle
+
+**Raised by Seth, 2026-09-05: where does 0.775 come from, is falling short a *problem*, and would
+a pusher plate be better below it?**
+
+#### Where 0.775 comes from
+
+The paper states it plainly and it is not a physical threshold. `sec:jet_efficiency`:
+
+> Published solenoid results for drift-free plumes report collimation ratios of 0.65 to 0.85,
+> which is 130 to 170% of the 0.5 available to them by reflection. **Our own target of 0.775 is
+> 147% of the 0.529 available at `k` = 8.5.** We are asking a solenoid for what solenoids are
+> already reported to deliver.
+
+So 0.775 is **the literature's own collimation performance, rescaled to our reflection baseline**.
+It is a statement about what a solenoid ought to manage, not about what the architecture needs.
+The paper elsewhere concedes it sits above the best directly comparable simulation: *"the 0.775 we
+require sits above the 0.6 to 0.7 the best case returns"* (Inatomi's solenoid).
+
+#### The values that *are* thresholds, and where we sit against them
+
+| threshold | value | what fails below it | where we are |
+| --- | ---: | --- | --- |
+| **forward thrust**, `1/sqrt(1+k)` | **0.324** | the nozzle pushes the craft **backward**; the chain returns nothing | 0.68–0.87 — **2.1 to 2.7× clear** |
+| growth break-even | between 0.324 and ~0.45 (`tab:mass_interest_growth`'s zero rows sit at `eta_geom` = 0.25–0.30) | the craft runs forward but **loses mass** — "underwater on a mass interest" | `eta_geom` = 0.58–0.98, well clear |
+| scale-case economics | ~0.70 | the cost rebuttal at fleet scale | cleared above ~52 km/s |
+| early-generation economics | ~0.89 | the \$3200/kg worst-case rebuttal | not cleared anywhere |
+| **the 0.775 target** | 0.775 | **nothing** — it is a calibration | cleared above ~56 km/s |
+
+**So falling short of 0.775 is not a failure, it is a worse result.** It moves the design down
+`tab:mass_interest_growth` — slower doubling, smaller return — and it does not approach anything
+that breaks. The number that would break something is **0.324**, and the chain clears it by more
+than a factor of two everywhere, on both legs, on both branches, with or without an extension.
+
+**What the paper should change:** say which of these is which. At present 0.775 is quoted as a
+requirement, and a reader cannot tell it from the 0.324 that actually is one. Given P24, the
+honest framing is: *the architecture works above 0.324, grows above roughly 0.45, and matches the
+solenoid literature above 0.775.*
+
+#### Would a pusher plate be better below 0.775? No — and mostly it is not even available
+
+Worth doing because this repository owns `f`: `CONCLUSION.md` puts it at **0.8**, defined as the
+axial momentum delivered as a fraction of full-capture-perfect-bounce, so a plate's impulse is
+`2f m w` = **1.600 m w**.
+
+| `eta_jet` | overtake nozzle | vs the plate | head-on nozzle | vs the plate |
+| ---: | ---: | ---: | ---: | ---: |
+| 0.324 (thrust floor) | 2.000 | 1.25× | 0.000 | — |
+| **0.679 (our 45.58 value)** | **3.095** | **1.93×** | 1.095 | 0.68× |
+| 0.775 (the target) | 3.391 | 2.12× | 1.391 | 0.87× |
+| 0.846 (our 75 value) | 3.610 | 2.26× | 1.610 | 1.01× |
+
+**On the overtake the nozzle beats an `f` = 0.8 plate for any `eta_jet` above 0.194**, and we are
+3.5× above that. Even at our shortfall the nozzle delivers **93% more impulse** than a perfect-as-
+built plate. The plate never wins.
+
+**On the head-on departure a plate cannot be used at all**, and the reason is structural rather
+than numerical. The projectile arrives with momentum `-m w`; a plate returns it at `+f m w`, so the
+impulse is `-(1+f) m w` — **it decelerates the craft.** Forward thrust on that leg requires
+ejecting *more* momentum than arrived, and **only added mass can do that.** That is the reason the
+departure burn needs a slug at all, and it is worth one sentence in the paper because it makes the
+whole nozzle-versus-plate question disappear on that leg.
+
+**And at these speeds the plate is not an option regardless.** This repository's `f` study runs
+3.2–16 km/s; the nozzle legs run 45.58–75 km/s, where `sec:minimum_nozzle`'s "no wall survives the
+pass" applies — the front's own radiative flux is 4.5 TW/m² against graphite's 13.1 MW/m²
+(`snowplow.py`). The two architectures do not overlap in velocity, so the comparison above is a
+sanity check rather than a live design choice.
+
+---
+
+### P26. Why our regime beats the literature's 0.34 — and it is a *regime* argument, not a geometry one
+
+**Raised by Seth, 2026-09-05, and it is the right thing to want in the paper.** The paper already
+gives four reasons our nozzle should beat Schilling's 0.34, and all four indict **his geometry**:
+his field is a 32-strut cage with gaps (Ampère's law on an interior loop encloses no net current),
+its maximum sits at the *closed* apex, plasma trapped there enters a resistive heating loop, and
+his run stops with performance still climbing. The paper's summary is sharp and correct — *"the
+distinction that matters is residence rather than resistivity"* — and it even concedes that per
+interaction **his field grips more cleanly than ours**, `Rm` of 300–3e4 against our 39–650.
+
+**What that argument cannot do is explain why we should beat the *good* nozzles in the same
+literature** — Ahedo's 0.63–0.83 or Inatomi's 0.6–0.7, neither of which has a cage. The paper's
+0.775 sits above both, and at present it is justified only by a scaling of collimation ratios.
+**This batch supplies the missing reason, and it is fundamental rather than geometric.**
+
+#### The advantage: our plume is a fluid, so the field is a wall rather than a maze
+
+Every nozzle in that comparison is modelled **collisionless**. Ahedo's is explicitly "collisionless,
+electron-magnetized, current-free and low `beta`". In that regime a plasma is a population of
+*particles*, each conserving its own `mu`, and the field's *topology* governs everything: particles
+mirror, trap in local `|B|` minima, and leak through gaps. Trapping is the dominant failure mode,
+and Schilling's apex bottle is one instance of it.
+
+**Our plume is not in that regime, and P11 measures the distance: `Kn` = 2.5e-7**, on the longest of
+three collision channels. A parcel collides two to ten million times crossing the bore. It is a
+**fluid**, and three things follow that have no counterpart in the collisionless literature:
+
+1. **It cannot be magnetically trapped. At all.** `(J x B) . B = 0` identically, so for a
+   scalar-pressure fluid the field exerts **no force along a field line**. The mirror force of
+   kinetic theory is proportional to `p_perp - p_par`, and collisions erase that anisotropy in
+   ~1e-10 s against a 2 ms transit. **Every trapping failure mode in that literature — loss cones,
+   magnetic bottles, apex traps, ripple wells — is structurally unavailable to us** (P17 reaches
+   the same conclusion from the ripple side, and withdraws P8's coil-count requirement because of
+   it). The paper's "every gram has a downhill path out" is not a property of the graded profile.
+   It is a property of the *regime*, and it would hold even if the profile were not monotone.
+2. **The field is a wall, not a fence.** At `beta` = 0.013–0.15 the magnetic pressure exceeds the
+   plasma's by 7 to 75×, so a continuous winding confines the plume the way a pipe confines gas.
+   P24 shows the same thing doing the harder job at the closed end, standing off the full
+   stagnation pressure with 2.8× margin in field.
+3. **The bore is a pipe.** Traced through the real field, `<cos theta>` inside the winding is
+   **0.999** — there is no divergence loss at all until the plume passes the last coil. The entire
+   remaining loss is a detachment-surface question, which is a much smaller and better-posed
+   problem than "how much plasma does the topology lose".
+
+#### What the paper should say, and why it matters more than the cage argument
+
+> The published numbers this section brackets against were all computed for collisionless plumes,
+> where the field is a topology that particles navigate and trapping is the dominant loss. Our
+> plume is not in that regime. At the flown bag density the Knudsen number is `2.5e-7`: a parcel
+> collides millions of times crossing the bore, so the plasma is a continuum fluid with a scalar
+> pressure. For such a fluid the Lorentz force has no component along a field line, so the field
+> cannot hold the plume back at all — it can only wall it in, and at `beta` of 0.01 to 0.15 it walls
+> it in with an order of magnitude to spare. The collimation figures in the literature are
+> therefore not a ceiling on this device. They are measurements of a different problem, in which
+> the nozzle has to win an argument with the field's topology that ours never has.
+
+**Three reasons to prefer this to the cage argument**, which should be kept but demoted:
+
+1. It explains the gap against the **good** nozzles, not only against the cage.
+2. It is a statement about our own measured state rather than about someone else's design, so it
+   cannot be answered by "he should have used a solenoid".
+3. It is **falsifiable and already tested**: if `Kn` were of order 1 the argument collapses, and
+   P11 is the run that checks it.
+
+#### The honest cost of the argument, and it must be stated with it
+
+**If their regime does not bound us from above, it does not support us from below either.** The
+paper currently draws comfort from "we are asking a solenoid for what solenoids are already
+reported to deliver". That sentence has to go if this argument is adopted: a collisionless
+solenoid's 0.65–0.85 is neither a ceiling nor a floor for a continuum one. **Our `eta_geom` then
+stands on our own solve and nothing else** — 0.58–0.86 as flown, 0.86–0.98 with R11's extension.
+That is a stronger position but a lonelier one, and the paper should say so rather than keep both
+arguments.
+
+#### And it makes the argon case in one line
+
+The same density that makes us collisional is what makes the water dissociation toll bite (P15).
+**Our regime buys the nozzle and pays for it in chemistry.** Argon keeps the first and drops the
+second, which is why P15 recommends it as the next build: it is not an incremental efficiency, it
+is the only change that keeps the regime advantage without the regime's cost.
 
 ---
 
