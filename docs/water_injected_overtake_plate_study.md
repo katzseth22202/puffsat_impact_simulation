@@ -151,7 +151,8 @@ architecture superiority is ready to transfer.
 - [x] Implement the overtake mass/energy/impulse reference and its conservation checks.
 - [x] Quantify gasification versus full molecular-dissociation energy scales.
 - [x] Quantify coating inventory versus diameter, curvature, and thinner layers.
-- [ ] Specify bounded incoming pulse and injection profiles and source-energy accounting.
+- [x] Specify and mass-normalize bounded incoming pulse and injection profiles.
+- [ ] Complete source thermodynamics and collision-paid gasification accounting.
 - [ ] Validate the injected-flow calculation against analytic limits and convergence.
 - [ ] Measure combined, unsprayed, and injection-only impulse at the first speed.
 - [ ] Resolve chemistry and wall loading through the impulse-producing interval.
@@ -165,9 +166,10 @@ architecture superiority is ready to transfer.
 | Bulk-momentum cancellation alone does not bound hot-mixture plate impulse at 2f; the common ideal overtake ceiling is 1 + sqrt(1+k). | Conservation identities and `ledger_pulses.csv`; already identified by the proposal. | Ready as an accounting qualification, not a plate-performance claim. |
 | At the 45.58 km/s, k = 8.5 reference, gasification costs about 2.13% of incoming KE; full molecular dissociation represents a 46.59% store. | `ledger_pulses.csv`, with the reference-state qualifications above. | Useful motivation; neither actual dissociation nor recovered energy has been measured. |
 | A 100 micrometer full-face layer need not be a small consumable; 1–10 micrometers is much cheaper in inventory. | `ledger_coatings.csv`; actual area and illustrative density explicit. | Design trade only; do not prescribe a protective thickness yet. |
+| Distributed mixing depends on radial overlap: at r_foot/R = 0.75, uniform full-plate injection places 56.25% of its mass inside the incoming footprint; an r-squared source places 31.64% there. | `profile_injection.csv` and independently integrated source normalization tests. | Input geometry only. The outer water can still interact with outward flow; these fractions are not capture efficiency. |
 | Water injection beats a bare plate or a magnetic nozzle, recovers recombination energy, or simplifies survivable hardware. | No simulation/engineering evidence yet. | No result to transfer; corresponding checklist items remain open. |
 
-Checkpoint verification: 16 new acceptance tests pass; all Python lint, format,
+Checkpoint verification: 24 study acceptance tests pass; all Python lint, format,
 and strict type checks pass. A broader Python run was interrupted after 164
 passes. Full repository tests/Rust lint could not execute because this environment
 has no `cargo`; this is not a full-suite pass.
@@ -176,19 +178,67 @@ has no `cargo`; this is not a full-suite pass.
 
 - Branch: `main`; find the latest study checkpoint with
   `git log --oneline --grep='water.*plate'` and inspect `git status --short` first.
-- Completed: Step 0 and the checked items above. Reproduce with
-  `make water-plate-ledger && make water-plate-test`.
-- Active next step: define and verify bounded incoming-pulse and injection-source
-  profiles for the first flow comparison. No hydrodynamic result exists yet.
+- Completed: Step 0 (commit 08dc8f3) and the kinematic profiles. Reproduce with
+  `make water-plate-ledger && make water-plate-profiles && make water-plate-test`.
+- Active next step: implement and validate the first conservative injected-flow
+  calculation. Source thermodynamics remains open; no hydrodynamic result exists yet.
 - Scratch: `todos/water_plate_study_scope.md` points here; it is not the canonical
   task state. The companion checkout is disposable and pinned at 9440b27.
 - Keep this checkpoint and the progress checklist synchronized with completed
   work. Record paper-ready findings with their evidence and limits in the table.
 
+## Step 1: bounded kinematic input profiles
+
+`make water-plate-profiles` writes [`profile_pulses.csv`](../data/results/water_plate/profile_pulses.csv)
+(45 cases) and [`profile_injection.csv`](../data/results/water_plate/profile_injection.csv)
+(18 cases). These are screening inputs, not a parameter optimization or flow solve.
+Their spatial and temporal mass integrals are checked independently by quadrature.
+
+The incoming screen at 45.58 km/s uses diameters 10/20/30 m, r_foot/R = 0.5/0.75/1,
+and durations 10/30/100/300/1000 microseconds. These are provisional search bounds;
+extend any binding edge. The initial shape is a uniform cylindrical pulse with
+zero radial divergence. Density is derived from 25 kg and never held fixed while
+changing area or duration. Incoming ram pressure is an input scale, not wall pressure.
+
+The first illustrative reference is D = 10 m, r_foot/R = 0.75, duration = 100
+microseconds: length 4.558 m, incoming density 0.12415 kg/m3, ram pressure 257.93 MPa.
+This is not a chosen optimum or a structurally qualified plate.
+
+Injection examples use k = 8.5 and compare uniform footprint-matched delivery,
+uniform full-plate delivery, and full-plate delivery weighted by r-squared. Flux
+is per projected area. For a curved plate convert to actual face flux using its
+local normal; source momentum is initially axial, not implicitly surface-normal.
+The cumulative radial mass fraction is (r/R_source)^(power+2), clipped at one.
+
+Temporal examples are all pre-spray, all during-pulse, or a half-and-half split.
+The pre-spray occupies [-2, -1] ms and the during part [0, 0.1] ms; t = 0 is
+unperturbed front arrival at the vertex plane. A solver must start early enough
+to represent the pre-spray and its earlier encounter with the incoming pulse,
+not initialize it at t = 0 as though no collision could already have occurred.
+Injection speeds are 10 and 100 m/s toward the pulse. Lead times, source duration,
+and velocities are illustrative and will need a wider scan once the solver exists.
+
+For the footprint-matched example, spreading 212.5 kg over the 1 ms pre-spray needs
+212,500 kg/s, versus 2,125,000 kg/s during the 100 microsecond pulse. At 100 m/s the
+area-mean equivalent stream densities are 48.1 and 481.0 kg/m3. These are continuity
+requirements m_dot/(A*u), not physical equilibrium vapor densities or shocked
+mixture densities. The r-squared case's local rim flux is twice its area mean.
+Such rates are recorded without making injector engineering a prerequisite to
+the ideal performance screen. Actual prespray expansion changes density/overlap.
+
+At 100 m/s the injected water carries 21,250 N s of backward momentum and 1.0625 MJ
+of KE (0.0041% of incoming KE). That is a prescribed kinetic input; actual feed
+pressure work is still unspecified. Injection-only control forces, not this scale
+alone, determine the recoil subtraction in a flow calculation.
+
 ## Next calculation
 
-Specify bounded incoming and injected gas profiles, then run the first controlled
-hydrodynamic comparison. Existing `euler2d` is lossless and fixed-gamma; it cannot
+Complete the source-energy prescription, then run the first controlled
+hydrodynamic comparison. Do not impose a cold ideal-gas state at the equivalent
+stream densities above and silently grant it free vaporization energy. Stored
+liquid and gaseous products must share a consistent energy zero, with local
+conversion drawing energy from the collision. Initial incoming temperature is
+still a named input to select and bracket. Existing `euler2d` is lossless and fixed-gamma; it cannot
 resolve the chemistry advantage. Injection, geometry, EOS, and wall losses must
 be checked together before a performance claim. Report required coating thickness,
 local pressure/heat flux, and permanent structure alongside consumable economy.
