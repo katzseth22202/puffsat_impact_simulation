@@ -1,13 +1,14 @@
 # PuffSat impact simulation — single build entry point (ADR-0018).
 # Delegates to cargo (Rust hot path) and uv (Python cold path); the two meet only in data/.
 #
-# TWO STUDIES live here (CONTEXT.md). Unprefixed targets belong to the per-collision `f(v)` study
-# (puffsat_impact_sim_design.md); `tamper-*` targets belong to the tamped-nozzle effective-Isp
-# study (puffsat_tamper_isp_prd.md), whose block is at the bottom of this file.
+# Unprefixed targets serve the per-collision study and nozzle-side calculations.
+# `tamper-*` serves the head-on study; `water-plate-*` serves the water-injected
+# overtake plate study (docs/water_injected_overtake_plate_study.md).
 
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
+.PHONY: water-plate-ledger water-plate-test
 .PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-nozzle-ledger analysis-nozzle-field analysis-nozzle-detachment analysis-nozzle-jet analysis-nozzle-snowplow analysis-continuum analysis-nozzle-fluxtube analysis-nozzle-extension analysis-nozzle-residence analysis-nozzle-front analysis-nozzle-phi analysis-replies analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-toll analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
@@ -642,3 +643,10 @@ data/results/tamper/ledger_anchors.csv: python/puffsat/tamper/ledger.py
 ## tamper-test: the tamped-nozzle study's tests alone (analytic anchors + invariants, PRD §8)
 tamper-test:
 	uv run pytest python/tests/test_tamper_ledger.py
+
+# Water-injected overtake plate: small analytic tables, regenerated together.
+water-plate-ledger:
+	PYTHONPATH=python $(PY) -m puffsat.water_plate.ledger
+
+water-plate-test:
+	uv run pytest python/tests/test_water_plate_ledger.py

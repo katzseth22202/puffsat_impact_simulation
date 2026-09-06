@@ -75,6 +75,10 @@ __pycache__/
 !/data/results/tamper/
 /data/results/tamper/*
 !/data/results/tamper/ledger_*.csv
+# Small analytic evidence for the water-injected overtake plate study.
+!/data/results/water_plate/
+/data/results/water_plate/*
+!/data/results/water_plate/ledger_*.csv
 # ...and the raw TOPS/OPLIB opacity pull (ADR-0007 amendment): the citable provenance
 # artifact behind the 69 km/s table; needs a network allow to re-fetch (`make fetch-tops`).
 !/data/tables/

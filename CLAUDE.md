@@ -7,6 +7,14 @@ efficiency of a PuffSat gas pulse bouncing off the pusher plate.
 - **Full design + rationale:** [`puffsat_impact_sim_design.md`](puffsat_impact_sim_design.md).
 - **Decisions:** [`docs/adr/`](docs/adr/).
 
+The **water-injected overtake plate study** is separate from both `f(v)` and the
+head-on tamper study. Scope and current results:
+[`docs/water_injected_overtake_plate_study.md`](docs/water_injected_overtake_plate_study.md).
+Its Python is `python/puffsat/water_plate/`, outputs are under
+`data/results/water_plate/`, and targets are `make water-plate-ledger` and
+`make water-plate-test`. Its incoming momentum is a credit, and its injected
+water ratio and geometry must not inherit head-on-study conventions.
+
 ## Architecture (settled)
 
 Two languages, one repo. The split is ADR-0002.
