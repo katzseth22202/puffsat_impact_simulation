@@ -80,6 +80,7 @@ __pycache__/
 /data/results/water_plate/*
 !/data/results/water_plate/ledger_*.csv
 !/data/results/water_plate/profile_*.csv
+!/data/results/water_plate/thermo_*.csv
 # ...and the raw TOPS/OPLIB opacity pull (ADR-0007 amendment): the citable provenance
 # artifact behind the 69 km/s table; needs a network allow to re-fetch (`make fetch-tops`).
 !/data/tables/

@@ -1,7 +1,8 @@
 # Water-injected overtake plate study
 
-Status: scope agreed in discussion; Step 0 analytic ledger implemented. No injected
-plate hydrodynamic performance, chemistry recovery, or survivability result yet.
+Status: scope, analytic ledger, kinematic profiles, and local equilibrium mixing
+screen implemented. No injected plate hydrodynamic performance, chemistry recovery,
+or survivability result yet.
 
 Source: [companion proposal at 9440b27](https://github.com/katzseth22202/Balloon-Pulse-Propulsion/blob/9440b2789195d14d18409b4eb619c80dba44f71d/docs/water_injected_overtake_plate_for_impact_sim.md).
 User refinements recorded 2026-09-05 are listed below. This is distinct from the
@@ -152,7 +153,9 @@ architecture superiority is ready to transfer.
 - [x] Quantify gasification versus full molecular-dissociation energy scales.
 - [x] Quantify coating inventory versus diameter, curvature, and thinner layers.
 - [x] Specify and mass-normalize bounded incoming pulse and injection profiles.
-- [ ] Complete source thermodynamics and collision-paid gasification accounting.
+- [x] Align stored liquid and vapor energy references; test collision-paid local mixing.
+- [x] Screen local equilibrium states for initial dissociation avoidance and energy stores.
+- [ ] Implement the flow source/boundary with the same energy reference and feed work.
 - [ ] Validate the injected-flow calculation against analytic limits and convergence.
 - [ ] Measure combined, unsprayed, and injection-only impulse at the first speed.
 - [ ] Resolve chemistry and wall loading through the impulse-producing interval.
@@ -167,9 +170,10 @@ architecture superiority is ready to transfer.
 | At the 45.58 km/s, k = 8.5 reference, gasification costs about 2.13% of incoming KE; full molecular dissociation represents a 46.59% store. | `ledger_pulses.csv`, with the reference-state qualifications above. | Useful motivation; neither actual dissociation nor recovered energy has been measured. |
 | A 100 micrometer full-face layer need not be a small consumable; 1–10 micrometers is much cheaper in inventory. | `ledger_coatings.csv`; actual area and illustrative density explicit. | Design trade only; do not prescribe a protective thickness yet. |
 | Distributed mixing depends on radial overlap: at r_foot/R = 0.75, uniform full-plate injection places 56.25% of its mass inside the incoming footprint; an r-squared source places 31.64% there. | `profile_injection.csv` and independently integrated source normalization tests. | Input geometry only. The outer water can still interact with outward flow; these fractions are not capture efficiency. |
+| In local equilibrium mixing at 45.58 km/s, k = 5–10 and assumed mixed densities 0.1–10 kg/m3 retain 97.9–100% of the full molecular dissociation store immediately after the merge. | `thermo_mixing.csv`; common liquid/vapor energy reference and source-state sensitivity below. | Conditional finding: simple uniform dilution in this box does not avoid most initial dissociation. Recombination during later pressure coupling remains untested. |
 | Water injection beats a bare plate or a magnetic nozzle, recovers recombination energy, or simplifies survivable hardware. | No simulation/engineering evidence yet. | No result to transfer; corresponding checklist items remain open. |
 
-Checkpoint verification: 24 study acceptance tests pass; all Python lint, format,
+Checkpoint verification: 33 study acceptance tests pass; all Python lint, format,
 and strict type checks pass. A broader Python run was interrupted after 164
 passes. Full repository tests/Rust lint could not execute because this environment
 has no `cargo`; this is not a full-suite pass.
@@ -178,10 +182,12 @@ has no `cargo`; this is not a full-suite pass.
 
 - Branch: `main`; find the latest study checkpoint with
   `git log --oneline --grep='water.*plate'` and inspect `git status --short` first.
-- Completed: Step 0 (commit 08dc8f3) and the kinematic profiles. Reproduce with
-  `make water-plate-ledger && make water-plate-profiles && make water-plate-test`.
+- Completed: Step 0 (08dc8f3), kinematic profiles (3485abd), and the local equilibrium
+  mixing screen. Reproduce with `make water-plate-ledger`, `make water-plate-profiles`,
+  `make water-plate-thermo`, and `make water-plate-test` (last two use the `sci` extra).
 - Active next step: implement and validate the first conservative injected-flow
-  calculation. Source thermodynamics remains open; no hydrodynamic result exists yet.
+  calculation, carrying the liquid/gas energy offset and the feed-work ledger.
+  No hydrodynamic result exists yet; the local mixed density is still an input.
 - Scratch: `todos/water_plate_study_scope.md` points here; it is not the canonical
   task state. The companion checkout is disposable and pinned at 9440b27.
 - Keep this checkpoint and the progress checklist synchronized with completed
@@ -231,14 +237,70 @@ of KE (0.0041% of incoming KE). That is a prescribed kinetic input; actual feed
 pressure work is still unspecified. Injection-only control forces, not this scale
 alone, determine the recoil subtraction in a flow calculation.
 
+## Step 2: local equilibrium mixing with collision-paid gasification
+
+`make water-plate-thermo` produces [`thermo_mixing.csv`](../data/results/water_plate/thermo_mixing.csv)
+(84 states: four speeds, seven nonzero k values, three mixed densities) and
+[`thermo_sensitivity.csv`](../data/results/water_plate/thermo_sensitivity.csv)
+(24 source/reference variations at the cold k = 8.5 anchor).
+
+This is a closed-parcel calculation. It conserves signed momentum and total energy
+when projectile vapor and carried liquid mix inelastically, then inverts the
+existing equilibrium EOS at a chosen final gas density. It does not impose a
+global mixture on the bowl, compute where mixing occurs, or equate the local k to
+the global k without qualification. It represents a parcel where that ratio is
+realized. No wall stagnation, radiation, expansion, or species evolution is solved.
+
+Stored water is liquid at 293.15 K and 101325 Pa. Match CoolProp/IAPWS-95 internal
+energy to `eos_water` at dilute molecular vapor (400 K, 0.01 kg/m3). Add the resulting
+constant offset to the liquid's internal energy. This yields about -1.914 MJ/kg
+on the bound-molecular-gas zero, with CoolProp 7.2.0; negative is physically correct
+on this reference. Heating/gasifying it to the 400 K vapor reference costs about
+2.471 MJ/kg of internal energy. The earlier 2.6 MJ/kg remains a rounded enthalpy
+scale, not a second debit. No dissociation cost is subtracted separately because
+the gas EOS already includes it. The bridge transfers an internal-energy
+difference; it is not a globally stitched phase/plasma EOS for a flow solver.
+
+Incoming vapor is provisionally 400 K at 0.12415 kg/m3, the input reference density.
+This cold molecular energy is held fixed for the local screen across speeds; the
+screen does not assert that the resulting mixture follows the input geometry.
+Mixed gas density is sampled at 0.1, 1, and 10 kg/m3, independently of stream
+density. It must ultimately come from the flow, not be fitted to aid recombination.
+Baseline injection velocity is zero; a 100 m/s opposing velocity is included in
+sensitivity. For local ratio k, the merge velocity is `(w-k*u)/(1+k)` and the
+heat generated per projectile kg is `k*(w+u)^2/[2*(1+k)]`. The remaining bulk KE
+is retained explicitly. The plate can later dissipate more of it.
+
+At 45.58 km/s, k = 8.5, with stationary carried liquid:
+
+| Assumed mixed density (kg/m3) | Equilibrium temperature (K) | Molecular bond store held | Ionization store (MJ/kg mixture) |
+| --- | --- | --- | --- |
+| 0.1 | 13,947 | 99.974% | 14.38 |
+| 1 | 15,998 | 99.827% | 10.50 |
+| 10 | 18,242 | 98.775% | 6.73 |
+
+The molecular fraction here is **stored bond energy divided by full atomization
+energy**, including OH/H2/O2 bonds, not the fraction of molecules destroyed. Across
+all k = 5–10 at this speed it spans 97.897–99.991%. At these sampled local states,
+adding this much water does not avoid most initial dissociation. This is evidence
+for prioritizing the later recombination/pressure-coupling question, not evidence
+that water injection cannot help or that equilibrium recovery will occur.
+
+Sensitivity rows vary the dilute matching temperature 400/600 K, incoming vapor
+temperature 400/800 K, and injection speed 0/100 m/s. The energy-offset change
+between the two matching states is 1.295 kJ/kg (small compared with the phase
+energy); the table records the corresponding solved states rather than silently
+treating the two EOS models as identical. No extra composition or ablator has yet
+been added. Carbon effects remain a separate requirement.
+
 ## Next calculation
 
-Complete the source-energy prescription, then run the first controlled
-hydrodynamic comparison. Do not impose a cold ideal-gas state at the equivalent
+Carry the local energy reference into the actual source/boundary prescription,
+then run the first controlled hydrodynamic comparison. Do not impose a cold ideal-gas state at the equivalent
 stream densities above and silently grant it free vaporization energy. Stored
 liquid and gaseous products must share a consistent energy zero, with local
 conversion drawing energy from the collision. Initial incoming temperature is
-still a named input to select and bracket. Existing `euler2d` is lossless and fixed-gamma; it cannot
+provisionally 400 K, bracketed to 800 K in the local screen. Existing `euler2d` is lossless and fixed-gamma; it cannot
 resolve the chemistry advantage. Injection, geometry, EOS, and wall losses must
 be checked together before a performance claim. Report required coating thickness,
 local pressure/heat flux, and permanent structure alongside consumable economy.
