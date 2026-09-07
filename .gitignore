@@ -81,6 +81,18 @@ __pycache__/
 !/data/results/water_plate/ledger_*.csv
 !/data/results/water_plate/profile_*.csv
 !/data/results/water_plate/thermo_*.csv
+!/data/results/water_plate/chemistry_milestones.csv
+!/data/results/water_plate/chemistry_sizes.csv
+!/data/results/water_plate/chemistry_convergence.csv
+!/data/results/water_plate/chemistry.png
+!/data/results/water_plate/flow_reference_convergence.csv
+!/data/results/water_plate/flow_reference_milestones.csv
+!/data/results/water_plate/flow_reference_model.json
+!/data/results/water_plate/flow_reference.png
+!/data/results/water_plate/freeze_runs.csv
+!/data/results/water_plate/freeze_comparison.csv
+!/data/results/water_plate/freeze_model.json
+!/data/results/water_plate/freeze_comparison.png
 # ...and the raw TOPS/OPLIB opacity pull (ADR-0007 amendment): the citable provenance
 # artifact behind the 69 km/s table; needs a network allow to re-fetch (`make fetch-tops`).
 !/data/tables/

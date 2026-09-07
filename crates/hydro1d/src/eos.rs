@@ -22,6 +22,12 @@ use tables::Table;
 /// Lagrangian scheme conserves. Implementors are `Debug + Clone` so [`crate::kernel::Tube`] can
 /// derive both.
 pub trait Eos: core::fmt::Debug + Clone {
+    /// Material-specific closure for a Lagrangian cell. Uniform EOS implementations
+    /// retain the original behavior. Indexed implementations are currently supported
+    /// by the bare hydro/history path, not the radiation/ablation operators.
+    fn for_cell(&self, _cell: usize) -> &Self {
+        self
+    }
     /// Pressure `p(ρ, e)`.
     fn pressure(&self, rho: f64, e: f64) -> f64;
     /// Adiabatic sound speed `c_s(ρ, e)`.

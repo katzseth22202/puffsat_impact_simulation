@@ -12,7 +12,16 @@ head-on tamper study. Scope and current results:
 [`docs/water_injected_overtake_plate_study.md`](docs/water_injected_overtake_plate_study.md).
 Its Python is `python/puffsat/water_plate/`, outputs are under
 `data/results/water_plate/`, and targets are `make water-plate-ledger`,
-`make water-plate-profiles`, `make water-plate-thermo`, and `make water-plate-test`.
+`make water-plate-profiles`, `make water-plate-thermo`, `make water-plate-chemistry`,
+`make water-plate-flow-table`, `make water-plate-flow`, `make water-plate-flow-analysis`,
+`make water-plate-flow-report`, `make water-plate-freeze-parent`,
+`make water-plate-freeze-prepare`, `make water-plate-freeze`,
+`make water-plate-freeze-report`, and `make water-plate-test`.
+The same-state reaction-switch comparison is scoped in
+[ADR-0044](docs/adr/0044-water-plate-parcel-frozen-restarts.md).
+The flow reference is planar, stratified and
+prepositioned, not a distributed injector; its provisional cold/dense EOS is
+scoped in [ADR-0043](docs/adr/0043-water-plate-cold-source-and-provisional-dense-eos.md).
 Its incoming momentum is a credit, and its injected
 water ratio and geometry must not inherit head-on-study conventions.
 

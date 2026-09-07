@@ -136,6 +136,31 @@ pub struct Tube<E: Eos> {
     energy: Vec<f64>,
 }
 
+/// Explicit staggered state for heterogeneous columns; masses are per unit area.
+/// Boundary velocities are supplied explicitly, with no silent primitive projection.
+#[derive(Debug, Clone)]
+pub struct LagrangianState {
+    /// Ordered node coordinates [m], length N+1.
+    pub positions: Vec<f64>,
+    /// Nodal velocities [m/s], length N+1.
+    pub node_velocities: Vec<f64>,
+    /// Conserved cell masses per unit area [kg/m²], length N.
+    pub cell_masses: Vec<f64>,
+    /// Specific internal energies on the EOS storage reference [J/kg], length N.
+    pub specific_energies: Vec<f64>,
+}
+
+/// Boundary forces integrated using the same two force evaluations as Verlet.
+#[derive(Debug, Clone, Copy)]
+pub struct HydroStep {
+    /// Elapsed time [s].
+    pub dt: f64,
+    /// Positive-x impulse delivered to gas by the left wall, per unit area [Pa s].
+    pub left_wall_impulse: f64,
+    /// Negative-x impulse magnitude delivered by the right wall [Pa s].
+    pub right_wall_impulse: f64,
+}
+
 /// Shared wall-impulse integration loop for a bounce (ADR-0001): peak-detect the wall force, then
 /// integrate `J_wall` trapezoidally until it decays to `10⁻³` of its peak. [`Tube::run_bounce`],
 /// [`CoupledBounce::run`], [`CondensingBounce::run`], and [`AblatingBounce::run`] each wrap
@@ -285,6 +310,80 @@ impl Tube<IdealGas> {
 }
 
 impl<E: Eos> Tube<E> {
+    /// Initialize exact cell masses, nodal velocities, and internal energies.
+    ///
+    /// # Panics
+    /// Rejects invalid shapes, nonpositive mass/energy, unordered positions, or a
+    /// nonzero wall velocity. Callers own any initial projection impulse/heat.
+    #[must_use]
+    pub fn from_lagrangian(
+        state: LagrangianState,
+        eos: E,
+        left: Boundary,
+        right: Boundary,
+        viscosity: Viscosity,
+    ) -> Self {
+        let n = state.cell_masses.len();
+        assert!(n > 0);
+        assert_eq!(state.positions.len(), n + 1);
+        assert_eq!(state.node_velocities.len(), n + 1);
+        assert_eq!(state.specific_energies.len(), n);
+        assert!(state.positions.iter().all(|x| x.is_finite()));
+        assert!(state.positions.windows(2).all(|x| x[1] > x[0]));
+        assert!(state.node_velocities.iter().all(|x| x.is_finite()));
+        assert!(
+            state
+                .cell_masses
+                .iter()
+                .chain(&state.specific_energies)
+                .all(|x| x.is_finite() && *x > 0.0)
+        );
+        assert!(left != Boundary::Wall || state.node_velocities[0] == 0.0);
+        assert!(right != Boundary::Wall || state.node_velocities[n] == 0.0);
+        Self {
+            eos,
+            viscosity,
+            left,
+            right,
+            x: state.positions,
+            u: state.node_velocities,
+            mass: state.cell_masses,
+            energy: state.specific_energies,
+        }
+    }
+
+    /// Copy the full staggered state for offline material-history analysis.
+    #[must_use]
+    pub fn lagrangian_state(&self) -> LagrangianState {
+        LagrangianState {
+            positions: self.x.clone(),
+            node_velocities: self.u.clone(),
+            cell_masses: self.mass.clone(),
+            specific_energies: self.energy.clone(),
+        }
+    }
+
+    /// Advance one CFL-limited step, capped by the caller's next output time.
+    ///
+    /// # Panics
+    /// Requires a positive finite timestep limit and an untangled, valid state.
+    pub fn advance(&mut self, max_dt: f64) -> HydroStep {
+        self.advance_with_cfl_fraction(max_dt, 1.0)
+    }
+
+    /// As [`Self::advance`], with a fraction of the usual CFL step for time refinement.
+    /// Existing callers retain their original timestep and dynamics.
+    ///
+    /// # Panics
+    /// Requires a positive finite limit and `0 < fraction <= 1`.
+    pub fn advance_with_cfl_fraction(&mut self, max_dt: f64, fraction: f64) -> HydroStep {
+        assert!(max_dt > 0.0 && max_dt.is_finite());
+        assert!(fraction > 0.0 && fraction <= 1.0);
+        let dt = (fraction * self.stable_dt()).min(max_dt);
+        assert!(dt > 0.0 && dt.is_finite());
+        self.step_with_balance(dt)
+    }
+
     /// Build a tube with an arbitrary [`Eos`] from cell-centered primitive initial conditions on
     /// the node grid `x` (length `cells + 1`). The initial `e` is seeded from the initial `p` via
     /// [`Eos::energy_from_pressure`].
@@ -357,7 +456,7 @@ impl<E: Eos> Tube<E> {
     pub fn pressure(&self, j: usize) -> f64 {
         let e = self.energy[j];
         if e > 0.0 {
-            self.eos.pressure(self.density(j), e)
+            self.eos.for_cell(j).pressure(self.density(j), e)
         } else {
             0.0
         }
@@ -368,7 +467,9 @@ impl<E: Eos> Tube<E> {
     /// is the ablation-relevant thermal load (survivability companion to [`Self::wall_pressure`]).
     #[must_use]
     pub fn wall_temperature(&self) -> f64 {
-        self.eos.temperature(self.density(0), self.energy[0])
+        self.eos
+            .for_cell(0)
+            .temperature(self.density(0), self.energy[0])
     }
 
     /// Cell-centered velocity (average of the two bounding node velocities).
@@ -401,7 +502,7 @@ impl<E: Eos> Tube<E> {
         let rho = self.density(j);
         let e = self.energy[j];
         if e > 0.0 && rho > 0.0 {
-            self.eos.sound_speed(rho, e)
+            self.eos.for_cell(j).sound_speed(rho, e)
         } else {
             0.0
         }
@@ -485,6 +586,26 @@ impl<E: Eos> Tube<E> {
 
     /// Advance one step of size `dt` with velocity Verlet (kick–drift–kick).
     fn step(&mut self, dt: f64) {
+        self.step_with_balance(dt);
+    }
+
+    fn step_with_balance(&mut self, dt: f64) -> HydroStep {
+        let end_forces = |tube: &Self| {
+            let last = tube.cells() - 1;
+            (
+                if tube.left == Boundary::Wall {
+                    tube.wall_force()
+                } else {
+                    0.0
+                },
+                if tube.right == Boundary::Wall {
+                    tube.pressure(last) + tube.artificial_viscosity(last)
+                } else {
+                    0.0
+                },
+            )
+        };
+        let (left_old, right_old) = end_forces(self);
         // 1. Half-kick to uⁿ⁺¹ᐟ²; endpoints have zero acceleration so stay fixed.
         let accel = self.node_accelerations();
         for (ui, ai) in self.u.iter_mut().zip(accel.iter()) {
@@ -505,14 +626,26 @@ impl<E: Eos> Tube<E> {
             let v_new = 1.0 / rho_new;
             let dv = v_new - v_old[j];
             let q = self.artificial_viscosity(j);
-            self.energy[j] =
-                Self::update_energy(&self.eos, rho_new, self.energy[j], p_old[j], q, dv);
+            self.energy[j] = Self::update_energy(
+                self.eos.for_cell(j),
+                rho_new,
+                self.energy[j],
+                p_old[j],
+                q,
+                dv,
+            );
         }
 
         // 4. Half-kick to uⁿ⁺¹ using the updated (time-n+1) pressures.
+        let (left_new, right_new) = end_forces(self);
         let accel = self.node_accelerations();
         for (ui, ai) in self.u.iter_mut().zip(accel.iter()) {
             *ui += 0.5 * dt * ai;
+        }
+        HydroStep {
+            dt,
+            left_wall_impulse: 0.5 * dt * (left_old + left_new),
+            right_wall_impulse: 0.5 * dt * (right_old + right_new),
         }
     }
 
@@ -528,7 +661,7 @@ impl<E: Eos> Tube<E> {
     }
 
     /// Total axial momentum `Σ_i m̄_i u_i` carried by the nodes (boundary nodes own a half-cell).
-    fn total_momentum(&self) -> f64 {
+    pub fn total_momentum(&self) -> f64 {
         let cells = self.cells();
         self.u
             .iter()
@@ -544,9 +677,22 @@ impl<E: Eos> Tube<E> {
     /// Total (Lagrangian-conserved) gas mass `Σ_j m_j`. Conserved by the hydro step; a wall-sticking
     /// condensation sink (Rung C) is the only operator that removes it, so the drop equals the stuck
     /// mass (the mass-sink closure check exercises this).
-    #[cfg(test)]
-    fn total_mass(&self) -> f64 {
+    #[must_use]
+    pub fn total_mass(&self) -> f64 {
         self.mass.iter().sum()
+    }
+
+    /// Internal plus nodal kinetic energy per unit area, on the EOS storage zero.
+    #[must_use]
+    pub fn total_energy(&self) -> f64 {
+        let internal: f64 = self.mass.iter().zip(&self.energy).map(|(m, e)| m * e).sum();
+        let kinetic: f64 = self
+            .mass
+            .iter()
+            .enumerate()
+            .map(|(j, m)| 0.25 * m * (self.u[j].powi(2) + self.u[j + 1].powi(2)))
+            .sum();
+        internal + kinetic
     }
 
     /// Force the gas exerts on the rigid wall at `x = 0`: the total pressure `p + q` of cell 0.

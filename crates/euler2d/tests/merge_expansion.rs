@@ -262,7 +262,7 @@ fn report() {
     println!("\ncos(theta) = v_z/|v| histogram for the COLUMN (flat = isotropic, 0.100/bin):");
     for (i, h) in cosine_histogram(&g, 10).iter().enumerate() {
         let lo = -1.0 + 0.2 * f64::from(i32::try_from(i).unwrap_or(0));
-        let bar = "#".repeat(((h * 200.0) as usize).min(120));
+        let bar = "#".repeat((1..=120).take_while(|&n| f64::from(n) <= h * 200.0).count());
         println!("  [{lo:+.1}, {:+.1})  {h:.4}  {bar}", lo + 0.2);
     }
 }

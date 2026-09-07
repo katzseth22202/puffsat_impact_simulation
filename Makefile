@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: water-plate-ledger water-plate-profiles water-plate-thermo water-plate-test
+.PHONY: water-plate-ledger water-plate-profiles water-plate-thermo water-plate-chemistry water-plate-flow-table water-plate-flow water-plate-flow-analysis water-plate-test
 .PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-nozzle-ledger analysis-nozzle-field analysis-nozzle-detachment analysis-nozzle-jet analysis-nozzle-snowplow analysis-continuum analysis-nozzle-fluxtube analysis-nozzle-extension analysis-nozzle-residence analysis-nozzle-front analysis-nozzle-phi analysis-replies analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-toll analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
@@ -649,10 +649,66 @@ water-plate-ledger:
 	PYTHONPATH=python $(PY) -m puffsat.water_plate.ledger
 
 water-plate-test:
-	uv run --extra sci pytest python/tests/test_water_plate_ledger.py python/tests/test_water_plate_profiles.py python/tests/test_water_plate_thermodynamics.py
+	uv run --extra sci pytest python/tests/test_water_plate_ledger.py python/tests/test_water_plate_profiles.py python/tests/test_water_plate_thermodynamics.py python/tests/test_water_plate_chemistry.py python/tests/test_water_plate_flow_eos.py python/tests/test_water_plate_flow.py python/tests/test_water_plate_freeze.py
+	cargo test --release -p water_plate
+	cargo test --release -p hydro1d --test history
 
 water-plate-profiles:
 	PYTHONPATH=python $(PY) -m puffsat.water_plate.profiles
 
 water-plate-thermo:
 	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.thermodynamics
+
+water-plate-chemistry:
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.chemistry
+
+water-plate-flow-table:
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.flow_eos
+
+WATER_FLOW_CELLS ?= 20
+WATER_FLOW_LAYER ?= 1
+WATER_FLOW_SAMPLES ?= 64
+WATER_FLOW_TIMESTEP_FRACTION ?= 0.25
+WATER_FLOW_COUPLING_SAMPLES ?= 0
+WATER_FLOW_TABLE ?= data/tables/water_plate_flow.json
+WATER_FLOW_OUTPUT ?= data/results/water_plate/flow_h$(WATER_FLOW_LAYER)_n$(WATER_FLOW_CELLS)_cfl01_1ms.jsonl
+
+data/tables/water_plate_flow.json: python/puffsat/water_plate/flow_eos.py python/puffsat/eos_water.py python/puffsat/water_plate/thermodynamics.py
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.flow_eos --output $@
+
+water-plate-flow: $(WATER_FLOW_TABLE)
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.flow --cells $(WATER_FLOW_CELLS) --layer $(WATER_FLOW_LAYER) --samples $(WATER_FLOW_SAMPLES) --timestep-fraction $(WATER_FLOW_TIMESTEP_FRACTION) --coupling-samples $(WATER_FLOW_COUPLING_SAMPLES)
+	cargo run --release -p water_plate -- $(WATER_FLOW_TABLE) data/results/water_plate/flow_inputs_h$(WATER_FLOW_LAYER)_n$(WATER_FLOW_CELLS).json $(WATER_FLOW_OUTPUT)
+
+water-plate-flow-analysis:
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.flow --analyze $(WATER_FLOW_OUTPUT)
+
+# Assemble only already-analyzed runs; bulk trajectories are intentionally not versioned.
+.PHONY: water-plate-flow-report
+WATER_FLOW_REPORT_RUNS ?= n20_cfl01 n40_cfl01 n80_cfl01 n20_cfl005 n40_cfl01_eos3 n40_cfl01_s128 n40_cfl01_dense n40_cfl01_dense301
+WATER_FLOW_REFERENCE ?= data/results/water_plate/flow_h1_n40_cfl01_dense301_1ms.jsonl
+water-plate-flow-report:
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.flow_report $(addprefix data/results/water_plate/flow_h1_,$(addsuffix _1ms.jsonl,$(WATER_FLOW_REPORT_RUNS))) --reference $(WATER_FLOW_REFERENCE)
+
+# Same-state reaction switch; parent needs exact staggered checkpoints.
+.PHONY: water-plate-freeze-parent water-plate-freeze-prepare water-plate-freeze water-plate-freeze-report
+WATER_FREEZE_CELLS ?= 80
+WATER_FREEZE_PARENT ?= data/results/water_plate/freeze_parent_h1_n$(WATER_FREEZE_CELLS).jsonl
+WATER_FREEZE_INPUT ?= data/results/water_plate/freeze_inputs_n$(WATER_FREEZE_CELLS)_05ms.json
+WATER_FREEZE_OUTPUT ?= data/results/water_plate/freeze_n$(WATER_FREEZE_CELLS)_05ms.jsonl
+WATER_FREEZE_END ?= 0.0005
+WATER_FREEZE_TIMES_US ?= 153.5 193
+WATER_FREEZE_REPORT_RUNS ?= data/results/water_plate/freeze_05ms.jsonl data/results/water_plate/freeze_n80_05ms.jsonl data/results/water_plate/freeze_probe.jsonl
+WATER_FREEZE_REFERENCE ?= data/results/water_plate/freeze_n80_05ms.jsonl
+
+water-plate-freeze-parent:
+	$(MAKE) water-plate-flow WATER_FLOW_CELLS=$(WATER_FREEZE_CELLS) WATER_FLOW_LAYER=1 WATER_FLOW_COUPLING_SAMPLES=301 WATER_FLOW_OUTPUT=$(WATER_FREEZE_PARENT)
+
+water-plate-freeze-prepare: $(WATER_FREEZE_PARENT)
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.freeze $(WATER_FREEZE_PARENT) --times-us $(WATER_FREEZE_TIMES_US) --end $(WATER_FREEZE_END) --output $(WATER_FREEZE_INPUT)
+
+water-plate-freeze: water-plate-freeze-prepare $(WATER_FLOW_TABLE)
+	cargo run --release -p water_plate --bin freeze -- $(WATER_FLOW_TABLE) $(WATER_FREEZE_INPUT) $(WATER_FREEZE_OUTPUT)
+
+water-plate-freeze-report:
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.freeze_report $(WATER_FREEZE_REPORT_RUNS) --reference $(WATER_FREEZE_REFERENCE)
