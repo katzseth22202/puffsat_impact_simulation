@@ -149,13 +149,33 @@ def test_the_impactor_crosses_the_column_supersonically() -> None:
         assert check.crossing_time < check.acoustic_time
 
 
-@pytest.mark.parametrize("throat_area", [2.0, 7.0])
+@pytest.mark.parametrize("throat_area", [2.0, 4.0, 7.0])
 def test_the_sealed_vessel_verdict_depends_on_the_throat(throat_area: float) -> None:
-    """Item 0 clears at a 2 m^2 throat with margin ~24 and is marginal at 7 m^2 with ~7 -- not
-    the ~50 ADR-0016 assumes, because that used hydrogen's sound speed *and* a 30 ms blowdown
-    that only the small-throat end delivers."""
+    """**Item 0's answer is conditional on the throat, and it fails at the wide end.**
+
+    `n_eq` is ~24 at 2 m^2, ~12 at 4 m^2 and ~6.8 at 7 m^2 -- so against this study's own
+    `n_eq >= 10` bar the sealed vessel sets `k` only for throats of about 4 m^2 or narrower. At
+    7 m^2 the chamber empties before it has equilibrated and `k` reverts to being set by what the
+    cone sweeps, which is the coupling problem the walled chamber was adopted to escape.
+
+    None of these is the ~50 ADR-0016 assumes: that used hydrogen's sound speed (W4) *and* a
+    30 ms blowdown that only the small-throat end delivers.
+
+    **4 m^2 is the crossover and it is load-bearing**, because it is where W6's Isp
+    recommendation and this criterion agree.
+    """
     state = chamber.solve_chamber(400.0, 14.0, chamber.FLOWN_TEMPERATURE)
     check = chamber.acoustic_check(state, throat_area)
-    assert check.equilibrations > 5.0
-    assert check.equilibrations < 30.0
-    assert check.sealed_vessel_sets_k == (throat_area <= 2.0)
+    assert 5.0 < check.equilibrations < 30.0
+    assert check.sealed_vessel_sets_k == (throat_area <= 4.0)
+
+
+def test_blowdown_stretches_as_the_throat_narrows() -> None:
+    """The cost side of W6's recommendation. Choked mass flow goes as `A*`, so the pulse lengthens
+    in proportion as the throat shrinks -- 8 ms to 28 ms at 200 m^3 across the ask's 7 -> 2 m^2
+    range. That is 3.5x longer for the wall to absorb the same pulse, and it is *not* costed in
+    this study: it belongs to N9 items 1-7."""
+    state = chamber.solve_chamber(200.0, 7.1, chamber.FLOWN_TEMPERATURE)
+    wide = chamber.acoustic_check(state, throat_area=7.0).blowdown_time
+    narrow = chamber.acoustic_check(state, throat_area=2.0).blowdown_time
+    assert narrow / wide == pytest.approx(7.0 / 2.0, rel=1e-6)

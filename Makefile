@@ -777,7 +777,7 @@ water-plate-parcel-check:
 # bore, no field, a 200-673 m^3 chamber, 25 kg at 75 km/s into methane -- and it must not inherit
 # the magnetic nozzle's bag or the plate-side conventions.
 
-.PHONY: walled-nozzle-chamber walled-nozzle-hydrogen walled-nozzle-test
+.PHONY: walled-nozzle-chamber walled-nozzle-hydrogen walled-nozzle-freeze walled-nozzle-test
 ## walled-nozzle-chamber: N10 item 4b and N9 item 0 -- the solved chamber charge (equilibrium
 ## composition, wall-cap energy density, the slug-ratio fixed point) and the sealed-vessel
 ## equilibration timescales -> data/results/walled_nozzle/chamber.csv
@@ -791,7 +791,15 @@ walled-nozzle-chamber:
 walled-nozzle-hydrogen:
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.hydrogen
 
+## walled-nozzle-freeze: N10 items 1-3 -- the Bray freeze race along the walled expansion, on
+## literature H+H+M rate coefficients (rates.py). Reports the verdict as decades of margin, the
+## throat-area sensitivity (item 4), and the N+N+M comparison behind the ammonia rung.
+walled-nozzle-freeze:
+	@mkdir -p data/results/walled_nozzle
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.freeze
+
 ## walled-nozzle-test: this study's tests alone
 walled-nozzle-test:
 	uv run pytest python/tests/test_eos_methane.py python/tests/test_walled_nozzle_chamber.py \
-	                python/tests/test_walled_nozzle_hydrogen.py
+	                python/tests/test_walled_nozzle_hydrogen.py \
+	                python/tests/test_walled_nozzle_freeze.py

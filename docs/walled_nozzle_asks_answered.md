@@ -19,16 +19,19 @@ from a run; the [provenance table](#provenance) says which.
 | **N10.4b** (chamber dissociation equilibrium) | **Answered, and it reverses the premise.** Hydrogen is 93–98% dissociated at the flown 10 kK, not 49–76%. The store is 95–99% charged. | **yes** (W1) — and it gives back most of the Isp the 2026-09-09 correction took |
 | **N10, Project 242** | **Answered, and it settles the tension.** 2700 s is *above* the frozen ceiling of 2085–2229 s. The arithmetic is right; the prose is wrong. | **yes** (W2) |
 | **N9.0** (sealed vessel) | **Answered, and the geometry question dissolves.** Column length cancels exactly; the verdict is a bore/throat area ratio. But the sound speed used was hydrogen's. | **yes** (W3, W4) |
-| **N10.1–3** (freeze stations, `H+H+M`, `N+N+M`) | **Not started.** Needs literature rate coefficients this repository will not invent. | no |
+| **N10.1–3** (freeze stations, `H+H+M`, `N+N+M`) | **Answered, and the fork closes on the good side.** The gas never freezes in this nozzle — `Da` stays above the threshold everywhere, with 0.4–2.2 decades of margin. The walled nozzle converts **39–41% of the wall-cap energy into directed kinetic energy** at the ask's own 7 m² throat (methane; no ammonia Isp is produced — see W7). That is *not* the paper's effective-Isp column and must not be compared with 1080 s directly. | **yes** (W5, W6, W7) |
 | **N10.5** (carbon nucleation) | **Not started.** | no |
 | **N9.1–7** (contact station, wall fluence, throat carbon, convective flux) | **Not started.** | no |
 
-**Four items fall out, W1–W4.** W1 is the one that moves a headline number. **W2 is the strongest
+**Seven items fall out, W1–W7.** W1 is the one that moves a headline number. **W2 is the strongest
 result here**, because it is a published case reproduced and a stated contradiction resolved in
-the direction the design needs.
+the direction the design needs. **W5 settles the 1080 s / 793 s fork** the ask calls high priority,
+and **W6 says the remaining lever is the throat, not the chemistry**.
 
-**If you read only two:** W1 (the correction that cost methane 40 s should be largely unwound)
-and W2 (Project 242's own number requires the recombination its prose denies).
+**If you read only three:** W1 (the correction that cost methane 40 s should be largely unwound),
+W2 (Project 242's own number requires the recombination its prose denies), and W5 (the walled
+nozzle does not freeze, so the *equilibrium* branch applies and the frozen one does not — read its
+note on Isp conventions before quoting any number from it).
 
 **One of the asks was itself mistaken** and one of ADR-0016's inputs is wrong; both are in
 [What the ask got wrong](#what-the-ask-got-wrong), because one of them would have sent N9 item 0
@@ -96,8 +99,12 @@ differs from 1132 s only because the solved `u` is 139.9 MJ/kg rather than the a
 the paper's column and should be identified before either number is printed.
 
 Either way the direction is the same: **up from the current 1059–1095 s**, by 2–6%. Subject
-throughout to N10.1–3 and N10.5, which are not answered here and which decide whether the charged
-store is *returned* at all.
+throughout to N10.5, which is not answered here. N10.1–3 *is* now answered (W5) and it confirms
+the charged store is genuinely returned rather than frozen out — but note that W5's exit Isp is
+computed directly from the expansion rather than from `sqrt(1+k)/k`, and lands at 1074–1076 s at
+the ask's own throat — but on a *different normalisation*, so **the two must not be compared
+directly**; W5 sets out why. The `sqrt(1+k)/k` ratio above is the safe way to move a number in
+this column, and it is what this section uses.
 
 **Two things this does not license.** The 8,000 K row is a real 6–12% penalty, so the argument
 for 10,000 K over a cooler chamber is now stronger than the argument against a hotter one. And a
@@ -150,8 +157,16 @@ and the short column is admissible on exactly the same terms as the long one. Th
 choice returns to the thermal and Isp arguments — which W1 shows are worth under 2% between
 200 and 673 m³ at 10,000 K.
 
-The verdict itself holds but with less margin than booked: `n_eq ≈ 24` at a 2 m² throat,
-`≈ 6.8` at 7 m². Not ~50.
+**And at the wide end of the ask's own throat range the verdict does not hold at all.** The
+criterion this study applies is `n_eq >= 10` — a column that turns over ten times has no memory of
+which parcels the cone touched first. The run gives `n_eq ≈ 24` at a 2 m² throat, `11.9` at 4 m²
+and **`6.8` at 7 m², which fails it**. Not ~50 anywhere, and not passing at all at 7 m².
+
+So item 0's answer is conditional on the throat: **the sealed vessel sets `k` only for throats of
+about 4 m² or narrower.** At 7 m² the chamber empties before it has equilibrated and `k` is once
+again set by what the cone sweeps — the very coupling problem the walled chamber was adopted to
+escape. This turns out to point the same way as W6's Isp argument, which is the strongest reason
+in this document to prefer a narrow throat.
 
 ### W4. The 11 km/s sound speed is hydrogen's, not methane's
 
@@ -172,6 +187,181 @@ is inside. Equilibration sets `k` — it happens over the blowdown, long after �
 is untouched by the sealed vessel, and N9 items 1–3 remain exactly as posed.
 
 ---
+
+### W5. The plume does not freeze in this nozzle, so 1080 s is the right branch and 793 s is not
+
+**Locate:** N10, "For the flown methane slug it is the fork between 1,080 s and 793 s", and its
+items 1–3; ADR-0016's hand-estimated margins of ×3400 for `H+H+M` and ×403 for `N+N+M`.
+
+**Now:** the fork is open, and the equilibrium branch is an assumption.
+
+**Should be:** the fork is closed in favour of equilibrium. Running Bray's criterion station by
+station along the de Laval expansion, on the literature `H + H + M` coefficients tabulated
+below, the Damköhler number never falls to the freezing band anywhere in the bore:
+
+**All of the following is methane** (`eos_methane`, ADR-0016's 25 kg at 75 km/s into CH₄).
+Ammonia is not run here at all; W7 says why. **The `Isp` column is a *total*, unnormalised
+exhaust-velocity Isp and is not the paper's effective-Isp column** — see the note under the table
+before comparing it with anything.
+
+| chamber | throat | `A/A*` | exit `T` [K] | min `Da` | verdict | store returned | **exit Isp [s]** | margin [decades] |
+| ---: | ---: | ---: | ---: | ---: | :--- | ---: | ---: | ---: |
+| 200 m³ | 7.0 m² | 4.04 | 5584 | 1461 | equilibrium | 0.262 | **1074.3** | 2.16 |
+| 400 m³ | 7.0 m² | 4.04 | 5425 | 815 | equilibrium | 0.243 | **1076.3** | 1.91 |
+| 673 m³ | 7.0 m² | 4.04 | 5296 | 343 | equilibrium | 0.226 | **1073.8** | 1.53 |
+| 200 m³ | 4.0 m² | 7.07 | 5067 | 732 | equilibrium | 0.313 | 1153.6 | 1.86 |
+| 400 m³ | 4.0 m² | 7.07 | 4931 | 341 | equilibrium | 0.294 | 1155.5 | 1.53 |
+| 673 m³ | 4.0 m² | 7.07 | 4822 | 134 | equilibrium | 0.278 | 1152.7 | 1.13 |
+| 200 m³ | 2.0 m² | 14.14 | 4561 | 216 | equilibrium | 0.367 | **1229.7** | 1.33 |
+| 400 m³ | 2.0 m² | 14.14 | 4443 | 65.2 | equilibrium | 0.348 | **1232.0** | 0.81 |
+| 673 m³ | 2.0 m² | 14.14 | 4349 | 25.8 | equilibrium | 0.332 | **1229.1** | 0.41 |
+
+**`Isp` here is the nozzle's own exhaust velocity over `g0`, and it is NOT the paper's
+effective-Isp column.** The distinction matters and an earlier draft of this document got it
+wrong, so it is spelled out:
+
+- **What is quoted above is *total*** — exit flow speed divided by `g0`, counting every kilogram
+  expelled (slug *and* vaporised impactor), with **no** divergence or geometry loss, no drift
+  term and no vessel mass.
+- **ADR-0016's 1080 s is *effective*** — impulse per kilogram of *launched slug*, which is a
+  factor `(1+k)/k = 1.051` larger for the same exhaust speed, and it additionally carries the
+  launch-ledger normalisations this repository does not own (`eta_geom`, the drift term of
+  `eq:reflection_baseline`, vessel mass). Those are worth a further **factor 0.609 on velocity**:
+  ADR-0016's own identity `w/sqrt(1+k)` gives 16 541 m/s, which on its slug convention would be
+  1773 s, and the column says 1080 s.
+
+Put on the paper's slug convention our exhaust speeds give 1129–1133 s at 7 m², but that number
+still lacks the 0.609 of normalisation, so **it must not be read as reproducing 1080 s either.**
+Any near-agreement between an unnormalised total and a normalised effective is two errors
+cancelling, and this document should not trade on it. `chamber.isp_scaling` refuses to emit an
+absolute Isp for exactly this reason and that discipline applies here too.
+
+**The convention-free statement of the same result is the energy conversion fraction**, which is
+what this study actually owns:
+
+| throat | wall-cap energy appearing as directed KE |
+| ---: | ---: |
+| 7.0 m² | **0.393–0.406** |
+| 4.0 m² | 0.452–0.468 |
+| 2.0 m² | **0.514–0.532** |
+
+At the ask's own throat the walled nozzle turns about **40% of `u` into directed kinetic energy**,
+and that figure carries no normalisation of anyone's. It is the number to compare against, and
+the ratios in W6 are safe because a constant normalisation cancels out of them.
+
+**What the fork verdict does and does not need.** The 1080 s / 793 s choice is a question about
+whether the composition freezes, and that is settled by the Damköhler columns above without any
+Isp convention entering. **The equilibrium branch is self-consistent everywhere in the bore, so
+793 s does not apply** — that conclusion stands. What this study cannot yet do is quote the
+paper's own 1080 s back at it, because that would need the paper's normalisations. **The clean
+like-for-like test would be the equilibrium-to-frozen *ratio*** — ADR-0016's own 1080/793 = 1.36 —
+run on a frozen-composition methane EOS, which `eos_water` has (`pressure_energy_frozen`) and
+`eos_methane` does not yet. That is the first thing to build next on this rung.
+
+**The margin is the part to keep.** `margin` is how many decades the rate coefficient could be
+wrong, in the pessimistic direction, before the verdict changes. The stated uncertainty on the
+evaluated coefficient is 0.5 decades (a factor of 3.16), so **the flown 200 m³ / 7 m² case, at
+2.16 decades, survives its own rate uncertainty roughly four times over.**
+
+**One corner does not, and should be said out loud: 673 m³ at a 2 m² throat has 0.41 decades,
+which is *less* than the coefficient's own uncertainty.** That configuration — the largest, and
+therefore thinnest, chamber pushed to the largest area ratio — is the one place in this study
+where the verdict genuinely rests on the rate constant being right. It is also the corner W6
+recommends moving toward, so the two results have to be read together: narrow the throat on the
+200 m³ chamber, where the margin is 1.33 decades, rather than on the 673 m³ one.
+
+ADR-0016's hand-estimated ×3400 (3.5 decades) is too generous even for the best case here, and
+its ×403 is the wrong reaction for methane entirely — but both erred in the safe direction.
+
+**Where it would eventually freeze.** Pushed past the bore as a diagnostic, the 400 and 673 m³
+cases do freeze — at `A/A*` of 188 and 95, at 3300–3500 K and around 0.1 bar, with about half the
+store still held. So there is a real ceiling: no amount of nozzle recovers all of it. The 200 m³
+case does not freeze out to `A/A* = 400` at all, being the densest.
+
+### W6. The binding constraint is the expansion ratio, not the chemistry — narrow the throat
+
+**Locate:** N10 item 4, "Sensitivity to throat area, since that is the knob that sets how long the
+gas stays dense."
+
+**Now:** the item is posed as a chemistry-preservation knob — hold density up so recombination
+keeps up.
+
+**Should be:** that is the right knob for the wrong reason, and it points the other way. The
+chemistry is not the thing in short supply: even the *worst* case in W5 has 0.4 decades of margin,
+and the flown one has 2.16. What limits the return is that the nozzle **does not expand far
+enough** — at `A/A* = 4.04` the gas leaves at 5300–5600 K still holding 70–76% of its store, not
+because it froze but because at 5500 K equilibrium itself still holds the bonds broken.
+
+So narrowing the throat helps, and substantially:
+
+| throat | `A/A*` | exit `T` [K] | exit Isp [s] — *total*, methane, unnormalised (see W5) | vs the 7 m² baseline | `n_eq` (N9.0) | sets `k`? | blowdown, 200 m³ |
+| ---: | ---: | ---: | ---: | ---: | ---: | :--- | ---: |
+| 7.0 m² | 4.04 | 5296–5584 | 1073.8–1076.3 | — | 6.8 | **no** | 8.0 ms |
+| 4.0 m² | 7.07 | 4822–5067 | 1152.7–1155.5 | **+79 s (+7.4%)** | 11.9 | yes | 14.0 ms |
+| 2.0 m² | 14.14 | 4349–4561 | 1229.1–1232.0 | **+155 s (+14.4%)** | 23.8 | yes | 28.0 ms |
+
+**Why not go the other way and widen it?** Because the bore is fixed at 28.3 m², so
+`A/A* = A_bore / A*` and the throat is the *only* expansion-ratio knob available inside a 3 m
+bore. Widening shrinks the expansion, and a de Laval nozzle converts enthalpy to directed speed
+only in proportion to how far it opens. What a wider throat buys is chemical margin — the one
+quantity already in surplus by two decades. It is paying, in the currency that is limiting, for
+more of the commodity that is not.
+
+**Three independent arguments converge on the same recommendation**, which is what makes it worth
+acting on: the Isp gain above; N9 item 0's equilibration count, which *fails* at 7 m² and passes
+at 4 m² (W3); and the freeze margin, which stays comfortable at 4 m² in every chamber.
+
+**The cost is blowdown time, and it is not costed here.** Choked mass flow is proportional to `A*`,
+so the pulse stretches from 8.0 ms to 28.0 ms at 200 m³ as the throat goes 7 → 2 m². That is 3.5×
+longer for the wall to absorb the same pulse, at the same time as the throat itself is passing the
+same power through a third of the area. **Both are N9 items 1–7 and neither is answered**, so the
+Isp gain quoted here is an upper bound on what is actually collectable.
+
+**This is the largest single lever found in either ask**, and it costs no new physics — only a
+smaller throat and whatever that does to the wall loading, which is N9's problem. The chemistry
+still keeps up at 2 m² in every chamber — but read W5's caveat before acting on the bottom row:
+at 2 m² the 673 m³ chamber's margin falls to 0.41 decades, below the rate coefficient's own
+uncertainty, while the 200 m³ chamber still holds 1.33. **Narrow the throat on the small chamber,
+not the large one**, and note that the 2 m² exits at 4349–4561 K walk into the temperature range
+where this EOS's omission of condensed carbon starts to matter (weakness 4).
+
+**A second result falls out of the same table: chamber volume barely moves the specific impulse.**
+At fixed throat the three chambers land within 0.3% of each other (1073.8 / 1076.3 / 1074.3 at
+7 m²). A larger chamber charges more of the store (W1) but is thinner and returns less of it by
+the exit plane, and the two effects cancel almost exactly. Taken with W3 — where the sealed-vessel
+count also turned out not to separate the geometries — **N9's volume choice should be made on
+thermal and structural grounds, because the Isp argument does not distinguish them.**
+
+### W7. The ammonia rung rests on a rate that is uncertain by 1.3 decades, and carbon has no rate at all
+
+**Locate:** N10, "Nitrogen is about eight times slower, which is why it freezes in arcjets at 0.1
+to 1 bar", and item 2's 68.9 MJ/kg for ammonia; item 5's carbon condensation.
+
+**Now:** the 8× is quoted as a settled ratio.
+
+**Should be:** quoted with its spread, because the nitrogen channel is the *least* well determined
+number in this ask. Comparing atomic third bodies at 6000 K:
+
+| source | `k(N+N+N)` [m⁶/s] | `k(H+H+H)/k(N+N+N)` |
+| --- | ---: | ---: |
+| Byron 1966 (shock tube, 6000–9000 K) | 1.43e-44 | **0.6** — nitrogen *faster* than hydrogen |
+| Notey, Jo & Panesi 2025 (ab initio master equation) | 7.24e-46 | **12.7** |
+
+**The two disagree by 1.3 decades.** The ask's 8× sits inside that band but only near the ab
+initio end; Byron's measurement contradicts the claim outright. The statement is defensible, not
+robust, and should not be carried without the spread — especially as ammonia's whole rung depends
+on it. **An ammonia specific impulse is not produced here**: that needs an `eos_ammonia` this
+repository does not have, and building one on a rate this uncertain would be misleading precision.
+
+**Carbon is a different and harder situation, and the literature search is itself the finding.**
+The evaluated databases hold exactly one measurement of `C + C + M -> C2 + M` (one third body, a
+1000 K window, ±55%) and **nothing at all** for `C + H + M -> CH + M`, against six independent
+evaluations and three shock-tube studies for hydrogen. An association channel gets measured when
+it controls something measurable, and carbon's do not — because carbon in a cooling carbon-rich
+gas does not form diatomics, it forms clusters and then soot. **So the 43% of methane's
+atomisation locked in carbon cannot be settled by a rate coefficient the way the 52% held as H₂
+just was.** N10 item 5 needs classical nucleation theory, and no amount of further rate-hunting
+substitutes for it.
 
 ## Smaller corrections, no argument attached
 
@@ -203,21 +393,125 @@ reported and it is 93–98% (W1).
 
 ## Deferred, with cost
 
-- **N10 items 1–3 (freeze stations and frozen fractions for `H+H+M` and `N+N+M`).** Not started,
-  deliberately. `recombination.py` states that it "computes no rate coefficients of its own" and
-  every constant in it is a named literature value with a stated uncertainty. Supplying `H+H+M`
-  and `N+N+M` coefficients from recall would break that discipline on the exact numbers the
-  1080 s / 793 s fork turns on. **What is needed to unblock it:** evaluated low-pressure
-  three-body coefficients and their temperature exponents for `H + H + M` and `N + N + M`, with
-  third-body efficiencies, from Baulch et al. or Park's high-temperature set. Everything else —
-  the Bray criterion, the expansion history, the Damköhler comparison, the decades-of-margin
-  reporting — already exists and needs only a no-field variant of `nozzle_history`.
-  **Cost of the delay:** W1 raises the *charged* store; only this decides how much comes back.
-- **N10 item 5 (carbon nucleation).** Not started. It is not a three-body reaction and needs
-  classical-nucleation machinery that does not exist here. It is 43% of the store.
+- **N10 item 5 (carbon nucleation).** Not started, and W7 now shows it *cannot* be started as
+  a rate problem: the evaluated literature has one `C + C + M` measurement and no `C + H + M`
+  at all. It needs classical-nucleation machinery that does not exist here. It is 43% of the
+  store, and it is the last thing standing between this study and a complete methane answer.
+- **An ammonia specific impulse (N10 items 2–3 for `NH3`).** The `N + N + M` rates are in
+  hand, but the rung needs an `eos_ammonia` alongside `eos_methane`, and W7's 1.3-decade
+  spread on the nitrogen channel would dominate the answer. **What is needed to unblock it:**
+  a resolution of Byron 1966 against the 2025 ab initio result, or an ammonia number reported
+  as a band.
 - **N9 items 1–7.** Not started. W4 confirms they are still live: the sealed vessel does not
   dissolve the arrival transient.
 - **N11.** Not started.
+
+## The rate literature this rests on
+
+**Stated in full because the answer is only as good as these, and because an agent in the paper
+repository cannot run the code that consumes them.** Every coefficient below was read from the
+NIST Chemical Kinetics Database (`kinetics.nist.gov`), which reproduces each evaluation's own
+fit rather than refitting it; the squib is NIST's record identifier, so any line can be traced
+back. Nothing here was computed on this side. The form throughout is
+
+    k(T) = A (T / 298 K)^n   in cm^6 molecule^-2 s^-1;   1 cm^6 = 1e-12 m^6.
+
+They live in `python/puffsat/walled_nozzle/rates.py`, one named constant per row.
+
+### `H + H + M -> H2 + M` — methane's recoverable store
+
+| M | `A` | `n` | range [K] | unc. | source | squib |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| H₂ | 8.85e-33 | −0.60 | 100–5000 | ×3.16 | Baulch et al. 1992, *J. Phys. Chem. Ref. Data* **21**, 411 | `1992BAU/COB411-429:216` |
+| H₂ | 9.04e-33 | −0.60 | 50–5000 | ×2.51 | Cohen & Westberg 1983, *JPCRD* **12**, 531 | `1983COH/WES531:42` |
+| Ar | 6.48e-33 | −1.00 | 77–5000 | ×2.00 | Cohen & Westberg 1983 | `1983COH/WES531:44` |
+| N₂ | 9.1e-33 | −1.30 | 77–2000 | ×2.00 | Tsang & Hampson 1986, *JPCRD* **15**, 1087 | `1986TSA/HAM1087:253` |
+| **H₂** | **4.83e-33** | **0** | **2500–7000** | — | **Hurle, Jones & Rosenfeld 1969**, Proc. 8th Int. Shock Tube Symp. 253 | `1969HUR/JON253-276:1` |
+| Ar | 1.68e-32 | 0 | 2500–7000 | — | Hurle et al. 1969 | `1969HUR/JON253-276:2` |
+
+Two points about this table matter more than any single row.
+
+**The channel is genuinely known.** Baulch and Cohen & Westberg evaluated `M = H₂`
+*independently* and landed within 2% of each other with the same exponent. That agreement is a
+stronger statement than either stated uncertainty bar, and it is what a regression test in
+`test_walled_nozzle_freeze.py` now pins.
+
+**Most of the nozzle is measured, and the extrapolation that remains is conservative.** Hurle et
+al. measured 2500–7000 K directly, which covers the expansion from just below the throat all the
+way to the exit; only the throat itself, near 8500 K, sits above their ceiling, and the atomic-H
+efficiency is read from a 2900–4700 K experiment. So this is *not* an extrapolation-free result —
+see weakness 6. What makes it safe is the **direction**: Hurle found the rate
+*temperature-independent* across their window, so the steep negative exponents in the cold
+evaluations are low-temperature behaviour that does not continue upward. Extrapolating Baulch's
+`T^−0.6` to 5000 K gives 1.6e-45 m⁶/s where Hurle measures 4.8e-45 — **using the cold fits above
+their window understates the rate by about 3×**. Every margin quoted in W5 is therefore a floor,
+not an estimate.
+
+### Third-body efficiency — the find that changes the answer
+
+Three independent shock tubes each measured `H + H + M` with M = Ar, H₂ **and atomic H** over
+2800–5330 K, all fitted with the same `n = −1`. Ratios taken *within* one experiment cancel that
+experiment's systematics:
+
+| study | `k_H / k_Ar` | `k_H2 / k_Ar` | squibs |
+| --- | ---: | ---: | --- |
+| Jacobs, Giedt & Cohen 1967, *J. Chem. Phys.* **47**, 54 | 20.0 | 2.5 | `1967JAC/GIE54-57:1,2,3` |
+| Rink 1962, *J. Chem. Phys.* **36**, 262 | 6.7 | 2.0 | `1962RIN262-265:1,2` |
+| Patch 1962, *J. Chem. Phys.* **36**, 1919 | 66.6 | 10.0 | `1962PAT1919-1924:1,2,3` |
+
+**Atomic hydrogen is 7–67× better at stabilising the collision than argon, and 2–10× better than
+H₂**, and all three studies agree on the ordering. This is not a detail. W1 established that at
+the flown 10 kK the charge is 93–98% dissociated — so the third body in this nozzle *is* atomic
+hydrogen. A margin computed on H₂, or on a generic collider, understates the recombination rate
+by roughly an order of magnitude. The paper-side hand estimates of ×3400 and ×403 do not say
+which third body they assumed; if it was H₂ or an inert, they are pessimistic.
+
+### `N + N + M -> N2 + M` — the ammonia rung only
+
+| M | `A` | `n` | range [K] | source | squib |
+| --- | ---: | ---: | ---: | --- | --- |
+| N₂ | 4.16e-33 | −0.50 | 6000–9000 | Byron 1966, *J. Chem. Phys.* **44**, 1378 | `1966BYR1378-1388:4` |
+| N | 1.29e-30 | −1.50 | 6000–9000 | Byron 1966 | `1966BYR1378-1388:5` |
+| Ar | 1.60e-33 | −0.50 | 6000–9000 | Byron 1966 | `1966BYR1378-1388:6` |
+
+Byron's window *straddles* the chamber temperature, so nitrogen needs no upward extrapolation at
+all. Against it we set a modern ab initio result:
+
+> Notey, Jo & Panesi, "Master equation study of three-body recombination of nitrogen and oxygen
+> in non-equilibrium hypersonic flows", *J. Chem. Phys.* **163**, 194311 (2025); arXiv:2506.17452.
+
+That paper solves a state-to-state master equation on ab initio potential energy surfaces for
+**atoms held at 10 000 K and then plunged into a cold bath** — which is exactly what a nozzle
+does to a chamber. Its quasi-steady `N + N + N` values are 9.125e-46 m⁶/s at 2500 K and
+7.60e-46 at 5000 K. **It sits 1.3 decades below Byron.** That disagreement is the honest width of
+the nitrogen channel, and it is why the ammonia rung is reported below as a band rather than a
+number.
+
+### Carbon — searched, and the answer is that there is nothing to pick
+
+| reaction | evaluated records | best available |
+| --- | ---: | --- |
+| `C + C + M -> C2 + M` | 1 | Slack 1976, *J. Chem. Phys.* **64**, 228: 5.46e-31 (T/298)^−1.60, M = Ar, 5000–6000 K, **±55%** |
+| `C + H + M -> CH + M` | **0** | nothing |
+
+Hydrogen's channel has six independent evaluations and three shock-tube studies spanning
+2500–7000 K. Carbon's has one measurement, one third body, a 1000 K window and a 55% error bar —
+and the `C + H + M` channel is absent from the evaluated literature entirely.
+
+**That asymmetry is a result, not a failed search.** An association channel gets measured when it
+controls something measurable, and the carbon ones do not, because carbon in a cooling
+carbon-rich gas does not go to diatomics — it goes to clusters, and then to soot. So the 43% of
+methane's atomisation locked in carbon **cannot be settled by a rate coefficient at all**, the
+way the 52% held as H₂ can. This is independent support for N10 item 5 being a nucleation problem
+needing different machinery, rather than one more row in the table above.
+
+### One citation checked and rejected
+
+Bourdon & Vervisch, *Phys. Rev. E* **54**, 1888 (1996), "Three-body recombination rate of atomic
+nitrogen in low-pressure plasma flows", is the obvious hit for `N + N + M` and **is not that
+reaction**. It is electron–ion collisional-radiative recombination (`N⁺ + e + e`), i.e. the
+ionisation store, which `recombination.py` already carries from Zel'dovich & Raizer. Recorded
+here so the next reader does not spend the search twice.
 
 ## Provenance
 
@@ -225,9 +519,11 @@ reported and it is 93–98% (W1).
 | --- | --- | --- |
 | chamber composition, `k`, `u`, pressures, Isp ratios, item 0 timescales | `puffsat.walled_nozzle.chamber` | `make walled-nozzle-chamber` |
 | Project 242 bracket, pure-hydrogen rung | `puffsat.walled_nozzle.hydrogen` | `make walled-nozzle-hydrogen` |
-| the equilibrium EOS underneath both | `puffsat.eos_methane`, `puffsat.walled_nozzle.hydrogen` | `make walled-nozzle-test` |
+| freeze stations, Damköhler margins, throat sensitivity, exit Isp, the `N+N+M` comparison | `puffsat.walled_nozzle.freeze` | `make walled-nozzle-freeze` |
+| the rate coefficients themselves, one named constant per published value | `puffsat.walled_nozzle.rates` | `make walled-nozzle-test` |
+| the equilibrium EOS underneath all of them | `puffsat.eos_methane`, `puffsat.walled_nozzle.hydrogen` | `make walled-nozzle-test` |
 
-Committed artifact: `data/results/walled_nozzle/chamber.csv`.
+Committed artifacts: `data/results/walled_nozzle/chamber.csv` and `data/results/walled_nozzle/freeze.csv`.
 
 ## Known weaknesses of this answer
 
@@ -247,4 +543,21 @@ Stated rather than buried, in the order they would bite:
    `eos_water` makes, and the same place it would first fail.
 4. **Condensed carbon is absent by construction** (ADR-0050). Below ~4,000 K the true equilibrium
    has graphite in it and this EOS does not, so the cold end of the expansion is not yet a
-   physical answer. That is N10 item 5 and it is not answered here.
+   physical answer. That is N10 item 5 and it is not answered here. **This bites W5's 2 m² row
+   hardest**, whose exit sits at 4349–4561 K, and the W6 recommendation to narrow the throat walks
+   further into it — the +155 s is real for the hydrogen store and silent about the carbon one.
+5. **The nozzle's clock rests on an assumed shape.** Temperature against area ratio is solved, but
+   turning it into a time needs the area profile along the bore, which ADR-0016 does not give; a
+   linear opening over the chamber's own length is assumed, exactly as `expansion.cooling_history`
+   does for the magnetic nozzle. `Da` scales linearly in that length, so a nozzle half as long
+   halves every margin in W5 — the flown case survives it, the 673 m³ / 2 m² corner does not.
+6. **The `H + H + M` rate is extrapolated in temperature at the hot end**, though conservatively.
+   The evaluations stop at 5000 K and the throat starts near 8000 K. Hurle et al.'s direct
+   2500–7000 K measurement is *faster* than the extrapolated cold fits by about 3×, so the
+   extrapolation understates the recombination rate and the margins in W5 are floors, not
+   estimates. Being wrong in the safe direction is still being wrong.
+7. **Third-body efficiencies are read across from Ar/H₂/H shock-tube ratios.** The hydrocarbon and
+   carbon-bearing colliders are charged at argon's efficiency, the slowest of the three measured,
+   because nothing better exists. At the flown state they are a small minority of the third bodies
+   (the gas is 93–98% dissociated) so this is a minor exposure — but it grows at the cold end,
+   which is where the freeze question lives.

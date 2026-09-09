@@ -107,8 +107,16 @@ outputs are under `data/results/walled_nozzle/`.
 ```
 make walled-nozzle-chamber    # N10.4b + N9.0: the solved chamber charge and the sealed-vessel clock
 make walled-nozzle-hydrogen   # N10: the Project 242 validation and the pure-hydrogen rung
+make walled-nozzle-freeze     # N10.1-3: the Bray freeze race, throat sensitivity, exit Isp
 make walled-nozzle-test       # that study's tests alone
 ```
+
+**Rate coefficients in that study obey a provenance rule** (ADR-0050 amendment, inherited from
+`recombination.py`): `python/puffsat/walled_nozzle/rates.py` computes none of its own. Every
+constant carries its bath gas, fitted temperature window, the evaluation's stated uncertainty and
+its NIST record id. Verdicts are reported as **decades of margin** in the coefficient, and a
+verdict whose margin does not exceed the stated uncertainty is not a verdict. Carbon deliberately
+has no coefficient -- the evaluated literature has none to take, and inventing one is forbidden.
 
 ## Rust coding standards
 

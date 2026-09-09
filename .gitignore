@@ -122,3 +122,8 @@ __pycache__/
 # agent there cannot run `make walled-nozzle-chamber` to regenerate the table it cites. 9 rows.
 !/data/results/walled_nozzle/
 !/data/results/walled_nozzle/chamber.csv
+# Same reason for the freeze ledger behind W5-W7: it is the station-by-station evidence for the
+# Damkoehler verdict and the exit Isp, and the paper repo cannot run `make walled-nozzle-freeze`.
+# 767 rows / ~140 KB -- larger than the rule of thumb, kept because it is the only record of
+# *where* along the nozzle each verdict was reached.
+!/data/results/walled_nozzle/freeze.csv

@@ -71,3 +71,42 @@ ceiling rather than a charge.
 adopted `eta_geom`, not a solved nozzle. It inherits ADR-0016's scoring
 conventions so the two repositories' tables can be compared line for line, and it
 must not be read as an independent confirmation of them.
+
+## Amendment 2026-09-09: rate coefficients enter, under a provenance rule
+
+N10 items 1-3 are answered, which required this study to carry three-body
+recombination rate coefficients for the first time. They live in
+`python/puffsat/walled_nozzle/rates.py` under the rule `recombination.py`
+already states and this module inherits: **it computes no rate coefficient of
+its own.** Every constant is a published value carrying its bath gas, its fitted
+temperature window, the evaluation's own stated uncertainty, and the NIST record
+identifier it was read from, so any number can be traced to its source without
+this repository in the loop.
+
+Three consequences are load-bearing and are recorded here rather than only in
+docstrings.
+
+**A rate belongs to a third body.** Published `H + H + M` coefficients differ by
+an order of magnitude across `M = Ar`, `H2` and atomic `H`, and at the flown
+10 kK this charge is 93-98% dissociated, so the third body is atomic hydrogen.
+`freeze.mixture_coefficient` weights the species actually present rather than
+adopting one coefficient; anything unmeasured is charged at argon's efficiency,
+the slowest measured, so an unknown collider cannot flatter the result.
+
+**The answer is a margin, not a point value.** Verdicts are reported as decades
+of headroom in the rate coefficient, because that is the form in which a result
+resting on measured constants can be honestly compared with their uncertainty.
+A verdict whose margin does not exceed the coefficient's stated uncertainty is
+not a verdict.
+
+**Carbon gets no coefficient, and that is a finding.** The evaluated literature
+holds one `C + C + M` measurement and no `C + H + M` at all. This is not a gap to
+be filled by a harder search: the carbon store condenses rather than
+associating, which is why nobody measured it. ADR-0050's exclusion of condensed
+carbon therefore stands, and N10 item 5 remains a nucleation problem outside this
+machinery. Adding an invented carbon rate to close the ledger is specifically
+forbidden.
+
+No no-field integrator was needed. `expansion.cooling_history` was already
+parametrised by the EOS and the sound speed and knows nothing about a magnetic
+nozzle; running it on `eos_methane` with ADR-0016's geometry is the walled case.
