@@ -20,9 +20,10 @@ from a run; the [provenance table](#provenance) says which.
 | **N10, Project 242** | **Answered, and it settles the tension.** 2700 s is *above* the frozen ceiling of 2085–2229 s. The arithmetic is right; the prose is wrong. | **yes** (W2) |
 | **N9.0** (sealed vessel) | **Answered, and the geometry question dissolves.** Column length cancels exactly; the verdict is a bore/throat area ratio. But the sound speed used was hydrogen's. | **yes** (W3, W4) |
 | **N10.1–3** (freeze stations, `H+H+M`, `N+N+M`) | **Answered, and the fork closes on the good side.** The gas never freezes in this nozzle — `Da` stays above the threshold everywhere, with 0.4–2.2 decades of margin. The walled nozzle converts **39–41% of the wall-cap energy into directed kinetic energy** at the ask's own 7 m² throat (methane; no ammonia Isp is produced — see W7). That is *not* the paper's effective-Isp column and must not be compared with 1080 s directly. | **yes** (W5, W6, W7) |
-| **N10.3** (the water and hydrogen rungs) | **Answered.** The ask's own `k = 37.70` and `k = 7.99` are reproduced as *outputs* (39.55, 7.77). Neither water nor ammonia beats methane; hydrogen nearly doubles it. | **yes** (W8) |
+| **N10.3** (the water and hydrogen rungs) | **Answered for water and hydrogen; ammonia unplaced.** The ask's own `k = 37.70` and `k = 7.99` come back as *outputs* (39.55, 7.77). Water is 30% below methane and hydrogen 88% above it, both solved. **Ammonia is not settled** — it has no EOS and was handed methane's conversion fraction. | **yes** (W8) |
 | **N10.5** (carbon nucleation) | **Reframed, and much smaller than booked.** 84% of the carbon store returns as gas-phase acetylene with no nucleation at all; only 16% of it (5.2% of the energy budget) is genuinely hostage to soot. | **yes** (W9) |
-| **N9.1–7** (contact station, wall fluence, throat carbon, convective flux) | **Not started.** | no |
+| **N9.1–7** (contact station, wall fluence, throat carbon, convective flux) | **Not started** — and W6 raises their priority: the throat recommendation stretches the pulse from 8 ms to 28 ms, which is their problem to price. | no |
+| **N11** (radiative escape, wall fluence) | **Not started.** | no |
 
 **Nine items fall out, W1–W9.** W1 is the one that moves a headline number. **W2 is the strongest
 result here**, because it is a published case reproduced and a stated contradiction resolved in
@@ -195,7 +196,7 @@ is untouched by the sealed vessel, and N9 items 1–3 remain exactly as posed.
 
 ---
 
-### W5. The plume does not freeze in this nozzle, so 1080 s is the right branch and 793 s is not
+### W5. The plume does not freeze in this nozzle, so the equilibrium branch applies and the frozen one does not
 
 **Locate:** N10, "For the flown methane slug it is the fork between 1,080 s and 793 s", and its
 items 1–3; ADR-0016's hand-estimated margins of ×3400 for `H+H+M` and ×403 for `N+N+M`.
@@ -602,10 +603,19 @@ reported and it is 93–98% (W1).
 
 ## Deferred, with cost
 
-- **N10 item 5 (carbon nucleation).** Not started, and W7 now shows it *cannot* be started as
-  a rate problem: the evaluated literature has one `C + C + M` measurement and no `C + H + M`
-  at all. It needs classical-nucleation machinery that does not exist here. It is 43% of the
-  store, and it is the last thing standing between this study and a complete methane answer.
+- **N10 item 5 (carbon nucleation) — reframed by W9 and much smaller than booked.** Soot is
+  **not** worth 43% of atomisation: acetylene returns 84% of the carbon store in the gas phase,
+  leaving ~7 points of atomisation (5.2% of the energy budget) actually hostage to nucleation.
+  That remainder still needs classical-nucleation machinery that does not exist here, and W7
+  shows it cannot be substituted by a rate coefficient — the evaluated literature has one
+  `C + C + M` measurement and no `C + H + M` at all. **But it is no longer the item that decides
+  methane's Isp.**
+- **The acetylene kinetics (the new top priority on this rung).** W9 shows the carbon energy is
+  gas-phase and reachable, and W5's Damköhler analysis prices only `H + H + M`, so nothing here
+  yet says whether the `C → C₃ → C₂H₂` path keeps up during the expansion. **What is needed to
+  unblock it:** bimolecular hydrocarbon rates (`C₂H + H₂`, `C₂H₂ + H` and relatives), which the
+  combustion literature characterises heavily — ordinary kinetics, not nucleation theory.
+  **Cost of the delay:** 59 points of atomisation, far more than the 7 that soot is worth.
 - **An ammonia specific impulse (N10 items 2–3 for `NH3`).** The `N + N + M` rates are in
   hand, but the rung needs an `eos_ammonia` alongside `eos_methane`, and W7's 1.3-decade
   spread on the nitrogen channel would dominate the answer. **What is needed to unblock it:**
@@ -730,9 +740,17 @@ here so the next reader does not spend the search twice.
 | Project 242 bracket, pure-hydrogen rung | `puffsat.walled_nozzle.hydrogen` | `make walled-nozzle-hydrogen` |
 | freeze stations, Damköhler margins, throat sensitivity, exit Isp, the `N+N+M` comparison | `puffsat.walled_nozzle.freeze` | `make walled-nozzle-freeze` |
 | the rate coefficients themselves, one named constant per published value | `puffsat.walled_nozzle.rates` | `make walled-nozzle-test` |
+| **the propellant ladder: `k`, `u`, conversion, true and effective Isp for H₂ / CH₄ / H₂O, and the estimated NH₃ rung (W8)** | `puffsat.walled_nozzle.propellants` | `make walled-nozzle-propellants` |
+| the acetylene stoichiometry and the C → C₃ → C₂H₂ speciation (W9) | `puffsat.eos_methane` (0 K atomisation energies and the equilibrium solve) | `make walled-nozzle-test` |
 | the equilibrium EOS underneath all of them | `puffsat.eos_methane`, `puffsat.walled_nozzle.hydrogen` | `make walled-nozzle-test` |
 
-Committed artifacts: `data/results/walled_nozzle/chamber.csv` and `data/results/walled_nozzle/freeze.csv`.
+Committed artifacts, all three readable without running anything:
+`data/results/walled_nozzle/chamber.csv`, `data/results/walled_nozzle/freeze.csv` and
+`data/results/walled_nozzle/propellants.csv`.
+
+**Everything above was produced at `puffsat_impact_simulation@4a448c0`** on 2026-09-09. The
+tests that pin each claim are `python/tests/test_walled_nozzle_{chamber,hydrogen,freeze,propellants}.py`
+and `test_eos_methane.py` — 110 of them, run by `make walled-nozzle-test`.
 
 ## Known weaknesses of this answer
 
@@ -744,6 +762,14 @@ Stated rather than buried, in the order they would bite:
    of the store `C3` is withholding. At the flown 10,000 K it is **0.1–1.2%**; at 8,000 K it is
    **3.4–9.9%**. The 10,000 K conclusions are safe; the 8,000 K row is soft in the direction of
    understating the charge.
+
+   **W9 raises the stakes on this one.** The expansion parks 66–82% of the carbon in `C3` at the
+   exit plane, so the species this study trusts least is the one now carrying most of the carbon
+   through the temperature range where the answer is decided. The chamber numbers are unaffected
+   (at 10,000 K `C3` is a percent), but **the exit-plane speciation in W9 inherits the full
+   exposure**, and a `C3` partition function overstated by the harmonic treatment would put too
+   much carbon in `C3` and too little in the atoms and acetylene either side of it. Anything
+   built on W9's speciation should treat `C3` as the first thing to check.
 2. **Ground electronic terms only**, as in `eos_water`. `C2`'s low-lying `a 3Pi_u` at 716 cm⁻¹ is
    not summed, understating `C2`, which never exceeds a few percent of the carbon here.
 3. **Ideal mixture.** `p = n k T` with no excluded volume and no Coulomb correction. At the
@@ -765,7 +791,15 @@ Stated rather than buried, in the order they would bite:
    2500–7000 K measurement is *faster* than the extrapolated cold fits by about 3×, so the
    extrapolation understates the recombination rate and the margins in W5 are floors, not
    estimates. Being wrong in the safe direction is still being wrong.
-7. **Third-body efficiencies are read across from Ar/H₂/H shock-tube ratios.** The hydrocarbon and
+7. **The ammonia rung is assembled, not solved**, and its assumed conversion fraction is doing
+   real work (W8). It is the only row in the ladder that could move by more than a few percent
+   for a reason internal to this study rather than to the physics.
+8. **W9's acetylene result is thermodynamic, not kinetic.** The stoichiometry and the equilibrium
+   speciation are solid, but nothing here shows the `C → C₃ → C₂H₂` path *keeps up* during the
+   expansion — the Damköhler work in W5 prices `H + H + M` only. If that path freezes early the
+   59 points of atomisation it represents stay locked, and the exit composition would sit
+   somewhere between the C₃ this study computes and the acetylene equilibrium it points at.
+9. **Third-body efficiencies are read across from Ar/H₂/H shock-tube ratios.** The hydrocarbon and
    carbon-bearing colliders are charged at argon's efficiency, the slowest of the three measured,
    because nothing better exists. At the flown state they are a small minority of the third bodies
    (the gas is 93–98% dissociated) so this is a minor exposure — but it grows at the cold end,
