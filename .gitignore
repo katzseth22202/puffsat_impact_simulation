@@ -117,3 +117,8 @@ __pycache__/
 # Scratch space for temporary working files shared with Claude (e.g. checklists
 # for completing a single task). Disposable; never checked in.
 /todos/
+# The walled-nozzle chamber ledger is a CROSS-REPO deliverable, not this study's evidence:
+# `docs/walled_nozzle_asks_answered.md` is written to be copied into the paper repository, and an
+# agent there cannot run `make walled-nozzle-chamber` to regenerate the table it cites. 9 rows.
+!/data/results/walled_nozzle/
+!/data/results/walled_nozzle/chamber.csv

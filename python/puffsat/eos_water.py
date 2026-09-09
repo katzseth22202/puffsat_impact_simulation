@@ -629,7 +629,7 @@ def bond_energy_held(rho: float, temp: float) -> float:
     return _bond_energy_held(composition(rho, temp), rho / M_H2O) / rho
 
 
-def _sound_speed_fd(
+def sound_speed_fd(
     pe: Callable[[float, float], tuple[float, float]], rho: float, temp: float
 ) -> float:
     """Adiabatic sound speed `c_s = sqrt((dp/drho)_s)` [m/s] for any `(p, e)(rho, T)` EOS, by
@@ -650,8 +650,8 @@ def _sound_speed_fd(
 
 
 def sound_speed(rho: float, temp: float) -> float:
-    """Equilibrium adiabatic sound speed `c_s` [m/s] (see `_sound_speed_fd`)."""
-    return _sound_speed_fd(pressure_energy, rho, temp)
+    """Equilibrium adiabatic sound speed `c_s` [m/s] (see `sound_speed_fd`)."""
+    return sound_speed_fd(pressure_energy, rho, temp)
 
 
 # ---- Frozen-composition EOS (sudden-freeze bounding runs) --------------------------------------
@@ -746,8 +746,8 @@ def pressure_energy_frozen(rho: float, temp: float, y: FrozenComposition) -> tup
 
 
 def sound_speed_frozen(rho: float, temp: float, y: FrozenComposition) -> float:
-    """Frozen adiabatic sound speed `c_s` [m/s] (see `_sound_speed_fd`)."""
-    return _sound_speed_fd(lambda r, t: pressure_energy_frozen(r, t, y), rho, temp)
+    """Frozen adiabatic sound speed `c_s` [m/s] (see `sound_speed_fd`)."""
+    return sound_speed_fd(lambda r, t: pressure_energy_frozen(r, t, y), rho, temp)
 
 
 def eos_grid_frozen(rho_grid: Vec, t_grid: Vec, y: FrozenComposition) -> tuple[Vec, Vec, Vec]:

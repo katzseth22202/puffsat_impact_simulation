@@ -95,6 +95,21 @@ make tamper-ledger   # Rung 0: the analytic reference ledger (owns every closed-
 make tamper-test     # that study's tests alone
 ```
 
+**The `walled-nozzle-*` targets belong to a third study.** The walled thermal nozzle answers asks
+N9-N11 of the companion repository against its ADR-0016: a 3 m bore, **no field**, a 200-673 m^3
+chamber and 25 kg at 75 km/s into methane. It shares the EOS machinery and the Bray criterion and
+nothing else -- not the `f(v)` bag, not the magnetic nozzle's geometry, not the plate-side
+conventions. Scope is [ADR-0050](docs/adr/0050-walled-thermal-nozzle-methane-chamber.md); results
+are in [`docs/walled_nozzle_asks_answered.md`](docs/walled_nozzle_asks_answered.md). Its Python is
+`python/puffsat/walled_nozzle/` plus the top-level `python/puffsat/eos_methane.py`, and its
+outputs are under `data/results/walled_nozzle/`.
+
+```
+make walled-nozzle-chamber    # N10.4b + N9.0: the solved chamber charge and the sealed-vessel clock
+make walled-nozzle-hydrogen   # N10: the Project 242 validation and the pure-hydrogen rung
+make walled-nozzle-test       # that study's tests alone
+```
+
 ## Rust coding standards
 
 **Safe Rust only.** The workspace denies `unsafe_code`. Use safe Rust exclusively.

@@ -771,3 +771,27 @@ water-plate-parcel-check:
 	PYTHONPATH=python uv run --extra sci pytest python/tests/test_water_plate_parcel.py
 	cargo test --release -p water_plate --lib parcel::tests
 	cargo test --release -p water_plate --test nonlinear_parcel
+
+# --- The walled thermal nozzle (asks N9-N11; ADR-0050) -----------------------------------------
+# A third study, sharing the EOS machinery and nothing else. Its geometry is ADR-0016's -- 3 m
+# bore, no field, a 200-673 m^3 chamber, 25 kg at 75 km/s into methane -- and it must not inherit
+# the magnetic nozzle's bag or the plate-side conventions.
+
+.PHONY: walled-nozzle-chamber walled-nozzle-hydrogen walled-nozzle-test
+## walled-nozzle-chamber: N10 item 4b and N9 item 0 -- the solved chamber charge (equilibrium
+## composition, wall-cap energy density, the slug-ratio fixed point) and the sealed-vessel
+## equilibration timescales -> data/results/walled_nozzle/chamber.csv
+walled-nozzle-chamber:
+	@mkdir -p data/results/walled_nozzle
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.chamber
+
+## walled-nozzle-hydrogen: N10's Project 242 validation -- equilibrium pure hydrogen at Rubbia's
+## chamber, and the frozen/equilibrium Isp bracket that says whether his 2700 s baseline needs
+## recombination. Also ADR-0016's pure-hydrogen rung.
+walled-nozzle-hydrogen:
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.hydrogen
+
+## walled-nozzle-test: this study's tests alone
+walled-nozzle-test:
+	uv run pytest python/tests/test_eos_methane.py python/tests/test_walled_nozzle_chamber.py \
+	                python/tests/test_walled_nozzle_hydrogen.py
