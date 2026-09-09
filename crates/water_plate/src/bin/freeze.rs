@@ -30,6 +30,7 @@ impl State {
 #[derive(Debug, Deserialize)]
 struct Parcel {
     gas: FrozenGas,
+    ionizing: Option<water_plate::selective::IonizingGas>,
     temperature_k: f64,
     pressure_pa: f64,
     expansion_rate_s: f64,
@@ -100,6 +101,7 @@ fn run(
     table: &Arc<TableEos>,
     curve: &Arc<ResidualCurve>,
     frozen: bool,
+    molecular: bool,
     out: &mut impl Write,
 ) -> Result<(), Box<dyn Error>> {
     assert_eq!(input.parcels.len(), input.state.cell_masses.len());
@@ -128,6 +130,11 @@ fn run(
         if frozen {
             let mut cell = FrozenCell {
                 gas: p.gas.clone(),
+                ionizing: if molecular {
+                    Some(p.ionizing.clone().ok_or("missing selective coefficients")?)
+                } else {
+                    None
+                },
                 residual: Arc::clone(curve),
                 storage_shift: input.storage_shift,
                 energy_offset: 0.0,
@@ -180,7 +187,9 @@ fn run(
     {
         return Err(format!("splice or cross-language EOS acceptance failed: p_jump={max_start_pressure_jump}, T_jump={max_start_temperature_jump}, source_p={max_source_pressure_error}, source_e={max_source_energy_error}").into());
     }
-    let branch = if frozen {
+    let branch = if frozen && molecular {
+        "molecular_frozen"
+    } else if frozen {
         "parcel_frozen"
     } else {
         "equilibrium"
@@ -244,9 +253,10 @@ fn run(
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() != 4 {
-        return Err("usage: freeze TABLE.json INPUTS.json OUTPUT.jsonl".into());
+    if !(args.len() == 4 || (args.len() == 5 && args[4] == "molecular")) {
+        return Err("usage: freeze TABLE.json INPUTS.json OUTPUT.jsonl [molecular]".into());
     }
+    let molecular = args.len() == 5;
     let table = Arc::new(TableEos::new(tables::Table::load(&args[1])?));
     let input: Inputs = serde_json::from_reader(File::open(&args[2])?)?;
     let curve = Arc::new(input.residual_curve);
@@ -254,11 +264,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     row(
         &mut out,
         &json!({"record":"metadata","input_path":args[2],"table_path":args[1],
-        "model":"same-state parcel-frozen composition; residual exponent 2; T>=1000 K"}),
+        "model":"same-state constrained composition; residual exponent 2; T>=1000 K",
+        "molecular_frozen_ionization_active":molecular}),
     )?;
     for restart in &input.restarts {
         for frozen in [false, true] {
-            run(restart, &table, &curve, frozen, &mut out)?;
+            run(restart, &table, &curve, frozen, molecular, &mut out)?;
             out.flush()?;
         }
     }

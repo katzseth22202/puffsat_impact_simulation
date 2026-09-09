@@ -649,7 +649,7 @@ water-plate-ledger:
 	PYTHONPATH=python $(PY) -m puffsat.water_plate.ledger
 
 water-plate-test:
-	uv run --extra sci pytest python/tests/test_water_plate_ledger.py python/tests/test_water_plate_profiles.py python/tests/test_water_plate_thermodynamics.py python/tests/test_water_plate_chemistry.py python/tests/test_water_plate_flow_eos.py python/tests/test_water_plate_flow.py python/tests/test_water_plate_freeze.py
+	uv run --extra sci pytest python/tests/test_water_plate_ledger.py python/tests/test_water_plate_profiles.py python/tests/test_water_plate_thermodynamics.py python/tests/test_water_plate_chemistry.py python/tests/test_water_plate_flow_eos.py python/tests/test_water_plate_flow.py python/tests/test_water_plate_freeze.py python/tests/test_water_plate_selective.py python/tests/test_water_plate_kinetics.py
 	cargo test --release -p water_plate
 	cargo test --release -p hydro1d --test history
 
@@ -698,6 +698,7 @@ WATER_FREEZE_INPUT ?= data/results/water_plate/freeze_inputs_n$(WATER_FREEZE_CEL
 WATER_FREEZE_OUTPUT ?= data/results/water_plate/freeze_n$(WATER_FREEZE_CELLS)_05ms.jsonl
 WATER_FREEZE_END ?= 0.0005
 WATER_FREEZE_TIMES_US ?= 153.5 193
+WATER_FREEZE_TIMESTEP_FRACTION ?=
 WATER_FREEZE_REPORT_RUNS ?= data/results/water_plate/freeze_05ms.jsonl data/results/water_plate/freeze_n80_05ms.jsonl data/results/water_plate/freeze_probe.jsonl
 WATER_FREEZE_REFERENCE ?= data/results/water_plate/freeze_n80_05ms.jsonl
 
@@ -705,10 +706,68 @@ water-plate-freeze-parent:
 	$(MAKE) water-plate-flow WATER_FLOW_CELLS=$(WATER_FREEZE_CELLS) WATER_FLOW_LAYER=1 WATER_FLOW_COUPLING_SAMPLES=301 WATER_FLOW_OUTPUT=$(WATER_FREEZE_PARENT)
 
 water-plate-freeze-prepare: $(WATER_FREEZE_PARENT)
-	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.freeze $(WATER_FREEZE_PARENT) --times-us $(WATER_FREEZE_TIMES_US) --end $(WATER_FREEZE_END) --output $(WATER_FREEZE_INPUT)
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.freeze $(WATER_FREEZE_PARENT) --times-us $(WATER_FREEZE_TIMES_US) --end $(WATER_FREEZE_END) --output $(WATER_FREEZE_INPUT) $(if $(WATER_FREEZE_TIMESTEP_FRACTION),--timestep-fraction $(WATER_FREEZE_TIMESTEP_FRACTION))
 
 water-plate-freeze: water-plate-freeze-prepare $(WATER_FLOW_TABLE)
 	cargo run --release -p water_plate --bin freeze -- $(WATER_FLOW_TABLE) $(WATER_FREEZE_INPUT) $(WATER_FREEZE_OUTPUT)
 
 water-plate-freeze-report:
 	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.freeze_report $(WATER_FREEZE_REPORT_RUNS) --reference $(WATER_FREEZE_REFERENCE)
+
+# Intermediate closure: fixed molecular abundances, atomic ionization active.
+.PHONY: water-plate-molecular-prepare water-plate-molecular water-plate-molecular-report water-plate-selective-report
+WATER_MOLECULAR_INPUT ?= data/results/water_plate/molecular_inputs_n$(WATER_FREEZE_CELLS)_05ms.json
+WATER_MOLECULAR_OUTPUT ?= data/results/water_plate/molecular_n$(WATER_FREEZE_CELLS)_05ms.jsonl
+WATER_MOLECULAR_RUNS ?= data/results/water_plate/molecular_n40_05ms.jsonl data/results/water_plate/molecular_n80_05ms.jsonl data/results/water_plate/molecular_n40_halfdt_05ms.jsonl
+WATER_MOLECULAR_REFERENCE ?= data/results/water_plate/molecular_n80_05ms.jsonl
+WATER_SELECTIVE_ALL_RUNS ?= data/results/water_plate/freeze_05ms.jsonl data/results/water_plate/freeze_n80_05ms.jsonl data/results/water_plate/freeze_n40_halfdt_05ms.jsonl
+
+water-plate-molecular-prepare: $(WATER_FREEZE_PARENT)
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.freeze $(WATER_FREEZE_PARENT) --molecular --times-us $(WATER_FREEZE_TIMES_US) --end $(WATER_FREEZE_END) --output $(WATER_MOLECULAR_INPUT) $(if $(WATER_FREEZE_TIMESTEP_FRACTION),--timestep-fraction $(WATER_FREEZE_TIMESTEP_FRACTION))
+
+water-plate-molecular: water-plate-molecular-prepare $(WATER_FLOW_TABLE)
+	cargo run --release -p water_plate --bin freeze -- $(WATER_FLOW_TABLE) $(WATER_MOLECULAR_INPUT) $(WATER_MOLECULAR_OUTPUT) molecular
+
+water-plate-molecular-report:
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.freeze_report $(WATER_MOLECULAR_RUNS) --reference $(WATER_MOLECULAR_REFERENCE) --prefix molecular --frozen-branch molecular_frozen
+
+water-plate-selective-report:
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.selective_report --all-frozen $(WATER_SELECTIVE_ALL_RUNS) --molecular-frozen $(WATER_MOLECULAR_RUNS)
+
+.PHONY: water-plate-kinetics-audit
+WATER_KINETICS_PARENTS ?= data/results/water_plate/freeze_parent_h1_n40.jsonl data/results/water_plate/freeze_parent_h1_n80.jsonl
+WATER_KINETICS_STRIDES ?= 1 2
+water-plate-kinetics-audit:
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.kinetics_audit $(WATER_KINETICS_PARENTS) --strides $(WATER_KINETICS_STRIDES)
+
+.PHONY: water-plate-pressure-kinetics-audit
+water-plate-pressure-kinetics-audit:
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.pressure_kinetics_audit $(WATER_KINETICS_PARENTS) --strides $(WATER_KINETICS_STRIDES)
+
+.PHONY: water-plate-thermal-kinetics-audit
+water-plate-thermal-kinetics-audit:
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.thermal_kinetics_audit $(WATER_KINETICS_PARENTS) --strides $(WATER_KINETICS_STRIDES)
+
+# Nonlinear prescribed-history parcels: not a coupled finite-rate flow solve.
+WATER_PARCEL_PARENT ?= data/results/water_plate/freeze_parent_h1_n80.jsonl
+WATER_PARCEL_INPUT ?= data/results/water_plate/parcel_n80_input.json
+WATER_PARCEL_OUTPUT ?= data/results/water_plate/parcel_n80.jsonl
+WATER_PARCEL_STRIDE ?= 2
+WATER_PARCEL_TOLERANCE ?= 1e-4
+WATER_PARCEL_MAX_STEP ?= 2.5e-7
+WATER_PARCEL_RUNS ?= data/results/water_plate/parcel_n40.jsonl data/results/water_plate/parcel_n80.jsonl data/results/water_plate/parcel_n80_refined.jsonl data/results/water_plate/parcel_n80_sampling.jsonl data/results/water_plate/parcel_n80_fine.jsonl
+
+.PHONY: water-plate-parcel-prepare water-plate-parcels water-plate-parcel-report water-plate-parcel-check
+water-plate-parcel-prepare:
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.parcel --parent $(WATER_PARCEL_PARENT) --stride $(WATER_PARCEL_STRIDE) --tolerance $(WATER_PARCEL_TOLERANCE) --maximum-step $(WATER_PARCEL_MAX_STEP) --output $(WATER_PARCEL_INPUT)
+
+water-plate-parcels: water-plate-parcel-prepare
+	cargo run --release -p water_plate --bin parcels -- $(WATER_PARCEL_INPUT) $(WATER_PARCEL_OUTPUT)
+
+water-plate-parcel-report:
+	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.parcel_report $(WATER_PARCEL_RUNS)
+
+water-plate-parcel-check:
+	PYTHONPATH=python uv run --extra sci pytest python/tests/test_water_plate_parcel.py
+	cargo test --release -p water_plate --lib parcel::tests
+	cargo test --release -p water_plate --test nonlinear_parcel

@@ -98,7 +98,16 @@ def sample_times(start: float, end: float) -> list[float]:
     return [float(t) for t in np.unique(np.clip(np.concatenate((early, late)), start, end))]
 
 
-def prepare(parent: Path, times: list[float], output: Path, end: float = 0.001) -> None:
+def prepare(
+    parent: Path,
+    times: list[float],
+    output: Path,
+    end: float = 0.001,
+    molecular: bool = False,
+    timestep_fraction: float | None = None,
+) -> None:
+    if timestep_fraction is not None and not 0 < timestep_fraction <= 1:
+        raise ValueError("timestep fraction must be in (0, 1]")
     # Any stays confined to this locally produced JSON boundary. Calculations
     # receive explicit floats or typed gas parameters, never an untyped EOS API.
     selected: list[dict[str, Any]] = []
@@ -151,6 +160,10 @@ def prepare(parent: Path, times: list[float], output: Path, end: float = 0.001) 
                     "expansion_rate_s": float(cell["expansion_rate_s"]),
                 }
             )
+            if molecular:
+                from puffsat.water_plate.selective import ionizing_parameters
+
+                states[-1]["ionizing"] = asdict(ionizing_parameters(rho, temp))
         samples = sample_times(start, end)
         c = configs[snap["name"]]
         restarts.append(
@@ -162,7 +175,9 @@ def prepare(parent: Path, times: list[float], output: Path, end: float = 0.001) 
                 "storage_shift": shift,
                 "water_cells": int(snap["water_cells"]),
                 "incoming_momentum_ns": float(c["projectile_kg"]) * float(c["speed_m_s"]),
-                "timestep_fraction": float(c["timestep_fraction"]),
+                "timestep_fraction": float(c["timestep_fraction"])
+                if timestep_fraction is None
+                else timestep_fraction,
                 "state": snap["lagrangian_state"],
                 "parcels": states,
                 "output_times_s": samples,
@@ -185,10 +200,25 @@ def main() -> None:
     parser.add_argument("--times-us", nargs="+", type=float, default=[153.5, 193.0])
     parser.add_argument("--end", type=float, default=0.001)
     parser.add_argument(
+        "--timestep-fraction",
+        type=float,
+        help="override parent CFL fraction for matched restart refinement",
+    )
+    parser.add_argument(
+        "--molecular", action="store_true", help="export fixed-molecule, active-ion coefficients"
+    )
+    parser.add_argument(
         "--output", type=Path, default=Path("data/results/water_plate/freeze_inputs.json")
     )
     args = parser.parse_args()
-    prepare(args.parent, [t * 1e-6 for t in args.times_us], args.output, args.end)
+    prepare(
+        args.parent,
+        [t * 1e-6 for t in args.times_us],
+        args.output,
+        args.end,
+        args.molecular,
+        args.timestep_fraction,
+    )
 
 
 if __name__ == "__main__":

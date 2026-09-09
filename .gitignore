@@ -93,6 +93,21 @@ __pycache__/
 !/data/results/water_plate/freeze_comparison.csv
 !/data/results/water_plate/freeze_model.json
 !/data/results/water_plate/freeze_comparison.png
+!/data/results/water_plate/molecular_runs.csv
+!/data/results/water_plate/molecular_comparison.csv
+!/data/results/water_plate/molecular_model.json
+!/data/results/water_plate/molecular_comparison.png
+!/data/results/water_plate/selective_comparison.csv
+!/data/results/water_plate/kinetics_audit.csv
+!/data/results/water_plate/kinetics_model.json
+!/data/results/water_plate/pressure_kinetics_audit.csv
+!/data/results/water_plate/pressure_kinetics_audit.json
+!/data/results/water_plate/thermal_kinetics_audit.csv
+!/data/results/water_plate/thermal_kinetics_audit.json
+!/data/results/water_plate/thermal_kinetics_refined.csv
+!/data/results/water_plate/thermal_kinetics_refined.json
+!/data/results/water_plate/parcel_return.csv
+!/data/results/water_plate/parcel_return.json
 # ...and the raw TOPS/OPLIB opacity pull (ADR-0007 amendment): the citable provenance
 # artifact behind the 69 km/s table; needs a network allow to re-fetch (`make fetch-tops`).
 !/data/tables/

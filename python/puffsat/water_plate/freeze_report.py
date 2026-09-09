@@ -54,11 +54,13 @@ def read_run(path: Path) -> tuple[list[Row], list[Row], dict[str, object], float
     return history, summaries, provenance, cold_rate, arrival
 
 
-def valid_quad(rows: list[Row], arrival: float) -> bool:
+def valid_quad(rows: list[Row], arrival: float, frozen_branch: str = "parcel_frozen") -> bool:
     """Require matched controls, conservation and small matching corrections."""
+    if frozen_branch not in ("parcel_frozen", "molecular_frozen"):
+        return False
     keys = {(str(r["name"]).split("_h")[0], r["branch"]) for r in rows}
     if len(rows) != 4 or keys != {
-        (c, b) for c in ("combined", "unsprayed") for b in ("equilibrium", "parcel_frozen")
+        (c, b) for c in ("combined", "unsprayed") for b in ("equilibrium", frozen_branch)
     }:
         return False
     if len({str(r["name"]).split("_h", 1)[1] for r in rows}) != 1:
@@ -116,18 +118,24 @@ def valid_quad(rows: list[Row], arrival: float) -> bool:
     return True
 
 
-def comparison(rows: list[Row], cold_rate: float, arrival: float) -> Row:
-    result: Row = {"switch_time_s": rows[0]["start_time_s"], "status": "invalid_or_unmatched"}
-    if not valid_quad(rows, arrival):
+def comparison(
+    rows: list[Row], cold_rate: float, arrival: float, frozen_branch: str = "parcel_frozen"
+) -> Row:
+    result: Row = {
+        "switch_time_s": rows[0]["start_time_s"],
+        "status": "invalid_or_unmatched",
+        "frozen_branch": frozen_branch,
+    }
+    if not valid_quad(rows, arrival, frozen_branch):
         return result
     by = {(str(r["name"]).split("_h")[0], r["branch"]): float(r["wall_impulse_ns"]) for r in rows}
     ce, cf, ue, uf = (
         by[k]
         for k in (
             ("combined", "equilibrium"),
-            ("combined", "parcel_frozen"),
+            ("combined", frozen_branch),
             ("unsprayed", "equilibrium"),
-            ("unsprayed", "parcel_frozen"),
+            ("unsprayed", frozen_branch),
         )
     )
     end = float(rows[0]["time_s"])
@@ -155,7 +163,9 @@ def comparison(rows: list[Row], cold_rate: float, arrival: float) -> Row:
     return result
 
 
-def report(paths: list[Path], reference: Path) -> None:
+def report(
+    paths: list[Path], reference: Path, prefix: str = "freeze", frozen_branch: str = "parcel_frozen"
+) -> None:
     all_runs: list[Row] = []
     comparisons: list[Row] = []
     reference_history: list[Row] = []
@@ -164,7 +174,7 @@ def report(paths: list[Path], reference: Path) -> None:
         history, summaries, meta, cold_rate, arrival = read_run(path)
         for switch in sorted({float(r["start_time_s"]) for r in summaries}):
             quad = [r for r in summaries if float(r["start_time_s"]) == switch]
-            row = comparison(quad, cold_rate, arrival)
+            row = comparison(quad, cold_rate, arrival, frozen_branch)
             row["run"] = path.stem
             comparisons.append(row)
             if path == reference and row["status"] != "matched":
@@ -177,21 +187,27 @@ def report(paths: list[Path], reference: Path) -> None:
             provenance = meta
     if not reference_history:
         raise ValueError("reference must be included in paths")
-    _write(OUTPUT_DIR / "freeze_runs.csv", all_runs)
-    _write(OUTPUT_DIR / "freeze_comparison.csv", comparisons)
-    (OUTPUT_DIR / "freeze_model.json").write_text(json.dumps(provenance, indent=2) + "\n")
-    write_figure(reference_history, reference.stem)
+    provenance["frozen_branch"] = frozen_branch
+    _write(OUTPUT_DIR / f"{prefix}_runs.csv", all_runs)
+    _write(OUTPUT_DIR / f"{prefix}_comparison.csv", comparisons)
+    (OUTPUT_DIR / f"{prefix}_model.json").write_text(json.dumps(provenance, indent=2) + "\n")
+    write_figure(reference_history, reference.stem, prefix, frozen_branch)
     for row in comparisons:
         print(row)
 
 
-def write_figure(history: list[Row], name: str) -> None:
+def write_figure(
+    history: list[Row], name: str, prefix: str = "freeze", frozen_branch: str = "parcel_frozen"
+) -> None:
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     switches = sorted({str(r["name"]).split("_freeze_")[1] for r in history})
+    closure_label = (
+        "molecules fixed" if frozen_branch == "molecular_frozen" else "all species fixed"
+    )
     fig, axes = plt.subplots(2, 1, figsize=(9, 7), sharex=True, layout="constrained")
     colors = ("#0072B2", "#D55E00", "#009E73", "#CC79A7")
     for index, switch in enumerate(switches):
@@ -210,13 +226,13 @@ def write_figure(history: list[Row], name: str) -> None:
             selected(c, b)
             for c, b in (
                 ("combined", "equilibrium"),
-                ("combined", "parcel_frozen"),
+                ("combined", frozen_branch),
                 ("unsprayed", "equilibrium"),
-                ("unsprayed", "parcel_frozen"),
+                ("unsprayed", frozen_branch),
             )
         )
         times = [1e3 * float(r["time_s"]) for r in ce]
-        for rows, style, branch in ((ce, "-", "equilibrium"), (cf, "--", "frozen")):
+        for rows, style, branch in ((ce, "-", "equilibrium"), (cf, "--", closure_label)):
             axes[0].plot(
                 times,
                 [float(r["wall_impulse_ns"]) / 1e6 for r in rows],
@@ -244,13 +260,16 @@ def write_figure(history: list[Row], name: str) -> None:
     axes[0].set_ylabel("Combined wall impulse (MN s)")
     axes[1].set_ylabel("Reaction effect on water-layer\nadvantage (kN s)")
     axes[1].set_xlabel("Time (ms)")
-    axes[0].set_title(
-        "Same-state reaction switch: all later chemistry active versus frozen\n" + name
+    description = (
+        "fixed molecules, ionization active"
+        if frozen_branch == "molecular_frozen"
+        else "all species fixed"
     )
+    axes[0].set_title(f"Same-state switch: equilibrium versus {description}\n" + name)
     for axis in axes:
         axis.legend()
         axis.grid(True, alpha=0.2)
-    fig.savefig(OUTPUT_DIR / "freeze_comparison.png", dpi=180)
+    fig.savefig(OUTPUT_DIR / f"{prefix}_comparison.png", dpi=180)
     plt.close(fig)
 
 
@@ -258,8 +277,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="+", type=Path)
     parser.add_argument("--reference", required=True, type=Path)
+    parser.add_argument("--prefix", choices=("freeze", "molecular"), default="freeze")
+    parser.add_argument(
+        "--frozen-branch", choices=("parcel_frozen", "molecular_frozen"), default="parcel_frozen"
+    )
     args = parser.parse_args()
-    report(args.paths, args.reference)
+    report(args.paths, args.reference, args.prefix, args.frozen_branch)
 
 
 if __name__ == "__main__":

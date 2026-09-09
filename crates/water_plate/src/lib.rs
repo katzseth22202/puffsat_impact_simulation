@@ -5,6 +5,9 @@ use hydro1d::eos::{Eos, TableEos};
 use serde::Deserialize;
 use std::sync::Arc;
 
+pub mod parcel;
+pub mod selective;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ResidualKnot {
     pub log_rho: f64,
@@ -84,6 +87,7 @@ impl FrozenGas {
 #[derive(Debug, Clone)]
 pub struct FrozenCell {
     pub gas: FrozenGas,
+    pub ionizing: Option<selective::IonizingGas>,
     pub residual: Arc<ResidualCurve>,
     pub storage_shift: f64,
     /// Constant energy and entropy-pressure corrections to match the parent
@@ -123,15 +127,29 @@ impl FrozenCell {
         let bt = -0.5 * (1.0 - (t0 / temp).powi(2));
         let fx = d[0] - temp * d[1] + d[2] * b;
         let fxx = dd[0] - temp * dd[1] + dd[2] * b;
-        let (gas_e, gas_cv) = self.gas.thermal(temp);
-        let r = self.gas.gas_constant + self.pressure_r_offset;
+        let gas = self.ionizing.as_ref().map_or_else(
+            || {
+                let (energy, cv) = self.gas.thermal(temp);
+                let r = self.gas.gas_constant;
+                Thermo {
+                    pressure: rho * r * temp,
+                    energy,
+                    cv,
+                    pressure_t: rho * r,
+                    pressure_r: r * temp,
+                    energy_r: 0.0,
+                }
+            },
+            |g| g.at_temperature(rho, temp),
+        );
+        let r = self.pressure_r_offset;
         Thermo {
-            pressure: rho * (r * temp + fx),
-            energy: gas_e + v[0] + v[2] * a + self.storage_shift + self.energy_offset,
-            cv: gas_cv + v[2] * (t0 / temp).powi(2),
-            pressure_t: rho * (r - d[1] + d[2] * bt),
-            pressure_r: r * temp + fx + fxx,
-            energy_r: (d[0] + d[2] * a) / rho,
+            pressure: gas.pressure + rho * (r * temp + fx),
+            energy: gas.energy + v[0] + v[2] * a + self.storage_shift + self.energy_offset,
+            cv: gas.cv + v[2] * (t0 / temp).powi(2),
+            pressure_t: gas.pressure_t + rho * (r - d[1] + d[2] * bt),
+            pressure_r: gas.pressure_r + r * temp + fx + fxx,
+            energy_r: gas.energy_r + (d[0] + d[2] * a) / rho,
         }
     }
 
@@ -234,6 +252,7 @@ mod tests {
 
     fn monatomic(r: f64) -> FrozenCell {
         FrozenCell {
+            ionizing: None,
             gas: FrozenGas {
                 gas_constant: r,
                 linear_cv: 1.5 * r,

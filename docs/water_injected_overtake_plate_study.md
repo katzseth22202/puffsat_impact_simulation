@@ -1,10 +1,13 @@
 # Water-injected overtake plate study
 
-Status: scope, analytic ledger, kinematic profiles, local equilibrium mixing,
-conditional recombination-location screen, and a provisional planar stratified-water
-flow reference implemented. The reference shows temporal overlap between molecular
-store return and wall impulse. No distributed-injection performance, isolated causal
-chemistry contribution to impulse, or survivability result yet.
+Status: Steps 0–9 and the **nonlinear prescribed-history parcel calculation**
+(Step 11) implemented. Tested documented-rate scenarios return roughly 23–25%
+of the molecular store held at 153.5 microseconds by 193 microseconds, and about
+30–31% by 250 microseconds. Extreme slow-rate scenarios return less. These are
+conditional amounts, not likelihood intervals or useful-work fractions.
+Step 10 establishes source-applicability limits but does not validate the hot/dense
+rates. No coupled finite-rate flow, distributed-injection performance, or
+survivability result yet.
 
 Source: [companion proposal at 9440b27](https://github.com/katzseth22202/Balloon-Pulse-Propulsion/blob/9440b2789195d14d18409b4eb619c80dba44f71d/docs/water_injected_overtake_plate_for_impact_sim.md).
 User refinements recorded 2026-09-05 are listed below. This is distinct from the
@@ -161,6 +164,19 @@ architecture superiority is ready to transfer.
   at the first speed (conditional density/geometry assumptions; Step 3).
 - [x] Run a planar prepositioned-water reference with conservative source bookkeeping,
   matched wall controls, spatial/time-step checks and actual parcel chemistry clocks.
+- [x] Isolate the conditional post-switch chemistry effect using same-state parcel-frozen
+  controls at two switch times and two spatial resolutions (Step 5).
+- [x] Separate an ordered molecular-reaction effect from atomic ionization using a
+  fixed-molecule/active-ion intermediate closure (Step 6; not finite-rate kinetics).
+- [x] Audit a reduced neutral network's local relaxation and rate applicability on
+  the saved equilibrium flow (Step 7; kinetic validation remains open).
+- [x] Check direct-water pressure-source coverage and channel removal (Step 8).
+- [x] Resolve local fixed-energy feedback and association rate control (Step 9).
+- [x] Trace evaluated H2/collider sources and compare a documented H2 replacement
+  (Steps 10–11; hot/dense physical validation not passed).
+- [ ] Establish an applicable hot/dense rate and thermodynamic uncertainty envelope.
+- [x] Verify nonlinear fixed-energy neutral chemistry and integrate prescribed
+  parcel density/energy-forcing histories (Step 11; ions fixed, flow not recomputed).
 - [ ] Implement the flow source/boundary with the same energy reference and feed work.
 - [ ] Validate the injected-flow calculation against analytic limits and convergence.
 - [ ] Measure combined, unsprayed, and injection-only impulse at the first speed.
@@ -181,7 +197,8 @@ architecture superiority is ready to transfer.
 | The planar stratified-water reference has molecular store return within centimetres of the wall during the main impulse interval; its 1 ms impulse exceeds the unsprayed control. | `flow_reference_milestones.csv` and `flow_reference_convergence.csv`; Step 4 states the EOS, sampling and control limitations. | Provisional reference result only: no distributed spray, finite plate, causal chemistry increment or survivability claim. |
 | Water injection beats a bare plate or a magnetic nozzle, recovers recombination energy, or simplifies survivable hardware. | No simulation/engineering evidence yet. | No result to transfer; corresponding checklist items remain open. |
 
-Step 3 checkpoint verification: 39 study acceptance tests pass; `make lint` passes
+Historical Step 3 verification (superseded by the Step 9 verification below):
+39 study acceptance tests pass; `make lint` passes
 (including strict Python typing, clippy, and Rust formatting). Step 3 includes
 the resolution comparison below. Full Rust tests pass in release mode: 175 passed,
 11 repository-marked ignored. A pre-existing float-to-integer cast in the Rust
@@ -198,18 +215,25 @@ run was stopped and replaced by the completed `cargo test --release --locked` ru
 
 - Branch: `main`; find the latest study checkpoint with
   `git log --oneline --grep='water.*plate'` and inspect `git status --short` first.
-- Completed: Step 0 (08dc8f3), kinematic profiles (3485abd), and the local equilibrium
-  mixing screen (f9c2df8), followed by the conditional chemistry-location screen
-  (2026-09-06 working-tree checkpoint; inspect `git status` before editing).
-  Reproduce with `make water-plate-ledger`, `make water-plate-profiles`,
-  `make water-plate-thermo`, `make water-plate-chemistry`, and `make water-plate-test`
-  (last three use the `sci` extra).
-- Active next step: implement and validate the first conservative injected-flow
-  calculation, carrying the liquid/gas energy offset and the feed-work ledger.
-  Extract parcel density/temperature and separate chemical stores against cumulative
-  wall impulse. Step 3 prioritizes whether a dense cooling layer actually forms and
-  stays pressure-coupled; it does not supply that layer as an initial condition.
-  No hydrodynamic result exists yet; the local mixed density is still an input.
+- Completed: Steps 0–9 and nonlinear conditional parcel scenarios (Step 11), with
+  substantial uncommitted code, tests and evidence. Do not restart at Step 3 or
+  overwrite the working tree. Current verification is recorded at Step 11.
+- Physical-data gate still open: hot/dense H2 association/collider and other
+  association rates (Step 10 below).
+  NIST's kinetics database and Princeton's Li manuscript became accessible after
+  the network retry. The original Cohen/Tsang PDFs remain unread; the NIST records
+  are separately identified as database transcriptions of those evaluations.
+  The Li H2 replacement and nonlinear parcel integration are now implemented;
+  source agreement does not turn the missing physical envelope into a passed gate.
+- Reproduce local diagnostics with `make water-plate-kinetics-audit`,
+  `make water-plate-pressure-kinetics-audit`, and
+  `make water-plate-thermal-kinetics-audit`. They use the saved N40/N80
+  `freeze_parent_h1_*.jsonl` histories, not new injected flow.
+- Reproduce the new amounts with `make water-plate-parcels` and
+  `make water-plate-parcel-report`; Step 11 names grid/sampling/solver overrides.
+- Next numerical gate: conservative chemistry/flow coupling, including pressure
+  feedback, dense-EOS convergence and the missing ion/loss physics. The parcel
+  results cannot supply a finite-rate wall impulse by postprocessing alone.
 - Scratch: `todos/water_plate_study_scope.md` points here; it is not the canonical
   task state. The companion checkout is disposable and pinned at 9440b27.
 - Keep this checkpoint and the progress checklist synchronized with completed
@@ -679,12 +703,794 @@ only when their exact checkpoints exist and all parcels satisfy the hot domain.
 Bulk parent/restart files remain ignored. The flow table and Cargo environment
 requirements are unchanged from Step 4.
 
-## Next calculation
+Verification: the full checkpoint suite passed **519 Python tests** (21m29s)
+and **183 Rust release tests** (11 intentionally ignored). Subsequent additions
+and final edits pass **98 focused Python tests and 9 Rust study/history tests**,
+including the additional vibrational-heat-capacity test. `make lint` passes.
+All three reported restart files were rerun with the final equilibrium-splice
+guard; invalid-domain and mismatched comparisons have explicit regression tests.
 
-Separate molecular and ionization responses and validate finite-rate chemistry
-on this controlled flow, with EOS table convergence and the dense-water closure
-limits kept visible. The same-state all-reaction switch above is complete as a
-conditional test, not a full chemistry attribution. Then
+## Step 6: separating molecular reactions from atomic ionization
+
+An intermediate closure now holds each parcel's H2O, OH, H2 and O2 abundances
+fixed while allowing its remaining atomic H/O inventory and electrons to
+equilibrate through the existing Saha ion ladder. The fixed molecular bond store
+does not return, but ionization can still exchange energy with the thermal pool.
+The thermal degrees of freedom, dense-water residual and exact conserved restart
+state remain unchanged. Details and thermodynamic acceptance tests are in
+[ADR-0045](adr/0045-water-plate-selective-chemistry.md).
+
+This compares three closures: full equilibrium E; molecules fixed, ionization
+active M; and all species fixed F. The **ordered** differences are
+`G_E-G_M` (allow molecular reactions with ions active) and `G_M-G_F`
+(allow ionization with molecules fixed). They sum to Step 5's `G_E-G_F`.
+Changing the order could allocate coupled chemistry/flow effects differently;
+this is not a unique decomposition of chemical work. Forward and reverse
+reactions are both included, not recombination alone.
+
+### Conditional molecular contribution
+
+All gains below use the same 0.5 ms endpoint and subtract the unsprayed and
+analytic cold-only controls. Positive contributions increase the water-layer
+advantage; a negative contribution need not mean negative thrust.
+
+| Switch (microseconds) | N | Molecular effect, ions active (kN s) | Ionization effect, molecules fixed (kN s) | All-chemistry effect (kN s) |
+| --- | --- | --- | --- | --- |
+| 153.5 | 40 | 126.456 | -40.356 | 86.099 |
+| 153.5 | 80 | 127.219 | -39.182 | 88.037 |
+| 193 | 40 | 22.516 | -21.837 | 0.679 |
+| 193 | 80 | 22.143 | -21.564 | 0.579 |
+
+The early-switch molecular contribution is positive and material: at N=80 it
+is **18.4%** of the equilibrium water-layer gain. The molecular effect changes
+by 0.60% from N=40 to 80, while the late-switch molecular effect changes by
+1.66%. These are limited grid checks, not model uncertainty bounds.
+Halving the N=40 restart timestep changes either molecular contribution by
+less than **0.21 N s** (0.00017% for the early switch); the late net
+all-chemistry difference changes by 0.10 N s. This is a post-switch timestep
+check only: the saved pre-switch shock history is identical, not independently
+time-refined by this experiment.
+The unsprayed pulse benefits much
+more from enabling atomic ionization under the fixed-molecule constraint,
+reducing the **relative** water-layer advantage. That is why the ordered
+molecular contribution can exceed the net all-chemistry contribution without
+violating energy conservation.
+
+The late-switch result corrects a possible over-reading of Step 5: its small
+net difference does **not** mean that both chemical effects are negligible.
+At N=80 roughly +22.1 kN s of molecular effect and -21.6 kN s of relative
+ionization effect largely cancel. Neither conditional effect is an independently
+usable engineering gain or a unique recombination-energy fraction.
+
+This strengthens the evidence that molecular chemistry is early enough to
+affect wall loading in the provisional planar reference. It does not establish
+the real finite-rate recovery fraction, total pre-switch chemistry benefit,
+or performance of locally mixed injected water on a finite pusher plate.
+
+At N=80 the largest actual switch p/T jump is below 4e-13 relative; the
+independent Rust/Python source checks agree within 3.01e-7 in pressure and
+2.89e-10 in energy. Maximum restart energy drift is 3.27e-6 of physical energy.
+Matching the analytic constrained EOS to the parent table still requires up to
+30.98 MJ of summed absolute constant-energy offsets (about 0.12% of physical
+energy) and a maximum 0.459% pressure correction, essentially the same as
+Step 5. Small conservation errors and source agreement do not validate the
+provisional dense residual or remove its table-interpolation uncertainty.
+
+### Evidence and reproduction
+
+- [Ordered differences](../data/results/water_plate/selective_comparison.csv).
+- [Molecular-switch comparisons](../data/results/water_plate/molecular_comparison.csv).
+- [Branch conservation and splice diagnostics](../data/results/water_plate/molecular_runs.csv).
+- [Reference provenance](../data/results/water_plate/molecular_model.json).
+- [Molecular-switch impulse histories](../data/results/water_plate/molecular_comparison.png).
+
+Use the exact Step 5 parents, then `make water-plate-molecular` (N=80 by
+default), and repeat with `WATER_FREEZE_CELLS=40`. The molecular preparation
+is separately available as `make water-plate-molecular-prepare`.
+`WATER_MOLECULAR_INPUT` and `WATER_MOLECULAR_OUTPUT` name distinct variant files;
+the endpoint and switches use `WATER_FREEZE_END` and `WATER_FREEZE_TIMES_US`.
+The optional `WATER_FREEZE_TIMESTEP_FRACTION=0.125` halves the reference
+restart timestep, without changing the pre-switch parent flow; give both
+all-frozen and molecular-frozen variants distinct filenames when using it.
+The default report includes this N=40 half-timestep pair. Reproduce it with:
+
+```
+make water-plate-molecular WATER_FREEZE_CELLS=40 WATER_FREEZE_TIMESTEP_FRACTION=0.125 WATER_MOLECULAR_INPUT=data/results/water_plate/molecular_inputs_n40_halfdt_05ms.json WATER_MOLECULAR_OUTPUT=data/results/water_plate/molecular_n40_halfdt_05ms.jsonl
+make water-plate-freeze WATER_FREEZE_CELLS=40 WATER_FREEZE_TIMESTEP_FRACTION=0.125 WATER_FREEZE_INPUT=data/results/water_plate/freeze_inputs_n40_halfdt_05ms.json WATER_FREEZE_OUTPUT=data/results/water_plate/freeze_n40_halfdt_05ms.jsonl
+```
+
+`make water-plate-molecular-report` reports the molecular runs and
+`make water-plate-selective-report` pairs them with the all-frozen controls.
+The latter checks actual restart arrays and integration grids as well as
+metadata and matched equilibrium outcomes. Override `WATER_MOLECULAR_RUNS`,
+`WATER_MOLECULAR_REFERENCE` and `WATER_SELECTIVE_ALL_RUNS` for other selections;
+paired lists must use the same order. Bulk JSON inputs/trajectories remain ignored.
+
+Verification: the full checkpoint passed **546 Python tests** (22m59s) and
+**186 Rust release tests** (11 intentionally ignored). Final additions and
+report changes pass **123 focused Python tests and 11 Rust study/history tests**;
+`make lint` and `git diff --check` pass. The final reports include both spatial
+resolutions and the matched N=40 half-timestep pair, with all branches completing
+the common window and passing conservation, thermodynamic-domain and splice gates.
+
+## Step 7: reaction-rate margin and applicability audit
+
+The rate check now includes ten reversible reactions among H, O, H2, OH, O2
+and H2O, using documented forward coefficients and collision-partner efficiencies
+from the [Cantera v3.2.0 GRI-Mech hydrogen–oxygen submechanism](https://github.com/Cantera/cantera/blob/v3.2.0/data/h2o2.yaml).
+Reverse rates are matched to this study's molecular partition functions, not
+silently substituted from the mechanism's NASA7 thermodynamics. The new
+[ADR-0046](adr/0046-water-plate-kinetics-applicability.md) records the source hash,
+unit/event conventions, linear-response construction and applicability limits.
+
+This is **not** finite-rate hydrodynamics. It measures a local isothermal,
+fixed-density, fixed-ion, bond-energy-weighted relaxation time from the four
+reactive eigenmodes of the detailed-balanced neutral network. It includes both
+directions of each reaction and multiple routes; it is not the former one-way
+OH-partner collision time. HO2/H2O2 and ionic reaction/collider channels remain
+absent. Equal forward and reverse equilibrium fluxes do not count as heat release.
+
+### Conditions during modeled molecular return
+
+Audit the existing 100–250 microsecond loading history, weighted by **positive
+consecutive parcel bond-store decreases**. These weights count repeated returns
+after reheating again; they are not unique released energy, parcel-peak decreases
+or causal impulse weights. Rates, temperatures, pressures and measured velocity-
+gradient clocks use interval right endpoints. Every quoted temperature range
+below contains the central 80% of the corresponding store-decrease weight.
+
+| Interval (microseconds) | Positive store-decrease weight (GJ) | Temperature p10–p90 (K) | Median pressure (MPa) | Median tracking Da |
+| --- | --- | --- | --- | --- |
+| 100–153.5 | 0.236 | 5,135–9,449 | 2,537 | 3.19e6 |
+| 153.5–193 | 1.406 | 5,653–8,270 | 373 | 1.48e5 |
+| 193–250 | 0.369 | 4,861–5,368 | 39.8 | 3.28e4 |
+
+These are N=80, fine-output results. Tracking Da compares the network relaxation
+time with the smaller of the measured expansion time and the sampled
+mean-held-store / store-return-rate time. The latter checks rapid chemical-store
+changes that a density-only clock might miss; it is not a continuous nonlinear
+composition forcing calculation. Compression receives no invented expansion clock.
+In the main 153.5–193 microsecond interval, the store-decrease-weighted median
+density is 71 kg/m3 and the median parcel position is **2.1 cm from the wall**.
+These are sampled material positions, not a separately resolved reaction front.
+
+Across the whole interval, **99.74%** of the store-decrease weight has a resolved
+expansion clock and tracking Da above 10. About **0.26%** has no positive expansion
+clock and remains unclassified, not frozen. Numerically tiny decreases remain in
+the denominator; no spectrum failure is relabeled a fast reaction. The tracking
+Da p10/median/p90 are approximately **3.12e4 / 1.28e5 / 2.40e6** for the resolved
+subset. Uniformly reducing all retained forward and reverse rates by 1000 would
+still leave **99.62%** of the total weight above Da=10 **on this saved equilibrium
+history**. That is a sensitivity calculation, not a validated uncertainty bound
+or a recomputed wall impulse.
+
+The weighted median of the old OH-partner time divided by the new energy-weighted
+network time is about 4.17. Neither clock is a rigorous upper or lower
+bound on real kinetics. Steam's relative collider abundance evolves: the effective
+water-formation collider multiplier has a weighted median near 1.50, not a fixed
+3.65 for the whole mixture. Almost none of the molecular-return weight is in
+material with more than 1% ionized nuclei. This does not erase the separate ion
+impulse effect in the hotter unsprayed configuration.
+
+### What remains unvalidated
+
+**All** of the positive molecular store-decrease weight in this loading interval
+is above the source mechanism's **3500 K thermodynamic-fit ceiling**. This is
+not a demonstrated upper validity limit for each forward rate; it shows that
+the supplied mechanism cannot be used unchanged as a thermodynamic validation.
+The present screen uses the study's own extended thermodynamics and extrapolates
+the listed forward rate laws.
+
+The retained association reactions, including H + OH + M -> H2O + M, have **no
+high-pressure falloff law in that source**. About 24% of the fine-grid return
+weight occurs above 1 GPa; roughly 17–19% has more than a 10% difference between
+the flow pressure and the ideal-mixture pressure across the sampling checks.
+The pressure thresholds are diagnostics, not certified rate limits. No evaluated
+uncertainty envelope or dense-fluid activity/rate correction at these conditions
+has been established here. Thus every audit summary explicitly retains
+`kinetics_validated = false`.
+
+The numerical rate margin is substantial, but it does not yet validate the
+127 kN s conditional molecular impulse contribution from Step 6 as real finite-
+rate performance. Missing pressure-dependent kinetics, nonlinear thermal feedback,
+and the provisional dense EOS still matter; actual injection, finite-plate escape
+and wall losses remain separate work.
+
+### Numerical checks and evidence
+
+The total positive store-decrease weight is 2.0018 GJ at N=40 and 2.0108 GJ at
+N=80, a 0.45% change. Thinning the N=80 output from approximately 0.5 to 1.0
+microsecond spacing changes it by 0.53% and the median tracking Da by about 3.4%.
+The fraction retaining Da above 10 after a uniform 1000-fold rate slowdown stays
+between 99.55% and 99.77% across the two spatial grids and output samplings.
+Threshold-based nonideality fractions are less precisely converged; quote their
+sampling spread, not fine-grid digits as physical accuracy. The unsprayed control's
+trace interval decreases are only around 10–16 J and are explicitly flagged
+negligible, not used to declare a molecular freeze-out result.
+
+Evidence: [weighted rate/applicability audit](../data/results/water_plate/kinetics_audit.csv)
+and [pinned coefficients and parent provenance](../data/results/water_plate/kinetics_model.json).
+`make water-plate-kinetics-audit` regenerates both spatial grids and both output
+samplings from the exact Step 5 parents. `WATER_KINETICS_PARENTS` and
+`WATER_KINETICS_STRIDES` select alternatives. The audit requires finite, accepted
+parent conservation diagnostics, fixed parcel masses and exact window boundaries.
+It makes no changes to the Rust flow or to the chemistry-switch impulse artifacts.
+
+Verification: the full checkpoint passed **569 Python tests** (23m37s) and
+**186 Rust release tests** (11 intentionally ignored). Final additions pass
+**138 focused Python tests and 11 Rust study/history tests**. `make lint` and
+`git diff --check` pass. Tests cover units, reaction-event conventions, detailed
+balance, reversible Jacobians, elemental energy-gauge invariance, rate scaling,
+sampling boundaries, parent conservation/mass gates and unresolved-weight handling.
+
+## Step 8: pressure-source coverage and removing direct water association
+
+**The fast local chemistry result does not depend solely on the uncapped
+H + OH + M <=> H2O + M reaction.** Removing this reaction in both directions
+slows the local energy relaxation by a weighted median factor of **2.54**,
+not orders of magnitude. This narrows one rate uncertainty; it does not
+validate all the other rates or the Step 6 impulse prediction.
+
+### A documented pressure-dependent source, with incomplete coverage
+
+The [Cantera example-data implementation of Singal et al. (2024)](https://github.com/Cantera/cantera-example-data/blob/1a5d27e508a38b1791543e9fded80ffd5c5b8d75/ammonia-CO-H2-Alzueta-2023.yaml#L966)
+supplies a pressure-dependent direct water-association curve and a
+temperature-dependent steam collision efficiency. Its reference-collider
+pressure table reaches **10,000 atm = 1.01325 GPa**. The final table point
+is **not** an explicit high-pressure limit. The associated author-group
+collider database supplies values at 300, 1000 and 2000 K; all of our
+positive store-decrease weight is hotter than those points. This marker
+is not a certified temperature boundary for the whole reaction model.
+[ADR-0047](adr/0047-water-plate-pressure-kinetics.md) records the pinned
+sources, extracted coefficients, matching rules and limitations.
+
+Importantly, the pressure argument is the **neutral ideal collider
+pressure multiplied by mixture efficiency**, not the measured dense-flow
+pressure. Its weighted median during 153.5–193 microseconds is **1.265 GPa**,
+although the flow-pressure median is only 373 MPa. Consequently only
+**42.65%** of the main-window store-decrease weight is inside the supplied
+effective-pressure table. Whole-window coverage is **48.98%** at N=80 with
+fine sampling, ranging **48.98–50.30%** across both grids and samplings.
+Do not silently clamp the remaining states to the highest pressure node.
+
+On the pressure-covered subset, extrapolating the source's temperature
+fits gives a weighted median direct association coefficient **7.44 times**
+the baseline value. Replacing that channel alone makes the network
+relaxation time a median **0.195 times** baseline. About **48.84% of the
+total weight** has a supplied-pressure rate, a resolved clock and Da>10;
+the other weight is not declared slow. The reference's five other neutral
+colliders inherit its default N2 efficiency, accounting for a whole-window
+median 79.3% of neutral particles. These defaults are not evaluated
+collision efficiencies for a hot radical-rich mixture.
+
+This is an extracted **single-channel hybrid**, not the full source
+mechanism. Reverse rates still use the study's equilibrium constants, and
+the other nine reactions remain unchanged. The source's separate explicit
+steam dissociation channel and other pathways are not added. The forward
+rate implementation agrees with independent Cantera 3.2.0 evaluations to
+better than 1e-13 relative at three checked in-table states. Agreement
+verifies implementation, not applicability at 5–9 kK or dense-fluid conditions.
+
+### Does losing this one channel make chemistry too late?
+
+Set the direct association/dissociation flux to zero, keeping the other
+nine rates and the saved equilibrium history fixed. Water still forms
+through **H2 + OH <=> H + H2O** and **2 OH <=> O + H2O**. The remaining
+network retains all four reactive modes. With its other rates fixed,
+removing this one channel is mathematically a **slow endpoint for the
+isothermal local energy-relaxation time**: adding any nonnegative
+detailed-balanced direct-channel flux can only shorten that time
+(ADR-0047). It is not a bound on nonlinear chemistry or thrust.
+
+| Interval (microseconds) | Median local slowing factor after removal | Median tracking Da after removal | Total store-decrease weight with Da>10 |
+| --- | --- | --- | --- |
+| 100–153.5 | 1.96 | 1.63e6 | 99.28% |
+| 153.5–193 | 2.47 | 5.96e4 | 99.75% |
+| 193–250 | 3.17 | 1.04e4 | 99.97% |
+
+These are N=80, fine-sampling, right-endpoint results with the same
+positive consecutive parcel store-decrease weights as Step 7. They are
+neither unique released energy nor causal impulse weights. Whole-window
+tracking Da p10/median/p90 after removal are **1.01e4 / 4.83e4 / 1.19e6**,
+and **99.74%** of the total weight remains above Da=10. The unclassified
+fraction is almost entirely the same missing positive expansion clocks;
+no unresolved spectrum is recast as a fast rate. Numerically tiny changes
+remain in the denominator.
+
+The weighted median slowing factor stays **2.54–2.56** across N=40/80
+and both samplings. The fraction above Da=10 stays **99.55–99.79%**.
+If the remaining nine rates are also uniformly reduced by 1000, **90.06%**
+of fine-grid weight still has Da>10 (89.77–90.43% across samplings/grids).
+This additional slowdown is only an algebraic sensitivity on the saved
+history, not an uncertainty distribution or a new flow calculation.
+
+The result supports early molecular relaxation even if direct water
+association is strongly suppressed. **Other retained three-body
+associations still have no high-pressure limits**, and the exchange rates,
+nonlinear thermal response and dense EOS remain unvalidated here. Thus
+the 127 kN s conditional molecular impulse effect is still not an
+established finite-rate nozzle result. The modeled return positions and
+loading times from Step 7 have not been recalculated or moved by this audit.
+
+Evidence: [pressure-source and removal audit](../data/results/water_plate/pressure_kinetics_audit.csv)
+and [rate/parent provenance](../data/results/water_plate/pressure_kinetics_audit.json).
+`make water-plate-pressure-kinetics-audit` regenerates both grids and samplings;
+the Step 7 parent/stride overrides also apply. All 32 baseline summary rows
+agree with the original Step 7 artifact, which is preserved. Tests cover
+units, pressure interpolation/rejection, composition-dependent detailed
+balance, the independent Cantera anchors, the removal bound and a separate
+conservation-projected linear solve. The full checkpoint passes **596 Python
+tests** (11m27s with eight parallel test workers) and **186 Rust release
+tests** (11 intentionally ignored). The focused new suite passes 20 tests.
+`make lint` and `git diff --check` pass. The ordinary debug `make test` was
+started, then its slow debug run was stopped in favor of the complete release
+Rust suite and parallel Python suite above; no test failures were bypassed.
+
+## Step 9: remaining rate controls and local temperature feedback
+
+The next check permits temperature to respond to small composition
+disturbances while conserving **local total energy at fixed volume**.
+It also measures which of the ten rates control the relaxation time and
+slows all six association channels together. This is still a local linear
+diagnostic on the saved equilibrium history, **not nonlinear finite-rate
+chemistry or a new impulse prediction**. No newly evaluated physical rate
+set has been substituted. [ADR-0048](adr/0048-water-plate-local-thermal-kinetics.md)
+defines the constraint, observable, rate controls and acceptance tests.
+
+### What temperature feedback means in this check
+
+Use per-species total internal energies and the **fixed-composition** heat
+capacity, including neutral internal modes, fixed ion/electron sensible
+heat and the same provisional dense residual. Using equilibrium heat
+capacity here would count the composition response twice. Both the
+relaxation operator and the bond-energy susceptibility are transformed
+for the fixed-energy constraint; changing only the eigenvalues and keeping
+the isothermal energy weights would mix two different diagnostics.
+
+The infinite-heat-capacity limit reproduces Step 7's isothermal time.
+An independent finite-difference check solves temperature from conserved
+energy after each composition perturbation and verifies the local kinetic
+Jacobian. This is not a claim that the modeled cooling history reverses
+or that a shorter local relaxation time releases more usable energy.
+
+At N=80 with fine output sampling, the weighted median fixed-energy time
+is **0.269 times** the fixed-temperature time: roughly a 3.7-fold faster
+decay of these small disturbances. The corresponding median chemical
+susceptibility is only **0.272 times** its isothermal value. Whole-window
+median tracking Da is **4.87e5**, with 99.74% of the total store-decrease
+weight above Da=10. Thus this local temperature feedback does not erase
+the rate margin, but it also does not imply an extra energy or thrust gain.
+The whole-window median frozen heat capacity is 2440 J/kg/K; its dense
+residual contributes a median 0.154%. The equilibrium compositions and
+flow pressures remain subject to the earlier, separate dense-EOS limits.
+
+### Why the remaining association rates matter
+
+Rate control is measured by `S_r = -d ln(tau) / d ln(k_r)`, with both
+directions of a reaction scaled together and equilibrium fixed. These
+nonnegative sensitivities sum to one. Their positive-store-decrease-
+weighted means are **not reaction heat fractions or impulse fractions**.
+In particular, a fast alternate water-forming exchange reaction can
+carry flux without being the slow step that controls complete relaxation.
+
+The grouped slowdown changes source reactions 1, 2, 12, 13, 14 and 15:
+O2 formation, OH formation, all three H2-formation collider channels,
+and direct H2O formation. The four exchange rates stay unchanged. A
+1,000-fold or million-fold slowdown is a parameterized sensitivity, not
+an evaluated uncertainty interval. Exactly deleting every association
+creates an extra conserved neutral-particle count: the exchange-only
+network has rank three rather than four. It cannot be labeled fully
+equilibrating by clipping the resulting zero eigenvalue.
+
+The whole-window fixed-energy rate-control means are:
+
+| Rate group | Baseline control weight | With direct water association removed |
+| --- | --- | --- |
+| Direct H + OH association to H2O | 59.74% | 0% |
+| H2 formation, all three collider channels | 30.70% | 76.66% |
+| H + O association to OH | 7.28% | 17.89% |
+| O + O association to O2 | 1.67% | 4.04% |
+| All four exchange reactions | 0.62% | 1.41% |
+
+These means condition on resolved rate pairs, covering effectively all
+of the non-tiny store-decrease weight. Association channels carry **99.38%**
+of baseline rate control and **98.59%** when direct water association is
+absent. In the latter case, the explicit **H2O-collider H2-formation channel
+alone carries 41.32%**. That makes H2 recombination with realistic collision
+partners a concrete next rate-validation priority. Redundant routes explain
+why direct water association can be important in the baseline sensitivity
+yet its removal need not prevent rapid equilibration.
+
+### Stress test of all association channels together
+
+| Interval (microseconds) | Median fixed-energy Da, baseline | With associations 1,000x slower | With associations 1,000,000x slower |
+| --- | --- | --- | --- |
+| 100–153.5 | 8.13e6 | 8.18e3 | 8.21 |
+| 153.5–193 | 5.49e5 | 552 | 0.553 |
+| 193–250 | 1.62e5 | 162 | 0.163 |
+
+At a 1,000-fold slowdown, **99.73%** of whole-window weight still has a
+resolved clock and Da>10. At a million-fold slowdown that fraction is
+only **5.52%**; the main and late loading windows no longer have even a
+median Da above one. This extreme parameter choice would undermine the
+local equilibrium-tracking screen. It is **not evidence that actual water
+rates are that slow**, nor a recomputed physical freeze-out or impulse.
+All of these diagnostics use the unchanged positive consecutive parcel
+store decreases and right-endpoint clocks from Step 7, not unique energy
+release or causal impulse weights.
+
+Across N=40/80 and both output samplings, the median thermal/isothermal
+time ratio is **0.267–0.270**. The Da>10 fraction is **99.55–99.79%** for
+the 1,000-fold slowdown and **5.37–5.96%** for the million-fold slowdown.
+The baseline/zero-direct/1,000-fold variants have no additional unresolved
+rate weight beyond the tiny-change exclusion. The extreme million-fold
+case has about **0.176%** of fine-grid weight without a resolved rate
+pair, retained in the denominator and not declared fast or frozen.
+
+The 512-to-1024-knot residual check changes the reported non-extreme
+thermal time/Da quantiles by less than **8e-11 relative**, with unchanged
+Da>10 fractions. The extreme million-fold case has marginal numerical
+acceptance: its lower Da quantile shifts by up to **0.19%**, and per-window
+resolved coverage by up to **0.020 percentage points**. Both constraints
+must pass the spectrum and sensitivity-sum gates, so this affects their
+common accepted subset; it is not evidence for a large physical heat-
+capacity interpolation error. Do not overinterpret extreme-case tail digits.
+
+Evidence: [thermal/rate-control audit](../data/results/water_plate/thermal_kinetics_audit.csv),
+[model and parent provenance](../data/results/water_plate/thermal_kinetics_audit.json),
+and the [1024-knot residual check](../data/results/water_plate/thermal_kinetics_refined.csv).
+`make water-plate-thermal-kinetics-audit` runs both spatial grids and both
+output samplings; the existing kinetics parent/stride overrides apply.
+All 32 original baseline summaries match Step 7 exactly. Verification:
+**612 full-suite Python tests** passed (11m55s, eight workers), plus the
+final **53 focused rate/thermal tests**, including two tests added after
+the full run collected its cases. The full Rust release suite passed
+**186 tests** (11 intentionally ignored). `make lint` and `git diff --check`
+pass. The full Rust/Python checks use the release/parallel equivalents of
+the repository's `make test` commands; no production Rust flow was changed.
+
+## Step 10 in progress: evaluated-rate source access and limits
+
+Network retry on **2026-09-08** obtained the author-hosted Li manuscript and
+NIST Chemical Kinetics Database records. This materially improves the source
+audit, but does not validate the rates at the saved flow's dense/hot states.
+
+### Directly inspected sources
+
+[Li et al. (2004), author-hosted manuscript](<https://www.princeton.edu/~combust/research/publications/H2_O2%20Mech%20(Li%20et%20al%20Int%20J%20Chem%20Kin%2036%20566%20575,%202004).pdf>),
+*An updated comprehensive kinetic model of hydrogen combustion*,
+[DOI 10.1002/kin.20026](https://doi.org/10.1002/kin.20026):
+
+- PDF page 9 reports mechanism comparisons over **298–3000 K, 0.3–87 atm**
+  (upper pressure 8.82 MPa). This is the paper's collection of experimental
+  conditions, not proof of validation at every point of that rectangle or a
+  reaction-specific steam uncertainty envelope.
+- Table I, PDF page 13, gives H2 + M -> 2 H + M with
+  **A = 4.58e19, n = -1.40, E = 104.38 kcal/mol**, in cm/mol/s units;
+  footnote a gives H2O efficiency **12.0**, H2 efficiency **2.5**.
+  No high-pressure limit is supplied for this reaction.
+- The 300–3000 K collider-efficiency averaging statement on PDF page 6 concerns
+  **H + O2 (+M) -> HO2 (+M)**, not H2 formation. It must not be reassigned.
+- PDF page 7 explains that direct H + OH + M water formation was adjusted to
+  improve flame speeds, and that transport/rate uncertainty permits nonunique
+  fits. Whole-mechanism agreement is not independent validation of each rate.
+- Download SHA-256:
+  `4749d34d818dafbb4fa0feb5f76f2e908ae7f2158b21e6be4b526618e803da3b`.
+
+The following are **NIST database records**, not a claim to have read the
+underlying Cohen–Westberg or Tsang–Hampson articles. The displayed rate convention
+is `k(T) = A*(T/298 K)^n*exp(-Ea/RT)`, with **molecules**, not moles.
+
+| NIST record | Reaction / bath | Listed temperature range | Displayed A, n, Ea (J/mol) | Reported uncertainty |
+| --- | --- | --- | --- | --- |
+| [1986TSA/HAM1087:91](https://kinetics.nist.gov/kinetics/Detail?id=1986TSA%2FHAM1087%3A91) | H2 dissociation / N2 | 600–2000 K | 2.61e-8 cm3/molecule/s, -1.40, 436510 | 3.0 |
+| [1983COH/WES531:40](https://kinetics.nist.gov/kinetics/Detail?id=1983COH%2FWES531%3A40) | 2 H association / H2O | 300–2000 K | 9.26e-32 cm6/molecule2/s, -1.00, 0 | 5.0 |
+| [1983COH/WES531:42](https://kinetics.nist.gov/kinetics/Detail?id=1983COH%2FWES531%3A42) | 2 H association / H2 | 50–5000 K | 9.04e-33 cm6/molecule2/s, -0.60, 0 | about 2.51 |
+| [1983COH/WES531:18](https://kinetics.nist.gov/kinetics/Detail?id=1983COH%2FWES531%3A18) | H2 dissociation / Ar | 600–5000 K | 1.88e-8 cm3/molecule/s, -1.10, 436510 | 2.0 |
+
+These detail records do not provide a pressure-validity interval or dense-fluid
+correction. In particular the factor 3 inherited by the FFCM2 trial table now has
+an identifiable **600–2000 K nitrogen-bath** evaluation behind it. It is not a
+5–9 kK steam uncertainty bound. The older steam-specific record does supply an
+uncertainty, unlike FFCM2's `N/A` for its adopted steam efficiency; these are
+different prescriptions and neither validates the hot/dense extrapolation.
+The Ar record cannot validate a steam collider, and Ar is absent from this study.
+
+For the source-coefficient check, the NIST N2 expression converts to approximately
+`4.58e19*T^-1.4*exp(-436510/RT) cm3/mol/s` by multiplying A by
+`N_A*298^1.4`. The result is `4.574e19`, within 0.2% of the Li executable
+coefficient using the rounded database inputs. Thus the **4.58e16** prefactor in the
+[pinned FFCM2 trial web table](https://github.com/dongwd016/FFCM2_Website/blob/64c78825158ac2b240c2ea32e911ed7e9cf9973f/assets/data/trialmodel/trialmodel.json)
+is not used. The cause of that web-table discrepancy remains unresolved; it is
+not silently interpreted as a unit conversion or a physical uncertainty range.
+
+Crossref verified the original evaluation identifiers:
+[Cohen and Westberg (1983), 10.1063/1.555692](https://doi.org/10.1063/1.555692)
+and [Tsang and Hampson (1986), 10.1063/1.555759](https://doi.org/10.1063/1.555759).
+Their publisher PDFs returned HTTP 403; NIST's PDF archive returned 503.
+Wayback availability queries returned no snapshots for those exact current
+publisher PDF URLs or the Li manuscript URL. CDX queries also encountered
+503/timeouts. This is a retrieval outcome, **not evidence that no archived
+copies exist**. Princeton supplied Li directly; OpenAlex/Semantic Scholar
+did not identify a usable open Cohen/Tsang full-text copy in the checked records.
+
+### Consequence and exit criteria
+
+Step 7's main loading interval has a 10th–90th percentile temperature range
+of **5653–8270 K** and median flow pressure **373 MPa**. These new source
+limits do not support treating its large extrapolated Da as physically validated.
+The early/near-wall equilibrium finding survives as a conditional result; no
+finite-rate impulse result is added by this source retrieval.
+
+The conditional Li H2 replacement is implemented in Step 11 without double-counting
+the three original H2 channels. It retains study-matched reverse rates and explicitly
+extrapolated status. A useful rate-validation conclusion requires either an
+applicable temperature/collider/pressure uncertainty envelope or an explicit
+unresolved physical-data gate; numerical agreement among inherited mechanisms
+does not pass that gate. Nonlinear parcel tests may proceed as conditional
+numerical work, not as a substitute for missing physical rate data.
+
+The remaining performance gates are: (1) conservative finite-rate flow and EOS
+convergence; (2) actual local injection plus finite-plate escape with matched
+combined/unsprayed/injection-only controls; (3) losses, material-specific
+protection, permanent assembly mass, and matched nozzle comparison. Each needs
+analytic/conservation checks and resolution tests where applicable. A missing
+material or rate input must be named, not assigned a fictitious validated value.
+
+## Step 11: nonlinear conditional amounts during the loading window
+
+This is the first **nonlinear amount calculation**, not another conversion of a
+local Da into a presumed release fraction. The Rust integrator evolves the four
+independent molecular populations and temperature together. Hydrogen and oxygen
+budgets determine the two atomic populations. Reverse rates and species energy
+use the study's common partition functions. The algorithm and limitations are
+specified in [ADR-0049](adr/0049-water-plate-nonlinear-parcels.md).
+
+### Ensemble and energy ledger
+
+All **237.5 kg** of the N40/N80 combined planar reference start from their exact
+153.5 microsecond states. There are 380/760 fixed-mass parcels; no spatial
+representative-subset weighting is substituted. At N80 the initial molecular
+dissociation store is **5.627720 GJ**. For each endpoint the amount is
+
+```
+net return = sum_parcels mass * (bond_store_at_153.5us - bond_store_at_endpoint).
+```
+
+Negative parcel returns are retained. Successive positive decreases are **not**
+added; reheating cannot earn the same bond energy twice. These fractions are
+relative to the remaining store at the stated start, not incoming kinetic energy,
+the maximum full-atomization capacity, water-molecule fraction, or total release
+since impact. The 193/250 microsecond endpoints refer to the existing reference
+loading windows, not independently solved pressure-decoupling times.
+
+Density is replayed log-linearly between parent samples. Temperature is solved,
+not replayed. The implicit update obeys
+`delta(e) = -p_new*delta(1/rho) + prescribed_input`, with the existing dense
+Helmholtz residual. Two forcing cases are compared:
+
+- Reversible expansion/compression work only, with no external input.
+- The same work plus the parent's sampled non-mechanical residual,
+  `delta(e_parent) + mean(p_parent)*delta(1/rho_parent)`.
+
+The latter includes shock heating **and** sampling/EOS/discretization defects;
+it is not measured chemical heating. At 193 microseconds its ensemble input is
+about **0.156/0.198 GJ** with fine/coarse parent sampling. Its sensitivity is kept
+visible instead of silently forcing the parcel to follow the equilibrium temperature.
+The initial energy offset includes constant frozen-ion chemical energy and the
+elemental/storage energy gauge as well as matching the parent table; do not
+interpret the full offset as interpolation error.
+
+Ions/electrons are fixed populations per unit mass, but carry sensible heat.
+Initially the mass-mean ionized-nuclei fraction is about **10.12%**, concentrated
+largely in the incoming hot material; 10.66% of mass has more than 1% ionized
+nuclei. This is not a complete ion/molecular recombination calculation.
+
+### Conditional result
+
+The rounded ranges below include the tested grid, history-sampling, solver and
+prescribed-forcing variations. They are **not statistical confidence intervals**
+or physical bounds on untested rate laws. The first row includes baseline rates,
+the documented Li H2 replacement, and removal of both direct water association
+and the explicit steam-assisted H2 channel. Their differences are smaller than
+the checked numerical/forcing spread; that is not independent rate validation.
+
+| Rate scenario | Net return by 193 microseconds | Net return by 250 microseconds |
+| --- | --- | --- |
+| Documented-rate alternatives / named channel removals | about **1.3–1.4 GJ**, **23–25%** | about **1.7–1.8 GJ**, **30–31%** |
+| All six association channels slowed 1,000-fold, exchanges unchanged | about **1.3–1.4 GJ**, **23–25%** | about **1.7–1.8 GJ**, **30–31%** |
+| All six association channels slowed 1,000,000-fold, exchanges unchanged | about **0.55–0.59 GJ**, **10%** | about **0.67–0.71 GJ**, **12%** |
+| All chemistry frozen, numerical control | zero to roundoff | zero to roundoff |
+
+The two slowdown factors are deliberate stress parameters inherited from Step 9,
+not measured uncertainty factors. In particular **10% is not a defensible physical
+lower bound**. Slower untested chemistry, different flow, losses, additional
+species or different dense-water thermodynamics can move the result outside this
+scenario set. Conversely this test does not assert that molecular return ceases
+after 250 microseconds; later return may be less useful to the plate.
+
+The saved parent equilibrium trajectory gives net returns of **1.369796 GJ**
+and **1.735269 GJ** at the same two endpoints. That comparison is informative,
+but not a convergence target for fixed-ion, independently energy-solved parcels.
+The reported amounts are not wall work, and none has been multiplied by an
+invented conversion efficiency to produce thrust.
+
+### Numerical checks and retained evidence
+
+Kernel acceptance checks cover analytic reversible chemistry, the frozen ideal-gas
+adiabat, first-order temporal convergence, independent Python/Rust partition
+functions and source terms, analytic composition/temperature Jacobians, finite
+water perturbations returning to a known fixed-energy equilibrium, equilibrium
+stationarity, positivity, elemental conservation and the energy ledger. Invalid
+rates/settings are rejected. Missing endpoints or failed energy checks stay in
+the ensemble denominator in the report; signed-return/missing-coverage tests
+exercise that contract.
+
+The initial N40/N80 runs use every second saved output, relative tolerance 1e-4,
+and maximum step 0.25 microseconds. Separate N80 checks use (a) tolerance 1e-5
+and maximum step 0.125 microseconds, and (b) every saved output with the original
+solver settings. Among reacting cases, maximum relative net-return changes are
+**2.17%** for N40/N80, **0.73%** for the solver refinement, and **2.02%** for
+history sampling. Thus fine digits are not warranted. A combined finer check
+uses every saved output, tolerance 1e-6 and maximum step 0.0625 microseconds for
+baseline and the two slowdown cases. Its results are retained separately.
+Relative to the fine-history/original-solver run, this last solver check changes
+net return by at most **0.93%**. Its baseline values are **1.361–1.380 GJ**
+at 193 microseconds and **1.725–1.743 GJ** at 250 microseconds across the two
+forcing prescriptions. The rounded scenario table deliberately retains the
+wider observed numerical spread rather than presenting these as precise bounds.
+
+Every tested parcel reaches both endpoints: **100% mass/start-store coverage**
+to summation roundoff, with no inferred contribution assigned to unresolved
+parcels. The largest accumulated energy-ledger error across all runs is less
+than **1.14e-8 of the parcel's initial internal energy**. The frozen control's
+ensemble bond return is below **3e-9 J** in magnitude. Conservation is much
+tighter than the trajectory discretization uncertainty; the two are not the
+same accuracy test.
+
+Evidence: [net-return scenarios and convergence](../data/results/water_plate/parcel_return.csv)
+and [source, input and output provenance](../data/results/water_plate/parcel_return.json).
+Large replay inputs/JSONL remain ignored but are hashed in the provenance. The
+independent thermochemistry fixture is retained under
+`crates/water_plate/tests/fixtures/neutral_parcel.json` and checked against its
+Python generator. `make water-plate-parcel-check` runs the focused acceptance tests.
+
+Reproduce each base run with `make water-plate-parcels`, overriding
+`WATER_PARCEL_PARENT`, `WATER_PARCEL_INPUT`, and `WATER_PARCEL_OUTPUT` for N40/N80.
+Use `WATER_PARCEL_STRIDE=1` for the history check; use
+`WATER_PARCEL_TOLERANCE=1e-5 WATER_PARCEL_MAX_STEP=1.25e-7` for the separate solver
+check. The combined fine input is generated with `python -m
+puffsat.water_plate.parcel --stride 1 --tolerance 1e-6 --maximum-step 6.25e-8
+--variants baseline association_1e3_slower association_1e6_slower`, with explicit
+`--parent` and `--output`, under `PYTHONPATH=python uv run --extra sci`.
+`make water-plate-parcel-report` combines all five outputs.
+
+Verification: **614 full-suite Python tests** passed (11m02s, eight workers),
+followed by **66 focused parcel/rate/thermal tests**, including the 13 new parcel
+tests added after full-suite collection. The final full Rust release suite passed
+**193 tests**, with 11 intentionally ignored. The numerical results remain
+conditional despite those software checks.
+`make water-plate-parcel-check`, `make lint`, and `git diff --check` pass.
+
+### Useful conclusion at this gate
+
+For this reference density history, documented extrapolated rates permit an
+appreciable amount of the remaining molecular store to return during the principal
+loading interval. Thousand-fold association slowing barely changes that broad
+amount; million-fold slowing reduces it substantially but does not eliminate it.
+This supports pursuing conservative chemistry/flow coupling. It does **not**
+establish a likely real-world range, a finite-rate thrust increment, or the
+survivability/superiority of a sprayed-water plate.
+
+## Final cooling check and bounded conclusion (2026-09-08)
+
+The high-pressure objection is well founded: the nominal calculations do **not**
+show molecular recombination being substantially prevented by slow reactions.
+The fine neutral parcel replay returns about 99.4% of the parent equilibrium
+net molecular return at both 193 and 250 microseconds. These are not identical
+thermodynamic controls (the replay freezes ions), but they rule out describing
+the nominal result as a large neutral kinetic shortfall on this history.
+
+The remaining store is principally a temperature/history issue. The reference
+is stratified, without the proposed local injection/mixing. Its incoming 25 kg
+remains much hotter than its 212.5 kg water layer. Of the 5.628 GJ molecular
+store at the common 153.5 microsecond start, 4.354 GJ is in the water layer and
+1.274 GJ in the incoming material. The incoming material returns less than
+0.001 MJ net through 1 ms in the equilibrium parent. A conventional H2/O2
+rocket's cooler combustion products and nozzle expansion are therefore not a
+matched thermodynamic trajectory, even if its density is lower. High pressure
+helps association but does not force complete molecular binding at high T.
+
+### Cooling versus loading through the saved tail
+
+Recomputed from all fixed-mass cells of `freeze_parent_h1_n80.jsonl`, using
+signed molecular-store differences from 153.5 microseconds, not summed positive
+release or parcel peak drops:
+
+| Time (microseconds) | Water mass-mean T (K) | Equilibrium net molecular return (GJ) | Cumulative wall impulse (MN s) | Fraction of impulse accumulated by 1 ms |
+|---:|---:|---:|---:|---:|
+| 153.5 | 8830 | 0 | 1.5604 | 59.23% |
+| 193 | 5457 | 1.370 | 2.3778 | 90.26% |
+| 250 | 4858 | 1.735 | 2.4737 | 93.90% |
+| 481.437 | 4205 | 2.200 | 2.5686 | 97.50% |
+| 1000 | 3800 | 2.527 | 2.6344 | 100% |
+
+The last two molecular amounts are **equilibrium parent diagnostics**, not an
+extension of the finite-rate replay beyond 250 microseconds. The N40 parent
+gives 1.350, 1.716, 2.181 and 2.507 GJ at the four nonzero-return checkpoints;
+the largest N40/N80 change is about 1.5% of the N80 return. Water-only return
+is about 40% of its starting molecular store by 250 microseconds and 58% by
+1 ms; the corresponding whole-ensemble fractions are about 31% and 45%.
+
+Between 250 microseconds and 1 ms, another 0.792 GJ returns while wall impulse
+increases by 0.1607 MN s, 6.10% of its 1 ms value. This establishes temporal
+overlap and diminishing loading, **not** a causal energy-to-impulse efficiency.
+At 1 ms wall pressure remains 1.85 MPa: the impulse is not demonstrably settled,
+and this table does not identify a physical finite-plate decoupling time.
+
+### Source-EOS consistency check
+
+At each of the five N80 checkpoints, invert the underlying source EOS at each
+cell's saved density and physical internal energy, then compare temperature and
+pressure with the saved interpolated fields. The correct inversion is
+`pressure_energy(rho,T)[1] - ENERGY_SHIFT = cell.energy_j_kg`: the table includes
+the common 4 MJ/kg storage offset whereas snapshot energy excludes it.
+Brent root solves used temperature tolerance 1e-5 K, with all 760 cells checked
+per checkpoint (3800 checks). Maximum absolute relative discrepancies over this
+sample are **0.489% in T** and **0.522% in pressure**. All inversions completed.
+An initial diagnostic omitted the offset and was discarded; its larger
+discrepancies are not evidence of an EOS defect.
+
+This sampled check finds no large interpolation temperature error explaining
+the incomplete return. It is not a table-refined flow integration, an audit of
+every intervening shock state, or independent physical validation of the dense
+EOS. The previously small n=2/n=3 impulse sensitivity is likewise only a limited
+closure test. No new flow or chemistry evolution was run for this final check.
+
+Parent SHA-256 identifiers:
+
+- N80: `8ae0d4d1f74d8d8dfce817d57ddc45a469c7184cdc69851f437eaf18a25b9991`
+- N40: `8d44881cc663c02a6e868314c5d12d53f8800863c40209e689385bde26ddf1be`
+
+### Study conclusion
+
+**Water recombination is not ruled out as an early contributor to pusher-plate
+impulse.** On this lossless planar reference, finite-rate neutral chemistry
+returns roughly 1.3–1.4 GJ by 193 microseconds and 1.7 GJ by 250 microseconds,
+during appreciable wall loading. The ordered same-state closure test also gives
+a positive molecular impulse increment (127 kN s through 0.5 ms), conditional
+on its equilibrium-versus-frozen closures. Neither is a validated finite-rate
+thrust prediction for the proposed sprayed plate.
+
+**A useful chemistry feasibility conclusion is reached; an engineering
+performance conclusion is not.** The remaining decisive uncertainties are the
+physical hot/dense EOS and rate applicability, actual local mixing and finite
+plate escape with chemistry/flow feedback, and radiation, wall heat transfer,
+ablation and structural survival. More arbitrary rate multipliers cannot resolve
+those uncertainties. Do not quote a likely real-world recombination range,
+claimed nozzle superiority, or a survivable plate design from this reference.
+Further work would be a new physical-model/design stage, not another necessary
+iteration of the present nominal-rate screen.
+
+## Deferred work if the design study resumes
+
+Prioritize evaluated **H2 association and collider rates**, including
+steam as collision partner, alongside direct water and OH association.
+The local sensitivity work identifies where rate validation matters; it
+does not supply a high-temperature/dense-fluid uncertainty envelope.
+The pressure-dependent water curve found in Step 8 still leaves about
+half the weighted states beyond its effective-pressure table, with
+temperature applicability unestablished. Step 11 now supplies nonlinear,
+energy-conserving neutral parcel amounts on prescribed histories. Next check
+**chemistry/flow pressure feedback**, rather than treating that replay as a new
+hydrodynamic solution. Match additional
+species and reverse rates to the same energy reference. Do not treat a
+standard mechanism reactor, pressure-table endpoint or large extrapolated
+local Da as performance validation.
+Continue EOS table convergence
+and the dense-water closure limits kept visible. The all-reaction and ordered
+molecular/ionization switches above are conditional tests, not a full chemistry
+attribution or measured reaction rates. Then
 implement the actual locally mixing injection prescription and finite plate
 escape. The positive reference G and early store return are reasons to continue,
 not permission to transfer an injected-nozzle performance claim.

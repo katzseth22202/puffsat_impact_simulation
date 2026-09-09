@@ -16,9 +16,28 @@ Its Python is `python/puffsat/water_plate/`, outputs are under
 `make water-plate-flow-table`, `make water-plate-flow`, `make water-plate-flow-analysis`,
 `make water-plate-flow-report`, `make water-plate-freeze-parent`,
 `make water-plate-freeze-prepare`, `make water-plate-freeze`,
-`make water-plate-freeze-report`, and `make water-plate-test`.
+`make water-plate-freeze-report`, `make water-plate-molecular-prepare`,
+`make water-plate-molecular`, `make water-plate-molecular-report`,
+`make water-plate-selective-report`, `make water-plate-kinetics-audit`,
+`make water-plate-pressure-kinetics-audit`,
+`make water-plate-thermal-kinetics-audit`,
+`make water-plate-parcels`, `make water-plate-parcel-report`,
+`make water-plate-parcel-check`,
+and `make water-plate-test`.
 The same-state reaction-switch comparison is scoped in
 [ADR-0044](docs/adr/0044-water-plate-parcel-frozen-restarts.md).
+Its ordered molecular/ionization separation is scoped in
+[ADR-0045](docs/adr/0045-water-plate-selective-chemistry.md).
+The local neutral-network rate/applicability screen is scoped in
+[ADR-0046](docs/adr/0046-water-plate-kinetics-applicability.md).
+The direct water-association pressure-source coverage and channel-removal
+sensitivity are scoped in
+[ADR-0047](docs/adr/0047-water-plate-pressure-kinetics.md).
+Rate-control sensitivities and fixed-energy local temperature feedback are
+scoped in [ADR-0048](docs/adr/0048-water-plate-local-thermal-kinetics.md).
+Nonlinear neutral chemistry on prescribed parcel density histories is scoped
+in [ADR-0049](docs/adr/0049-water-plate-nonlinear-parcels.md). It solves temperature
+from energy conservation, but does not recompute hydrodynamics or wall impulse.
 The flow reference is planar, stratified and
 prepositioned, not a distributed injector; its provisional cold/dense EOS is
 scoped in [ADR-0043](docs/adr/0043-water-plate-cold-source-and-provisional-dense-eos.md).

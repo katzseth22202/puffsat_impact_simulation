@@ -10,6 +10,7 @@ from puffsat import eos_water as ew
 from puffsat.water_plate.flow import CsvValue
 from puffsat.water_plate.freeze import gas_parameters, sample_times
 from puffsat.water_plate.freeze_report import comparison, valid_quad
+from puffsat.water_plate.selective_report import ordered_comparison
 
 
 @pytest.mark.parametrize("rho,reference", [(0.01, 1e5), (1.0, 16000.0), (300.0, 8000.0)])
@@ -96,3 +97,47 @@ def test_restart_samples_cover_only_the_requested_window(start: float, end: floa
 def test_invalid_restart_window_is_rejected(start: float, end: float) -> None:
     with pytest.raises(ValueError, match="switch"):
         sample_times(start, end)
+
+
+def molecular_controls() -> list[dict[str, CsvValue]]:
+    rows = controls()
+    for row in rows:
+        if row["branch"] == "parcel_frozen":
+            row["branch"] = "molecular_frozen"
+            row["wall_impulse_ns"] = float(row["wall_impulse_ns"]) + (
+                8.0 if str(row["name"]).startswith("combined") else 3.0
+            )
+    return rows
+
+
+def test_ordered_differences_telescope_without_confusing_frozen_closures() -> None:
+    molecular = molecular_controls()
+    assert not valid_quad(molecular, 0.1)
+    result = ordered_comparison(controls(), molecular, 1000.0, 0.1)
+    assert result["all_chemistry_effect_ns"] == 10.0
+    assert result["molecular_effect_with_ionization_active_ns"] == 5.0
+    assert result["ionization_effect_with_molecules_frozen_ns"] == 5.0
+
+
+def test_ordered_difference_preserves_negative_relative_ionization_response() -> None:
+    molecular = molecular_controls()
+    molecular[1]["wall_impulse_ns"] = 278.0
+    result = ordered_comparison(controls(), molecular, 1000.0, 0.1)
+    assert result["molecular_effect_with_ionization_active_ns"] == 15.0
+    assert result["ionization_effect_with_molecules_frozen_ns"] == -5.0
+    assert result["all_chemistry_effect_ns"] == 10.0
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("time_s", 0.0006),
+        ("wall_impulse_ns", 300.01),
+        ("name", "combined_h1_n80_freeze_153.5us"),
+        ("status", "invalid_domain"),
+    ],
+)
+def test_ordered_difference_rejects_mismatched_controls(field: str, value: CsvValue) -> None:
+    rows = molecular_controls()
+    rows[0][field] = value
+    assert "all_chemistry_effect_ns" not in ordered_comparison(controls(), rows, 1000.0, 0.1)
