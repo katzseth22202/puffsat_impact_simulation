@@ -29,6 +29,12 @@ result here**, because it is a published case reproduced and a stated contradict
 the direction the design needs. **W5 settles the 1080 s / 793 s fork** the ask calls high priority,
 and **W6 says the remaining lever is the throat, not the chemistry**.
 
+**One table is meant to be lifted straight into the paper:** the propellant ladder in
+[W8](#w8-the-propellant-ladder-solved--with-true-and-effective-isp-side-by-side), which gives
+**true and effective Isp side by side** for hydrogen, methane, water and (estimated) ammonia. It
+replaces the ladder ADR-0016 quotes from assumed slug ratios, and carrying both columns is what
+prevents the convention error W5 records from propagating.
+
 **If you read only three:** W1 (the correction that cost methane 40 s should be largely unwound),
 W2 (Project 242's own number requires the recombination its prose denies), and W5 (the walled
 nozzle does not freeze, so the *equilibrium* branch applies and the frozen one does not — read its
@@ -364,7 +370,7 @@ atomisation locked in carbon cannot be settled by a rate coefficient the way the
 just was.** N10 item 5 needs classical nucleation theory, and no amount of further rate-hunting
 substitutes for it.
 
-### W8. The propellant ladder, solved: neither water nor ammonia beats methane, and hydrogen doubles it
+### W8. The propellant ladder, solved — with true and effective Isp side by side
 
 **Locate:** N10 item 3, "The same for a water slug at `k = 37.70` and for pure hydrogen at
 `k = 7.99`, so the ladder in ADR-0016 rests on solved chemistry rather than on the equilibrium
@@ -381,16 +387,65 @@ identity mentions no species —
 ask's own 7 m² throat, with each fluid on **its own** equilibrium EOS so the conversion fraction
 is solved rather than borrowed:
 
-`Isp total` is the exhaust speed over `g0`; `Isp effective` is that same speed multiplied by
-`(1+k)/k` — so the effective column is *derived* from the total, not independently computed.
-Neither carries the paper's launch-ledger normalisations (W5).
+> ### ➜ ADD THIS TABLE TO THE PAPER
+>
+> It is the compact statement of what the walled nozzle delivers per propellant, it replaces the
+> ladder ADR-0016 currently quotes from assumed slug ratios, and **it carries both Isp
+> conventions side by side** so the column confusion recorded in W5 cannot be repeated
+> downstream. Reproduce it with `make walled-nozzle-propellants`; the machine-readable copy is
+> `data/results/walled_nozzle/propellants.csv`.
 
-| fluid | `m̄` [amu] | `k` | `u` [MJ/kg] | exit `T` [K] | conversion | `u_e` [m/s] | Isp total | **Isp effective** |
+**The two columns, and why they differ.**
+
+- **`Isp true`** — the honest exhaust performance: `u_e / g0`, the impulse divided by **every**
+  kilogram that leaves the nozzle, slug *and* vaporised impactor together. This is what the
+  nozzle actually does and it is the number to compare against any other thruster.
+- **`Isp effective`** — the same impulse divided by only the propellant **the vehicle had to
+  carry**, i.e. the slug. The impactor arrives from outside at 75 km/s; the vehicle never lifted
+  it, so charging it against the vehicle's mass budget would understate the architecture. This is
+  the mission figure of merit and it is ADR-0016's column.
+
+The two differ by exactly
+
+> **`Isp effective / Isp true = (1+k)/k = 1 + 1/k`**
+
+**— which is a bonus that grows as the required slug shrinks, and therefore rewards hydrogen most
+of all.** A fluid that soaks up the pulse in a small slug gets a proportionally larger free ride
+from the impactor mass it did not carry:
+
+| fluid | `k` | slug carried | free impactor share | **bonus** |
+| --- | ---: | ---: | ---: | ---: |
+| hydrogen | 7.77 | 194 kg | 25 kg of 219 kg | **+12.9%** |
+| methane | 19.56 | 489 kg | 25 kg of 514 kg | +5.1% |
+| ammonia\* | 28.54 | 714 kg | 25 kg of 739 kg | +3.5% |
+| water | 39.55 | 989 kg | 25 kg of 1014 kg | **+2.5%** |
+
+So hydrogen's advantage is *understated* by the true column and correctly stated by the effective
+one — it wins on chemistry first and then gains a second time on the mass ledger.
+
+### The ladder
+
+Run at 10 000 K, 75 km/s, through the ask's own 7 m² throat, 200 m³ chamber:
+
+| fluid | `m̄` [amu] | `k` | `u` [MJ/kg] | exit `T` [K] | conversion | `u_e` [m/s] | **Isp true** | **Isp effective** |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| **hydrogen** | 1.01 | **7.77** | 320.8 | 5168 | 0.532 | 18 482 | 1885 s | **2127 s** |
-| **methane** | 3.21 | 19.56 | 136.8 | 5584 | 0.406 | 10 536 | 1074 s | **1129 s** |
-| ammonia\* | 4.26 | 28.54 | 95.2 | — | *assumed* | ~8 800 | 833–944 s | **862–977 s** |
-| **water** | 6.00 | **39.55** | 69.4 | 5200 | 0.415 | 7 588 | 774 s | **793 s** |
+| **hydrogen** | 1.01 | **7.77** | 320.8 | 5168 | **0.532** | 18 482 | **1885 s** | **2127 s** |
+| **methane** | 3.21 | 19.56 | 136.8 | 5584 | 0.406 | 10 536 | **1074 s** | **1129 s** |
+| ammonia\* | 4.26 | 28.54 | 95.2 | — | *assumed 0.41* | ~8 800 | *~901 s* | *~933 s* |
+| **water** | 6.00 | **39.55** | 69.4 | 5200 | 0.415 | 7 588 | **774 s** | **793 s** |
+
+Neither column carries the paper's launch-ledger normalisations — `eta_geom`, the drift term of
+`eq:reflection_baseline`, vessel mass — which are worth a further factor of about 0.609 on
+velocity (W5). **These numbers are therefore comparable across fluids but must not be set beside
+the paper's absolute figures without that factor.** Three of the four rows are solved end to end;
+the ammonia row is not, and is italicised throughout for that reason.
+
+**Conversion is a chemistry result, not a nozzle constant.** All four rows run the *same*
+geometry, yet hydrogen extracts 53.2% of its stored energy and methane 40.6%. The difference is
+where the store sits at the exit plane: hydrogen's is banked in H₂, methane's is parked in C₃ with
+only 30% of atomisation handed back (W9). Any comparison that assumes a common conversion
+fraction — as the ammonia row is forced to — is assuming every fluid gets equally stuck, which is
+exactly what these three solved rows disprove.
 
 \* **Estimate, not a solved rung, and the estimate is load-bearing.** There is no `eos_ammonia`
 — nitrogen appears in no EOS in this repository — so ammonia's `u` is assembled from the ask's own

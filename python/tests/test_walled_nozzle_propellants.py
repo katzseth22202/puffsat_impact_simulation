@@ -208,3 +208,28 @@ def test_the_flown_nozzle_leaves_the_acetylene_energy_on_the_table() -> None:
     assert c.density_of(m.C3) * 3.0 / c.n_c_nuclei > 0.5
     assert c.carbon_free < 0.35
     assert exit_station.store_held > 0.6
+
+
+def test_the_free_impactor_bonus_rewards_the_smallest_slug(
+    rungs: list[propellants.Rung],
+) -> None:
+    """**Why the effective convention favours hydrogen, stated as its own result.**
+
+    The vehicle carries the slug; the impactor arrives from outside at 75 km/s and was never
+    lifted. So the impulse per kilogram *carried* exceeds the impulse per kilogram *expelled* by
+    `(1+k)/k = 1 + 1/k` -- a bonus that grows as the required slug shrinks. Hydrogen soaks the
+    pulse up in 194 kg and collects +12.9%; water needs 989 kg and collects +2.5%.
+
+    This is a second advantage for light propellants, independent of the chemistry that set `k`
+    in the first place, and it is why W8 prints both columns rather than picking one.
+    """
+    by_k = sorted(rungs, key=lambda r: r.slug_ratio)
+    assert [r.name for r in by_k] == ["hydrogen", "methane", "water"]
+    bonuses = [r.free_impactor_bonus for r in by_k]
+    assert all(a > b for a, b in zip(bonuses, bonuses[1:], strict=False))
+    assert by_k[0].free_impactor_bonus == pytest.approx(0.129, abs=0.003)
+    assert by_k[-1].free_impactor_bonus == pytest.approx(0.025, abs=0.003)
+    for r in rungs:
+        assert r.isp_effective / r.isp_true == pytest.approx(1.0 + r.free_impactor_bonus)
+        assert r.carried_slug_mass == pytest.approx(r.slug_ratio * chamber.IMPACTOR_MASS)
+    assert by_k[0].carried_slug_mass == pytest.approx(194.2, abs=1.0)

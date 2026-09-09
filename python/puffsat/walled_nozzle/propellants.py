@@ -87,6 +87,26 @@ class Rung:
         return self.exhaust_speed / G0
 
     @property
+    def isp_true(self) -> float:
+        """Alias for `isp_total`. **W8 prints this column as "Isp true"**, so the name the paper
+        will carry resolves here rather than looking like a missing quantity."""
+        return self.isp_total
+
+    @property
+    def carried_slug_mass(self) -> float:
+        """Propellant the vehicle actually lifted [kg] -- the slug alone. The impactor arrives
+        from outside at 75 km/s and was never carried, which is the whole reason the effective
+        convention exists."""
+        return self.slug_ratio * chamber.IMPACTOR_MASS
+
+    @property
+    def free_impactor_bonus(self) -> float:
+        """`isp_effective / isp_true - 1 = 1/k`: the free ride from mass the vehicle did not
+        carry. **It grows as the required slug shrinks**, so it rewards hydrogen (+12.9%) far
+        more than water (+2.5%) -- a second, independent advantage on top of the chemistry."""
+        return 1.0 / self.slug_ratio
+
+    @property
     def isp_effective(self) -> float:
         """Per kilogram of launched slug [s] -- the companion's column, unnormalised."""
         return self.exhaust_speed * (1.0 + self.slug_ratio) / (self.slug_ratio * G0)
@@ -213,8 +233,8 @@ def ladder(temp: float = chamber.FLOWN_TEMPERATURE) -> list[Rung]:
 
 
 CSV_HEADER = (
-    "fluid,estimated,mean_atomised_amu,slug_ratio,rho,u_j_kg,exit_temp_k,"
-    "exhaust_speed_m_s,conversion,isp_total_s,isp_effective_s\n"
+    "fluid,estimated,mean_atomised_amu,slug_ratio,carried_slug_kg,rho,u_j_kg,exit_temp_k,"
+    "exhaust_speed_m_s,conversion,isp_true_s,isp_effective_s,free_impactor_bonus\n"
 )
 
 
@@ -226,8 +246,9 @@ def write(rungs: list[Rung], path: Path = DEFAULT_OUTPUT) -> None:
         for r in rungs:
             fh.write(
                 f"{r.name},{r.estimated},{r.mean_atomised_mass:.4f},{r.slug_ratio:.4f},"
-                f"{r.rho:.6e},{r.energy:.6e},{r.exit_temp:.2f},{r.exhaust_speed:.2f},"
-                f"{r.conversion:.5f},{r.isp_total:.1f},{r.isp_effective:.1f}\n"
+                f"{r.carried_slug_mass:.2f},{r.rho:.6e},{r.energy:.6e},{r.exit_temp:.2f},"
+                f"{r.exhaust_speed:.2f},{r.conversion:.5f},{r.isp_true:.1f},"
+                f"{r.isp_effective:.1f},{r.free_impactor_bonus:.5f}\n"
             )
 
 
