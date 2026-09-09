@@ -108,6 +108,7 @@ outputs are under `data/results/walled_nozzle/`.
 make walled-nozzle-chamber    # N10.4b + N9.0: the solved chamber charge and the sealed-vessel clock
 make walled-nozzle-hydrogen   # N10: the Project 242 validation and the pure-hydrogen rung
 make walled-nozzle-freeze     # N10.1-3: the Bray freeze race, throat sensitivity, exit Isp
+make walled-nozzle-propellants # N10.3: the H2 / CH4 / H2O / NH3 ladder, both Isp conventions
 make walled-nozzle-test       # that study's tests alone
 ```
 

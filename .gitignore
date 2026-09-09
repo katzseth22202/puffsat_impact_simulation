@@ -127,3 +127,5 @@ __pycache__/
 # 767 rows / ~140 KB -- larger than the rule of thumb, kept because it is the only record of
 # *where* along the nozzle each verdict was reached.
 !/data/results/walled_nozzle/freeze.csv
+# And the propellant ladder behind W8 -- 6 rows, and the paper repo cannot run the target.
+!/data/results/walled_nozzle/propellants.csv

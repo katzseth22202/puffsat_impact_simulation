@@ -20,10 +20,11 @@ from a run; the [provenance table](#provenance) says which.
 | **N10, Project 242** | **Answered, and it settles the tension.** 2700 s is *above* the frozen ceiling of 2085–2229 s. The arithmetic is right; the prose is wrong. | **yes** (W2) |
 | **N9.0** (sealed vessel) | **Answered, and the geometry question dissolves.** Column length cancels exactly; the verdict is a bore/throat area ratio. But the sound speed used was hydrogen's. | **yes** (W3, W4) |
 | **N10.1–3** (freeze stations, `H+H+M`, `N+N+M`) | **Answered, and the fork closes on the good side.** The gas never freezes in this nozzle — `Da` stays above the threshold everywhere, with 0.4–2.2 decades of margin. The walled nozzle converts **39–41% of the wall-cap energy into directed kinetic energy** at the ask's own 7 m² throat (methane; no ammonia Isp is produced — see W7). That is *not* the paper's effective-Isp column and must not be compared with 1080 s directly. | **yes** (W5, W6, W7) |
-| **N10.5** (carbon nucleation) | **Not started.** | no |
+| **N10.3** (the water and hydrogen rungs) | **Answered.** The ask's own `k = 37.70` and `k = 7.99` are reproduced as *outputs* (39.55, 7.77). Neither water nor ammonia beats methane; hydrogen nearly doubles it. | **yes** (W8) |
+| **N10.5** (carbon nucleation) | **Reframed, and much smaller than booked.** 84% of the carbon store returns as gas-phase acetylene with no nucleation at all; only 16% of it (5.2% of the energy budget) is genuinely hostage to soot. | **yes** (W9) |
 | **N9.1–7** (contact station, wall fluence, throat carbon, convective flux) | **Not started.** | no |
 
-**Seven items fall out, W1–W7.** W1 is the one that moves a headline number. **W2 is the strongest
+**Nine items fall out, W1–W9.** W1 is the one that moves a headline number. **W2 is the strongest
 result here**, because it is a published case reproduced and a stated contradiction resolved in
 the direction the design needs. **W5 settles the 1080 s / 793 s fork** the ask calls high priority,
 and **W6 says the remaining lever is the throat, not the chemistry**.
@@ -362,6 +363,159 @@ gas does not form diatomics, it forms clusters and then soot. **So the 43% of me
 atomisation locked in carbon cannot be settled by a rate coefficient the way the 52% held as H₂
 just was.** N10 item 5 needs classical nucleation theory, and no amount of further rate-hunting
 substitutes for it.
+
+### W8. The propellant ladder, solved: neither water nor ammonia beats methane, and hydrogen doubles it
+
+**Locate:** N10 item 3, "The same for a water slug at `k = 37.70` and for pure hydrogen at
+`k = 7.99`, so the ladder in ADR-0016 rests on solved chemistry rather than on the equilibrium
+assumption."
+
+**Now:** the ladder's slug ratios are quoted as inputs.
+
+**Should be:** they are outputs, and they come out close to the quoted values. The chamber
+identity mentions no species —
+
+> `rho = (1+k) m_p / V`,  `u = e(rho, T)`,  `k = (w²/2)/u − 1`
+
+— so pointing it at a different EOS gives the whole ladder. Run at 10 000 K, 75 km/s, through the
+ask's own 7 m² throat, with each fluid on **its own** equilibrium EOS so the conversion fraction
+is solved rather than borrowed:
+
+`Isp total` is the exhaust speed over `g0`; `Isp effective` is that same speed multiplied by
+`(1+k)/k` — so the effective column is *derived* from the total, not independently computed.
+Neither carries the paper's launch-ledger normalisations (W5).
+
+| fluid | `m̄` [amu] | `k` | `u` [MJ/kg] | exit `T` [K] | conversion | `u_e` [m/s] | Isp total | **Isp effective** |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **hydrogen** | 1.01 | **7.77** | 320.8 | 5168 | 0.532 | 18 482 | 1885 s | **2127 s** |
+| **methane** | 3.21 | 19.56 | 136.8 | 5584 | 0.406 | 10 536 | 1074 s | **1129 s** |
+| ammonia\* | 4.26 | 28.54 | 95.2 | — | *assumed* | ~8 800 | 833–944 s | **862–977 s** |
+| **water** | 6.00 | **39.55** | 69.4 | 5200 | 0.415 | 7 588 | 774 s | **793 s** |
+
+\* **Estimate, not a solved rung, and the estimate is load-bearing.** There is no `eos_ammonia`
+— nitrogen appears in no EOS in this repository — so ammonia's `u` is assembled from the ask's own
+68.9 MJ/kg atomisation plus an exactly computed translational term, and **its conversion fraction
+is assumed to be methane-like (0.35–0.45) rather than solved.**
+
+**That assumption is probably wrong in ammonia's favour, so the methane-over-ammonia ordering is
+NOT established.** The three solved rungs each returned a different share of their store, and the
+reason methane converts only 0.406 is W9: at the exit its carbon is parked in C₃ with just 30% of
+atomisation handed back. Ammonia has no C₃ trap — its store returns as **N₂ (941 kJ/mol, among
+the strongest bonds in chemistry) and H₂**, two simple diatomics — so a materially higher
+conversion is physically plausible.
+
+**The crossover is computable even though the rung is not:** ammonia draws level with methane at a
+conversion of **0.601**, against methane's solved 0.406 — a factor of 1.48. That is a large ask,
+but it is not absurd: **hydrogen reaches 0.532 at this same area ratio**, so conversions above
+0.5 are demonstrably attainable here. Until an `eos_ammonia` exists, read this table as
+
+> **hydrogen > methane > water, solved** — and ammonia unplaced, somewhere between water and
+> possibly above methane.
+
+The `1/sqrt(m̄)` scaling below cannot settle it either, because that law implicitly assumes a
+common conversion fraction and this is exactly the case where that fails.
+
+**Two of these are checks rather than results, and they pass.** Nothing in the fixed point was
+told the ask's numbers, and it returns **`k = 39.55` against the stated 37.70 for water** and
+**`k = 7.77` against 7.99 for hydrogen** — both within 5%. The ladder is therefore resting on
+solved chemistry, which is what item 3 asked for.
+
+**The ordering is one variable, and it is not negotiable by nozzle design.** Effective Isp tracks
+`1/sqrt(m̄)`, the mean mass of a particle once atomised, to within 10% across a factor of six:
+
+| | H₂ | CH₄ | NH₃ | H₂O |
+| --- | ---: | ---: | ---: | ---: |
+| atomises to | 2 H | C + 4H | N + 3H | O + 2H |
+| `1/sqrt(m̄)` ÷ methane | 1.78 | 1.00 | 0.87 | 0.73 |
+| **solved Isp ÷ methane** | **1.88** | 1.00 | 0.86 | **0.70** |
+
+A light fluid stores more per kilogram, because at 10 kK most of `u` is `3/2 kT` **per particle**
+and a kilogram of a light gas is more particles. Storing more per kilogram means less mass is
+needed to absorb the pulse, so `k` falls — and then `k` enters a *second* time through the
+effective convention `(1+k)/k`, which is 1.13 for hydrogen and 1.03 for water. Low `k` is rewarded
+twice. This is the molecular-weight law of any rocket, reappearing in a chamber heated by impact
+rather than by combustion.
+
+**So the carbon exposure cannot be dodged by switching to a carbon-free fluid without paying for
+it** — with ammonia the open question above. Water is carbon-free and 30% worse. Only hydrogen is
+both carbon-free and better, by 88% — and its store returns through `H + H + M`, the one channel
+W5 has established with margin to spare. **ADR-0016 treats hydrogen as a validation rung; on
+these numbers it is the strongest candidate in the table**, and its real cost is storage density,
+which is a vehicle problem that appears nowhere in these asks.
+
+### W9. Most of the carbon store returns as acetylene, not as soot — which moves N10 item 5 from a nucleation problem to an expansion-ratio problem
+
+**Locate:** N10 item 5, "Methane returns 52% of its atomisation as H2 and 43% as condensing
+carbon", and its framing of the 43% as recoverable only by nucleation.
+
+**Now:** the whole 43% is treated as hostage to soot formation, with ADR-0016's 880 s floor if
+carbon does not condense.
+
+**Should be:** the great majority of that 43% comes back **in the gas phase**, before any particle
+forms, because acetylene is nearly as strongly bound per atom as methane was. The stoichiometry is
+exact and needs no rate constant at all:
+
+> **2 CH₄ → C₂H₂ + 3 H₂** returns **89.0%** of full atomisation.
+
+against 52.6% for the H₂ channel alone and 95.9% for H₂ plus fully condensed carbon. All three
+follow from 0 K atomisation energies this repository already carries (`CH4` 1642.0, `C₂H₂` 1625.7,
+`H2` 432.1 kJ/mol).
+
+**So the carbon store splits, and only the small part needs nucleation:**
+
+| carbon store, 43.3% of atomisation | share | how it returns |
+| --- | ---: | --- |
+| recovered by reaching acetylene | **36.3 points (84%)** | gas-phase chemistry, species already in `eos_methane` |
+| requires actual condensation | **7.0 points (16%)** | nucleation — N10 item 5 proper |
+
+That is **5.2% of the chamber's energy budget** genuinely hostage to soot, not the 32.4% implied
+by treating the whole carbon store as condensation-limited. **And the two-phase lag exposure
+shrinks with it**: carbon that leaves as C₂H₂ is gas, so it stays momentum-coupled and there are
+no particles to lag.
+
+**The equilibrium path is C → C₃ → C₂H₂, and it is temperature-gated.** Solved on `eos_methane`
+at 1 kg/m³, the fraction of carbon nuclei by species:
+
+| `T` [K] | atoms | C₃ | C₂H₂ | store still held |
+| ---: | ---: | ---: | ---: | ---: |
+| 6000 | 0.16 | 0.67 | 0.03 | 0.599 |
+| 5000 | 0.03 | 0.67 | 0.16 | 0.397 |
+| 4000 | 0.00 | 0.30 | **0.63** | 0.206 |
+| 3500 | 0.00 | 0.08 | **0.89** | 0.144 |
+| 3000 | 0.00 | 0.01 | **0.98** | **0.118** |
+
+`held = 0.118` is the 89% return, arrived at independently. **C₃ is the intermediate**, which is
+worth stating because it is also this EOS's largest admitted weakness (weakness 1) — the species
+that carries the carbon between 4000 and 6000 K is the one whose partition function is least
+trustworthy.
+
+**And the flown nozzle does not get there — it parks the carbon in C₃.** At the exit plane:
+
+| throat | exit `T` [K] | exit `rho` | free atoms | **C₃** | C₂H₂ | store held |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 7.0 m² | 5584 | 0.207 | 0.250 | **0.658** | 0.009 | 0.698 |
+| 4.0 m² | 5067 | 0.110 | 0.160 | **0.750** | 0.015 | 0.650 |
+| 2.0 m² | 4561 | 0.052 | 0.090 | **0.819** | 0.024 | 0.599 |
+
+That is better than free atoms — C₃ is strongly bound and has already banked about 62% per carbon
+of what condensation would give (439.9 against 711.2 kJ per mole of C) — but it is a long way from
+done. **The gap that matters is not the soot gap.** From the exit state to acetylene equilibrium
+is **59 points of atomisation**; from acetylene to fully condensed carbon is **7**. The dominant
+missing energy is simply unfinished gas-phase recombination, and it is unfinished because the
+nozzle stopped too hot, not because any nucleation failed.
+
+**This is the same finding as W6 arriving from the carbon side: the binding constraint is
+expansion ratio.** The acetylene energy is real, large, gas-phase and needs no nucleation
+theory — and this geometry leaves essentially all of it on the table because it stops 1000–1500 K
+too hot. Reaching ~3500 K collects it; reaching it *at density* (≥0.2 kg/m³) collects it before
+the chemistry can freeze, which W5's deep-expansion diagnostic puts at 3300–3500 K.
+
+**What this does not settle.** W5's Damköhler analysis is run on `H + H + M` and therefore prices
+the H₂ channel only. **The acetylene path has its own kinetics and they are not tested here** — but
+they are a far better prospect than the three-body carbon association W7 could find no data for,
+because C₂H₂ forms through *bimolecular* hydrocarbon reactions (`C₂H + H₂`, `C₂H₂ + H` and
+relatives) that the combustion literature characterises heavily. **That is the next thing to
+build**, and it is ordinary chemical kinetics rather than nucleation theory.
 
 ## Smaller corrections, no argument attached
 

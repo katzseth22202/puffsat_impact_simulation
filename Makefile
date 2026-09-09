@@ -777,7 +777,7 @@ water-plate-parcel-check:
 # bore, no field, a 200-673 m^3 chamber, 25 kg at 75 km/s into methane -- and it must not inherit
 # the magnetic nozzle's bag or the plate-side conventions.
 
-.PHONY: walled-nozzle-chamber walled-nozzle-hydrogen walled-nozzle-freeze walled-nozzle-test
+.PHONY: walled-nozzle-chamber walled-nozzle-hydrogen walled-nozzle-freeze walled-nozzle-propellants walled-nozzle-test
 ## walled-nozzle-chamber: N10 item 4b and N9 item 0 -- the solved chamber charge (equilibrium
 ## composition, wall-cap energy density, the slug-ratio fixed point) and the sealed-vessel
 ## equilibration timescales -> data/results/walled_nozzle/chamber.csv
@@ -798,8 +798,16 @@ walled-nozzle-freeze:
 	@mkdir -p data/results/walled_nozzle
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.freeze
 
+## walled-nozzle-propellants: N10 item 3 -- the propellant ladder (hydrogen / methane / water
+## solved on their own EOS, ammonia estimated) at a fixed 10 kK chamber, reporting both Isp
+## conventions -> data/results/walled_nozzle/propellants.csv
+walled-nozzle-propellants:
+	@mkdir -p data/results/walled_nozzle
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.propellants
+
 ## walled-nozzle-test: this study's tests alone
 walled-nozzle-test:
 	uv run pytest python/tests/test_eos_methane.py python/tests/test_walled_nozzle_chamber.py \
 	                python/tests/test_walled_nozzle_hydrogen.py \
-	                python/tests/test_walled_nozzle_freeze.py
+	                python/tests/test_walled_nozzle_freeze.py \
+	                python/tests/test_walled_nozzle_propellants.py
