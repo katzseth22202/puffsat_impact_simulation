@@ -938,6 +938,11 @@ def end_wall_strike(
 
 # ---- What a narrower throat costs: the throat as a consumable (W24) --------------------------
 
+#: Chamber temperatures the trade study is run at. Two, not one, because the throat and the
+#: temperature dials are the study's only two live levers (W17, W24) and the useful question is
+#: what they are worth *together* -- which is what W8's recommended-geometry rung quotes.
+THROAT_TEMPERATURES = (10000.0, 12000.0)
+
 #: Throat areas [m^2] the trade study is run over: the ask's flown 7 down to 0.1. It stops one
 #: rung short of the N16 grid's 0.05 deliberately -- methane's blowdown already misses the 400 ms
 #: pulse period at 0.1, and the effective Isp has been flat to within a percent since 0.5, so a
@@ -1251,8 +1256,9 @@ def write_bartz(points: Sequence[BartzPoint], path: Path = BARTZ_OUTPUT) -> None
 
 
 THROAT_LIFE_HEADER = (
-    "fluid,volume_m3,temp_c_k,throat_area_m2,throat_radius_mm,area_ratio,exit_temp_k,"
-    "conversion,conversion_capped,verdict,isp_effective_s,isp_gain_vs_7m2,"
+    "fluid,volume_m3,temp_c_k,throat_area_m2,throat_radius_mm,area_ratio,slug_ratio,exit_temp_k,"
+    "conversion,conversion_capped,verdict,isp_true_s,isp_effective_s,isp_ceiling_s,"
+    "isp_gain_vs_7m2,"
     "flux_throat_mw_m2,blowdown_ms,blowdown_fits,fluence_mj_m2,recession_mm_per_pulse,"
     "area_growth_per_pulse,pulses_to_plus_10pc,pulses_to_2x,below_carbon_floor\n"
 )
@@ -1261,38 +1267,59 @@ THROAT_LIFE_HEADER = (
 def write_throat_life(
     fluids: Sequence[surface.Fluid] = (surface.METHANE, surface.HYDROGEN),
     volume: float = 200.0,
-    temp_c: float = 10000.0,
+    temps: Sequence[float] = THROAT_TEMPERATURES,
     path: Path = THROAT_LIFE_OUTPUT,
 ) -> None:
     """Write W24's trade table: what a narrower throat buys against what it costs.
 
+    `isp_ceiling_s` is the **zero-loss** effective Isp at that chamber's own `k`: the same ledger
+    evaluated at `eta_jet = 1`, i.e. full conversion through a perfect nozzle. It is carried so a
+    reader can see how much of the available impulse a given geometry actually collects, and so
+    that a proposed number can be checked against what the architecture allows before it is
+    argued about. `slug_ratio` is beside it because the ceiling is a function of `k` alone.
+
     Joined here rather than in `surface.py` because the cost side is this module's -- the Bartz
     flux, the blowdown dwell and the ablation rate -- while the gain side is one column read off
     the N16 grid. Committed for the cross-repo reason ADR-0025 records.
+
+    **The gain column comes from the grid and not from `propellants.solved_rung`, deliberately.**
+    That function holds the nozzle length at the ask's 7.1 m and applies no freeze cap, both of
+    which are fine at the ask's own wide throat and wrong at a deep one. `surface.column` rebuilds
+    the cone geometry per throat and carries `conversion_capped` with a Damkoehler verdict, so it
+    is the only source in the study that can be trusted down the ladder.
+
+    `isp_gain_vs_7m2` is taken against the widest throat **at the same temperature**, so the
+    column is a throat effect with the temperature dial held still.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:
         fh.write(THROAT_LIFE_HEADER)
         for fluid in fluids:
-            points = {
-                p.throat_area: p
-                for p in surface.column(fluid, temp_c, volume, throats=THROAT_LADDER)
-            }
-            base = points[max(THROAT_LADDER)].isp_effective
-            for area in THROAT_LADDER:
-                g = points[area]
-                life = throat_life(fluid, volume, temp_c, area)
-                fh.write(
-                    f"{fluid.name},{volume:g},{temp_c:g},{area:g},"
-                    f"{life.throat_radius * 1e3:.0f},{g.area_ratio:.1f},{g.exit_temp:.0f},"
-                    f"{g.conversion:.4f},{g.conversion_capped:.4f},{g.verdict},"
-                    f"{g.isp_effective:.1f},{g.isp_effective / base - 1.0:.4f},"
-                    f"{life.flux / 1e6:.0f},{life.blowdown * 1e3:.1f},{g.blowdown_fits},"
-                    f"{life.fluence:.1f},{life.recession * 1e3:.3f},"
-                    f"{life.area_growth_per_pulse:.5f},"
-                    f"{life.pulses_to_area_growth(0.10):.0f},"
-                    f"{life.pulses_to_area_growth(1.00):.0f},{g.below_carbon_floor}\n"
-                )
+            for temp_c in temps:
+                points = {
+                    p.throat_area: p
+                    for p in surface.column(fluid, temp_c, volume, throats=THROAT_LADDER)
+                }
+                base = points[max(THROAT_LADDER)].isp_effective
+                for area in THROAT_LADDER:
+                    g = points[area]
+                    life = throat_life(fluid, volume, temp_c, area)
+                    # Zero-loss effective Isp at this chamber's own k: the ledger at eta_jet = 1.
+                    ceiling = chamber.isp_ledger(g.exhaust_speed_ideal, g.slug_ratio)
+                    fh.write(
+                        f"{fluid.name},{volume:g},{temp_c:g},{area:g},"
+                        f"{life.throat_radius * 1e3:.0f},{g.area_ratio:.1f},"
+                        f"{g.slug_ratio:.4f},{g.exit_temp:.0f},"
+                        f"{g.conversion:.4f},{g.conversion_capped:.4f},{g.verdict},"
+                        f"{g.isp_true:.1f},{g.isp_effective:.1f},"
+                        f"{ceiling.isp_effective:.1f},"
+                        f"{g.isp_effective / base - 1.0:.4f},"
+                        f"{life.flux / 1e6:.0f},{life.blowdown * 1e3:.1f},{g.blowdown_fits},"
+                        f"{life.fluence:.1f},{life.recession * 1e3:.3f},"
+                        f"{life.area_growth_per_pulse:.5f},"
+                        f"{life.pulses_to_area_growth(0.10):.0f},"
+                        f"{life.pulses_to_area_growth(1.00):.0f},{g.below_carbon_floor}\n"
+                    )
 
 
 def _report_throat_trade(volume: float = 200.0, temp_c: float = 10000.0) -> None:
@@ -1337,6 +1364,48 @@ def _report_throat_trade(volume: float = 200.0, temp_c: float = 10000.0) -> None
         f"\n  Throat life goes as A*^{THROAT_LIFE_EXPONENT} -- a factor of three per halving --"
         "\n  because the throat FLUX barely moves (Bartz D*^-0.2, ~7% per halving) while the"
         "\n  blowdown DWELL doubles. Recession is the pessimistic edge: no transpiration credit."
+    )
+
+
+def _report_recommended_rung(volume: float = 200.0) -> None:
+    """Print the W8 rung: the fluids re-run at the geometry W24 and W17 actually recommend.
+
+    W8's ladder is pinned to the ask's own 7 m^2 throat and 10 kK, which is the right choice for
+    answering the ask on its own terms and the wrong one for stating what the architecture can do.
+    This block moves both live dials to where this study recommends them and carries the throat
+    life alongside, so the specific impulse cannot be quoted without its consumable cost.
+
+    **Every column is like-for-like**: each row is one fluid at one geometry, and methane sits
+    beside hydrogen at the same throat and the same chamber temperature.
+    """
+    print("\n=== The W8 rung at the recommended geometry (W17's temperature, W24's throat) ===")
+    print(
+        f"  {'fluid':>9} {'T_c':>7} {'A*':>5} {'exit T':>7} {'conv':>6} {'verdict':>11} "
+        f"{'Isp true':>9} {'Isp EFF':>8} {'vs ask':>7} {'to +10%':>8}"
+    )
+    for fluid in (surface.METHANE, surface.HYDROGEN):
+        reference = None
+        for temp_c in THROAT_TEMPERATURES:
+            points = {
+                p.throat_area: p
+                for p in surface.column(fluid, temp_c, volume, throats=(7.0, 2.0, 1.0))
+            }
+            for area in (7.0, 2.0, 1.0):
+                g = points[area]
+                if reference is None:
+                    reference = g.isp_effective  # the ask's own point: 7 m^2 at 10 kK
+                life = throat_life(fluid, volume, temp_c, area)
+                print(
+                    f"  {fluid.name:>9} {temp_c:7.0f} {area:5.2f} {g.exit_temp:7.0f} "
+                    f"{g.conversion_capped:6.3f} {g.verdict:>11} {g.isp_true:9.0f} "
+                    f"{g.isp_effective:8.0f} "
+                    f"{100.0 * (g.isp_effective / reference - 1.0):+6.1f}% "
+                    f"{life.pulses_to_area_growth(0.10):8.0f}"
+                )
+    print(
+        "\n  'vs ask' is against that fluid's own 7 m^2 / 10 kK point, so it is the gain the two"
+        "\n  dials buy together. 'to +10%' is pulses until the throat has eroded 10% wider: the"
+        "\n  Isp and the throat life are one choice, not two."
     )
 
 
@@ -1526,6 +1595,7 @@ def main() -> None:
         )
 
     _report_throat_trade()
+    _report_recommended_rung()
 
     write_fronts(runs)
     write_strikes(strikes)

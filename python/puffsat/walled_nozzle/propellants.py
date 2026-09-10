@@ -178,7 +178,14 @@ def solved_rung(
     throat_area: float = THROAT_AREA,
     steps: int = 128,
 ) -> Rung:
-    """Run one fluid end to end: fixed point, then the nozzle, on its own EOS."""
+    """Run one fluid end to end: fixed point, then the nozzle, on its own EOS.
+
+    **Valid at the ask's own wide throat and not down the ladder.** Two simplifications are fine
+    at `A/A*` ~ 4 and wrong deeper: the nozzle length is held at the ask's `NOZZLE_LENGTH` rather
+    than rebuilt on the cone, and the conversion is the raw expansion with **no freeze cap and no
+    Damkoehler verdict**. For any throat narrower than the ask's, use `surface.column`, which does
+    both -- it is what `wall.write_throat_life` and W8's recommended-geometry rung are built on.
+    """
     k, rho, u = solve_slug_ratio(pe, temp)
     rows = expansion.cooling_history(
         rho, temp, pe, sound_speed, BORE_AREA / throat_area, NOZZLE_LENGTH, steps=steps

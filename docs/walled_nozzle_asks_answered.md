@@ -20,7 +20,7 @@ from a run; the [provenance table](#provenance) says which.
 | **N10, Project 242** | **Answered, and it settles the tension.** 2700 s is *above* the frozen ceiling of 2085–2229 s. The arithmetic is right; the prose is wrong. | **yes** (W2) |
 | **N9.0** (sealed vessel) | **Answered, and the geometry question dissolves.** Column length cancels exactly; the verdict is a bore/throat area ratio. But the sound speed used was hydrogen's. | **yes** (W3, W4) |
 | **N10.1–3** (freeze stations, `H+H+M`, `N+N+M`) | **Answered, and the fork closes on the good side.** The gas never freezes in this nozzle — `Da` stays above the threshold everywhere, with 0.4–2.2 decades of margin. The walled nozzle converts **39–41% of the wall-cap energy into directed kinetic energy** at the ask's own 7 m² throat (methane; no ammonia Isp is produced — see W7). That is *not* the paper's effective-Isp column and must not be compared with 1080 s directly. | **yes** (W5, W6, W7) |
-| **N10.3** (the water and hydrogen rungs) | **Answered for water and hydrogen; ammonia unplaced.** The ask's own `k = 37.70` and `k = 7.99` come back as *outputs* (39.55, 7.77). Water is 30% below methane and hydrogen 88% above it, both solved. **Ammonia is not settled** — it has no EOS and was handed methane's conversion fraction. | **yes** (W8) |
+| **N10.3** (the water and hydrogen rungs) | **Answered for water and hydrogen; ammonia unplaced.** The ask's own `k = 37.70` and `k = 7.99` come back as *outputs* (39.55, 7.77). On the corrected convention water is **19% below** methane and hydrogen **55% above** it (30% and 88% on the credit-only column). At the recommended geometry rather than the ask's, hydrogen reaches **1,650 s**. **Ammonia is not settled** — it has no EOS and was handed methane's conversion fraction. | **yes** (W8) |
 | **N10.5** (carbon nucleation) | **Reframed, and much smaller than booked.** 84% of the carbon store returns as gas-phase acetylene with no nucleation at all; only 16% of it (5.2% of the energy budget) is genuinely hostage to soot. | **yes** (W9) |
 | **N9.1–7** (contact station, wall fluence, throat carbon, convective flux) | **Not started** — and W6 raises their priority: the throat recommendation stretches the pulse from 8 ms to 28 ms, which is their problem to price. | no |
 | **N11** (radiative escape, wall fluence) | **Not started.** | no |
@@ -37,6 +37,12 @@ with the **head-on momentum debit charged** — the correction that puts effecti
 Isp rather than above it, and compresses hydrogen's lead over methane from 1.88x to 1.55x. It
 replaces the ladder ADR-0016 quotes from assumed slug ratios, and carrying every column is what
 prevents the convention error W5 records from propagating.
+
+**W8 now carries a second table**, because the first is deliberately run at the ask's own worst
+geometry. Moved to the throat and chamber temperature this study recommends (W17, W24), **methane
+reaches 1,035 s and hydrogen 1,650 s** — the latter 82% of hydrogen's own zero-loss ceiling — at a
+throat-replacement interval of about 72 pulses. **A 2,000 s effective figure is above the ceiling
+and should not be used as a target.**
 
 **If you read only three:** W1 (the correction that cost methane 40 s should be largely unwound),
 W2 (Project 242's own number requires the recombination its prose denies), and W5 (the walled
@@ -399,7 +405,7 @@ atomisation locked in carbon cannot be settled by a rate coefficient the way the
 just was.** N10 item 5 needs classical nucleation theory, and no amount of further rate-hunting
 substitutes for it.
 
-### W8. The propellant ladder, solved — real and effective Isp side by side, the head-on debit charged
+### W8. The propellant ladder, solved — real and effective Isp side by side, the head-on debit charged, and the same fluids at the recommended geometry
 
 **Locate:** N10 item 3, "The same for a water slug at `k = 37.70` and for pure hydrogen at
 `k = 7.99`, so the ladder in ADR-0016 rests on solved chemistry rather than on the equilibrium
@@ -566,6 +572,74 @@ column (30% on the credit-only one). Only hydrogen is both carbon-free and bette
 W5 has established with margin to spare. **ADR-0016 treats hydrogen as a validation rung; on
 these numbers it is the strongest candidate in the table**, and its real cost is storage density,
 which is a vehicle problem that appears nowhere in these asks.
+
+#### The same fluids at the geometry this study recommends — and hydrogen reaches 1,650 s
+
+**The ladder above is run at the ask's own 7 m² throat and 10,000 K, on purpose**, so that it
+answers item 3 on the ask's terms and against its numbers. That is also the *worst* geometry in
+this study: `A/A*` = 4.0 is barely an expansion, and two later items say so — **W17** (hotter is
+better, monotonically) and **W24** (narrowing the throat is worth +22 to +35%, priced in throat
+life). This block moves both dials to where those items recommend and states what the
+architecture can actually do.
+
+**Both dials, both fluids, 200 m³, every row on the equilibrium branch:**
+
+| fluid | `T_c` | `A*` | exit `T` | conversion | **Isp true** | **Isp effective** | vs the ask's point | pulses to +10% `A*` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| methane | 10,000 K | 7.0 m² | 5,583 K | 0.406 | 1,075 s | **738 s** | — *(the ask's point)* | 1,947 |
+| methane | 10,000 K | 2.0 m² | 4,561 K | 0.532 | 1,230 s | **902 s** | +22.1% | 262 |
+| methane | 10,000 K | 1.0 m² | 4,159 K | 0.585 | 1,290 s | **965 s** | +30.7% | 87 |
+| methane | 12,000 K | 7.0 m² | 5,870 K | 0.438 | 1,169 s | **804 s** | +8.9% | 1,933 |
+| methane | 12,000 K | 2.0 m² | 4,749 K | 0.564 | 1,326 s | **970 s** | +31.4% | 260 |
+| **methane** | **12,000 K** | **1.0 m²** | 4,308 K | 0.618 | 1,388 s | **1,035 s** | **+40.2%** | 86 |
+| hydrogen | 10,000 K | 7.0 m² | 5,168 K | 0.532 | 1,885 s | **1,143 s** | — *(the ask's point)* | 1,713 |
+| hydrogen | 10,000 K | 2.0 m² | 4,249 K | 0.687 | 2,140 s | **1,431 s** | +25.3% | 231 |
+| hydrogen | 10,000 K | 1.0 m² | 3,894 K | 0.752 | 2,240 s | **1,544 s** | +35.1% | 76 |
+| hydrogen | 12,000 K | 7.0 m² | 5,388 K | 0.568 | 2,061 s | **1,242 s** | +8.7% | 1,631 |
+| hydrogen | 12,000 K | 2.0 m² | 4,378 K | 0.718 | 2,317 s | **1,536 s** | +34.4% | 220 |
+| **hydrogen** | **12,000 K** | **1.0 m²** | 4,000 K | 0.781 | 2,417 s | **1,650 s** | **+44.4%** | 72 |
+
+**The two dials compound almost independently.** Temperature alone is worth +8.9% (methane) and
++8.7% (hydrogen); the throat alone is worth +30.7% and +35.1%; together they give +40.2% and
++44.4%, which is the product to within 2%. There is no interaction term worth modelling, so the
+paper can treat them as separate decisions.
+
+**Every one of the twelve rows is `equilibrium`** — no freeze cap is in play anywhere in this
+block, and methane's 1 m² exit at 12,000 K is 4,308 K, still above the 4,000 K carbon floor. So
+unlike the deep-throat rows of W19 and W24 these are not capped or floored numbers, and none of
+them carries the caveat that they should not be quoted.
+
+**How far this is from the ceiling, so a target can be checked before it is argued about.** The
+zero-loss effective Isp — full conversion through a perfect nozzle, `w(√(1+k) − 1)/(k g₀)` at that
+chamber's own `k` — is:
+
+| | `k` | `u` | **zero-loss ceiling** | recommended geometry reaches |
+| --- | ---: | ---: | ---: | ---: |
+| methane, 10,000 K | 19.56 | 136.8 MJ/kg | 1,382 s | 965 s (70%) |
+| methane, 12,000 K | 17.76 | 149.9 MJ/kg | 1,435 s | 1,035 s (72%) |
+| hydrogen, 10,000 K | 7.77 | 320.8 MJ/kg | 1,931 s | 1,544 s (80%) |
+| **hydrogen, 12,000 K** | **6.82** | **359.6 MJ/kg** | **2,014 s** | **1,650 s (82%)** |
+
+So **1,650 s is 82% of everything hydrogen can deliver in this architecture**, and the remaining
+18% is nozzle loss, not chemistry. It also fixes what is *not* available: a **2,000 s** effective
+figure sits above the ceiling at any chamber cooler than 12,000 K and requires `η_jet` = 1 even
+there, so it should not be quoted as a target. Neither should a number obtained by scaling Rubbia's
+2,700 s upward — **2,700 s already requires converting 97.5% of a 12,000 K hydrogen chamber's
+store**, which is this architecture's own full-conversion limit and is what W2 found from the
+recombination side.
+
+**The Isp and the throat life are one choice, not two.** The last column is the price: 1,650 s
+costs a throat every ~72 pulses against ~1,700 at the ask's geometry, a factor of 24. W24 sets
+out the exchange rate and recommends **2 m² where the throat is hard to service** — 1,536 s for
+hydrogen, still +34% — and 1 m² only where it is a scheduled consumable.
+
+**Source note.** These rows come from the N16 grid machinery (`surface.column`), **not** from the
+ladder module that produced the table above. `propellants.solved_rung` holds the nozzle length at
+the ask's 7.1 m and applies no freeze cap, which is correct at `A/A*` = 4 and wrong deeper. The
+cross-check that the two are comparable is the 7 m² rows: the grid gives 738.4 s and 1,142.8 s
+where the ladder gives 738.3 s and 1,143 s, agreeing to **0.02%**. They agree because nozzle
+*length* sets the Damköhler clock while the *area ratio* sets the thermodynamic end state, so on
+an unfrozen expansion the length cancels out of the answer.
 
 ### W9. Most of the carbon store returns as acetylene, not as soot — which moves N10 item 5 from a nucleation problem to an expansion-ratio problem
 
@@ -809,6 +883,7 @@ here so the next reader does not spend the search twice.
 | freeze stations, Damköhler margins, throat sensitivity, exit Isp, the `N+N+M` comparison | `puffsat.walled_nozzle.freeze` | `make walled-nozzle-freeze` |
 | the rate coefficients themselves, one named constant per published value | `puffsat.walled_nozzle.rates` | `make walled-nozzle-test` |
 | **the propellant ladder: `k`, `u`, conversion, η_jet, real / effective / credit-only Isp and the momentum debit for H₂ / CH₄ / H₂O, and the estimated NH₃ rung (W8)** | `puffsat.walled_nozzle.propellants` | `make walled-nozzle-propellants` |
+| **the same fluids at the recommended geometry, with the zero-loss ceiling and the throat life beside each (W8, second table)** | `puffsat.walled_nozzle.wall` + `surface.column` | `make walled-nozzle-wall` → `data/results/walled_nozzle/wall_throat_life.csv` |
 | the acetylene stoichiometry and the C → C₃ → C₂H₂ speciation (W9) | `puffsat.eos_methane` (0 K atomisation energies and the equilibrium solve) | `make walled-nozzle-test` |
 | the equilibrium EOS underneath all of them | `puffsat.eos_methane`, `puffsat.walled_nozzle.hydrogen` | `make walled-nozzle-test` |
 
