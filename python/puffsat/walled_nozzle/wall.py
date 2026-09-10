@@ -845,6 +845,96 @@ def carbon_budget_fraction(mass: float, volume: float, temp_c: float = 10000.0) 
     return mass / carbon
 
 
+# ---- The strike W10 moves the problem to: the contraction ------------------------------------
+
+
+@dataclass(frozen=True)
+class EndWallStrike:
+    """What the downstream end of a **sub-gate** chamber takes (W10's successor question).
+
+    Below the gate volume the front leaves the column before its cone touches the liner -- which
+    is the good news of W10. It does not leave the *hardware*. With a 0.05 to 1 m^2 throat against
+    a 3 m bore, the convergent section is 96-99% of the bore area, so it is very nearly a flat end
+    wall and the front stagnates on it at **normal incidence** rather than grazing past.
+
+    Two loads land there and they scale differently, which is the point of this dataclass:
+
+    - the **arrival**, concentrated on whatever patch the cone has opened to by the exit plane.
+      It gets *worse* as the chamber shrinks, because a shorter column decelerates the front less;
+    - the **bulk**, the rest of the charge turning the corner behind it. It is
+      **volume-independent**, because the same pulse energy passes through the same bore area
+      however long the column in front of it was.
+    """
+
+    fluid: str
+    volume: float
+    temp_c: float
+    throat_area: float
+    exit_radius: float
+    exit_speed: float
+    swept_mass: float
+    #: Patch of the end plane the front has opened to when it gets there [m^2], capped at the bore.
+    wetted_area: float
+    #: Area of the contraction the whole charge must turn against [m^2].
+    contraction_area: float
+    #: Kinetic energy the front carries at the exit plane [J].
+    front_energy: float
+    #: Incident fluence [MJ/m^2] of the arrival, over the wetted patch.
+    incident_arrival: float
+    #: Incident fluence [MJ/m^2] of the whole pulse over the contraction.
+    incident_bulk: float
+
+    @property
+    def front_share(self) -> float:
+        """Share of the pulse energy the front is still carrying when it arrives."""
+        return self.front_energy / chamber.PULSE_ENERGY
+
+    def delivered_arrival(self, stanton: float) -> float:
+        """Arrival fluence actually crossing into the surface [MJ/m^2] at this Stanton number."""
+        return stanton * self.incident_arrival
+
+    def delivered_bulk(self, stanton: float) -> float:
+        """Bulk fluence actually crossing into the surface [MJ/m^2] at this Stanton number."""
+        return stanton * self.incident_bulk
+
+
+def end_wall_strike(
+    fluid: surface.Fluid,
+    volume: float,
+    temp_c: float = 10000.0,
+    throat_area: float = 0.5,
+    spread_multiple: float = 1.0,
+) -> EndWallStrike:
+    """Price the contraction, for the chambers W10 clears of the side-wall strike.
+
+    **The bulk term is a ceiling reached from the energy budget rather than a flux.** Everything
+    the impactor brought has to turn the corner and leave through the throat, so the contraction
+    sees all 70.3 GJ pass across it whatever the chamber's shape; dividing by the contraction area
+    gives what would land if none of it turned. What actually crosses the surface is that times a
+    Stanton number, the same bracket and the same caveat as `strike`.
+    """
+    run = run_front(fluid, volume, temp_c, spread_multiple)
+    exit_state = run.exit_state
+    wetted = math.pi * min(exit_state.radius, WALL_RADIUS) ** 2
+    contraction = surface.BORE_AREA - throat_area
+    mass = chamber.IMPACTOR_MASS + exit_state.swept_mass
+    energy = 0.5 * mass * exit_state.speed**2
+    return EndWallStrike(
+        fluid=fluid.name,
+        volume=volume,
+        temp_c=temp_c,
+        throat_area=throat_area,
+        exit_radius=exit_state.radius,
+        exit_speed=exit_state.speed,
+        swept_mass=exit_state.swept_mass,
+        wetted_area=wetted,
+        contraction_area=contraction,
+        front_energy=energy,
+        incident_arrival=energy / wetted / 1e6,
+        incident_bulk=chamber.PULSE_ENERGY / contraction / 1e6,
+    )
+
+
 # ---- Does the throat self-heal? (item 5, properly) ---------------------------------------
 
 #: Gas-kinetic bimolecular rate coefficient [m^3/s], order of magnitude, for the *bound* below.
@@ -930,9 +1020,7 @@ class SelfHealing:
     @property
     def plates(self) -> bool:
         """Whether carbon deposits at all, on the limit the boundary layer actually sits in."""
-        ratio = (
-            self.saturation_equilibrium if self.layer.equilibrium else self.saturation_frozen
-        )
+        ratio = self.saturation_equilibrium if self.layer.equilibrium else self.saturation_frozen
         return ratio > 1.0
 
     @property
@@ -1137,6 +1225,27 @@ def main() -> None:
             f"radiative = {probed.fluence_radiative:.4f} MJ/m^2"
         )
 
+    print("\n=== W10's successor: what the contraction takes when the front misses the liner ===")
+    print(
+        f"{'V [m3]':>7} {'exit r':>7} {'v [km/s]':>9} {'% of pulse':>11} "
+        f"{'arrival (St bracket)':>22} {'bulk (St bracket)':>20}"
+    )
+    for volume in (50.0, 100.0, 150.0, 178.0):
+        e = end_wall_strike(surface.METHANE, volume)
+        print(
+            f"{volume:7.0f} {e.exit_radius:7.2f} {e.exit_speed / 1e3:9.1f} "
+            f"{e.front_share * 100:10.1f}% "
+            f"{e.delivered_arrival(STANTON_BRACKET[0]):10.2f} -"
+            f"{e.delivered_arrival(STANTON_BRACKET[1]):9.2f} "
+            f"{e.delivered_bulk(STANTON_BRACKET[0]):9.2f} -"
+            f"{e.delivered_bulk(STANTON_BRACKET[1]):8.2f}"
+        )
+    print(
+        "\n  All MJ/m^2 against the same 1.6 reference. The bulk column is identical at every"
+        "\n  volume -- the same pulse turns the same corner -- while the arrival column gets"
+        "\n  WORSE as the chamber shrinks, because a shorter column decelerates the front less."
+    )
+
     print("\n=== Item 4: does a cold film measurably reduce it? ===")
     print(f"{'film [kg/m2]':>13} {'capacity [MJ/m2]':>17}   against the loads above")
     for areal in FILM_AREAL:
@@ -1190,7 +1299,7 @@ def main() -> None:
             f"{area:8.2f} {h.throat_temp:9.0f} {h.throat_pressure / 1e5:9.0f} "
             f"{h.saturation_equilibrium:9.4g} {h.saturation_frozen:9.4g} "
             f"{h.layer.thickness * 1e6:9.1f} {h.layer.time * 1e6:9.2f} "
-            f"{h.layer.decades_of_margin:8.1f} {str(h.plates):>8} {h.ablation * 1e3:9.2f}mm"
+            f"{h.layer.decades_of_margin:8.1f} {h.plates!s:>8} {h.ablation * 1e3:9.2f}mm"
         )
     probe = self_healing(100.0, 8000.0, 0.5)
     print(

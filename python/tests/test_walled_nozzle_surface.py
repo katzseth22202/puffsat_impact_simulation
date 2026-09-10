@@ -138,3 +138,95 @@ def test_the_mixture_is_labelled_an_estimate() -> None:
     produces has to carry the flag."""
     assert surface.mixture().estimated
     assert not surface.METHANE.estimated
+
+
+# ---- The incoming-momentum debit -------------------------------------------------------------
+
+
+def test_eta_jet_is_the_square_root_of_the_conversion_fraction() -> None:
+    """The bridge between this repository's convention and the companion's.
+
+    `(1+k) u = w^2/2` makes `w^2/(1+k) = 2u`, so `u_e^2 / (w/sqrt(1+k))^2 = u_e^2/(2u)`, which is
+    the conversion fraction. It means the companion can take `eta_jet` straight out of the grid
+    without re-deriving anything, and it means a conversion fraction quoted as an `eta_jet` would
+    be wrong by a square root.
+    """
+    for point in surface.column(surface.METHANE, 10000.0, 100.0, throats=(7.0, 0.5, 0.05)):
+        assert point.eta_jet == pytest.approx(math.sqrt(point.conversion_capped), rel=1e-4)
+
+
+def test_the_effective_isp_is_the_companion_head_on_form() -> None:
+    """`Isp_eff = w (eta_jet sqrt(1+k) - 1) / (k g0)`, the paper's own head-on expression.
+
+    Asserted against the independently-built `isp_carried_gross - momentum_debit` so that the two
+    routes to it cannot drift apart.
+    """
+    for point in surface.column(surface.METHANE, 12000.0, 100.0, throats=(2.0, 0.2)):
+        paper = (
+            chamber.CLOSING_SPEED
+            * (point.eta_jet * math.sqrt(1.0 + point.slug_ratio) - 1.0)
+            / (point.slug_ratio * propellants.G0)
+        )
+        assert point.isp_effective == pytest.approx(paper, rel=1e-4)
+        assert point.isp_effective == pytest.approx(
+            point.isp_carried_gross - point.momentum_debit, rel=1e-12
+        )
+
+
+def test_the_debit_is_the_same_momentum_for_every_configuration() -> None:
+    """`w/(k g0)`: one projectile's momentum, spread over whatever slug was carried. It is why the
+    debit falls hardest on a lean charge -- nothing about the nozzle changes it."""
+    for point in surface.column(surface.METHANE, 10000.0, 100.0, throats=(7.0, 0.05)):
+        assert point.momentum_debit * point.slug_ratio * propellants.G0 == pytest.approx(
+            chamber.CLOSING_SPEED, rel=1e-9
+        )
+
+
+def test_the_head_on_burn_is_a_debit_and_never_a_credit() -> None:
+    """**The sign that must not be inherited from the overtake study.** A head-on arrival opposes
+    the ship's motion, so the corrected figure is below the credit-only one -- and, because the
+    debit `w/(k g0)` beats the credit `u_e/(k g0)` whenever `u_e < w`, below the real Isp too."""
+    for point in surface.surface(
+        fluids=(surface.METHANE, surface.WATER),
+        temperatures=(8000.0,),
+        volumes=(100.0,),
+        throats=(0.5,),
+    ):
+        assert point.isp_effective < point.isp_carried_gross
+        assert point.isp_effective < point.isp_true
+        assert point.exit_speed_capped < chamber.CLOSING_SPEED
+
+
+def test_every_cell_clears_the_thrust_floor() -> None:
+    """Below `eta_jet = 1/sqrt(1+k)` the nozzle pushes the ship backwards and the cell returns
+    nothing. Nothing in this grid is close, but the floor has to be checked rather than assumed."""
+    for point in surface.surface(
+        fluids=(surface.METHANE, surface.WATER),
+        temperatures=(6000.0, 12000.0),
+        volumes=(100.0,),
+        throats=(7.0, 0.05),
+    ):
+        assert point.eta_jet > point.thrust_floor
+        assert not point.isp.pushes_backwards
+        assert point.isp_effective > 0.0
+
+
+def test_the_grid_and_the_ladder_share_one_isp_ledger() -> None:
+    """**The reason the sign cannot be fixed in one study and missed in the other.** A grid cell
+    and a propellant rung at the same exhaust speed and slug ratio must agree exactly, because
+    both resolve to `chamber.IspLedger` rather than re-deriving the algebra."""
+    point = next(iter(surface.column(surface.METHANE, 10000.0, 200.0, throats=(7.0,))))
+    rung = propellants.Rung(
+        name="probe",
+        mean_atomised_mass=3.2,
+        slug_ratio=point.slug_ratio,
+        rho=point.rho_c,
+        energy=point.energy_c,
+        exit_temp=point.exit_temp,
+        exhaust_speed=point.exit_speed_capped,
+        conversion=point.conversion_capped,
+        estimated=True,
+    )
+    assert rung.isp_effective == pytest.approx(point.isp_effective, rel=1e-12)
+    assert rung.isp_true == pytest.approx(point.isp_true, rel=1e-12)
+    assert rung.momentum_debit == pytest.approx(point.momentum_debit, rel=1e-12)

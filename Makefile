@@ -799,8 +799,9 @@ walled-nozzle-freeze:
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.freeze
 
 ## walled-nozzle-propellants: N10 item 3 -- the propellant ladder (hydrogen / methane / water
-## solved on their own EOS, ammonia estimated) at a fixed 10 kK chamber, reporting both Isp
-## conventions -> data/results/walled_nozzle/propellants.csv
+## solved on their own EOS, ammonia estimated) at a fixed 10 kK chamber, reporting real Isp, the
+## effective Isp that charges the head-on momentum debit, and the credit-only intermediate
+## -> data/results/walled_nozzle/propellants.csv
 walled-nozzle-propellants:
 	@mkdir -p data/results/walled_nozzle
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.propellants

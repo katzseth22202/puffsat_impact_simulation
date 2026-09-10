@@ -45,6 +45,10 @@ SPECIFIC_PULSE_ENERGY = 0.5 * CLOSING_SPEED**2
 #: Total pulse energy [J] -- the "70.3 GJ pulse" of ADR-0016.
 PULSE_ENERGY = IMPACTOR_MASS * SPECIFIC_PULSE_ENERGY
 
+#: Standard gravity [m/s^2]. Defined here rather than per-module so every specific impulse in
+#: this study divides by the same constant.
+G0 = 9.80665
+
 #: Chamber bore **radius** [m]. ADR-0016 says "3 m bore" and means the radius: `pi r^2 L` closes
 #: its own three volumes only at `r = 3`, and its 24.9 degree cone reaches "a 3 m wall". This is
 #: the same 3.0 m as `expansion.CHAMBER_RADIUS`, but it is restated rather than imported, because
@@ -169,6 +173,118 @@ def solve_chamber(volume: float, length: float, temp: float, tol: float = 1e-10)
     )
 
 
+# --- The specific-impulse ledger, in one place so the sign cannot diverge -----------------------
+
+
+@dataclass(frozen=True)
+class IspLedger:
+    """Every specific impulse for one exhaust speed at one slug ratio, on one set of conventions.
+
+    **This is the only place in the study where the head-on momentum sign is written down.** Both
+    the propellant ladder (`propellants.Rung`) and the N16 grid (`surface.GridPoint`) delegate
+    here, so a sign fixed here is fixed everywhere and cannot be fixed in one and missed in the
+    other. The tamper study's `beta_ideal = sqrt(1+k) - 1` is this same `-1` with `eta_jet = 1`.
+
+    Two corrections separate `isp_true` from `isp_effective`, they run in **opposite directions**,
+    and the whole point of the ledger is that a figure of merit must carry both:
+
+    - a **credit**, for mass the vehicle never lifted. The impactor arrives from outside at
+      `w`, so only the slug is charged: a factor `(1+k)/k`, which rewards a *small* `k`.
+    - a **debit**, for arriving head-on. The projectile's momentum `m_p w` opposes the ship's
+      motion and the exhaust has to cancel it before any of it becomes thrust: a subtraction of
+      `w/(k g0)`, which also falls hardest on a *small* `k`.
+
+    Because both scale as `1/k`, the credit does **not** simply dominate the debit -- for every
+    fluid in this study the debit is the larger of the two, so `isp_effective < isp_true`.
+    """
+
+    #: Exhaust speed [m/s] actually achieved -- not the loss-free `w/sqrt(1+k)`.
+    exhaust_speed: float
+    #: `k`: kilograms of carried slug per kilogram of impactor.
+    slug_ratio: float
+
+    @property
+    def isp_true(self) -> float:
+        """**Real Isp** [s]: `u_e/g0`, per kilogram of *everything* expelled, slug and vaporised
+        impactor together. Convention-free, and the number to set beside any other thruster."""
+        return self.exhaust_speed / G0
+
+    @property
+    def eta_jet(self) -> float:
+        """The companion's jet efficiency: `u_e / (w/sqrt(1+k))`, the achieved speed over the
+        loss-free one-axis speed. Identically `sqrt(conversion)` (see `surface.GridPoint`)."""
+        return self.exhaust_speed / self.ideal_exhaust_speed
+
+    @property
+    def ideal_exhaust_speed(self) -> float:
+        """`w / sqrt(1+k)` [m/s] -- ADR-0016's own full-conversion identity."""
+        return CLOSING_SPEED / math.sqrt(1.0 + self.slug_ratio)
+
+    @property
+    def thrust_floor(self) -> float:
+        """`1/sqrt(1+k)`: the `eta_jet` below which the burn pushes the ship **backwards**.
+
+        Set `isp_effective = 0` and solve: the exhaust exactly cancels the arriving momentum and
+        nothing is left over. Below it the burn is a brake, whatever the exhaust speed.
+        """
+        return 1.0 / math.sqrt(1.0 + self.slug_ratio)
+
+    @property
+    def pushes_backwards(self) -> bool:
+        """Whether this configuration is under the thrust floor and produces no forward thrust."""
+        return self.eta_jet <= self.thrust_floor
+
+    @property
+    def free_impactor_bonus(self) -> float:
+        """`isp_carried_gross / isp_true - 1 = 1/k`: the **credit**, as a fraction.
+
+        The free ride from mass the vehicle did not carry. It grows as the required slug shrinks,
+        so it rewards hydrogen (+12.9%) far more than water (+2.5%).
+        """
+        return 1.0 / self.slug_ratio
+
+    @property
+    def momentum_debit(self) -> float:
+        """`w/(k g0)` [s]: the **debit**, in seconds of specific impulse.
+
+        It is the *same* momentum for every configuration -- one projectile's -- spread over
+        whatever slug was carried, so like the credit it goes as `1/k` and falls hardest on a lean
+        charge. It is also far larger than the credit: `w/(k g0)` against `u_e/(k g0)`, and
+        `u_e << w` at every point in this study.
+        """
+        return CLOSING_SPEED / (self.slug_ratio * G0)
+
+    @property
+    def isp_carried_gross(self) -> float:
+        """Per kilogram of carried slug [s], **credit only, debit not yet taken**.
+
+        `u_e (1+k) / (k g0)`. **Not a figure of merit** -- it describes a burn whose projectile
+        arrives for free *and* costs nothing in momentum, which no head-on burn does. It is kept
+        because it is the quantity W5 and W8 originally published, because `isp_effective` is
+        built from it, and because the `Isp ~ 1/sqrt(mean atomised mass)` scaling law is a
+        property of *this* convention rather than of the corrected one.
+        """
+        return self.exhaust_speed * (1.0 + self.slug_ratio) / (self.slug_ratio * G0)
+
+    @property
+    def isp_effective(self) -> float:
+        """**THE figure of merit** [s]: per kilogram of carried slug, both corrections applied.
+
+            Isp_effective = [ (1+k) u_e - w ] / (k g0) = w (eta_jet sqrt(1+k) - 1) / (k g0)
+
+        The companion's own head-on form (`templateArxiv.tex`: `I/(mw) = eta_jet sqrt(1+k) - 1`
+        head-on, against `+ 1` on an overtake). **The head-on burn is a momentum debit, never a
+        credit** -- the water-plate study in this repository takes the `+1` because that one is an
+        overtake, and inheriting its sign here would turn a penalty into a bonus of the same size.
+        """
+        return self.isp_carried_gross - self.momentum_debit
+
+
+def isp_ledger(exhaust_speed: float, slug_ratio: float) -> IspLedger:
+    """The Isp ledger for an achieved exhaust speed at a slug ratio. The one constructor."""
+    return IspLedger(exhaust_speed=exhaust_speed, slug_ratio=slug_ratio)
+
+
 def isp_scaling(state: ChamberState, reference: float) -> float:
     """Specific impulse relative to a chamber of slug ratio `reference`, on ADR-0016's identity.
 
@@ -177,14 +293,21 @@ def isp_scaling(state: ChamberState, reference: float) -> float:
     mass, the drift term of `eq:reflection_baseline`, `eta_geom` -- and reproducing a number
     without owning its normalisation would be arithmetic dressed as a result.
 
-    What *is* owned here is the identity ADR-0016 states: exhaust speed `w/sqrt(1+k)`, so the
-    impulse per pulse is `m_p w sqrt(1+k)` and the impulse per kilogram of launched slug goes as
-    `sqrt(1+k)/k`. Every normalisation the paper applies is a factor on that, so the ratio
+    What *is* owned here is the identity ADR-0016 states: at full conversion the exhaust leaves at
+    `w/sqrt(1+k)`, so the impulse per pulse is `m_p w (sqrt(1+k) - 1)` **net of the arriving
+    projectile's own momentum**, and the impulse per kilogram of carried slug goes as
+    `(sqrt(1+k) - 1)/k`. Every normalisation the paper applies is a factor on that, so the ratio
     survives them and can be applied directly to whatever the paper's own column says.
+
+    **The `-1` is the head-on debit and it does not cancel in the ratio.** Being a fixed
+    subtraction, it dilutes whatever advantage a lower `k` buys, so the corrected ratio always
+    lands **between 1 and the credit-only ratio**. Dropping it -- as this function did before the
+    ledger was written -- therefore overstates every chamber-to-chamber gain quoted from it: the
+    200 -> 673 m^3 gain reads 1.8% without the debit and 1.3% with it.
     """
 
     def per_kg(k: float) -> float:
-        return math.sqrt(1.0 + k) / k
+        return (math.sqrt(1.0 + k) - 1.0) / k
 
     return per_kg(state.slug_ratio) / per_kg(reference)
 

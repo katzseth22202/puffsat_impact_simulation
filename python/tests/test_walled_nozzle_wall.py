@@ -229,3 +229,34 @@ def test_the_throat_does_not_self_heal() -> None:
         assert not healing.plates
         assert not healing.self_heals
         assert healing.ablation > 0.0
+
+
+# ---- The contraction, which is where W10 moves the problem ----------------------------------
+
+
+def test_the_bulk_end_wall_load_does_not_depend_on_chamber_volume() -> None:
+    """The reason shrinking the chamber does not make the strike go away: the same pulse energy
+    turns the same corner through the same bore area however long the column in front of it was."""
+    small = wall.end_wall_strike(surface.METHANE, 50.0)
+    large = wall.end_wall_strike(surface.METHANE, 150.0)
+    assert small.incident_bulk == pytest.approx(large.incident_bulk, rel=1e-12)
+
+
+def test_the_arrival_load_gets_worse_as_the_chamber_shrinks() -> None:
+    """A shorter column decelerates the front less, so it arrives faster and on a smaller patch.
+    This is the term that runs the opposite way from the side-wall strike."""
+    strikes = [wall.end_wall_strike(surface.METHANE, v) for v in (50.0, 100.0, 150.0)]
+    assert strikes[0].incident_arrival > strikes[1].incident_arrival > strikes[2].incident_arrival
+    assert strikes[0].exit_speed > strikes[2].exit_speed
+
+
+def test_the_wetted_patch_is_capped_at_the_bore() -> None:
+    """Above the gate the cone has already reached the wall, so it cannot wet more than the bore."""
+    above = wall.end_wall_strike(surface.METHANE, 400.0)
+    assert above.wetted_area == pytest.approx(surface.BORE_AREA, rel=1e-9)
+
+
+def test_the_front_never_carries_more_than_the_pulse() -> None:
+    """Energy conservation on the snowplow: it can only ever hold a share of what arrived."""
+    for volume in (50.0, 100.0, 200.0):
+        assert 0.0 < wall.end_wall_strike(surface.METHANE, volume).front_share < 1.0

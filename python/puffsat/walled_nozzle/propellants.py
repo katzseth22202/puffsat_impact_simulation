@@ -14,20 +14,28 @@ which mentions no species at all. Point it at `eos_water` or `hydrogen` instead 
 and the ladder falls out. `expansion.cooling_history` is likewise parametrised by the EOS and the
 sound speed, so the same nozzle runs every fluid.
 
-**Why lighter wins twice.** A light fluid stores more energy per kilogram, because energy at
-10 kK is mostly `3/2 kT` per *particle* and a kilogram of a light gas is more particles. Storing
-more per kilogram means less mass is needed to absorb the pulse, so `k` falls -- and the exhaust
-speed `w / sqrt(1+k)` rises. Then `k` enters a second time through the effective-Isp convention
-`(1+k)/k`, which also rewards a small `k`. The net is close to `Isp ~ 1/sqrt(mean atomised
-particle mass)`, and the solved numbers follow that scaling to a few percent.
+**Why lighter wins twice, and then gives some of it back.** A light fluid stores more energy per
+kilogram, because energy at 10 kK is mostly `3/2 kT` per *particle* and a kilogram of a light gas
+is more particles. Storing more per kilogram means less mass is needed to absorb the pulse, so `k`
+falls -- and the exhaust speed `w / sqrt(1+k)` rises. Then `k` enters a second time through the
+carried-mass credit `(1+k)/k`, which also rewards a small `k`; on that convention alone the ladder
+follows `Isp ~ 1/sqrt(mean atomised particle mass)` to a few percent. But `k` enters a **third**
+time, through the head-on momentum debit `w/(k g0)`, and that one *punishes* a small `k`. So the
+corrected ladder is compressed relative to the scaling law: hydrogen still wins, by 1.55x over
+methane rather than the 1.88x the credit-only column shows.
 
-**Two Isp conventions, and they must not be mixed** (the mistake W5 records):
+**Three Isp quantities, and they must not be mixed** (the mistake W5 records). All three come from
+`chamber.IspLedger`, which is the single place the head-on sign is written down:
 
-- `isp_total` -- exhaust speed over `g0`, per kilogram of *everything* expelled.
-- `isp_effective` -- per kilogram of *launched slug*, a factor `(1+k)/k` larger. This is the
-  companion's column, and it is the figure of merit for a vehicle that carries the slug.
+- `isp_true` (alias `isp_total`) -- **real Isp**: exhaust speed over `g0`, per kilogram of
+  *everything* expelled. Convention-free.
+- `isp_effective` -- **the figure of merit**: per kilogram of *carried slug*, with the free
+  impactor credited **and the arriving momentum debited**. Below `isp_true` for every fluid here.
+- `isp_carried_gross` -- the credit-only intermediate, `(1+k)/k` times `isp_true`. **Not a figure
+  of merit**; retained because it is what W5 and W8 first published and because the `1/sqrt(mean
+  mass)` scaling law is a property of this convention.
 
-Neither carries the launch-ledger normalisations this repository does not own (`eta_geom`, the
+None carries the launch-ledger normalisations this repository does not own (`eta_geom`, the
 drift term, vessel mass), so **these numbers are comparable across fluids but not against the
 paper's absolute figures.**
 
@@ -47,7 +55,8 @@ from pathlib import Path
 from puffsat import eos_methane, eos_water, expansion
 from puffsat.walled_nozzle import chamber, hydrogen
 
-G0 = 9.80665
+#: Standard gravity, taken from `chamber` so every Isp in the study divides by the same one.
+G0 = chamber.G0
 
 #: Nozzle the ladder is run through: ADR-0016's 3 m bore over its widest throat, the
 #: configuration the ask itself states. W6 argues for a narrower one; the ladder is run at the
@@ -82,9 +91,14 @@ class Rung:
     estimated: bool
 
     @property
+    def isp(self) -> chamber.IspLedger:
+        """Every specific impulse for this rung. The algebra lives in `chamber.IspLedger`."""
+        return chamber.isp_ledger(self.exhaust_speed, self.slug_ratio)
+
+    @property
     def isp_total(self) -> float:
         """Per kilogram of everything expelled [s]."""
-        return self.exhaust_speed / G0
+        return self.isp.isp_true
 
     @property
     def isp_true(self) -> float:
@@ -101,20 +115,39 @@ class Rung:
 
     @property
     def free_impactor_bonus(self) -> float:
-        """`isp_effective / isp_true - 1 = 1/k`: the free ride from mass the vehicle did not
+        """`isp_carried_gross / isp_true - 1 = 1/k`: the free ride from mass the vehicle did not
         carry. **It grows as the required slug shrinks**, so it rewards hydrogen (+12.9%) far
-        more than water (+2.5%) -- a second, independent advantage on top of the chemistry."""
-        return 1.0 / self.slug_ratio
+        more than water (+2.5%) -- a second, independent advantage on top of the chemistry.
+
+        **It is not the whole mass ledger**: the head-on debit runs as `1/k` too, and is larger.
+        """
+        return self.isp.free_impactor_bonus
+
+    @property
+    def momentum_debit(self) -> float:
+        """`w/(k g0)` [s]: the momentum the arriving projectile costs, charged against thrust."""
+        return self.isp.momentum_debit
+
+    @property
+    def isp_carried_gross(self) -> float:
+        """Per kilogram of carried slug [s], credit only. **Not a figure of merit** -- see the
+        module docstring and `chamber.IspLedger`. This is the column W8 first published."""
+        return self.isp.isp_carried_gross
 
     @property
     def isp_effective(self) -> float:
-        """Per kilogram of launched slug [s] -- the companion's column, unnormalised."""
-        return self.exhaust_speed * (1.0 + self.slug_ratio) / (self.slug_ratio * G0)
+        """**The figure of merit** [s]: carried-mass credit *and* head-on momentum debit."""
+        return self.isp.isp_effective
+
+    @property
+    def eta_jet(self) -> float:
+        """The companion's jet efficiency, `u_e/(w/sqrt(1+k))` -- identically `sqrt(conversion)`."""
+        return self.isp.eta_jet
 
     @property
     def ideal_exhaust_speed(self) -> float:
         """`w / sqrt(1+k)` [m/s]: the speed at full conversion, ADR-0016's own identity."""
-        return chamber.CLOSING_SPEED / math.sqrt(1.0 + self.slug_ratio)
+        return self.isp.ideal_exhaust_speed
 
 
 def solve_slug_ratio(pe: Eos, temp: float, volume: float = VOLUME) -> tuple[float, float, float]:
@@ -234,7 +267,8 @@ def ladder(temp: float = chamber.FLOWN_TEMPERATURE) -> list[Rung]:
 
 CSV_HEADER = (
     "fluid,estimated,mean_atomised_amu,slug_ratio,carried_slug_kg,rho,u_j_kg,exit_temp_k,"
-    "exhaust_speed_m_s,conversion,isp_true_s,isp_effective_s,free_impactor_bonus\n"
+    "exhaust_speed_m_s,conversion,eta_jet,isp_true_s,isp_effective_s,isp_carried_gross_s,"
+    "momentum_debit_s,free_impactor_bonus\n"
 )
 
 
@@ -247,8 +281,9 @@ def write(rungs: list[Rung], path: Path = DEFAULT_OUTPUT) -> None:
             fh.write(
                 f"{r.name},{r.estimated},{r.mean_atomised_mass:.4f},{r.slug_ratio:.4f},"
                 f"{r.carried_slug_mass:.2f},{r.rho:.6e},{r.energy:.6e},{r.exit_temp:.2f},"
-                f"{r.exhaust_speed:.2f},{r.conversion:.5f},{r.isp_true:.1f},"
-                f"{r.isp_effective:.1f},{r.free_impactor_bonus:.5f}\n"
+                f"{r.exhaust_speed:.2f},{r.conversion:.5f},{r.eta_jet:.5f},{r.isp_true:.1f},"
+                f"{r.isp_effective:.1f},{r.isp_carried_gross:.1f},{r.momentum_debit:.1f},"
+                f"{r.free_impactor_bonus:.5f}\n"
             )
 
 
@@ -269,7 +304,7 @@ def main() -> None:
     )
     print(
         f"{'fluid':10} {'m_bar':>6} {'k':>7} {'u MJ/kg':>8} {'exit T':>7} {'u_e':>7} "
-        f"{'conv':>6} {'Isp tot':>8} {'Isp EFF':>8}"
+        f"{'conv':>6} {'Isp TRUE':>9} {'Isp EFF':>8} {'(gross':>8} {'debit)':>8}"
     )
 
     rungs = ladder()
@@ -277,7 +312,8 @@ def main() -> None:
         print(
             f"{r.name:10} {r.mean_atomised_mass:6.2f} {r.slug_ratio:7.2f} "
             f"{r.energy / 1e6:8.1f} {r.exit_temp:7.0f} {r.exhaust_speed:7.0f} "
-            f"{r.conversion:6.3f} {r.isp_total:8.0f} {r.isp_effective:8.0f}"
+            f"{r.conversion:6.3f} {r.isp_total:9.0f} {r.isp_effective:8.0f} "
+            f"{r.isp_carried_gross:8.0f} {-r.momentum_debit:8.0f}"
         )
 
     print()
@@ -286,9 +322,15 @@ def main() -> None:
         print(
             f"{'ammonia*':10} {a.mean_atomised_mass:6.2f} {a.slug_ratio:7.2f} "
             f"{a.energy / 1e6:8.1f} {'--':>7} {a.exhaust_speed:7.0f} "
-            f"{a.conversion:6.3f} {a.isp_total:8.0f} {a.isp_effective:8.0f}"
+            f"{a.conversion:6.3f} {a.isp_total:9.0f} {a.isp_effective:8.0f} "
+            f"{a.isp_carried_gross:8.0f} {-a.momentum_debit:8.0f}"
         )
-    print("  * ESTIMATE -- no eos_ammonia; conversion assumed, not solved\n")
+    print("  * ESTIMATE -- no eos_ammonia; conversion assumed, not solved")
+    print(
+        "  Isp EFF = gross - debit: the free impactor credited, the head-on momentum charged."
+        "\n  It is THE figure of merit and it is below Isp TRUE, because the debit w/(k g0)"
+        "\n  exceeds the credit u_e/(k g0) whenever u_e < w -- which is everywhere here.\n"
+    )
 
     methane = _by_name(rungs, "methane")
     print("Against 1/sqrt(mean atomised particle mass), normalised to methane:")
@@ -296,8 +338,13 @@ def main() -> None:
         scaling = math.sqrt(methane.mean_atomised_mass / r.mean_atomised_mass)
         print(
             f"  {r.name:10} predicted {scaling:5.2f}   "
-            f"actual {r.isp_effective / methane.isp_effective:5.2f}"
+            f"gross {r.isp_carried_gross / methane.isp_carried_gross:5.2f}   "
+            f"EFFECTIVE {r.isp_effective / methane.isp_effective:5.2f}"
         )
+    print(
+        "  The scaling law is a property of the GROSS convention. The debit compresses the"
+        "\n  ladder, because it falls hardest on the small-k fluids the law rewards."
+    )
 
     print("\nThe ask's own slug ratios, for comparison:")
     print(f"  water     ask k = 37.70   solved {_by_name(rungs, 'water').slug_ratio:.2f}")

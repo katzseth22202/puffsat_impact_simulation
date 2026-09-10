@@ -42,22 +42,41 @@ def test_the_ladder_sorts_by_mean_atomised_particle_mass(
     assert all(a.isp_effective > b.isp_effective for a, b in pairwise(ordered))
 
 
-def test_effective_isp_tracks_one_over_root_mean_mass(rungs: list[propellants.Rung]) -> None:
-    """`Isp ~ 1/sqrt(m_bar)` to within 10% across a factor of six in particle mass. This is the
-    rocket equation's molecular-weight law reappearing in a chamber that is heated by an impact
-    rather than by combustion, which is why the ordering is not negotiable by nozzle design."""
+def test_the_scaling_law_is_a_property_of_the_gross_convention(
+    rungs: list[propellants.Rung],
+) -> None:
+    """`Isp ~ 1/sqrt(m_bar)` to within 10% across a factor of six in particle mass -- **on the
+    credit-only column**. This is the rocket equation's molecular-weight law reappearing in a
+    chamber heated by an impact rather than by combustion, which is why the ordering is not
+    negotiable by nozzle design.
+
+    **The corrected column does not obey it, and that is a result rather than a defect.** The
+    head-on debit `w/(k g0)` also runs as `1/k`, so it falls hardest on exactly the light fluids
+    the law rewards, and the ladder comes out compressed. Asserting the law on `isp_effective`
+    would be asserting that the debit does not exist.
+    """
     methane = next(r for r in rungs if r.name == "methane")
     for r in rungs:
         predicted = math.sqrt(methane.mean_atomised_mass / r.mean_atomised_mass)
-        assert r.isp_effective / methane.isp_effective == pytest.approx(predicted, rel=0.10)
+        gross = r.isp_carried_gross / methane.isp_carried_gross
+        assert gross == pytest.approx(predicted, rel=0.10)
+    hydrogen = next(r for r in rungs if r.name == "hydrogen")
+    corrected = hydrogen.isp_effective / methane.isp_effective
+    assert corrected < hydrogen.isp_carried_gross / methane.isp_carried_gross
+    assert corrected > 1.0
 
 
 def test_water_is_below_methane_and_hydrogen_far_above_it(
     rungs: list[propellants.Rung],
 ) -> None:
-    """The solved part of the ladder. Water is *below* methane and hydrogen is nearly double it,
-    both on their own EOS -- so the carbon exposure of N10 item 5 cannot be escaped by switching
-    to water without paying for it in specific impulse.
+    """The solved part of the ladder. Water is *below* methane and hydrogen is half again above
+    it, both on their own EOS -- so the carbon exposure of N10 item 5 cannot be escaped by
+    switching to water without paying for it in specific impulse.
+
+    **The margins are the corrected ones and they are narrower than the credit-only column
+    showed**: hydrogen leads methane by 1.55x rather than 1.88x, and methane leads water by 1.23x
+    rather than 1.42x. The debit compresses the ladder because it punishes a small `k`. The
+    *ordering* is untouched, which is the part the verdict rests on.
 
     **Ammonia is deliberately not asserted against methane here**: its conversion fraction is
     assumed rather than solved, and `test_ammonia_ordering_is_not_established` records why that
@@ -67,9 +86,14 @@ def test_water_is_below_methane_and_hydrogen_far_above_it(
     water = next(r for r in rungs if r.name == "water")
     hydrogen = next(r for r in rungs if r.name == "hydrogen")
     assert water.isp_effective < methane.isp_effective
-    assert hydrogen.isp_effective > 1.7 * methane.isp_effective
-    # Ammonia clears water at every plausible conversion; that much is safe.
-    for conv in (0.35, 0.406, 0.45):
+    assert hydrogen.isp_effective > 1.5 * methane.isp_effective
+    assert methane.isp_effective / water.isp_effective == pytest.approx(1.23, abs=0.02)
+    # **Ammonia no longer clears water at the bottom of its assumed conversion range.** It did on
+    # the credit-only column. Ammonia's `k` is 28.5 against water's 39.5, so it pays a bigger
+    # debit, and at 0.35 conversion that is enough to put it just under -- 594 s against 600 s.
+    assert propellants.ammonia_rung(0.35).isp_effective < water.isp_effective
+    assert propellants.ammonia_rung(0.35).isp_carried_gross > water.isp_carried_gross
+    for conv in (0.406, 0.45):
         assert propellants.ammonia_rung(conv).isp_effective > water.isp_effective
 
 
@@ -78,33 +102,57 @@ def test_ammonia_ordering_is_not_established(rungs: list[propellants.Rung]) -> N
 
     Methane converts just 0.406 for a reason W9 explains: its carbon is parked in C3 at the exit
     with only 30% of atomisation returned. Ammonia has no C3 trap -- its store comes back as N2
-    (941 kJ/mol) and H2 -- so a higher conversion is physically plausible. The crossover is 0.601,
-    a factor of 1.48 above methane, and hydrogen already reaches 0.532 at this same area ratio,
-    so that is a stretch rather than an impossibility.
+    (941 kJ/mol) and H2 -- so a higher conversion is physically plausible.
 
-    This test pins the crossover so nobody reads the W8 table as settling ammonia.
+    **The correction moves the crossover a long way, and towards ammonia.** On the credit-only
+    column ammonia had to reach 0.601 to match methane -- a factor 1.48 above methane's own, a
+    real stretch. With the head-on debit charged it needs only **0.477**, a factor 1.18, which
+    hydrogen already beats at this same area ratio. The reason is that inverting the corrected form
+    adds back the debit before dividing: `u_e = (Isp_eff k g0 + w)/(1+k)`, and ammonia's leaner
+    charge pays more of that debit than methane does, so less exhaust speed is asked of it.
+
+    This test pins the crossover so nobody reads the W8 table as settling ammonia -- and after the
+    correction it settles it even less than before.
     """
     methane = next(r for r in rungs if r.name == "methane")
     u = propellants.ammonia_energy()
     k = chamber.SPECIFIC_PULSE_ENERGY / u - 1.0
-    needed = (methane.isp_effective * propellants.G0 * k / (1.0 + k)) ** 2 / (2.0 * u)
-    assert needed == pytest.approx(0.601, abs=0.01)
+    speed = (methane.isp_effective * k * propellants.G0 + chamber.CLOSING_SPEED) / (1.0 + k)
+    needed = speed**2 / (2.0 * u)
+    assert needed == pytest.approx(0.477, abs=0.01)
     assert needed > methane.conversion
+    # The credit-only crossover, kept so the size of the shift is on the record.
+    gross_speed = methane.isp_carried_gross * propellants.G0 * k / (1.0 + k)
+    assert gross_speed**2 / (2.0 * u) == pytest.approx(0.601, abs=0.01)
     # Not out of reach: a solved rung in this very table beats it on conversion... nearly.
     hydrogen = next(r for r in rungs if r.name == "hydrogen")
     assert hydrogen.conversion > 0.5
 
 
-def test_effective_exceeds_total_and_rewards_a_small_slug_ratio(
+def test_the_credit_exceeds_total_but_the_corrected_figure_does_not(
     rungs: list[propellants.Rung],
 ) -> None:
-    """`(1+k)/k` is where `k` enters a second time. It is 1.13 for hydrogen and 1.03 for water, so
-    the effective convention *widens* the gap the fixed point already opened."""
+    """**The correction that reverses the sign of a whole column.**
+
+    `(1+k)/k` is where `k` enters a second time, and on its own it *widens* the gap the fixed
+    point opened: 1.13x for hydrogen against 1.03x for water. But `k` enters a third time through
+    the head-on debit `w/(k g0)`, and since the credit is only `u_e/(k g0)`, the debit wins
+    wherever `u_e < w` -- which is every rung in this study, by a factor of four or more.
+
+    So the corrected figure of merit sits **below** the real Isp, not above it. A reader who takes
+    the credit and forgets the debit reads a number too high by `(w - u_e)/(k g0)`.
+    """
     for r in rungs:
-        assert r.isp_effective > r.isp_total
+        assert r.isp_carried_gross > r.isp_total
+        assert r.isp_effective < r.isp_total
+        assert r.exhaust_speed < chamber.CLOSING_SPEED
+        assert r.isp_carried_gross - r.isp_effective == pytest.approx(r.momentum_debit)
     ordered = sorted(rungs, key=lambda r: r.slug_ratio)
-    boosts = [r.isp_effective / r.isp_total for r in ordered]
+    boosts = [r.isp_carried_gross / r.isp_total for r in ordered]
     assert all(a > b for a, b in pairwise(boosts))
+    # The debit runs the same way as the credit, which is why it cannot be waved off as small.
+    debits = [r.momentum_debit for r in ordered]
+    assert all(a > b for a, b in pairwise(debits))
 
 
 def test_conversion_is_a_fraction_and_below_the_ideal_speed(
@@ -221,6 +269,9 @@ def test_the_free_impactor_bonus_rewards_the_smallest_slug(
 
     This is a second advantage for light propellants, independent of the chemistry that set `k`
     in the first place, and it is why W8 prints both columns rather than picking one.
+
+    **It is only half the mass ledger.** The head-on momentum debit is also `1/k`-shaped and is
+    larger, so this bonus never survives into the figure of merit intact.
     """
     by_k = sorted(rungs, key=lambda r: r.slug_ratio)
     assert [r.name for r in by_k] == ["hydrogen", "methane", "water"]
@@ -229,6 +280,60 @@ def test_the_free_impactor_bonus_rewards_the_smallest_slug(
     assert by_k[0].free_impactor_bonus == pytest.approx(0.129, abs=0.003)
     assert by_k[-1].free_impactor_bonus == pytest.approx(0.025, abs=0.003)
     for r in rungs:
-        assert r.isp_effective / r.isp_true == pytest.approx(1.0 + r.free_impactor_bonus)
+        assert r.isp_carried_gross / r.isp_true == pytest.approx(1.0 + r.free_impactor_bonus)
         assert r.carried_slug_mass == pytest.approx(r.slug_ratio * chamber.IMPACTOR_MASS)
+        # And the bonus is not the whole mass ledger: the debit runs as 1/k too, and is bigger.
+        assert r.momentum_debit > r.free_impactor_bonus * r.isp_true
     assert by_k[0].carried_slug_mass == pytest.approx(194.2, abs=1.0)
+
+
+# ---- The head-on momentum debit ---------------------------------------------------------------
+
+
+def test_the_ladder_uses_the_companion_head_on_form(rungs: list[propellants.Rung]) -> None:
+    """`Isp_eff = w (eta_jet sqrt(1+k) - 1) / (k g0)` -- the companion's own head-on expression,
+    and the same `sqrt(1+k) - 1` the tamper study's `beta_ideal` carries at `eta_jet = 1`."""
+    for r in rungs:
+        paper = (
+            chamber.CLOSING_SPEED
+            * (r.eta_jet * math.sqrt(1.0 + r.slug_ratio) - 1.0)
+            / (r.slug_ratio * propellants.G0)
+        )
+        assert r.isp_effective == pytest.approx(paper, rel=1e-9)
+
+
+def test_eta_jet_is_the_square_root_of_the_conversion(rungs: list[propellants.Rung]) -> None:
+    """The bridge to the companion's convention: `(1+k) u = w^2/2` makes `eta_jet^2` the
+    conversion fraction, so a conversion quoted *as* an `eta_jet` is wrong by a square root."""
+    for r in rungs:
+        assert r.eta_jet == pytest.approx(math.sqrt(r.conversion), rel=1e-6)
+
+
+def test_the_debit_is_one_projectiles_momentum(rungs: list[propellants.Rung]) -> None:
+    """`w/(k g0)`: the same momentum for every rung, spread over whatever slug was carried."""
+    for r in rungs:
+        assert r.momentum_debit * r.slug_ratio * propellants.G0 == pytest.approx(
+            chamber.CLOSING_SPEED, rel=1e-9
+        )
+
+
+def test_every_rung_clears_the_thrust_floor(rungs: list[propellants.Rung]) -> None:
+    """Below `eta_jet = 1/sqrt(1+k)` the burn is a brake. The ladder clears it, but on this
+    convention that has to be checked rather than assumed -- it is what `isp_effective > 0` means.
+    """
+    for r in rungs:
+        assert r.eta_jet > r.isp.thrust_floor
+        assert not r.isp.pushes_backwards
+        assert r.isp_effective > 0.0
+
+
+def test_the_ordering_survives_the_debit(rungs: list[propellants.Rung]) -> None:
+    """**The verdict that had to be re-checked, not assumed.** The debit punishes small `k`, which
+    is hydrogen's whole advantage, so the correction could in principle have reordered the ladder.
+    It does not: it compresses hydrogen's lead over methane from 1.88x to 1.55x."""
+    ordered = sorted(rungs, key=lambda r: r.slug_ratio)
+    assert [r.name for r in ordered] == ["hydrogen", "methane", "water"]
+    assert all(a.isp_effective > b.isp_effective for a, b in pairwise(ordered))
+    hydrogen, methane = ordered[0], ordered[1]
+    assert hydrogen.isp_carried_gross / methane.isp_carried_gross == pytest.approx(1.88, abs=0.02)
+    assert hydrogen.isp_effective / methane.isp_effective == pytest.approx(1.55, abs=0.02)

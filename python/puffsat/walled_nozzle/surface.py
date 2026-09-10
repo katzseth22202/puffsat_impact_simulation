@@ -292,24 +292,71 @@ class GridPoint:
     below_carbon_floor: bool
 
     @property
-    def exhaust_speed_ideal(self) -> float:
-        """`w / sqrt(1+k)` [m/s] -- ADR-0016's full-conversion identity."""
-        return chamber.CLOSING_SPEED / math.sqrt(1.0 + self.slug_ratio)
-
-    @property
     def exit_speed_capped(self) -> float:
         """Exhaust speed [m/s] on `conversion_capped` -- the bound, not the equilibrium branch."""
         return math.sqrt(2.0 * self.conversion_capped * self.energy_c)
 
     @property
+    def isp(self) -> chamber.IspLedger:
+        """Every specific impulse for this cell, on the **capped** conversion.
+
+        The algebra -- and in particular the sign of the head-on momentum term -- lives in
+        `chamber.IspLedger`, shared with the propellant ladder so the two cannot diverge.
+        """
+        return chamber.isp_ledger(self.exit_speed_capped, self.slug_ratio)
+
+    @property
+    def exhaust_speed_ideal(self) -> float:
+        """`w / sqrt(1+k)` [m/s] -- ADR-0016's full-conversion identity."""
+        return self.isp.ideal_exhaust_speed
+
+    @property
     def isp_true(self) -> float:
-        """Per kilogram of everything expelled [s], on the capped conversion."""
-        return self.exit_speed_capped / propellants.G0
+        """**Real Isp** [s]: per kilogram of everything expelled, on the capped conversion."""
+        return self.isp.isp_true
+
+    @property
+    def isp_carried_gross(self) -> float:
+        """Per kilogram of carried slug [s], **credit only, before the momentum debit**.
+
+        **Not the figure of merit on a head-on burn** and must not be quoted as one. Kept because
+        it is the quantity W5 and W8 first published, and because `isp_effective` is built on it.
+        """
+        return self.isp.isp_carried_gross
 
     @property
     def isp_effective(self) -> float:
-        """Per kilogram of *launched slug* [s] -- the companion's column (W5's convention)."""
-        return self.exit_speed_capped * (1.0 + self.slug_ratio) / (self.slug_ratio * propellants.G0)
+        """**THE figure of merit** [s]: `[ (1+k) u_e - w ] / (k g0)`.
+
+        The free impactor credited *and* the head-on momentum debited -- the companion's own
+        head-on form. See `chamber.IspLedger` for the derivation and the sign warning.
+        """
+        return self.isp.isp_effective
+
+    @property
+    def eta_jet(self) -> float:
+        """The companion's jet efficiency: exhaust speed over the loss-free one-axis speed.
+
+        `u_e / (w / sqrt(1+k))`, which is identically **`sqrt(conversion)`** -- because
+        `(1+k) u = w^2/2` makes `w^2/(1+k) = 2u`, so the ratio of the squares is `u_e^2/(2u)`.
+        That identity is the bridge between this repository's convention-free conversion fraction
+        and the companion's `eta_jet`, and it is pinned in the tests.
+        """
+        return self.isp.eta_jet
+
+    @property
+    def thrust_floor(self) -> float:
+        """`1/sqrt(1+k)`: the `eta_jet` below which this burn pushes the ship *backwards*."""
+        return self.isp.thrust_floor
+
+    @property
+    def momentum_debit(self) -> float:
+        """The incoming momentum charged against thrust, in seconds [s].
+
+        `w / (k g0)`. It is the *same* momentum for every configuration, so it falls hardest on a
+        lean charge: methane at 12 kK pays 422 s of it, water at 6 kK only 85 s.
+        """
+        return self.isp.momentum_debit
 
     @property
     def blowdown_fits(self) -> bool:
@@ -647,7 +694,8 @@ CSV_HEADER = (
     "u_j_kg,store_charged,exit_temp_k,exit_rho,exit_speed_m_s,conversion,conversion_capped,"
     "store_returned,"
     "store_held_exit,min_damkohler,margin_decades,verdict,freeze_area_ratio,freeze_temp_k,"
-    "nozzle_length_m,blowdown_ms,blowdown_fits,isp_true_s,isp_effective_s,below_carbon_floor\n"
+    "nozzle_length_m,blowdown_ms,blowdown_fits,eta_jet,thrust_floor,isp_true_s,"
+    "isp_effective_s,isp_carried_gross_s,momentum_debit_s,below_carbon_floor\n"
 )
 
 
@@ -668,7 +716,9 @@ def write(points: list[GridPoint], path: Path = DEFAULT_OUTPUT) -> None:
                 f"{'' if p.freeze_area_ratio is None else f'{p.freeze_area_ratio:.3f}'},"
                 f"{'' if p.freeze_temp is None else f'{p.freeze_temp:.1f}'},"
                 f"{p.nozzle_length:.3f},{p.blowdown_s * 1e3:.2f},{p.blowdown_fits},"
-                f"{p.isp_true:.1f},{p.isp_effective:.1f},{p.below_carbon_floor}\n"
+                f"{p.eta_jet:.5f},{p.thrust_floor:.5f},{p.isp_true:.1f},"
+                f"{p.isp_effective:.1f},{p.isp_carried_gross:.1f},"
+                f"{p.momentum_debit:.1f},{p.below_carbon_floor}\n"
             )
 
 
@@ -720,7 +770,7 @@ def _print_grid(points: list[GridPoint]) -> None:
                 f"{volume:8.0f} "
                 + "".join(f"{row[a].conversion_capped:9.3f}" for a in throats if a in row)
             )
-        print("  Isp effective [s], on the capped conversion")
+        print("  Isp EFFECTIVE [s] -- free impactor credited, head-on momentum debited.")
         for volume in sorted({p.volume for p in block}):
             row = {p.throat_area: p for p in block if p.volume == volume}
             print(

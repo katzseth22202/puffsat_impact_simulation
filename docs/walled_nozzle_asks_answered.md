@@ -32,8 +32,10 @@ and **W6 says the remaining lever is the throat, not the chemistry**.
 
 **One table is meant to be lifted straight into the paper:** the propellant ladder in
 [W8](#w8-the-propellant-ladder-solved--with-true-and-effective-isp-side-by-side), which gives
-**true and effective Isp side by side** for hydrogen, methane, water and (estimated) ammonia. It
-replaces the ladder ADR-0016 quotes from assumed slug ratios, and carrying both columns is what
+**real and effective Isp side by side** for hydrogen, methane, water and (estimated) ammonia,
+with the **head-on momentum debit charged** — the correction that puts effective Isp *below* real
+Isp rather than above it, and compresses hydrogen's lead over methane from 1.88x to 1.55x. It
+replaces the ladder ADR-0016 quotes from assumed slug ratios, and carrying every column is what
 prevents the convention error W5 records from propagating.
 
 **If you read only three:** W1 (the correction that cost methane 40 s should be largely unwound),
@@ -80,39 +82,56 @@ returns 0.458. Le Chatelier pushes in the direction the paper argues; at 600 bar
 near strong enough to do what was booked.
 
 **What to do with the Isp.** On ADR-0016's own exhaust-speed identity the impulse per kilogram of
-launched slug goes as `sqrt(1+k)/k`, so the ratio survives every normalisation the paper's
-effective-Isp column applies. Against the ask's own `k = 18.96` geometry:
+launched slug goes as `(√(1+k) − 1)/k` — the `−1` being the arriving projectile's own momentum,
+which the exhaust must cancel before any of it is thrust — so the ratio survives every
+normalisation the paper's effective-Isp column applies. Against the ask's own `k = 18.96`
+geometry:
 
 | chamber | 8,000 K | 10,000 K | 12,000 K |
 | --- | ---: | ---: | ---: |
-| 200 m³ | 0.878 | 0.984 | 1.035 |
-| 400 m³ | 0.918 | 0.996 | 1.043 |
-| 673 m³ | 0.940 | **1.001** | 1.049 |
+| 200 m³ | 0.906 | 0.988 | 1.026 |
+| 400 m³ | 0.938 | 0.997 | 1.031 |
+| 673 m³ | 0.955 | **1.001** | 1.035 |
 
-At the flown point the three chambers are within 1.8% of each other and within 1.6% of the
-ask's geometry. **The 200 → 673 m³ gain is 1.8%, not the +3.4% ADR-0016 books.**
+At the flown point the three chambers are within 1.3% of each other and within 1.2% of the
+ask's geometry. **The 200 → 673 m³ gain is 1.3%, not the +3.4% ADR-0016 books.**
 
-**Where the effective Isp lands depends which of ADR-0016's own rows you anchor on, and the two
-do not agree** — which is itself worth knowing, because it says the effective-Isp column is not a
-pure function of `k`:
+> **These ratios carry the head-on momentum debit** and an earlier draft of this document did not.
+> The per-kilogram-of-slug impulse goes as `(√(1+k) − 1)/k`, not `√(1+k)/k`: the arriving
+> projectile's own momentum has to be cancelled before any exhaust counts as thrust. Being a
+> *fixed* subtraction, it dilutes whatever a lower `k` buys, so every ratio moves toward 1 — the
+> 200 → 673 m³ gain reads 1.8% without it and **1.3% with it**. The verdict is unchanged and
+> slightly strengthened: **chamber volume is not a meaningful Isp dial.**
+
+**Where the effective Isp lands depends which of ADR-0016's own rows you anchor on. On the
+corrected convention the two rows very nearly agree — which is itself the answer to a question
+this document previously left open:**
 
 | anchor | its `k` | 200 m³ | 400 m³ | 673 m³ |
 | --- | ---: | ---: | ---: | ---: |
-| pre-correction, full atomisation, 1132 s | 18.67 | 1105 s | 1118 s | 1124 s |
-| post-correction, 1080 s at 400 m³ | 21.59 | 1137 s | 1151 s | 1157 s |
+| pre-correction, full atomisation, 1132 s | 18.67 | 1112 s | 1122 s | 1126 s |
+| post-correction, 1080 s at 400 m³ | 21.59 | 1123 s | 1133 s | 1137 s |
 
 The first is the like-for-like comparison — both cases have the store fully charged, and it
-differs from 1132 s only because the solved `u` is 139.9 MJ/kg rather than the assumed 143. **Take
-1105–1124 s**, and treat the second row as evidence that something other than `sqrt(1+k)/k` is in
-the paper's column and should be identified before either number is printed.
+differs from 1132 s only because the solved `u` is 139.9 MJ/kg rather than the assumed 143.
+**Take 1112–1126 s.**
+
+**The debit is most of what the two rows used to disagree about.** On the credit-only scaling they
+came out 1105–1124 s against 1137–1157 s, about **32 s (2.9%) apart**, and this document flagged
+that gap as evidence that "something other than `√(1+k)/k` is in the paper's column". Re-scaled
+with the `−1`, the gap closes to **11 s (1.0%)**. The missing ingredient was largely the head-on
+debit — which the companion's own head-on form (`I/(mw) = η_jet√(1+k) − 1`) already carries, so
+this is the two repositories agreeing rather than a new assumption. The residual 1% is small
+enough to be the anchors' own rounding.
 
 Either way the direction is the same: **up from the current 1059–1095 s**, by 2–6%. Subject
 throughout to N10.5, which is not answered here. N10.1–3 *is* now answered (W5) and it confirms
 the charged store is genuinely returned rather than frozen out — but note that W5's exit Isp is
-computed directly from the expansion rather than from `sqrt(1+k)/k`, and lands at 1074–1076 s at
-the ask's own throat — but on a *different normalisation*, so **the two must not be compared
-directly**; W5 sets out why. The `sqrt(1+k)/k` ratio above is the safe way to move a number in
-this column, and it is what this section uses.
+computed directly from the expansion rather than from the `(√(1+k) − 1)/k` identity, and is a
+*total* Isp of 1074–1076 s at the ask's own throat — a different convention *and* a different
+normalisation, so **the two must not be compared directly**; W5 sets out why. The
+`(√(1+k) − 1)/k` ratio above is the safe way to move a number in this column, and it is what this
+section uses.
 
 **Two things this does not license.** The 8,000 K row is a real 6–12% penalty, so the argument
 for 10,000 K over a cooler chamber is now stronger than the argument against a hotter one. And a
@@ -231,17 +250,26 @@ wrong, so it is spelled out:
 - **What is quoted above is *total*** — exit flow speed divided by `g0`, counting every kilogram
   expelled (slug *and* vaporised impactor), with **no** divergence or geometry loss, no drift
   term and no vessel mass.
-- **ADR-0016's 1080 s is *effective*** — impulse per kilogram of *launched slug*, which is a
-  factor `(1+k)/k = 1.051` larger for the same exhaust speed, and it additionally carries the
-  launch-ledger normalisations this repository does not own (`eta_geom`, the drift term of
-  `eq:reflection_baseline`, vessel mass). Those are worth a further **factor 0.609 on velocity**:
-  ADR-0016's own identity `w/sqrt(1+k)` gives 16 541 m/s, which on its slug convention would be
-  1773 s, and the column says 1080 s.
+- **ADR-0016's 1080 s is *effective*** — impulse per kilogram of *launched slug*. Two corrections
+  separate it from the total, and **they pull in opposite directions**: a **credit** of `(1+k)/k =
+  1.051` for the impactor mass the vehicle never lifted, and a **debit** of `w/(k g₀) = 391 s` for
+  the momentum that same impactor brings in head-on and the exhaust must cancel first. The debit
+  is the larger by a factor of seven. It additionally carries the launch-ledger normalisations
+  this repository does not own (`eta_geom`, the drift term of `eq:reflection_baseline`, vessel
+  mass).
 
-Put on the paper's slug convention our exhaust speeds give 1129–1133 s at 7 m², but that number
-still lacks the 0.609 of normalisation, so **it must not be read as reproducing 1080 s either.**
-Any near-agreement between an unnormalised total and a normalised effective is two errors
-cancelling, and this document should not trade on it. `chamber.isp_scaling` refuses to emit an
+Put on the paper's slug convention **with both corrections**, our exhaust speeds give **726–738 s**
+at 7 m² — below the total, not above it. On the credit-only convention the same speeds read
+1129–1133 s, and an earlier draft of this document quoted that.
+
+**What the residual normalisation is worth depends on which convention ADR-0016's column is in,
+and this is worth the paper side confirming:** ADR-0016's identity `w/√(1+k)` gives 16 541 m/s at
+the solved `k`, which is **1773 s** credit-only or **1382 s** with the debit. Against the column's
+1080 s the residual is therefore **0.609** on the first reading and **0.781** on the second. The
+`√(1+k) − 1` in the companion's own head-on expression says the second is the right one, and so
+does the anchor-row convergence in the table above. Either way **none of our numbers reproduces
+1080 s**, and any near-agreement between an unnormalised total and a normalised effective is two
+errors cancelling, which this document does not trade on. `chamber.isp_scaling` refuses to emit an
 absolute Isp for exactly this reason and that discipline applies here too.
 
 **The convention-free statement of the same result is the energy conversion fraction**, which is
@@ -371,7 +399,7 @@ atomisation locked in carbon cannot be settled by a rate coefficient the way the
 just was.** N10 item 5 needs classical nucleation theory, and no amount of further rate-hunting
 substitutes for it.
 
-### W8. The propellant ladder, solved — with true and effective Isp side by side
+### W8. The propellant ladder, solved — real and effective Isp side by side, the head-on debit charged
 
 **Locate:** N10 item 3, "The same for a water slug at `k = 37.70` and for pure hydrogen at
 `k = 7.99`, so the ladder in ADR-0016 rests on solved chemistry rather than on the equilibrium
@@ -396,49 +424,63 @@ is solved rather than borrowed:
 > downstream. Reproduce it with `make walled-nozzle-propellants`; the machine-readable copy is
 > `data/results/walled_nozzle/propellants.csv`.
 
-**The two columns, and why they differ.**
+**The columns, and why they differ.** There are two corrections between them, they run in
+**opposite directions**, and a figure of merit has to carry both:
 
-- **`Isp true`** — the honest exhaust performance: `u_e / g0`, the impulse divided by **every**
+- **`Isp true`** — the honest exhaust performance: `u_e / g₀`, the impulse divided by **every**
   kilogram that leaves the nozzle, slug *and* vaporised impactor together. This is what the
-  nozzle actually does and it is the number to compare against any other thruster.
-- **`Isp effective`** — the same impulse divided by only the propellant **the vehicle had to
-  carry**, i.e. the slug. The impactor arrives from outside at 75 km/s; the vehicle never lifted
-  it, so charging it against the vehicle's mass budget would understate the architecture. This is
-  the mission figure of merit and it is ADR-0016's column.
+  nozzle actually does and it is the number to compare against any other thruster. It is
+  convention-free.
+- **the credit, `(1+k)/k`** — charge only the propellant **the vehicle had to carry**. The
+  impactor arrives from outside at 75 km/s; the vehicle never lifted it, so charging it against
+  the vehicle's mass budget would understate the architecture.
+- **the debit, `w/(k g₀)`** — but that same impactor arrives **head-on**, against the ship's
+  motion. Its momentum `m_p w` has to be cancelled before *any* of the exhaust counts as thrust.
+  This is the companion's own `− 1`: `I/(mw) = η_jet√(1+k) − 1` head-on, against `+ 1` on an
+  overtake.
+- **`Isp effective`** — credit and debit both applied. **This is the figure of merit:**
 
-The two differ by exactly
+> **`Isp effective = [ (1+k) u_e − w ] / (k g₀) = w (η_jet √(1+k) − 1) / (k g₀)`**
 
-> **`Isp effective / Isp true = (1+k)/k = 1 + 1/k`**
+**Both corrections go as `1/k`, and the debit is the larger one.** Their ratio is exactly `w/u_e`,
+and `u_e` is four to nine times below `w` for every fluid here. So the corrected figure lands
+**below** `Isp true`, not above it, and the free-impactor credit never survives into it intact:
 
-**— which is a bonus that grows as the required slug shrinks, and therefore rewards hydrogen most
-of all.** A fluid that soaks up the pulse in a small slug gets a proportionally larger free ride
-from the impactor mass it did not carry:
+| fluid | `k` | slug carried | credit `+1/k` | debit `w/(k g₀)` | net effect on `Isp true` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| hydrogen | 7.77 | 194 kg | **+12.9%** (+243 s) | **−985 s** | **−39%** |
+| methane | 19.56 | 489 kg | +5.1% (+55 s) | −391 s | −31% |
+| ammonia\* | 28.54 | 714 kg | +3.5% (+31 s) | −268 s | −26% |
+| water | 39.55 | 989 kg | **+2.5%** (+20 s) | **−193 s** | **−22%** |
 
-| fluid | `k` | slug carried | free impactor share | **bonus** |
-| --- | ---: | ---: | ---: | ---: |
-| hydrogen | 7.77 | 194 kg | 25 kg of 219 kg | **+12.9%** |
-| methane | 19.56 | 489 kg | 25 kg of 514 kg | +5.1% |
-| ammonia\* | 28.54 | 714 kg | 25 kg of 739 kg | +3.5% |
-| water | 39.55 | 989 kg | 25 kg of 1014 kg | **+2.5%** |
-
-So hydrogen's advantage is *understated* by the true column and correctly stated by the effective
-one — it wins on chemistry first and then gains a second time on the mass ledger.
+**So hydrogen's mass-ledger advantage is not the one-way bonus an earlier draft of this document
+described.** It collects the largest credit *and* pays the largest debit, and the debit wins:
+lighter fluids need less slug, and less slug means one projectile's momentum is spread over fewer
+carried kilograms. Hydrogen still wins the ladder — on chemistry, decisively — but **its lead over
+methane is 1.55×, not the 1.88× the credit-only column shows.**
 
 ### The ladder
 
 Run at 10 000 K, 75 km/s, through the ask's own 7 m² throat, 200 m³ chamber:
 
-| fluid | `m̄` [amu] | `k` | `u` [MJ/kg] | exit `T` [K] | conversion | `u_e` [m/s] | **Isp true** | **Isp effective** |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| **hydrogen** | 1.01 | **7.77** | 320.8 | 5168 | **0.532** | 18 482 | **1885 s** | **2127 s** |
-| **methane** | 3.21 | 19.56 | 136.8 | 5584 | 0.406 | 10 536 | **1074 s** | **1129 s** |
-| ammonia\* | 4.26 | 28.54 | 95.2 | — | *assumed 0.41* | ~8 800 | *~901 s* | *~933 s* |
-| **water** | 6.00 | **39.55** | 69.4 | 5200 | 0.415 | 7 588 | **774 s** | **793 s** |
+| fluid | `m̄` [amu] | `k` | `u` [MJ/kg] | exit `T` [K] | conversion | `u_e` [m/s] | **Isp true** | **Isp EFFECTIVE** | *(credit only)* |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **hydrogen** | 1.01 | **7.77** | 320.8 | 5168 | **0.532** | 18 482 | **1885 s** | **1143 s** | *2127 s* |
+| **methane** | 3.21 | 19.56 | 136.8 | 5584 | 0.406 | 10 536 | **1074 s** | **738 s** | *1129 s* |
+| ammonia\* | 4.26 | 28.54 | 95.2 | — | *assumed 0.41* | ~8 800 | *~901 s* | *~665 s* | *~933 s* |
+| **water** | 6.00 | **39.55** | 69.4 | 5200 | 0.415 | 7 588 | **774 s** | **600 s** | *793 s* |
 
-Neither column carries the paper's launch-ledger normalisations — `eta_geom`, the drift term of
-`eq:reflection_baseline`, vessel mass — which are worth a further factor of about 0.609 on
-velocity (W5). **These numbers are therefore comparable across fluids but must not be set beside
-the paper's absolute figures without that factor.** Three of the four rows are solved end to end;
+**Read the `Isp EFFECTIVE` column.** The italic column is the credit-only figure — the free
+impactor counted but its head-on momentum not charged — and it is kept only because it is what
+this document published first and because the `1/√(m̄)` scaling law below is a property of *that*
+convention. It is not a figure of merit for a head-on burn.
+
+No column carries the paper's launch-ledger normalisations — `eta_geom`, the drift term of
+`eq:reflection_baseline`, vessel mass — which are worth a further factor of about **0.78** on
+velocity against a corrected column, or 0.609 against a credit-only one (W5 sets out why the
+figure depends on which convention ADR-0016's own number is in). **These numbers are therefore
+comparable across fluids but must not be set beside the paper's absolute figures without that
+factor.** Three of the four rows are solved end to end;
 the ammonia row is not, and is italicised throughout for that reason.
 
 **Conversion is a chemistry result, not a nozzle constant.** All four rows run the *same*
@@ -460,13 +502,24 @@ atomisation handed back. Ammonia has no C₃ trap — its store returns as **N�
 the strongest bonds in chemistry) and H₂**, two simple diatomics — so a materially higher
 conversion is physically plausible.
 
-**The crossover is computable even though the rung is not:** ammonia draws level with methane at a
-conversion of **0.601**, against methane's solved 0.406 — a factor of 1.48. That is a large ask,
-but it is not absurd: **hydrogen reaches 0.532 at this same area ratio**, so conversions above
-0.5 are demonstrably attainable here. Until an `eos_ammonia` exists, read this table as
+**The crossover is computable even though the rung is not, and the head-on debit moves it a long
+way toward ammonia:** ammonia draws level with methane at a conversion of **0.477**, against
+methane's solved 0.406 — a factor of just **1.18**. On the credit-only column the crossover was
+0.601, a factor of 1.48, and this document called that "a large ask". It is no longer a large ask:
+**hydrogen already reaches 0.532 at this same area ratio.** The reason the crossover moved is that
+inverting the corrected form adds the debit back before dividing — `u_e = (Isp_eff·k·g₀ + w)/(1+k)`
+— and ammonia's leaner charge pays more of that debit than methane's, so less exhaust speed is
+demanded of it to draw level. Until an `eos_ammonia` exists, read this table as
 
 > **hydrogen > methane > water, solved** — and ammonia unplaced, somewhere between water and
 > possibly above methane.
+
+**One clearance the correction removes.** On the credit-only column ammonia beat water across its
+whole assumed conversion range, and this document said so. Corrected, ammonia at the *bottom* of
+that range (0.35) lands at **594 s against water's 600 s** — just below. Ammonia's `k` is 28.5
+against water's 39.5, so it pays the bigger debit, and at low conversion that is enough to flip
+the pair. Ammonia still clears water at 0.406 and above. **The ammonia-versus-water ordering is
+therefore also conversion-dependent**, which is one more reason not to print an ammonia rung.
 
 The `1/sqrt(m̄)` scaling below cannot settle it either, because that law implicitly assumes a
 common conversion fraction and this is exactly the case where that fails.
@@ -476,25 +529,40 @@ told the ask's numbers, and it returns **`k = 39.55` against the stated 37.70 fo
 **`k = 7.77` against 7.99 for hydrogen** — both within 5%. The ladder is therefore resting on
 solved chemistry, which is what item 3 asked for.
 
-**The ordering is one variable, and it is not negotiable by nozzle design.** Effective Isp tracks
-`1/sqrt(m̄)`, the mean mass of a particle once atomised, to within 10% across a factor of six:
+**The ordering is one variable, and it is not negotiable by nozzle design.** The credit-only Isp
+tracks `1/√(m̄)`, the mean mass of a particle once atomised, to within 10% across a factor of six:
 
 | | H₂ | CH₄ | NH₃ | H₂O |
 | --- | ---: | ---: | ---: | ---: |
 | atomises to | 2 H | C + 4H | N + 3H | O + 2H |
-| `1/sqrt(m̄)` ÷ methane | 1.78 | 1.00 | 0.87 | 0.73 |
-| **solved Isp ÷ methane** | **1.88** | 1.00 | 0.86 | **0.70** |
+| `1/√(m̄)` ÷ methane | 1.78 | 1.00 | 0.87 | 0.73 |
+| credit-only Isp ÷ methane | 1.88 | 1.00 | 0.86\* | 0.70 |
+| **effective Isp ÷ methane** | **1.55** | 1.00 | 0.96\* | **0.81** |
+
+\* The ammonia column is its *most favourable* assumed conversion, 0.45. It is the row the
+`1/√(m̄)` prediction was checked against and it is carried unchanged for that reason; at its
+methane-like 0.406 the two ratios read 0.82 and 0.89 instead. **The ammonia column moves the
+opposite way from every other under the correction** — up, not down — because its `k` of 28.5 is
+larger than methane's 19.6 and it therefore pays a *smaller* debit. That is the same effect as the
+crossover shift above, seen from the other side.
 
 A light fluid stores more per kilogram, because at 10 kK most of `u` is `3/2 kT` **per particle**
 and a kilogram of a light gas is more particles. Storing more per kilogram means less mass is
 needed to absorb the pulse, so `k` falls — and then `k` enters a *second* time through the
-effective convention `(1+k)/k`, which is 1.13 for hydrogen and 1.03 for water. Low `k` is rewarded
-twice. This is the molecular-weight law of any rocket, reappearing in a chamber heated by impact
-rather than by combustion.
+carried-mass credit `(1+k)/k`, which is 1.13 for hydrogen and 1.03 for water. On that convention
+low `k` is rewarded twice, and the molecular-weight law of any rocket reappears in a chamber
+heated by impact rather than by combustion.
+
+**`k` enters a third time, and that one runs the other way.** The head-on debit `w/(k g₀)` also
+scales as `1/k`, so it too falls hardest on the light fluids — and it is the larger term. That is
+why the bottom row is **compressed** toward methane and no longer follows `1/√(m̄)`: the scaling
+law belongs to the credit-only convention. **The ordering is untouched, which is what the verdict
+rests on**; only the margins shrink.
 
 **So the carbon exposure cannot be dodged by switching to a carbon-free fluid without paying for
-it** — with ammonia the open question above. Water is carbon-free and 30% worse. Only hydrogen is
-both carbon-free and better, by 88% — and its store returns through `H + H + M`, the one channel
+it** — with ammonia the open question above. Water is carbon-free and 19% worse on the corrected
+column (30% on the credit-only one). Only hydrogen is both carbon-free and better, by **55%**
+(88% credit-only) — and its store returns through `H + H + M`, the one channel
 W5 has established with margin to spare. **ADR-0016 treats hydrogen as a validation rung; on
 these numbers it is the strongest candidate in the table**, and its real cost is storage density,
 which is a vehicle problem that appears nowhere in these asks.
@@ -740,7 +808,7 @@ here so the next reader does not spend the search twice.
 | Project 242 bracket, pure-hydrogen rung | `puffsat.walled_nozzle.hydrogen` | `make walled-nozzle-hydrogen` |
 | freeze stations, Damköhler margins, throat sensitivity, exit Isp, the `N+N+M` comparison | `puffsat.walled_nozzle.freeze` | `make walled-nozzle-freeze` |
 | the rate coefficients themselves, one named constant per published value | `puffsat.walled_nozzle.rates` | `make walled-nozzle-test` |
-| **the propellant ladder: `k`, `u`, conversion, true and effective Isp for H₂ / CH₄ / H₂O, and the estimated NH₃ rung (W8)** | `puffsat.walled_nozzle.propellants` | `make walled-nozzle-propellants` |
+| **the propellant ladder: `k`, `u`, conversion, η_jet, real / effective / credit-only Isp and the momentum debit for H₂ / CH₄ / H₂O, and the estimated NH₃ rung (W8)** | `puffsat.walled_nozzle.propellants` | `make walled-nozzle-propellants` |
 | the acetylene stoichiometry and the C → C₃ → C₂H₂ speciation (W9) | `puffsat.eos_methane` (0 K atomisation energies and the equilibrium solve) | `make walled-nozzle-test` |
 | the equilibrium EOS underneath all of them | `puffsat.eos_methane`, `puffsat.walled_nozzle.hydrogen` | `make walled-nozzle-test` |
 

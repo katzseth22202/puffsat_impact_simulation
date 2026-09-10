@@ -110,27 +110,145 @@ wall is hit, and `OPACITY_BRACKET` carries 0.1x-10x to show the verdict survivin
 it. This is the same posture `opacity_bracket.py` takes for the magnetic nozzle
 and the opposite of quoting one number from a table this study does not have.
 
-## Decision 7: carbon at the throat is a thermodynamic verdict plus a kinetic ceiling
+## Decision 7: throat carbon is decided at the wall-adjacent state, not the free stream
 
-Item 5 asks for net deposition per pulse. What is owned here is where deposition
-is *favoured* -- graphite's Clausius-Clapeyron vapour pressure, anchored at its
-measured 1 atm sublimation point, against the solved monatomic-carbon partial
-pressure -- and a Hertz-Knudsen **ceiling** on the rate with unit sticking and no
-boundary layer.
+Item 5 asks whether the throat self-cleans. The first attempt compared the **free stream's**
+monatomic-carbon partial pressure against graphite's vapour pressure at the **wall's**
+temperature. That mixes two states and is wrong: pressure is constant across a boundary layer and
+the gas at a no-slip wall sits at the wall temperature, so the state that decides whether carbon
+sticks is a **third** one -- the free stream's pressure at the wall's temperature, denser than
+either end.
 
-The ceiling is deliberately useless as a prediction (it is centimetres per pulse)
-and useful as a bound: it says the answer is set by the boundary layer and not by
-the thermodynamics, so a real number needs a boundary-layer solve this study does
-not have. What the thermodynamics does settle is the verdict, and the verdict is
-that no wall temperature both survives and self-cleans.
+`wall_gas_density` builds that state and `equilibrium_saturation` evaluates `S = p_C / p_vap` on
+it. The verdict reverses: `S` = 0.03 at graphite's working temperature rather than the
+supersaturation the mixed-state comparison reported. The mechanism is acetylene, which is the same
+sink W9 found from the recovery side, and it means the C3 partition function that is
+`eos_methane`'s worst weakness does not reach this answer -- C3 never carries more than 8% of the
+carbon at any wall temperature in range.
+
+**Both edges of the fork are kept**, because the answer depends entirely on which one the boundary
+layer sits in and they differ by six orders of magnitude: `deposition_threshold` is the frozen
+edge (renamed and re-documented rather than deleted, since it is what the earlier reading
+compared), `equilibrium_saturation` is the other.
+
+**The fork is closed on a bound, not on a rate.** `boundary_layer` gives the layer its thickness
+(`k/h`, which is free of Bartz's `c_p` uncertainty because `h` carries the same factor) and a
+diffusion clock, and `decades_below_gas_kinetic` reports how far under a **collision frequency**
+the carbon chemistry could run and still finish inside it. That is 5.0-5.3 decades. No rate
+coefficient is asserted -- `rates.py`'s provenance rule forbids inventing one -- and the number is
+stated as what would have to be true to flip the verdict.
+
+`hertz_knudsen_thickness` is kept as the free-flight ceiling on a plating rate. It is deliberately
+useless as a prediction (centimetres per pulse) and is retained only to show that the frozen edge,
+if it applied, would not be rate-limited either.
+
+## Decision 8: the contraction is priced from the energy budget, not from a flux
+
+Decision 5's split answers the *side wall*. Below the gate volume the front never reaches it, and
+the load moves to the convergent section, which at these throat areas is 96-99% of the bore --
+effectively a flat end wall taking a normal-incidence strike.
+
+`end_wall_strike` prices it as two terms with different scalings, and keeping them apart is the
+decision:
+
+- the **arrival**, the front's own remaining kinetic energy over the patch its cone has opened to.
+  It grows as the chamber shortens, because a shorter column decelerates the front less.
+- the **bulk**, the whole pulse energy over the contraction area. It is **volume-independent** by
+  construction -- the same 70.3 GJ turns the same corner -- so chamber volume is not a lever on it
+  at all.
+
+The bulk term is an **energy-budget ceiling**, reached the way `strike`'s `fluence_ceiling` is:
+everything the impactor brought must cross that surface on its way out, so dividing by the area
+gives what would land if none of it turned. What crosses into the wall is that times the same
+Stanton bracket, with the same caveat. A flux-based treatment would need a boundary-layer solve on
+a curved converging surface, which is recorded as deferred rather than approximated.
+
+The consequence is a recommendation the grid alone would not have produced: shrinking the chamber
+has a **floor** near 150 m^3, below which the arrival load climbs faster than anything else
+improves.
+
+## Decision 9: effective Isp carries both mass-ledger corrections, and it lives in one dataclass
+
+Two corrections separate the real Isp `u_e/g0` from the number a mission plan should use, and
+**they run in opposite directions**:
+
+- a **credit** of `(1+k)/k`, for the impactor mass the vehicle never lifted. This one was already
+  in the study.
+- a **debit** of `w/(k g0)`, for the momentum that same impactor brings in **head-on**. It arrives
+  against the ship's motion, so the exhaust must cancel `m_p w` before any of it is thrust. This
+  one was missing everywhere, and adding it is the decision.
+
+`isp_effective` now means both, which is the companion's own head-on form (`templateArxiv.tex`:
+`I/(mw) = eta_jet sqrt(1+k) - 1` head-on, against `+ 1` on an overtake):
+
+    Isp_effective = [ (1+k) u_e - w ] / (k g0) = w (eta_jet sqrt(1+k) - 1) / (k g0)
+
+**The debit is the larger correction, by exactly `w/u_e`.** Both go as `1/k`, so the credit does
+not dominate by being "the mass one"; since `u_e` runs four to nine times below `w` here, the
+corrected figure lands **below** the real Isp rather than above it. That reverses the sign of a
+whole column's worth of intuition: the old inequality `isp_effective > isp_true` was asserted in a
+test, and the corrected one asserts the opposite.
+
+**The naming is deliberate and it changes the meaning of a published column.** The alternative --
+keeping `isp_effective` credit-only and adding `isp_net` beside it -- was implemented first and
+rejected: it leaves the study's most quotable name attached to a quantity no reader should quote,
+and every downstream table then has to remember which of two nearly-identical names it wanted. So
+`isp_effective` is the corrected figure of merit and the credit-only intermediate is renamed
+`isp_carried_gross`, explicitly "not a figure of merit". The cost is that `isp_effective_s` in the
+CSVs changes meaning; it is paid down by shipping `isp_carried_gross_s` alongside, so the header
+itself tells a reader which vintage of the file they hold, and by saying so in both answer
+documents.
+
+**The credit-only column is kept, not deleted.** It is what W5 and W8 published, `isp_effective`
+is built from it, and the `Isp ~ 1/sqrt(mean atomised particle mass)` scaling law is a property of
+*that* convention -- the debit compresses the ladder precisely because it punishes the small-`k`
+fluids the law rewards, so asserting the law on the corrected column would be asserting the debit
+away.
+
+**The algebra lives in `chamber.IspLedger` and nowhere else.** The first implementation put it in
+`surface.py` for the N16 grid and left `propellants.py` -- the W8 ladder the paper lifts directly
+-- on the uncorrected convention. That is the failure mode the sign is most exposed to, so the
+ledger is now a single dataclass upstream of both, and `chamber.isp_scaling` was corrected to
+`(sqrt(1+k) - 1)/k` at the same time. Three things are pinned by test rather than assumed:
+
+- **`eta_jet = sqrt(conversion)`**, since `(1+k) u = w^2/2` makes `w^2/(1+k) = 2u`. A conversion
+  fraction quoted *as* an `eta_jet` would be wrong by a square root.
+- **the thrust floor is `1/sqrt(1+k)`** -- not a separate assertion but the root of
+  `isp_effective`; below it the nozzle pushes the ship backwards. Every cell clears it by 3.5-5.6x.
+- **agreement with the tamper study.** At `eta_jet = 1` the form collapses to `sqrt(1+k) - 1`,
+  which is `tamper.ledger.beta_ideal`, derived independently from Cauchy-Schwarz under a different
+  PRD. A test asserts the two match; if they ever diverge, one study has the sign wrong.
+
+**The sign is the hazard, not the algebra.** The water-plate study in this same repository records
+its incoming momentum as a **credit**, because that one is an overtake. Inheriting that `+1` here
+would flip a ~30% penalty into a ~30% bonus of the same size.
+`test_the_head_on_burn_is_a_debit_and_never_a_credit` asserts the corrected figure is below both
+the credit-only one and the real one, for every cell, so the mistake cannot land silently.
 
 ## Consequences
 
 - New module `python/puffsat/walled_nozzle/surface.py` (N16) and
   `python/puffsat/walled_nozzle/wall.py` (N9 items 1-7).
+- Item 5's verdict is that the throat is a **consumable**: it is chemically eroded on top of
+  being thermally ablated, and no redeposition credit is available at any survivable wall
+  temperature. The companion's "0.34 to 3.7% redeposition suffices" line prices a mechanism that
+  does not operate.
 - New targets `make walled-nozzle-surface` and `make walled-nozzle-wall`, both
   added to `make walled-nozzle-test`.
 - Six new committed CSVs under `data/results/walled_nozzle/`, un-ignored for the
   cross-repo reason ADR-0025 and the existing walled-nozzle entries already record.
+- **Every specific impulse in both answer documents is corrected.** No ranking changes: the N16
+  grid's temperature, volume, throat and methane-over-water verdicts all survive, with the
+  temperature margin narrowing from 1.74x to 1.56x, and W8's hydrogen > methane > water ordering
+  survives with hydrogen's lead compressed from 1.88x to 1.55x.
+- **Three W-series conclusions did move**, all in the ladder rather than the grid, and all
+  recorded in place: ammonia's crossover with methane falls from 0.601 to 0.477 conversion (a
+  factor 1.18 above methane, no longer "a large ask"); ammonia at the bottom of its assumed
+  conversion range now falls *below* water rather than clearing it; and W5's two ADR-0016 anchor
+  rows, previously 2.9% apart with the gap flagged as unexplained, close to 1.0% -- the head-on
+  debit was most of what they disagreed about, which is independent evidence that the companion's
+  own column already carries the `-1`.
+- **`chamber.isp_scaling` moved with it**: the 200 -> 673 m^3 gain reads 1.3% rather than 1.8%,
+  strengthening the "chamber volume is not an Isp dial" verdict.
 - The answer document is `docs/walled_nozzle_grid_and_wall.md`, numbered W10
   onward so it continues the W series the paper repository already cites.

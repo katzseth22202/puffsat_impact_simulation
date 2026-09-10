@@ -103,7 +103,7 @@ conventions. Scope is [ADR-0050](docs/adr/0050-walled-thermal-nozzle-methane-cha
 [ADR-0051](docs/adr/0051-walled-nozzle-grid-geometry-and-the-load-case.md); results are in
 [`docs/walled_nozzle_asks_answered.md`](docs/walled_nozzle_asks_answered.md) (W1-W9, asks N9.0
 and N10) and [`docs/walled_nozzle_grid_and_wall.md`](docs/walled_nozzle_grid_and_wall.md)
-(W10-W22, asks N16 and N9 items 1-7). Its Python is
+(W10-W23, asks N16 and N9 items 1-7). Its Python is
 `python/puffsat/walled_nozzle/` plus the top-level `python/puffsat/eos_methane.py`, and its
 outputs are under `data/results/walled_nozzle/`.
 

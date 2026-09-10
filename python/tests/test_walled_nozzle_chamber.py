@@ -88,7 +88,11 @@ def test_the_store_is_essentially_fully_charged_at_the_flown_point() -> None:
 
 def test_a_bigger_chamber_charges_more_store_but_barely() -> None:
     """The ask's *direction* is right and its *magnitude* is not: ADR-0016 books +3.4% on Isp
-    from 200 to 673 m^3, where the solved charge moves 1.7% and the Isp identity 1.8%."""
+    from 200 to 673 m^3, where the solved charge moves 1.7% and the Isp identity 1.3%.
+
+    That 1.3% was 1.8% before the head-on momentum debit entered `isp_scaling`: the debit is a
+    fixed subtraction, so it dilutes the gain a bigger, less dense, better-dissociated chamber
+    buys. The verdict -- chamber volume is not a meaningful Isp dial -- only gets stronger."""
     small = chamber.solve_chamber(200.0, 7.1, chamber.FLOWN_TEMPERATURE)
     large = chamber.solve_chamber(673.0, 23.8, chamber.FLOWN_TEMPERATURE)
     assert large.store_charged > small.store_charged
@@ -105,12 +109,69 @@ def test_the_c3_exposure_is_bounded_and_small_where_it_is_flown() -> None:
 
 
 def test_isp_scaling_is_the_identity_it_claims() -> None:
-    """`sqrt(1+k)/k`, and unity against itself."""
+    """`(sqrt(1+k) - 1)/k`, and unity against itself.
+
+    **The `-1` is the head-on momentum debit and it does not cancel in the ratio.** Because it is
+    a fixed subtraction, it dilutes whatever advantage a lower `k` buys: the corrected ratio always
+    sits **between 1 and the credit-only ratio**, in whichever direction the latter points. So
+    dropping the `-1` overstates every chamber-to-chamber gain this function is used to quote.
+    """
     state = chamber.solve_chamber(400.0, 14.0, chamber.FLOWN_TEMPERATURE)
     assert chamber.isp_scaling(state, state.slug_ratio) == pytest.approx(1.0)
     k, ref = state.slug_ratio, chamber.ASK_SLUG_RATIO
-    expected = (math.sqrt(1.0 + k) / k) / (math.sqrt(1.0 + ref) / ref)
+    expected = ((math.sqrt(1.0 + k) - 1.0) / k) / ((math.sqrt(1.0 + ref) - 1.0) / ref)
     assert chamber.isp_scaling(state, ref) == pytest.approx(expected)
+    gross = (math.sqrt(1.0 + k) / k) / (math.sqrt(1.0 + ref) / ref)
+    # This state is *above* the reference `k`, so both ratios sit below 1 -- and the corrected one
+    # is the nearer to 1, which is the compression the debit always produces.
+    assert gross < chamber.isp_scaling(state, ref) < 1.0
+
+
+# --- The Isp ledger: the one place the head-on sign is written down ------------------------------
+
+
+def test_the_ledger_splits_a_credit_and_a_debit_that_both_run_as_one_over_k() -> None:
+    """Both corrections go as `1/k`, so neither dominates by construction -- which is exactly why
+    the debit cannot be waved off as a small correction to the credit. Their *ratio* is `w/u_e`.
+    """
+    ledger = chamber.isp_ledger(exhaust_speed=8000.0, slug_ratio=20.0)
+    credit = ledger.isp_carried_gross - ledger.isp_true
+    assert credit == pytest.approx(ledger.isp_true / 20.0)
+    assert ledger.momentum_debit == pytest.approx(chamber.CLOSING_SPEED / (20.0 * chamber.G0))
+    assert ledger.momentum_debit / credit == pytest.approx(chamber.CLOSING_SPEED / 8000.0)
+    # And so the corrected figure is below the real one whenever the exhaust is slower than w.
+    assert ledger.isp_effective < ledger.isp_true < ledger.isp_carried_gross
+
+
+def test_the_thrust_floor_is_where_the_effective_isp_crosses_zero() -> None:
+    """`eta_jet = 1/sqrt(1+k)` is not a separate assertion -- it is the root of `isp_effective`.
+    At the floor the exhaust exactly cancels the arriving momentum and the burn does nothing."""
+    k = 12.0
+    ideal = chamber.CLOSING_SPEED / math.sqrt(1.0 + k)
+    at_floor = chamber.isp_ledger(exhaust_speed=ideal * (1.0 / math.sqrt(1.0 + k)), slug_ratio=k)
+    assert at_floor.eta_jet == pytest.approx(at_floor.thrust_floor)
+    assert at_floor.isp_effective == pytest.approx(0.0, abs=1e-9)
+    assert at_floor.pushes_backwards
+    below = chamber.isp_ledger(exhaust_speed=ideal * 0.9 / math.sqrt(1.0 + k), slug_ratio=k)
+    assert below.isp_effective < 0.0
+    assert below.pushes_backwards
+
+
+def test_the_ledger_agrees_with_the_tamper_studys_ceiling() -> None:
+    """**Cross-study coherence.** At full conversion (`eta_jet = 1`) the head-on form collapses to
+    `sqrt(1+k) - 1`, which is `tamper.ledger.beta_ideal` -- a separate study, a separate PRD, the
+    same physics. If the two ever disagree, one of them has the sign wrong."""
+    from puffsat.tamper import ledger as tamper_ledger
+
+    for k in (7.06, 19.56, 39.55):
+        full = chamber.isp_ledger(
+            exhaust_speed=chamber.CLOSING_SPEED / math.sqrt(1.0 + k), slug_ratio=k
+        )
+        assert full.eta_jet == pytest.approx(1.0)
+        beta = tamper_ledger.beta_ideal(k)
+        assert full.isp_effective == pytest.approx(
+            beta * chamber.CLOSING_SPEED / (k * chamber.G0), rel=1e-9
+        )
 
 
 # --- N9 item 0 ----------------------------------------------------------------------------------

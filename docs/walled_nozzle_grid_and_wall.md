@@ -21,21 +21,22 @@ produced it. Every figure came from a run; the [provenance table](#provenance) s
 | item | verdict | does the paper change? |
 | --- | --- | --- |
 | **N9 items 1–2** (contact station, state there) | **Answered, and the temperature premise does not survive.** The front reaches the wall at 5.6–6.2 m — the ask's own "6 m" is right — but by then it has ploughed through 41–178 kg and slowed to 9–28 km/s, so the layer is at **4,900–30,700 K, not 200,000 K**. | **yes** (W10, W11) |
-| **N9 item 0's successor — the gate** | **Answered, and the paper side's guess is right to 5%.** The front never reaches the wall below **178 m³**, so items 1–4 **close for the 50 and 100 m³ chambers**. On the fast end of the spreading bracket the gate falls to 92 m³. | **yes** (W10) |
+| **the gate** (N9's own precondition) | **Answered, and the paper side's guess is right to 5%.** The front never reaches the wall below **178 m³**, so items 1–4 **close for the 50 and 100 m³ chambers**. On the fast end of the spreading bracket the gate falls to 92 m³. | **yes** (W10) |
+| **the contraction** (raised here, not asked) | **Priced, and it does not shrink with the chamber.** The bulk load on the convergent section is **volume-independent** — the same 70.3 GJ turns the same corner — and the arrival load gets *worse* as the chamber shortens. | **yes** (W23) |
 | **N9 item 3** (fluence, split) | **Answered, and it reverses which channel matters.** Radiative delivery is **0.001–0.009 MJ/m²** against the 1.6 MJ/m² the section already clears. The load is **convective**, and it *grows* with chamber volume. | **yes** (W12) |
 | **N9 items 4 and 6** (the film) | **Answered, and generously.** Even 0.02 kg/m² carries 2.8 MJ/m² of capacity — more than the whole radiative transient at any volume. A sprayed film is not ruled out here the way it is for the magnetic liner. | **yes** (W13) |
 | **N9 item 7** (convective flux) | **Answered.** The paper's Bartz-like 123–281 MW/m² is a good *liner* number (we get 93–174 at 10 kK and 200 m³) and roughly 2–3× low at the *throat*. | **yes** (W14) |
-| **N9 item 5** (throat carbon) | **Answered as a verdict, deferred as a rate.** **No wall temperature both survives and self-cleans**: deposition stops only above 4,700–5,000 K and graphite's ceiling is 3,900 K. | **yes** (W15) |
+| **N9 item 5** (throat carbon) | **Answered, and there is no self-healing to be had.** The exhaust is **undersaturated** in carbon at any wall temperature graphite survives, so it *erodes* the throat rather than plating it. The boundary layer settles the fork with 5 decades to spare. | **yes** (W15) |
 | **N16** — `held(T, ρ)` | **Answered, and it retires the fit.** The exponent is **not −0.21 and not constant**: it runs 0 to −0.25 for methane and 0 to −0.42 for water, vanishing at both ends. | **yes** (W16) |
-| **N16** — the temperature dial | **Answered, and it reverses.** **Hotter is better, monotonically.** Across the grid 6,000 K returns 648–935 s where 12,000 K returns 1,217–1,565 s. | **yes** (W17) |
+| **N16** — the temperature dial | **Answered, and it reverses.** **Hotter is better, monotonically.** Across the grid 6,000 K returns 497–743 s net where 12,000 K returns 800–1,156 s net. | **yes** (W17) |
 | **N16** — the volume dial | **Answered, and "free" is wrong.** Volume buys slug ratio and costs freeze margin; the optimum is interior and moves with temperature. | **yes** (W18) |
 | **N16** — the throat dial | **Answered, and there is a wall.** The chemistry **does** freeze past `A/A*` ≈ 140. The store returned **peaks near `A/A*` = 56 and then falls**. | **yes** (W19, W20) |
-| **N16** — water on the same grid | **Answered, and it loses everywhere.** Water returns **52–74%** of methane's effective impulse at every one of the 128 grid cells, including at 400 m³ and at the cold end. | **yes** (W21) |
-| **N16** — the named configuration | **Priced, with plain methane beside it.** Methane beats the 90% water + 10% H₂ mix by 15% at the same point. | **yes** (W22) |
+| **N16** — water on the same grid | **Answered, and it loses everywhere.** Water returns **52–83%** of methane's net impulse at every one of the 128 grid cells, including at 400 m³ and at the cold end. | **yes** (W21) |
+| **N16** — the named configuration | **Priced, with plain methane beside it, and the hydrogen fraction swept.** Methane beats the 90% water + 10% H₂ mix by 4–12% at the ask's own point. Hydrogen is a real dial worth +18–23% over pure water. | **yes** (W22) |
 | **N13** (exit-plane velocity distribution) | **Not started, and confirmed unreachable from here.** It needs a 2-D solve; see [Deferred](#deferred-with-cost). | no |
 | **N11** (radiative escape, carbon-bearing plume) | **Not started.** | no |
 
-**Thirteen items fall out, W10–W22.** **If you read only four:** **W17** (the temperature dial
+**Fourteen items fall out, W10–W23.** **If you read only four:** **W17** (the temperature dial
 runs the other way, which unwinds the whole "Going hotter was considered and declined" section),
 **W19** (the deep throat's impulse does not arrive — the chemistry freezes first), **W10** (items
 1–4 close for the chamber you were going to build), and **W16** (the `ρ^-0.21` hack, replaced by
@@ -73,10 +74,10 @@ the bracket the 100 m³ chamber becomes marginal (gate 92 m³), so the honest st
 layer's sound speed), so this is not a new uncertainty — it is the existing one, evaluated.
 
 **And it is not a free pass.** The front leaving the *column* is not the front leaving the
-*hardware*. At a 0.05–0.2 m² throat the convergent section is very nearly a flat end wall — a
-0.13–0.25 m throat radius against a 3 m bore — so a short chamber trades a **grazing side-wall
-strike for a normal-incidence strike on the contraction**. Nothing here prices that, and it is
-the successor question to this item.
+*hardware*. At a 0.05–1 m² throat the convergent section is 96–99% of the bore area — very nearly
+a flat end wall — so a short chamber trades a **grazing side-wall strike for a normal-incidence
+strike on the contraction**. That is priced in [W23](#w23-shrinking-the-chamber-moves-the-strike-to-the-contraction-and-the-arrival-term-gets-worse-not-better),
+and it does not go the way the gate does.
 
 ---
 
@@ -192,7 +193,7 @@ vaporisation, and nothing here prices scouring.
 
 ---
 
-### W14. Bartz at the liner matches the paper; at the throat it is a factor 2–4 higher
+### W14. Bartz at the liner matches the paper; the throat is 3.5× the liner and is the new item
 
 **Locate:** N9 item 7, "the paper-side estimate is a Bartz-like scaling off a single anchor,
 giving 123 to 281 MW/m² between 10,000 and 18,000 K against a radiative 16 to 75".
@@ -226,14 +227,14 @@ to a thousand bar and a partly ionised boundary layer. **Read the size, not the 
 **What is new is the throat, and it is the item.** At the flown 7 m² throat the flux is 2–4× the
 liner's. At the throats N9 and N16 now recommend it becomes the design's binding component:
 
-| throat | flux (frozen – equilibrium) | blowdown | fluence per pulse | graphite ablated | as % of the pulse's carbon |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 7.00 m² | 302 – 1,445 MW/m² | 5 ms | 8 MJ/m² | 0.06 mm | 0.24% |
-| 2.00 m² | 342 – 1,638 | 19 ms | 30 | 0.23 mm | 0.27% |
-| 0.50 m² | 393 – 1,882 | 74 ms | 140 | 1.07 mm | 0.31% |
-| **0.20 m²** | 431 – 2,062 | 185 ms | 382 | **2.94 mm** | 0.34% |
-| **0.10 m²** | 462 – 2,210 | 371 ms | 820 | **6.29 mm** | 0.36% |
-| 0.05 m² | 495 – 2,369 | 742 ms | 1,757 | 13.49 mm | 0.39% |
+| throat | flux (frozen – equilibrium) | blowdown | fluence per pulse | graphite ablated |
+| ---: | ---: | ---: | ---: | ---: |
+| 7.00 m² | 302 – 1,445 MW/m² | 5 ms | 8 MJ/m² | 0.06 mm |
+| 2.00 m² | 342 – 1,638 | 19 ms | 30 | 0.23 mm |
+| 0.50 m² | 393 – 1,882 | 74 ms | 140 | 1.07 mm |
+| **0.20 m²** | 431 – 2,062 | 185 ms | 382 | **2.94 mm** |
+| **0.10 m²** | 462 – 2,210 | 371 ms | 820 | **6.29 mm** |
+| 0.05 m² | 495 – 2,369 | 742 ms | 1,757 | 13.49 mm |
 
 (100 m³ at 8,000 K; ablation at the equilibrium-`c_p` edge with no transpiration credit, so read
 it as the pessimistic end of a factor-of-two band.)
@@ -248,37 +249,102 @@ and the ablation is millimetres per pulse at the recommended throats.
 
 ---
 
-### W15. No wall temperature both survives and self-cleans — but the stream can replace what ablates
+### W15. The throat does not self-heal — and it is not plating at all, it is being chemically eroded
 
 **Locate:** N9 item 5, "the throat is the hottest and fastest station so it should self-clean,
 but nothing shows it", and "0.34 to 3.7% redeposition suffices" for the liner.
 
-**Now:** self-cleaning is assumed on the grounds that the throat is hot.
+**Now:** self-cleaning is assumed on the grounds that the throat is hot, and the liner is assumed
+to be self-healing if a small share of the exhaust carbon redeposits.
 
-**Should be:** the throat gas is hot; the throat *surface* cannot be. Deposition stops only when
-graphite's vapour pressure at the **wall** temperature exceeds the arriving carbon pressure:
+**Should be:** neither. The exhaust does not give carbon to a graphite surface at any temperature
+that surface can survive, so there is nothing to self-heal *with*.
 
-| chamber `T_c` | throat gas `T` | throat ρ | monatomic-C partial pressure | self-cleans above | graphite's ceiling |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 8,000 K | 7,244 K | 4.40 kg/m³ | 3.84e6 Pa | **4,696 K** | 3,900 K |
-| 10,000 K | 8,730 K | 3.42 kg/m³ | 9.98e6 Pa | **4,956 K** | 3,900 K |
+**Three states have to be kept apart, and conflating any two gets the wrong answer:**
 
-**The self-cleaning threshold sits 800–1,050 K above the material's own limit.** A surface cool
-enough to be graphite is cool enough to plate; a surface hot enough not to plate is not graphite
-any more. There is no operating point that satisfies both, and "the throat self-cleans because it
-is hot and fast" is not available as an argument.
+| state | where | condition at the flown throat |
+| --- | --- | --- |
+| the free stream | mid-channel | 7,244 K, 623 bar, 23% of carbon as free atoms |
+| **the wall-adjacent gas** | at the surface | **623 bar** (pressure is constant across a boundary layer) at **the wall's temperature** |
+| the surface | graphite | 3,900 K, its working ceiling |
 
-**How much plates is not settled here, and the bound says why.** A Hertz-Knudsen ceiling with unit
-sticking and no boundary layer gives 2.4–29 cm per pulse — useless as a prediction and useful as a
-bound: the answer is set by diffusion across the boundary layer, not by the thermodynamics, and
-that needs a solve this repository does not have.
+Deposition is driven by the **second against the third**, not the first against the third.
+Pressure does not vary across a boundary layer and the gas at a no-slip wall is at the wall
+temperature, so the state that decides whether carbon sticks is the free stream's *pressure* at
+the wall's *temperature* — a third state, denser than either end (15.1 kg/m³ against the free
+stream's 4.4).
 
-**The one thing that does close is the mass budget, and it closes favourably.** The methane
-exhaust carries 367 kg of carbon per pulse. Replacing the 0.06–13.5 mm the convective load ablates
-takes **0.24–0.39% of it** — inside the ask's own "0.34 to 3.7% redeposition suffices" band. So
-the picture is not "does it plate or does it ablate" but **both at once, in near balance**, and
-the question that decides the throat is whether the two rates match locally rather than in total.
-That is a genuinely different question from the one item 5 asks, and it is the one worth asking.
+**And at that state the gas is undersaturated, because the carbon is in acetylene.** Saturation
+ratio `S = p_C / p_vap(graphite)`, at 623 bar:
+
+| wall `T` | 1,500 K | 1,800 K | **1,912 K** | 2,000 K | 2,500 K | 3,000 K | **3,900 K** | 4,500 K |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `S` | 6.13 | 1.52 | **1.00** | 0.750 | 0.210 | 0.0886 | **0.0316** | 0.0182 |
+
+`S > 1` plates; `S < 1` means the gas can dissolve *more* carbon than it is carrying. **At
+graphite's own working temperature `S` = 0.032 — the gas has 32× spare carbon capacity, so it
+takes graphite off the surface rather than putting it on.** The band where nothing plates runs
+from **1,912 K upward**, with no upper edge out to 8,000 K; below the cold edge everything is
+supersaturated, which is just "solid carbon is the stable phase down there".
+
+**The mechanism is the same one W9 found from the recovery side.** In a hydrogen-rich carbon gas
+between about 1,900 and 5,000 K the carbon parks itself in **C₂H₂** — 68% of carbon nuclei at
+2,500 K (the rest as CH₄) and 92% at 3,900 K — and that sink is deep enough to hold the
+monatomic-carbon activity
+below graphite's own. It is why hydrogen-rich flames do not soot, and it is why a graphite throat
+inside this window cannot collect a deposit. **Nearly all the throat's carbon is in acetylene,
+not C₃**, so the C₃ partition function that is `eos_methane`'s worst admitted weakness (W9,
+ADR-0050 weakness 1) does **not** reach this answer: C₃ carries under 3% of the carbon at
+graphite's working temperature and under 9% anywhere below 4,300 K. (It does take over above
+4,700 K — 20% at 4,700 and 46% at 5,500 — so a *non-carbon* refractory running hotter than
+graphite would put the question back inside the EOS's weak spot.)
+
+**This turns on the boundary layer being in chemical equilibrium, and it is, with five decades to
+spare.** If the layer were frozen at the free stream's composition, free carbon atoms would arrive
+at the wall and `S` would be **41** instead of 0.032 — a six-order-of-magnitude fork, and the only
+thing that decides it:
+
+| throat | boundary layer | diffusion clock | gas-kinetic clock | margin |
+| ---: | ---: | ---: | ---: | ---: |
+| 2.0 m² | 18.7 µm | 4.05 µs | ~24 ps | **5.3 decades** |
+| 0.5 m² | 16.3 µm | 3.07 µs | ~24 ps | **5.2 decades** |
+| 0.2 m² | 14.9 µm | 2.56 µs | ~24 ps | **5.1 decades** |
+| 0.1 m² | 13.9 µm | 2.23 µs | ~24 ps | **5.0 decades** |
+
+The carbon-to-acetylene chemistry would have to run **more than five decades below a gas-kinetic
+collision frequency** to freeze inside that layer. These are radical reactions with small
+barriers at 3,000–4,000 K; nothing plausible is five decades slow. **No rate coefficient is
+asserted here** — `rates.py`'s provenance rule forbids inventing one — and the margin is stated
+as "how far below the collision frequency the chemistry could run and still finish", which is a
+bound on what would have to be true to flip the verdict rather than a claim about any reaction.
+
+**The boundary-layer thickness is free of the largest Bartz uncertainty.** `δ = k/h` with
+`k ∝ μ c_p` and Bartz's `h ∝ c_p`, so `c_p` cancels: the frozen and equilibrium branches, which
+differ by a factor of two in *flux*, give identical thicknesses. What is left depends on `μ` and
+`Pr`, and the margin is 5 decades, so it survives an order of magnitude on either.
+
+**So the throat's ledger has no credit side:**
+
+| throat | ablated per pulse (convective, no transpiration credit) | replaced by deposition |
+| ---: | ---: | ---: |
+| 2.0 m² | 0.23 mm | **none** |
+| 0.5 m² | 1.07 mm | **none** |
+| 0.2 m² | 2.94 mm | **none** |
+| 0.1 m² | 6.29 mm | **none** |
+
+**and the erosion is worse than the thermal number**, because the chemical attack is additive to
+it and is not counted in the table. **Delete the "0.34 to 3.7% redeposition suffices" line.** It
+prices a mechanism that does not operate: the redeposition is not rate-limited, it is
+thermodynamically absent.
+
+**What could be done about it, and it is not encouraging.** Plating needs a wall below ~1,900 K.
+The same surface is taking 400–2,400 MW/m², whose radiative-equilibrium temperature alone is
+7,400–12,100 K, so holding it under 1,900 K means removing essentially the whole throat load
+actively. **A self-healing carbon throat and a passively cooled one are mutually exclusive**, and
+the honest conclusion is that the throat is a consumable. The remaining levers are transpiration
+(worth about a factor of two on the flux), a refractory that is not carbon and therefore has no
+deposition question at all, and **water**, which has no carbon to deposit or erode — which is
+W21's point arriving from the liner side, exactly as N16 anticipated it might.
 
 ---
 
@@ -358,13 +424,15 @@ impulse, 100 m³ methane, unnormalised (see the conventions note below):
 
 | throat | 6,000 K | 8,000 K | 10,000 K | 12,000 K |
 | ---: | ---: | ---: | ---: | ---: |
-| 7.00 m² | 677 | 920 | 1,111 | 1,231 |
-| 2.00 m² | 792 | 1,063 | 1,272 | 1,398 |
-| 0.50 m² | 870 | 1,167 | 1,386 | 1,515 |
-| 0.20 m² | 883 | 1,186 | 1,413 | 1,546 |
-| 0.10 m² | 892 | 1,192 | 1,419 | 1,552 |
+| 7.00 m² | 509 | 637 | 738 | 808 |
+| 2.00 m² | 625 | 780 | 899 | 976 |
+| 0.50 m² | 702 | 884 | 1,012 | 1,093 |
+| 0.20 m² | 716 | 903 | 1,040 | 1,124 |
+| 0.10 m² | 725 | 909 | 1,045 | 1,129 |
 
-**Hotter wins at every throat, and by 80–120%, not by the 2.5%-per-2,000 K ADR-0016 books.**
+**Hotter wins at every throat, and by 56–59%, not by the 2.5%-per-2,000 K ADR-0016 books.**
+(On the gross convention the same rows read 677 → 1,231 and 892 → 1,552, so the reversal is not a
+convention artefact — the debit narrows the margin from 1.74× to 1.56× and leaves the ranking.)
 
 **Why the paper's reasoning misses it.** Exit temperature *is* a near-fixed fraction of chamber
 temperature (W20 confirms it), so the residual-heat argument is sound as far as it goes. What it
@@ -401,13 +469,13 @@ Isp, methane at a 0.5 m² throat:
 
 | chamber | 6,000 K | 8,000 K | 10,000 K | 12,000 K |
 | ---: | ---: | ---: | ---: | ---: |
-| 50 m³ | 842 | 1,109 | **1,341** | 1,500 |
-| 100 m³ | 870 | 1,167 | 1,386 | **1,515** |
-| 200 m³ | 895 | 1,207 | **1,399** | 1,512 |
-| 400 m³ | **919** | **1,222** | 1,371 | 1,476 |
+| 50 m³ | 692 | 856 | 995 | **1,091** |
+| 100 m³ | 702 | 884 | **1,012** | **1,093** |
+| 200 m³ | **707** | **893** | 1,008 | 1,081 |
+| 400 m³ | 706 | 879 | 971 | 1,039 |
 
-**The optimum is interior and it moves with temperature** — 400 m³ at the cold end, 100–200 m³ at
-the hot end. Two effects cross:
+**The optimum is interior and it moves with temperature** — 200 m³ at the cold end, 100 m³ at the
+hot end, and the whole row is flat to within 1% at 12,000 K. Two effects cross:
 
 - **A bigger chamber is thinner, so it dissociates more** (store charged 0.548 → 0.864 from 50 to
   400 m³ at 8,000 K), so `k` falls (30.27 → 22.34) and the exhaust speed rises. **This is the
@@ -416,8 +484,8 @@ the hot end. Two effects cross:
   freeze margin at 8,000 K and a 0.5 m² throat is +0.64 decades at 50 m³ and −0.77 at 400 m³.
 
 At 10,000 K and above the second effect catches the first and the curve turns over. **100 m³ at
-12,000 K is the best cell in the grid that also empties inside 400 ms and keeps its chemistry**,
-at 1,515 s — so the paper's 100 m³ recommendation is right, for a reason it did not give, and
+12,000 K is the best cell in the grid that also empties inside 400 ms and keeps its chemistry**, at
+**1,093 s net** — so the paper's 100 m³ recommendation is right, for a reason it did not give, and
 only in company with a *hotter* chamber rather than a cooler one.
 
 ---
@@ -516,7 +584,7 @@ Both curves are committed as `data/results/walled_nozzle/exit_temperature.csv`.
 
 ---
 
-### W21. Water loses to methane in all 64 grid cells, including at 400 m³ and at the cold end
+### W21. Water loses to methane in all 128 grid cells, including at 400 m³ and at the cold end
 
 **Locate:** N16's "Paper-side work puts water within 5 to 9% of methane at the cold end and
 *ahead* of it at 400 m³", and "The fluid choice may come down to the liner rather than the
@@ -524,15 +592,15 @@ impulse".
 
 **Now:** water is carried as roughly competitive and better at large volume.
 
-**Should be:** water's effective impulse is **52–74% of methane's** at every cell of the grid.
+**Should be:** water's net impulse is **52–83% of methane's** at every cell of the grid.
 The ratio, water ÷ methane:
 
 | `T_c` \ chamber | 50 m³ | 100 m³ | 200 m³ | 400 m³ |
 | ---: | ---: | ---: | ---: | ---: |
-| 6,000 K | 0.715 | 0.723 | 0.732 | **0.740** |
-| 8,000 K | 0.733 | 0.730 | 0.721 | 0.689 |
-| 10,000 K | 0.713 | 0.703 | 0.698 | 0.546 |
-| 12,000 K | 0.700 | 0.698 | 0.571 | 0.576 |
+| 6,000 K | 0.772 | 0.780 | 0.790 | **0.800** |
+| 8,000 K | 0.798 | 0.800 | 0.797 | 0.763 |
+| 10,000 K | 0.792 | 0.787 | 0.786 | 0.570 |
+| 12,000 K | 0.786 | 0.787 | 0.606 | 0.615 |
 
 (at a 2 m² throat; the full 128-cell table is in `surface.csv`. The low cells at 400 m³ are where
 water freezes and methane has not yet.)
@@ -540,8 +608,10 @@ water freezes and methane has not yet.)
 **A ratio, deliberately.** Both fluids are run through identical machinery with identical
 conventions, so every normalisation the paper applies — vessel mass, `eta_geom`, the drift term —
 cancels. **The ratio survives the conventions; an absolute number would not.** The best it ever
-gets is 0.740, at 6,000 K and 400 m³ — which is also the worst corner of the grid in absolute
-terms (919 s for methane, 680 for water).
+gets is 0.800, at 6,000 K and 400 m³ — which is also the worst corner of the grid in absolute
+terms (706 s net for methane, 565 for water). **The debit narrows the gap** by ~6 points, because
+water's larger `k` means a smaller per-kilogram debit (85–208 s against methane's 167–422 s), but
+it never closes it.
 
 **Why.** Water's mean atomised particle mass is 6.0 amu against methane's 3.2, so a kilogram of
 water holds fewer particles and less energy at the same temperature. It needs `k` = 40–50 where
@@ -556,36 +626,134 @@ the right trade. **But it should be argued as a liner choice, not sold as a near
 
 ---
 
-### W22. The configuration to price first, priced — and plain methane beats it by 15%
+### W22. The configuration to price first, priced — plain methane still beats it, and hydrogen is a bigger dial than 10%
 
 **Locate:** N16's "100 m³ at 1,284 bar, a 0.1 m² throat, and a bulk slug of 90% water with 10%
 liquid hydrogen ... If only one point can be run, run that one and plain methane beside it."
 
 **Should be:**
 
-| fluid | `k` | `p_c` | exit `T` | exit ρ | conversion | Isp effective | freeze margin |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| **90% water + 10% H₂*** | 34.42 | 1,289 bar | 3,108 K | 7.3e-3 | 0.763 | **1,033 s** | −2.30 |
-| water | 50.26 | 1,163 bar | 3,228 K | 1.0e-2 | 0.703 | 841 s | −1.78 |
-| **plain methane** | 27.01 | 1,127 bar | 3,109 K | 5.6e-3 | 0.697 | **1,192 s** | −1.46 |
+| fluid | `k` | `p_c` | exit `T` | conv raw / capped | freeze at `A/A*` | **Isp effective** |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **90% water + 10% H₂*** | 34.42 | 1,289 bar | 3,108 K | 0.763 / 0.610 | 11.2 | **811 – 933 s** |
+| water | 50.26 | 1,163 bar | 3,228 K | 0.703 / 0.596 | 21.3 | 689 – 761 s |
+| **plain methane** | 27.01 | 1,127 bar | 3,109 K | 0.697 / 0.633 | 47.6 | **909 – 968 s** |
 
-(100 m³, 8,000 K, 0.1 m² throat. \* **ESTIMATE** — see below.)
+(100 m³, 8,000 K, 0.1 m² throat. \* **ESTIMATE** — see below. All three freeze at this throat,
+so each is a bracket: capped conversion at the low end, equilibrium at the high end.)
 
-**Three readings.** The hydrogen dilution is worth **+23%** over plain water, which is the
-ask's own point and it is real. **Plain methane still beats the mix by 15%.** And **all three
-freeze** at this throat (W19), so all three numbers are the capped bound and none of them is the
-equilibrium figure.
+**Three readings.** The hydrogen dilution is worth **+18 to +23%** over plain water, which is the
+ask's own point and it is real. **Plain methane still beats the mix by 4–12%**, at both ends of
+the bracket. And all three freeze here (W19), so none of these is an equilibrium figure — methane's
+lead is partly that it freezes *latest* (`A/A*` 47.6 against 11.2), because its return channel is
+`H + H + M` with both partners the same species while the water fluids need a scarce OH.
+
+**Hydrogen is a real dial and 10% is not the end of it.** Swept at the best methane cell
+(12,000 K, 100 m³, 0.5 m² throat), effective Isp against hydrogen mass fraction:
+
+| H₂ by mass | `k` | `u` | **net, upper** | **net, lower** | min `Da` |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0% (pure water) | 36.81 | 74.4 MJ/kg | 846 | 816 | 2.89 |
+| 5% | 30.44 | 89.5 | 933 | 885 | 1.68 |
+| **10%** | 26.05 | 104.0 | **1,009** | 737 † | 1.04 |
+| 20% | 20.25 | 132.4 | 1,140 | 827 † | 0.445 |
+| 30% | 16.55 | 160.3 | 1,251 | 900 † | 0.206 |
+| *methane, same cell* | *18.11* | *147.2* | *1,093* | *1,093* | *23* |
+
+**Hydrogen buys energy density and sells freeze margin** — `u` rises 74 → 160 MJ/kg, which is the
+whole benefit and is real, but diluting the water slows its own three-body return (∝ ρ_water²) and
+`Da` falls monotonically. You would need ~15% hydrogen to match methane on the upper bound and ~20%
+to pass it, and by then the bracket is 313 s wide against methane's single hard number.
+
+**† Do not quote those three lower bounds.** They are a **step-function artefact**, not physics.
+Between 5% and 10% the freeze station jumps to `A/A*` = 1.00 — the throat itself, at 9,509 K with
+**95% of the store still held** — because `Da` at the throat crosses the threshold of 10, and the
+cap treats first-crossing-of-10 as *total* quench. The real freeze band is 10 down to 0.1, so
+`Da` ≈ 1 is mid-band, not frozen. The raw column is smooth and monotone throughout
+(0.681 → 0.706 → 0.728 → 0.760 → 0.783), which is what identifies the cliff as bookkeeping. Scored
+on the *optimistic* edge of the OH bracket instead — which is the fair comparison, since methane's
+single channel carries no scarcity bracket at all — the 10% mixture returns **983 s**, still under
+methane.
 
 **The mixture is an estimate and must be labelled one wherever it is quoted.** There is no joint
 H/O equilibrium EOS here, so it is composed of `eos_water` and a hydrogen EOS as two independent
 subsystems at a common temperature. That is exact for the thermal terms and each component's
 internal chemistry and wrong about one thing: the free hydrogen does not shift water's own
 dissociation equilibrium. Le Chatelier puts the real mixture's held store **above** this, so
-**1,033 s is an optimistic edge**. Since it already loses to methane, the conclusion is safe in
-the direction it matters.
+**every mixture number here is an optimistic edge**. Since the mixture already loses to methane,
+the conclusion is safe in the direction it matters.
 
 **At a throat that does not freeze** (0.5 m², `A/A*` = 56.5, the W19 recommendation), methane at
-100 m³ and 8,000 K returns 1,167 s and at 12,000 K returns 1,515 s.
+100 m³ and 8,000 K returns **884 s net** and at 12,000 K **1,093 s net**, both as hard numbers
+rather than brackets.
+
+---
+
+### W23. Shrinking the chamber moves the strike to the contraction, and the arrival term gets worse, not better
+
+**Locate:** nothing in the ask — this is the successor to W10, and it is the load case for the
+configuration W18 and W19 jointly recommend, so leaving it open would mean recommending a chamber
+whose wall load nobody had computed.
+
+**Now:** the section treats the side wall as the only wall.
+
+**Should be:** below the gate the front leaves the *column* but not the *hardware*. With a
+0.05–1 m² throat against a 3 m bore, the convergent section is 96–99% of the bore area, so the
+front stagnates on it at **normal incidence** rather than grazing past. Two loads land there and
+they scale in opposite directions:
+
+| chamber | front leaves at `r` | speed there | share of pulse still in the front | **arrival** (St = 0.001–0.01) | **bulk** (St = 0.001–0.01) |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 50 m³ | 1.19 m | 31.4 km/s | 41.8% | **6.67 – 66.7** | 2.53 – 25.3 |
+| 100 m³ | 2.02 m | 16.1 km/s | 21.4% | **1.18 – 11.8** | 2.53 – 25.3 |
+| 150 m³ | 2.67 m | 9.9 km/s | 13.2% | **0.41 – 4.14** | 2.53 – 25.3 |
+| 178 m³ (the gate) | 3.00 m | 8.0 km/s | 10.6% | 0.26 – 2.65 | 2.53 – 25.3 |
+
+All MJ/m², against the same 1.6 MJ/m² the section already clears the wall against.
+
+**The bulk column is identical at every volume**, and that is the structural point: the same
+70.3 GJ has to turn the corner and leave through the same throat however long the column in front
+of it was. Chamber volume is simply not a lever on it. At 2.53–25.3 MJ/m² it is 1.6× to 16× the
+side wall's equilibrium reference, and it sits on the same surface that W14 already has ablating
+millimetres per pulse and W15 has being chemically eroded.
+
+**The arrival column runs the wrong way.** A shorter column decelerates the front less, so it
+arrives faster and on a smaller patch: at 50 m³ the front is still doing 31.4 km/s and still holds
+42% of the pulse energy when it hits, concentrated on 4.4 m² of the 28.3 m² bore. That is
+6.7–67 MJ/m² — **4× to 42× the side-wall reference**, and worse than any side-wall number in W12
+except the 673 m³ corner.
+
+**So "make the chamber small" has a floor, and it is around 150 m³.** By then the front has slowed
+to 9.9 km/s and the arrival is down to 0.41–4.14 MJ/m², a factor of 16 below the 50 m³ case, while
+the side wall is still untouched (the gate is 178 m³). Below that the arrival climbs faster than
+anything else improves.
+
+**And 150 m³ costs almost nothing on the ledger**, which is what makes it a real recommendation
+rather than a compromise. Methane at 12,000 K through a 0.5 m² throat:
+
+| chamber | `p_c` | exit `T` | conversion | freeze margin | **Isp effective** | blowdown |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 m³ | 1,448 bar | 4,061 K | 0.674 | **+0.36** | **1,093 s** | 50 ms |
+| **150 m³** | 965 bar | 3,998 K | 0.668 | +0.07 | 1,091 s | 75 ms |
+| 200 m³ | 723 bar | 3,951 K | 0.657 | −0.15 (freezing) | 1,081 s | 99 ms |
+
+**The impulse is flat across all three** — 12 s out of 1,093, well inside every uncertainty in
+this document, and flatter on the net convention than on the gross one. So the choice is not an impulse choice at all:
+
+- **150 m³** is 2.9× softer on the contraction's arrival load, and 0.29 decades thinner on freeze
+  margin. Its exit at 3,998 K is 2 K below the condensed-carbon floor, so it is quoted as a bound.
+- **100 m³** has a comfortable freeze margin and an exit at 4,061 K, **above** the carbon floor —
+  the only cell in the whole grid that is both near-optimal and free of ADR-0050's weakness 4.
+
+**The paper should carry both and pick on the wall**, because that is the axis where they actually
+differ. If the Stanton bracket tightens toward its low end, 100 m³ is fine and the chemistry
+argument wins. If it tightens toward the high end, 150 m³ is the only one of the three whose
+contraction load is under 5 MJ/m².
+
+**What this does not price.** The contraction is a curved, converging surface and the front meets
+it obliquely near the bore and normally near the axis; treating it as a flat end wall overstates
+the normal component near the rim. And the bulk term is an energy-budget ceiling times a Stanton
+number, not a boundary-layer solve — the same weakness W12 carries, on the same footing.
 
 ---
 
@@ -602,14 +770,16 @@ the direction it matters.
 - **"Smaller is better and costs nothing" (N16).** Vessel mass is flat, performance is not.
   Halving the chamber raises `k`. The optimum is interior. (W18)
 - **"Water within 5 to 9% of methane at the cold end and ahead of it at 400 m³" (N16).** Water is
-  26–30% behind on the cells where both fluids stay in equilibrium, and 43–48% behind on the
+  17–24% behind on the cells where both fluids stay in equilibrium, and 39–48% behind on the
   cells where water freezes first. It is never ahead. (W21)
 - **"The chemistry finishes well past the flown throat ... about 1,074 s at `A/A*` = 200"
   (N16).** It freezes at `A/A*` ≈ 140 and the extra impulse does not arrive. (W19)
 - **`held(T, ρ) = held_W9(T) · ρ^-0.21` (N16).** Good to ±10% between 3,500 and 5,000 K, wrong by
   32–44% at 3,000 K, and structurally incapable of being right at both ends. (W16)
-- **"The throat is the hottest and fastest station so it should self-clean" (N9 item 5).** The
-  *gas* is; the *surface* cannot be. No wall temperature satisfies both constraints. (W15)
+- **"The throat is the hottest and fastest station so it should self-clean" (N9 item 5), and
+  "0.34 to 3.7% redeposition suffices".** There is nothing to clean off and nothing to redeposit:
+  the exhaust is *undersaturated* in carbon at every wall temperature graphite survives, because
+  the carbon is in acetylene. The throat is chemically eroded, not plated. (W15)
 
 **One thing the ask got right and should be credited for:** the 170 m³ gate estimate is correct
 to 5% (W10), and the "throat heat flux stops being a footnote and becomes the item" call is
@@ -637,22 +807,59 @@ exactly right (W14).
   the 200 m³ verdict ("comparable to the equilibrium load") is safe at either edge; the 673 m³
   verdict spans "5×" to "55× worse", which is the difference between a design margin and a
   redesign.
-- **Boundary-layer-limited carbon deposition (N9 item 5).** The thermodynamic verdict is settled
-  (W15); the rate is bounded only by a free-flight ceiling of centimetres per pulse.
-  **Consequence:** whether the throat's plating and ablation balance *locally* is open, and that
-  is what decides the throat's life.
-- **The normal-incidence strike on the convergent section (W10's successor).** Shrinking the
-  chamber below the gate moves the strike from the side wall to the contraction. Unpriced.
+- **The carbon-to-acetylene kinetics themselves (W15).** The equilibrium verdict is settled and
+  the boundary layer has five decades of margin against a *collision-frequency* bound, but no
+  evaluated rate coefficient for the C → C₂H₂ path exists in this repository — W9 already named
+  building one as the next thing. **Cost:** a literature pass under `rates.py`'s provenance rule.
+  **Consequence:** the verdict would have to be wrong by five decades to flip, so this is
+  confirmation rather than a gate.
+- **The chemical erosion rate (W15).** That the gas erodes graphite is settled; *how fast* is
+  not — it needs the same boundary-layer mass-transfer solve, now with the sign reversed.
+  **Consequence:** the ablation column in W14 is a floor, not the total.
+- **Softening the freeze cap from a step to a ramp** (weakness 1). **Cost:** small — it is one
+  function. **Consequence:** it would tighten every bracket in W19 and W22 and remove the cliff,
+  but it moves every number in this document, so it is the paper's call rather than ours.
+- **A boundary-layer solve on the contraction (W23).** The end-wall loads are energy-budget
+  ceilings times the same Stanton bracket as W12, and the surface is curved rather than flat.
+  **Consequence:** the 150-versus-100 m³ choice is decided by where inside that bracket the truth
+  sits, so it is the same deferral as W12 and closing one closes both.
 - **N11 entirely.** Untouched.
 
 ---
 
 ## Conventions, so nothing here is compared with the wrong number
 
-- **`Isp effective`** is per kilogram of *launched slug*, `u_e (1+k) / (k g₀)`. It carries **none**
-  of the launch-ledger normalisations this repository does not own — no `eta_geom`, no drift term,
-  no vessel mass. **Do not compare it directly with ADR-0016's 1,080 s or 709 s.** Ratios and
-  trends transfer; absolute values do not. This is the same warning W5 and W8 carry.
+- **Every specific impulse in this document is `Isp effective`**, and that is the figure of merit.
+  It carries **both** mass-ledger corrections:
+
+      Isp_effective = [ (1+k) u_e − w ] / (k g₀) = w (η_jet √(1+k) − 1) / (k g₀)
+
+  — a **credit** of `(1+k)/k` for the impactor mass the vehicle never lifted, and a **debit** of
+  `w/(k g₀)` for the momentum that same impactor brings in against the ship's motion. This is the
+  companion's own **head-on** form (`templateArxiv.tex`: `I/(mw) = η_jet√(1+k) − 1` head-on,
+  against `+ 1` on an overtake). **The head-on burn is a momentum *debit*, not a credit.** The
+  exhaust has to cancel `m_p w` before any of it becomes thrust. **Do not inherit the overtake
+  study's `+1`.**
+- **Both corrections scale as `1/k` and the debit is the larger**, by exactly `w/u_e`. So
+  `Isp effective` sits **below** `Isp true` everywhere in this grid, and a reader who applies the
+  credit but forgets the debit reads every number too high by `(w − u_e)/(k g₀)`.
+- The algebra lives in one place, `chamber.IspLedger`, shared with the propellant ladder of W8 so
+  the sign cannot be right in one study and wrong in the other. At `η_jet = 1` it reduces to
+  `√(1+k) − 1`, which is the tamper study's independently-derived `beta_ideal`.
+- **`η_jet` is exactly `√(conversion)`.** Because `(1+k) u = w²/2` makes `w²/(1+k) = 2u`, the ratio
+  of squares is `u_e²/(2u)`, which is the conversion fraction. So the companion can lift `η_jet`
+  straight out of the grid — and a conversion fraction quoted *as* an `η_jet` would be wrong by a
+  square root.
+- **The thrust floor is `1/√(1+k)`.** Below it the nozzle pushes the ship backwards. It runs
+  0.146–0.233 across this grid against η_jet of 0.76–0.86, so **every cell clears it by 3.5–5.6×**
+  and nothing here reverses.
+- **The credit-only figure is still in the CSV** as `isp_carried_gross_s`, because it is what W5
+  and W8 first reported and because `isp_effective` is built from it. It is **not** a figure of
+  merit on this burn. **`isp_effective_s` in this CSV is the corrected column** — if you are
+  holding a copy of `surface.csv` whose header has no `isp_carried_gross_s`, its
+  `isp_effective_s` is the *old credit-only* quantity and is too high by `momentum_debit_s`.
+  No column carries the launch-ledger normalisations this repository does not own — no `eta_geom`,
+  no vessel mass — so **do not compare any of them directly with ADR-0016's 1,080 s or 709 s.**
 - **`conversion`** is `u_e²/(2u)`, the share of the chamber's energy density that left as directed
   motion. It is convention-free and is the safest quantity to lift.
 - **`held`** is the fraction of *full atomisation* still locked in broken bonds, net of the bonds
@@ -672,12 +879,14 @@ exactly right (W14).
 | W12 | radiative and convective fluence, opacity bracket | `make walled-nozzle-wall` | `wall_strike.csv` |
 | W13 | film capacity | `make walled-nozzle-wall` | printed |
 | W14 | Bartz fluxes, throat fluence, ablation | `make walled-nozzle-wall` | `wall_bartz.csv` |
-| W15 | carbon partial pressure, deposition threshold | `make walled-nozzle-wall` | printed |
+| W15 | saturation ratios, the no-plating band, the boundary-layer margin | `make walled-nozzle-wall` | printed |
 | W16 | `held(T, ρ)` and its exponent | `make walled-nozzle-surface` | `held_surface.csv` |
-| W17–W19, W21, W22 | the 256-row grid (2 fluids x 128 cells) | `make walled-nozzle-surface` | `surface.csv` |
+| W17–W19, W21 | the 256-row grid (2 fluids x 128 cells), `isp_effective_s` column | `make walled-nozzle-surface` | `surface.csv` |
+| W22 | the mixture and the hydrogen-fraction sweep | `surface.mixture()`, scored inline | printed |
 | W20 | `T_e(A/A*)` and its local slope | `make walled-nozzle-surface` | `exit_temperature.csv` |
+| W23 | contraction arrival and bulk loads | `make walled-nozzle-wall` | printed |
 
-Tests: `make walled-nozzle-test` (28 new tests across
+Tests: `make walled-nozzle-test` (39 new tests across
 `test_walled_nozzle_surface.py` and `test_walled_nozzle_wall.py`). The two that matter most are
 `test_one_deep_isentrope_reproduces_a_dedicated_run_at_each_throat`, which pins the shortcut the
 whole grid rests on, and `test_the_front_integrator_reproduces_front_integrate`, which pins the
@@ -687,21 +896,42 @@ N9 integrator against the established magnetic-nozzle one.
 
 ## Known weaknesses of this answer
 
-1. **The Stanton bracket (W12) is the weakest number here and it is the one that binds.** A factor
+1. **The freeze cap is a step function where the physics is a ramp.** `conversion_capped` charges
+   the whole store still held at the *first* station where `Da` falls under 10, but real
+   sudden-freezing takes about a decade in `Da` to complete. Where the crossing happens deep in
+   the nozzle (all the methane rows) little is held there and the cap is nearly tight. Where it
+   happens at the throat — which it does for the hydrogen-diluted mixtures above 5% — the cap
+   charges 95% of the store and produces a cliff that is not physical. **Read `freeze_area_ratio`
+   in the CSV: a freeze at `A/A*` = 1.00 means the cap is biting at the throat and should not be
+   quoted.** Softening it to a ramp across the 10→0.1 band is deferred, because it would move
+   every number in this document and is the paper's call.
+2. **Water and the mixture are scored on the conservative edge of the OH scarcity bracket while
+   methane carries no bracket at all**, since `H + H + M` has both partners as the same species.
+   That asymmetry favours methane. Re-scoring the water fluids on their optimistic edge raises
+   `Da` by about 3.3× and the mixture's effective Isp from 737 to 983 s — **still under methane**, so
+   the W21 and W22 verdicts survive it, but a like-for-like comparison needs the evolved OH
+   network `recombination.py` already names.
+3. **The Stanton bracket (W12) is the weakest number here and it is the one that binds.** A factor
    of ten on the only channel that delivers meaningful energy to the wall.
-2. **Bartz is extrapolated far outside its calibration (W14)** — from tens of bar and a few
+4. **Bartz is extrapolated far outside its calibration (W14)** — from tens of bar and a few
    thousand kelvin to a thousand bar and a partly ionised boundary layer — and its equilibrium/
    frozen `c_p` edges differ by 2×. Read the size, not the digits.
-3. **The freeze-capped conversion (W19) is a lower bound, not the answer** (see Deferred).
-4. **The mixture rung (W22) omits cross-chemistry** and is an optimistic edge.
-5. **`eos_methane` has no condensed carbon below ~4,000 K** (ADR-0050 weakness 4), and **most of
+5. **The freeze-capped conversion (W19) is a lower bound, not the answer** (see Deferred), and
+   weakness 1 says when that bound is loose.
+6. **The mixture rung (W22) omits cross-chemistry** and is an optimistic edge.
+7. **`eos_methane` has no condensed carbon below ~4,000 K** (ADR-0050 weakness 4), and **most of
    this grid's interesting rows exit below it** — exit temperatures run 2,900–4,300 K. The one
    place this does *not* bite is the cell W18 recommends: 100 m³ at 12,000 K with a 0.5 m² throat
    exits at **4,061 K**, just above the floor. Every deeper throat is below it, which is a further
    reason to stop at `A/A*` ≈ 56.
-6. **The nozzle is assumed conical at 15°** (ADR-0051). `Da` scales linearly in the resulting
+8. **The graphite vapour-pressure model is Clausius–Clapeyron with a constant sublimation
+   enthalpy**, anchored at the measured 1 atm sublimation point. It reproduces the JANAF value at
+   2,500 and 3,000 K to within about a factor of two. At graphite's working temperature `S` is
+   0.032, so it would have to be 30× wrong to flip W15's verdict; the *cold edge* of the band
+   moves about ±200 K per factor of two, so quote it as 1,900 K ± 200.
+9. **The nozzle is assumed conical at 15°** (ADR-0051). `Da` scales linearly in the resulting
    length, so a 10° cone would improve every freeze margin by 0.18 decades and a 20° cone would
    worsen it by 0.13. That does not move W19's conclusion but it moves the exact station.
-7. **The front integrator is a snowplow**, so it assumes the swept gas moves with the front and
+10. **The front integrator is a snowplow**, so it assumes the swept gas moves with the front and
    the shocked layer is uniform. Both are the standard treatment and both are what
    `sec:needle_through_fog` already assumes.
