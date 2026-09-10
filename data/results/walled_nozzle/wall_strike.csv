@@ -1,0 +1,4 @@
+fluid,volume_m3,temp_c_k,spread_multiple,contact_x_m,transient_us,shocked_temp_k,shocked_rho,radial_speed_m_s,optical_depth,regime,cooling_time_s,blackbody_flux_w_m2,fluence_radiative_mj_m2,incident_convective_mj_m2,fluence_conv_low,fluence_conv_high,fluence_ceiling_mj_m2
+methane,200,10000,1,6.1529,99.77,4867,9.7796,2634.9,2.970065e-01,emission,1.652586e+01,3.180919e+07,0.003174,109.450,0.1094,1.0945,624.51
+methane,400,10000,1,5.6376,442.53,17186,4.7763,8066.1,6.558248e+03,diffusion,3.735809e+03,4.946842e+09,0.000890,3152.065,3.1521,31.5207,7514.39
+methane,673,10000,1,5.5662,646.57,30726,2.8106,12164.8,9.920660e+03,diffusion,1.500717e+03,5.053958e+10,0.008784,8793.050,8.7931,87.9305,20387.25

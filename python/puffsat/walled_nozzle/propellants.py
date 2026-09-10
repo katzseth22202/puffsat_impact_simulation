@@ -252,6 +252,11 @@ def write(rungs: list[Rung], path: Path = DEFAULT_OUTPUT) -> None:
             )
 
 
+def _by_name(rungs: list[Rung], name: str) -> Rung:
+    """The rung with this name. A helper so the report lines stay inside the line limit."""
+    return next(r for r in rungs if r.name == name)
+
+
 def main() -> None:
     """Report the propellant ladder at the flown chamber temperature."""
     print(
@@ -285,7 +290,7 @@ def main() -> None:
         )
     print("  * ESTIMATE -- no eos_ammonia; conversion assumed, not solved\n")
 
-    methane = next(r for r in rungs if r.name == "methane")
+    methane = _by_name(rungs, "methane")
     print("Against 1/sqrt(mean atomised particle mass), normalised to methane:")
     for r in rungs:
         scaling = math.sqrt(methane.mean_atomised_mass / r.mean_atomised_mass)
@@ -295,13 +300,8 @@ def main() -> None:
         )
 
     print("\nThe ask's own slug ratios, for comparison:")
-    print(
-        f"  water     ask k = 37.70   solved {next(r for r in rungs if r.name == 'water').slug_ratio:.2f}"
-    )
-    print(
-        f"  hydrogen  ask k =  7.99   solved "
-        f"{next(r for r in rungs if r.name == 'hydrogen').slug_ratio:.2f}"
-    )
+    print(f"  water     ask k = 37.70   solved {_by_name(rungs, 'water').slug_ratio:.2f}")
+    print(f"  hydrogen  ask k =  7.99   solved {_by_name(rungs, 'hydrogen').slug_ratio:.2f}")
 
     write([*rungs, *(ammonia_rung(c) for c in (0.35, 0.406, 0.45))])
     print(f"\nwrote {DEFAULT_OUTPUT}")

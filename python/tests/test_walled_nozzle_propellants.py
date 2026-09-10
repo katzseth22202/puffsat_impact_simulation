@@ -8,6 +8,7 @@ which says the whole ladder is one variable in disguise.
 from __future__ import annotations
 
 import math
+from itertools import pairwise
 
 import pytest
 
@@ -37,10 +38,8 @@ def test_the_ladder_sorts_by_mean_atomised_particle_mass(
     and the exhaust speed rises. One variable explains the whole ordering."""
     ordered = sorted(rungs, key=lambda r: r.mean_atomised_mass)
     assert [r.name for r in ordered] == ["hydrogen", "methane", "water"]
-    assert all(a.slug_ratio < b.slug_ratio for a, b in zip(ordered, ordered[1:], strict=False))
-    assert all(
-        a.isp_effective > b.isp_effective for a, b in zip(ordered, ordered[1:], strict=False)
-    )
+    assert all(a.slug_ratio < b.slug_ratio for a, b in pairwise(ordered))
+    assert all(a.isp_effective > b.isp_effective for a, b in pairwise(ordered))
 
 
 def test_effective_isp_tracks_one_over_root_mean_mass(rungs: list[propellants.Rung]) -> None:
@@ -105,7 +104,7 @@ def test_effective_exceeds_total_and_rewards_a_small_slug_ratio(
         assert r.isp_effective > r.isp_total
     ordered = sorted(rungs, key=lambda r: r.slug_ratio)
     boosts = [r.isp_effective / r.isp_total for r in ordered]
-    assert all(a > b for a, b in zip(boosts, boosts[1:], strict=False))
+    assert all(a > b for a, b in pairwise(boosts))
 
 
 def test_conversion_is_a_fraction_and_below_the_ideal_speed(
@@ -226,7 +225,7 @@ def test_the_free_impactor_bonus_rewards_the_smallest_slug(
     by_k = sorted(rungs, key=lambda r: r.slug_ratio)
     assert [r.name for r in by_k] == ["hydrogen", "methane", "water"]
     bonuses = [r.free_impactor_bonus for r in by_k]
-    assert all(a > b for a, b in zip(bonuses, bonuses[1:], strict=False))
+    assert all(a > b for a, b in pairwise(bonuses))
     assert by_k[0].free_impactor_bonus == pytest.approx(0.129, abs=0.003)
     assert by_k[-1].free_impactor_bonus == pytest.approx(0.025, abs=0.003)
     for r in rungs:

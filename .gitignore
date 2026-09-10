@@ -129,3 +129,14 @@ __pycache__/
 !/data/results/walled_nozzle/freeze.csv
 # And the propellant ladder behind W8 -- 6 rows, and the paper repo cannot run the target.
 !/data/results/walled_nozzle/propellants.csv
+# The N16 conversion-fraction surface and the two curves behind it, and the N9 wall ledgers --
+# same cross-repo reason: `docs/walled_nozzle_grid_and_wall.md` is written to be copied into the
+# paper repository, and an agent there cannot run `make walled-nozzle-surface` or
+# `make walled-nozzle-wall`. The held surface is the single artifact N16 calls the most valuable
+# thing the ask can return, so it is committed even though it is a table rather than a verdict.
+!/data/results/walled_nozzle/surface.csv
+!/data/results/walled_nozzle/held_surface.csv
+!/data/results/walled_nozzle/exit_temperature.csv
+!/data/results/walled_nozzle/wall_front.csv
+!/data/results/walled_nozzle/wall_strike.csv
+!/data/results/walled_nozzle/wall_bartz.csv

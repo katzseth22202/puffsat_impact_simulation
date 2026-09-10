@@ -96,11 +96,14 @@ make tamper-test     # that study's tests alone
 ```
 
 **The `walled-nozzle-*` targets belong to a third study.** The walled thermal nozzle answers asks
-N9-N11 of the companion repository against its ADR-0016: a 3 m bore, **no field**, a 200-673 m^3
-chamber and 25 kg at 75 km/s into methane. It shares the EOS machinery and the Bray criterion and
-nothing else -- not the `f(v)` bag, not the magnetic nozzle's geometry, not the plate-side
-conventions. Scope is [ADR-0050](docs/adr/0050-walled-thermal-nozzle-methane-chamber.md); results
-are in [`docs/walled_nozzle_asks_answered.md`](docs/walled_nozzle_asks_answered.md). Its Python is
+N9-N11 and N16 of the companion repository against its ADR-0016: a 3 m bore, **no field**, a
+50-673 m^3 chamber and 25 kg at 75 km/s into methane or water. It shares the EOS machinery and
+the Bray criterion and nothing else -- not the `f(v)` bag, not the magnetic nozzle's geometry, not the plate-side
+conventions. Scope is [ADR-0050](docs/adr/0050-walled-thermal-nozzle-methane-chamber.md) and
+[ADR-0051](docs/adr/0051-walled-nozzle-grid-geometry-and-the-load-case.md); results are in
+[`docs/walled_nozzle_asks_answered.md`](docs/walled_nozzle_asks_answered.md) (W1-W9, asks N9.0
+and N10) and [`docs/walled_nozzle_grid_and_wall.md`](docs/walled_nozzle_grid_and_wall.md)
+(W10-W22, asks N16 and N9 items 1-7). Its Python is
 `python/puffsat/walled_nozzle/` plus the top-level `python/puffsat/eos_methane.py`, and its
 outputs are under `data/results/walled_nozzle/`.
 
@@ -109,6 +112,8 @@ make walled-nozzle-chamber    # N10.4b + N9.0: the solved chamber charge and the
 make walled-nozzle-hydrogen   # N10: the Project 242 validation and the pure-hydrogen rung
 make walled-nozzle-freeze     # N10.1-3: the Bray freeze race, throat sensitivity, exit Isp
 make walled-nozzle-propellants # N10.3: the H2 / CH4 / H2O / NH3 ladder, both Isp conventions
+make walled-nozzle-surface    # N16: the conversion surface over chamber T, volume and throat area
+make walled-nozzle-wall       # N9.1-7: the front, the gate, the wall loads, the throat
 make walled-nozzle-test       # that study's tests alone
 ```
 

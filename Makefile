@@ -777,7 +777,7 @@ water-plate-parcel-check:
 # bore, no field, a 200-673 m^3 chamber, 25 kg at 75 km/s into methane -- and it must not inherit
 # the magnetic nozzle's bag or the plate-side conventions.
 
-.PHONY: walled-nozzle-chamber walled-nozzle-hydrogen walled-nozzle-freeze walled-nozzle-propellants walled-nozzle-test
+.PHONY: walled-nozzle-chamber walled-nozzle-hydrogen walled-nozzle-freeze walled-nozzle-propellants walled-nozzle-surface walled-nozzle-wall walled-nozzle-test
 ## walled-nozzle-chamber: N10 item 4b and N9 item 0 -- the solved chamber charge (equilibrium
 ## composition, wall-cap energy density, the slug-ratio fixed point) and the sealed-vessel
 ## equilibration timescales -> data/results/walled_nozzle/chamber.csv
@@ -805,9 +805,28 @@ walled-nozzle-propellants:
 	@mkdir -p data/results/walled_nozzle
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.propellants
 
+## walled-nozzle-surface: N16 -- the conversion-fraction surface over chamber T (6-12 kK),
+## chamber volume (50-400 m^3) and throat area (7 down to 0.05 m^2), methane and water, plus the
+## held(T, rho) surface that retires the paper side's rho^-0.21 fit and the exit-temperature curve
+## out to A/A* = 1000. ADR-0051. Runs ~15 min.
+## -> data/results/walled_nozzle/{surface,held_surface,exit_temperature}.csv
+walled-nozzle-surface:
+	@mkdir -p data/results/walled_nozzle
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.surface
+
+## walled-nozzle-wall: N9 items 1-7 -- the snowplow front, the volume below which it never
+## reaches the wall, the contact transient split into radiative and convective, the cold film, the
+## Bartz convective flux, and the throat carbon verdict. ADR-0051.
+## -> data/results/walled_nozzle/wall_{front,strike,bartz}.csv
+walled-nozzle-wall:
+	@mkdir -p data/results/walled_nozzle
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.wall
+
 ## walled-nozzle-test: this study's tests alone
 walled-nozzle-test:
 	uv run pytest python/tests/test_eos_methane.py python/tests/test_walled_nozzle_chamber.py \
 	                python/tests/test_walled_nozzle_hydrogen.py \
 	                python/tests/test_walled_nozzle_freeze.py \
-	                python/tests/test_walled_nozzle_propellants.py
+	                python/tests/test_walled_nozzle_propellants.py \
+	                python/tests/test_walled_nozzle_surface.py \
+	                python/tests/test_walled_nozzle_wall.py

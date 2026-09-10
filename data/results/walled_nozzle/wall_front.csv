@@ -1,0 +1,6 @@
+fluid,volume_m3,temp_c_k,spread_multiple,ambient_rho,length_m,cone_half_angle_deg,cone_contact_x_m,reaches_wall,contact_x_m,contact_time_us,contact_speed_m_s,swept_kg,local_slug_ratio,shocked_temp_k,shocked_rho,exit_radius_m,exit_speed_m_s
+methane,50,10000,1,11.04192,1.7684,30.31,4.8126,False,,,,,,,,1.1851,31376.3
+methane,100,10000,1,5.12012,3.5368,29.74,4.9245,False,,,,,,,,2.0160,16079.2
+methane,200,10000,1,2.44489,7.0736,29.26,5.0204,True,6.1529,248.63,9227.4,178.20,7.128,4867,9.7796,3.2611,7026.7
+methane,400,10000,1,1.19408,14.1471,28.88,5.0995,True,5.6376,135.15,19229.3,72.51,2.900,17186,4.7763,5.4458,4872.6
+methane,673,10000,1,0.70266,23.8025,28.66,5.1462,True,5.5662,107.82,28204.9,41.48,1.659,30726,2.8106,8.3424,4372.8
