@@ -817,8 +817,9 @@ walled-nozzle-surface:
 
 ## walled-nozzle-wall: N9 items 1-7 -- the snowplow front, the volume below which it never
 ## reaches the wall, the contact transient split into radiative and convective, the cold film, the
-## Bartz convective flux, and the throat carbon verdict. ADR-0051.
-## -> data/results/walled_nozzle/wall_{front,strike,bartz}.csv
+## Bartz convective flux, the throat carbon verdict, and W24's throat-reduction trade (what a
+## narrower throat buys in Isp against what it costs in throat life). ADR-0051.
+## -> data/results/walled_nozzle/wall_{front,strike,bartz,throat_life}.csv
 walled-nozzle-wall:
 	@mkdir -p data/results/walled_nozzle
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.wall

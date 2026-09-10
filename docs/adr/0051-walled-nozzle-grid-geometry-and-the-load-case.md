@@ -225,6 +225,35 @@ would flip a ~30% penalty into a ~30% bonus of the same size.
 `test_the_head_on_burn_is_a_debit_and_never_a_credit` asserts the corrected figure is below both
 the credit-only one and the real one, for every cell, so the mistake cannot land silently.
 
+## Decision 10: a narrow throat is priced from the blowdown dwell, not from the peak flux
+
+W6 recommended narrowing the throat and W19 found a wall past `A/A*` ~ 140, but neither priced
+the cost, and the paper's only stated cost is the pulse stretching from 8 ms to 28 ms. Crossing
+the two needed a decision about *which* thermal quantity does the pricing, and the intuitive
+answer is wrong.
+
+Bartz gives the **throat** flux as `D*^-0.2 ~ A*^-0.1`, so halving the throat area raises it by
+about 7% -- a factor 1.6 across a factor 140 in area. The **blowdown** goes as `1/A*`. Since
+fluence is flux times time, the dwell carries essentially the whole cost: a narrow throat does
+not heat the throat harder, it heats it for twice as long.
+
+`throat_life` therefore reports a **pulse count** rather than a flux or a temperature, which is
+only meaningful because of Decision 7: W15 established that the throat plates nothing back at any
+survivable wall temperature, so recession is a consumable rate rather than a survival question.
+Recession is radial and the throat *opens* as it erodes, so the metric is fractional area growth
+-- the nozzle drifts back up the trade curve it was narrowed to climb.
+
+**The exponent is derived before the solver runs and is asserted, not fitted.** Recession goes as
+`A*^-1.1`; a fixed fractional area growth needs a recession proportional to `r* ~ A*^0.5`; so
+throat life goes as **`A*^1.6`**, a factor 3.03 per halving. The joined Bartz/blowdown/ablation
+chain reproduces it to 2% across the ladder, and `THROAT_LIFE_EXPONENT` plus
+`test_throat_life_follows_the_analytic_area_exponent` pin it -- the same analytic-first discipline
+the kernels are built under, applied to a correlation whose absolute calibration is not
+trustworthy. It is what lets W24 quote an exchange rate while disowning the millimetres.
+
+The trade table is joined in `wall.py` rather than `surface.py` because the cost side is the
+wall's -- flux, dwell, ablation -- while the gain side is one column read off the N16 grid.
+
 ## Consequences
 
 - New module `python/puffsat/walled_nozzle/surface.py` (N16) and
@@ -252,3 +281,7 @@ the credit-only one and the real one, for every cell, so the mistake cannot land
   strengthening the "chamber volume is not an Isp dial" verdict.
 - The answer document is `docs/walled_nozzle_grid_and_wall.md`, numbered W10
   onward so it continues the W series the paper repository already cites.
+- **W24 asks the paper for something it does not currently state: a throat-replacement
+  interval.** The recommendation is 2 m^2 where the throat is hard to service and 1 m^2 where it
+  is a scheduled consumable, and total impulse per throat (pulses x Isp) falls 50x between them --
+  so the choice is an economics one and the study supplies only the exchange rate.

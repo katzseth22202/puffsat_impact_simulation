@@ -260,3 +260,69 @@ def test_the_front_never_carries_more_than_the_pulse() -> None:
     """Energy conservation on the snowplow: it can only ever hold a share of what arrived."""
     for volume in (50.0, 100.0, 200.0):
         assert 0.0 < wall.end_wall_strike(surface.METHANE, volume).front_share < 1.0
+
+
+# ---- W24: the throat as a consumable ----------------------------------------------------------
+
+
+def test_throat_life_follows_the_analytic_area_exponent() -> None:
+    """**The strongest check on W24, because the exponent is derived before the solver runs.**
+
+    Bartz gives the throat flux as `D*^-0.2 ~ A*^-0.1`; the blowdown goes as `1/A*`; so the pulse
+    fluence and the recession go as `A*^-1.1`. Reaching a *fractional* area growth needs a
+    recession proportional to `r* ~ A*^0.5`, so the pulse count goes as `A*^1.6`. If the joined
+    Bartz/blowdown/ablation chain ever stops reproducing that, one of the three has drifted.
+    """
+    lives = {a: wall.throat_life(surface.METHANE, 200.0, 10000.0, a) for a in (7.0, 2.0, 1.0, 0.5)}
+    for wide, narrow in ((7.0, 2.0), (2.0, 1.0), (1.0, 0.5)):
+        predicted = (wide / narrow) ** wall.THROAT_LIFE_EXPONENT
+        actual = lives[wide].pulses_to_area_growth(0.10) / lives[narrow].pulses_to_area_growth(0.10)
+        assert actual == pytest.approx(predicted, rel=0.02)
+
+
+def test_the_cost_of_a_narrow_throat_is_dwell_and_not_flux() -> None:
+    """**W24's mechanism, asserted so the write-up cannot be read the other way round.** Halving
+    the throat raises the throat flux by only about 7% (`D*^-0.2`) while doubling the blowdown, so
+    the fluence -- and the recession with it -- is carried by the time, not the intensity."""
+    wide = wall.throat_life(surface.METHANE, 200.0, 10000.0, 2.0)
+    narrow = wall.throat_life(surface.METHANE, 200.0, 10000.0, 1.0)
+    assert narrow.flux / wide.flux == pytest.approx(2.0**0.1, rel=0.02)
+    assert narrow.blowdown / wide.blowdown == pytest.approx(2.0, rel=0.02)
+    assert narrow.fluence / wide.fluence == pytest.approx(2.0**1.1, rel=0.03)
+
+
+def test_the_throat_opens_as_it_erodes() -> None:
+    """Recession is radial, so a throat narrowed for performance drifts back up the trade curve.
+
+    **The doubling count is exact in the radius rather than linearised in `dA/A`, and the two
+    disagree by 18%.** Dividing a 100% area growth by the per-pulse `dA/A` would give 10x the
+    +10% count; the honest answer is `(sqrt(2) - 1)/(sqrt(1.1) - 1)` = 8.49x, because the radius
+    has further to go than a linear reading of the area suggests. Linearising would overstate
+    every doubling life in W24's table.
+    """
+    life = wall.throat_life(surface.METHANE, 200.0, 10000.0, 1.0)
+    assert life.area_growth_per_pulse == pytest.approx(2.0 * life.recession / life.throat_radius)
+    assert life.throat_radius == pytest.approx(math.sqrt(1.0 / math.pi))
+    exact = (math.sqrt(2.0) - 1.0) / (math.sqrt(1.1) - 1.0)
+    ratio = life.pulses_to_area_growth(1.00) / life.pulses_to_area_growth(0.10)
+    assert ratio == pytest.approx(exact, rel=1e-9)
+    assert ratio == pytest.approx(8.49, abs=0.01)
+    assert ratio < 1.00 / 0.10  # the linearised reading, which is optimistic
+
+
+def test_the_deep_throat_stops_paying_before_it_stops_costing() -> None:
+    """**The finding W24 turns on.** Raw conversion keeps climbing all the way down the ladder,
+    but *capped* conversion saturates -- past the freeze station the equilibrium branch releases
+    chemistry the real flow no longer has time to release. So below about 0.5 m^2 the effective
+    Isp is flat to within a percent while the recession per pulse is still doubling per halving.
+    """
+    grid = {
+        p.throat_area: p
+        for p in surface.column(surface.METHANE, 10000.0, 200.0, throats=(0.5, 0.2, 0.1))
+    }
+    assert grid[0.1].conversion > grid[0.2].conversion > grid[0.5].conversion
+    assert grid[0.1].conversion_capped == pytest.approx(grid[0.5].conversion_capped, rel=0.02)
+    assert grid[0.1].isp_effective / grid[0.5].isp_effective == pytest.approx(1.0, abs=0.02)
+    coarse = wall.throat_life(surface.METHANE, 200.0, 10000.0, 0.5)
+    fine = wall.throat_life(surface.METHANE, 200.0, 10000.0, 0.1)
+    assert fine.recession > 4.0 * coarse.recession

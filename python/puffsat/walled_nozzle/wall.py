@@ -78,6 +78,7 @@ PAPER_GATE_VOLUME = 170.0
 DEFAULT_OUTPUT = Path("data/results/walled_nozzle/wall_front.csv")
 STRIKE_OUTPUT = Path("data/results/walled_nozzle/wall_strike.csv")
 BARTZ_OUTPUT = Path("data/results/walled_nozzle/wall_bartz.csv")
+THROAT_LIFE_OUTPUT = Path("data/results/walled_nozzle/wall_throat_life.csv")
 
 
 def chamber_length(volume: float, radius: float = WALL_RADIUS) -> float:
@@ -935,6 +936,99 @@ def end_wall_strike(
     )
 
 
+# ---- What a narrower throat costs: the throat as a consumable (W24) --------------------------
+
+#: Throat areas [m^2] the trade study is run over: the ask's flown 7 down to 0.1. It stops one
+#: rung short of the N16 grid's 0.05 deliberately -- methane's blowdown already misses the 400 ms
+#: pulse period at 0.1, and the effective Isp has been flat to within a percent since 0.5, so a
+#: deeper rung would price a throat that is off the table on two counts at once.
+THROAT_LADDER = (7.0, 4.0, 2.0, 1.0, 0.5, 0.2, 0.1)
+
+#: Analytic exponent of throat life in throat area, `life ~ A*^1.6`. Derived, not fitted:
+#: Bartz gives the throat flux as `D*^-0.2 ~ A*^-0.1`; the blowdown goes as `1/A*`; so the pulse
+#: fluence -- and with it the recession -- goes as `A*^-1.1`. Reaching a *fractional* area growth
+#: needs a recession proportional to `r* ~ A*^0.5`, so the pulse count goes as `A*^1.6`.
+#: `test_throat_life_follows_the_analytic_area_exponent` pins it.
+THROAT_LIFE_EXPONENT = 1.6
+
+
+@dataclass(frozen=True)
+class ThroatLife:
+    """How many pulses a throat lasts, given W15's verdict that it does not self-heal.
+
+    **This is the term that prices a narrow throat, and it is not the peak flux.** Bartz's throat
+    flux goes as `D*^-0.2`, so halving the throat area raises it only about 7%. What doubles is
+    the **blowdown time**, because the same chamber empties through a smaller hole. Fluence is
+    flux times time, so the dwell carries the whole cost: *a narrow throat does not heat the
+    throat harder, it heats it for twice as long.*
+
+    W15 established that the throat plates nothing back at any survivable wall temperature -- it
+    is chemically eroded on top of being thermally ablated -- so recession per pulse is a
+    consumable rate rather than a survival question, and the right output is a pulse count.
+
+    Recession is radial and the throat therefore **opens** as it erodes, which is why the metric
+    is fractional area growth: the nozzle drifts back up the trade curve it was narrowed to
+    escape.
+    """
+
+    fluid: str
+    volume: float
+    temp_c: float
+    throat_area: float
+    #: Throat radius [m], from `A* = pi r*^2`.
+    throat_radius: float
+    #: Throat flux [W/m^2] on the equilibrium `c_p` -- Bartz's upper edge.
+    flux: float
+    #: Chamber emptying time [s]: the dwell that carries the cost.
+    blowdown: float
+    #: Pulse fluence [MJ/m^2] at the throat.
+    fluence: float
+    #: Radial graphite recession per pulse [m], no transpiration credit (pessimistic edge).
+    recession: float
+
+    @property
+    def area_growth_per_pulse(self) -> float:
+        """`dA/A = 2 dr/r` per pulse: how fast the throat undoes its own narrowing."""
+        return 2.0 * self.recession / self.throat_radius
+
+    def pulses_to_area_growth(self, fraction: float) -> float:
+        """Pulses until the throat area has grown by `fraction` (0.10 for +10%, 1.0 for 2x).
+
+        Exact rather than linearised in `dA/A`, since a doubling is not a small perturbation:
+        `A ~ r^2`, so the radius has to reach `r* sqrt(1 + fraction)`.
+        """
+        if self.recession <= 0.0:
+            return math.inf
+        return (math.sqrt(1.0 + fraction) - 1.0) * self.throat_radius / self.recession
+
+
+def throat_life(
+    fluid: surface.Fluid,
+    volume: float = 200.0,
+    temp_c: float = 10000.0,
+    throat_area: float = 1.0,
+) -> ThroatLife:
+    """Price one throat area as a consumable, on the Bartz flux and the solved blowdown.
+
+    **Read the scaling, not the digits.** Every caveat on `bartz_flux` applies -- the correlation
+    is far outside its fit at a thousand bar and ten thousand kelvin -- and `ablation_depth` takes
+    no transpiration credit, so a blowing boundary layer roughly doubles every pulse count here.
+    What survives both is the exponent: `life ~ A*^1.6`, a factor of three per halving.
+    """
+    b = bartz_flux(fluid, volume, temp_c, throat_area, station="throat")
+    return ThroatLife(
+        fluid=fluid.name,
+        volume=volume,
+        temp_c=temp_c,
+        throat_area=throat_area,
+        throat_radius=math.sqrt(throat_area / math.pi),
+        flux=b.flux_equilibrium,
+        blowdown=b.blowdown,
+        fluence=b.fluence_equilibrium,
+        recession=ablation_depth(b.fluence_equilibrium * 1e6),
+    )
+
+
 # ---- Does the throat self-heal? (item 5, properly) ---------------------------------------
 
 #: Gas-kinetic bimolecular rate coefficient [m^3/s], order of magnitude, for the *bound* below.
@@ -1156,6 +1250,96 @@ def write_bartz(points: Sequence[BartzPoint], path: Path = BARTZ_OUTPUT) -> None
             )
 
 
+THROAT_LIFE_HEADER = (
+    "fluid,volume_m3,temp_c_k,throat_area_m2,throat_radius_mm,area_ratio,exit_temp_k,"
+    "conversion,conversion_capped,verdict,isp_effective_s,isp_gain_vs_7m2,"
+    "flux_throat_mw_m2,blowdown_ms,blowdown_fits,fluence_mj_m2,recession_mm_per_pulse,"
+    "area_growth_per_pulse,pulses_to_plus_10pc,pulses_to_2x,below_carbon_floor\n"
+)
+
+
+def write_throat_life(
+    fluids: Sequence[surface.Fluid] = (surface.METHANE, surface.HYDROGEN),
+    volume: float = 200.0,
+    temp_c: float = 10000.0,
+    path: Path = THROAT_LIFE_OUTPUT,
+) -> None:
+    """Write W24's trade table: what a narrower throat buys against what it costs.
+
+    Joined here rather than in `surface.py` because the cost side is this module's -- the Bartz
+    flux, the blowdown dwell and the ablation rate -- while the gain side is one column read off
+    the N16 grid. Committed for the cross-repo reason ADR-0025 records.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as fh:
+        fh.write(THROAT_LIFE_HEADER)
+        for fluid in fluids:
+            points = {
+                p.throat_area: p
+                for p in surface.column(fluid, temp_c, volume, throats=THROAT_LADDER)
+            }
+            base = points[max(THROAT_LADDER)].isp_effective
+            for area in THROAT_LADDER:
+                g = points[area]
+                life = throat_life(fluid, volume, temp_c, area)
+                fh.write(
+                    f"{fluid.name},{volume:g},{temp_c:g},{area:g},"
+                    f"{life.throat_radius * 1e3:.0f},{g.area_ratio:.1f},{g.exit_temp:.0f},"
+                    f"{g.conversion:.4f},{g.conversion_capped:.4f},{g.verdict},"
+                    f"{g.isp_effective:.1f},{g.isp_effective / base - 1.0:.4f},"
+                    f"{life.flux / 1e6:.0f},{life.blowdown * 1e3:.1f},{g.blowdown_fits},"
+                    f"{life.fluence:.1f},{life.recession * 1e3:.3f},"
+                    f"{life.area_growth_per_pulse:.5f},"
+                    f"{life.pulses_to_area_growth(0.10):.0f},"
+                    f"{life.pulses_to_area_growth(1.00):.0f},{g.below_carbon_floor}\n"
+                )
+
+
+def _report_throat_trade(volume: float = 200.0, temp_c: float = 10000.0) -> None:
+    """Print W24: the throat-reduction trade, measured from the ask's own 7 m^2 baseline."""
+    print(
+        f"\n=== W24: what reducing the throat buys and costs, from the ask's 7 m^2 "
+        f"({volume:.0f} m^3, {temp_c:.0f} K) ==="
+    )
+    for fluid in (surface.METHANE, surface.HYDROGEN):
+        points = {
+            p.throat_area: p for p in surface.column(fluid, temp_c, volume, throats=THROAT_LADDER)
+        }
+        base = points[max(THROAT_LADDER)].isp_effective
+        print(f"\n  {fluid.name}: baseline A* = 7 m^2 gives {base:.0f} s effective")
+        print(
+            f"  {'A*':>5} {'A/A*':>6} {'exit T':>7} {'conv/capped':>12} {'Isp eff':>8} "
+            f"{'vs 7':>7} {'/halving':>9} {'blowdown':>9} {'recess':>8} {'to +10%':>8} "
+            f"{'flags':>17}"
+        )
+        previous = None
+        for area in THROAT_LADDER:
+            g = points[area]
+            life = throat_life(fluid, volume, temp_c, area)
+            step = 0.0 if previous is None else 100.0 * (g.isp_effective / previous - 1.0)
+            marginal = "--" if previous is None else f"{step:+.1f}%"
+            flags = []
+            if g.verdict != "equilibrium":
+                flags.append("FREEZE")
+            if g.below_carbon_floor:
+                flags.append("C-floor")
+            if not g.blowdown_fits:
+                flags.append("BLOWDOWN")
+            print(
+                f"  {area:5.2f} {g.area_ratio:6.1f} {g.exit_temp:7.0f} "
+                f"{g.conversion:5.3f}/{g.conversion_capped:6.3f} {g.isp_effective:8.0f} "
+                f"{100.0 * (g.isp_effective / base - 1.0):+6.1f}% {marginal:>9} "
+                f"{life.blowdown * 1e3:8.1f}ms {life.recession * 1e3:7.2f}mm "
+                f"{life.pulses_to_area_growth(0.10):8.0f} {','.join(flags):>17}"
+            )
+            previous = g.isp_effective
+    print(
+        f"\n  Throat life goes as A*^{THROAT_LIFE_EXPONENT} -- a factor of three per halving --"
+        "\n  because the throat FLUX barely moves (Bartz D*^-0.2, ~7% per halving) while the"
+        "\n  blowdown DWELL doubles. Recession is the pessimistic edge: no transpiration credit."
+    )
+
+
 def main() -> None:
     """Answer N9 items 1-7 in the order the ask asks for them: the gate first."""
     print("N9: does the shocked front reach the wall, and what does it deliver?\n")
@@ -1341,10 +1525,13 @@ def main() -> None:
             f"{deposition_threshold(th.rho, th.temp):17.0f} {WALL_TEMPERATURE:17.0f}"
         )
 
+    _report_throat_trade()
+
     write_fronts(runs)
     write_strikes(strikes)
     write_bartz(bartz)
-    print(f"\nwrote {DEFAULT_OUTPUT}, {STRIKE_OUTPUT}, {BARTZ_OUTPUT}")
+    write_throat_life()
+    print(f"\nwrote {DEFAULT_OUTPUT}, {STRIKE_OUTPUT}, {BARTZ_OUTPUT}, {THROAT_LIFE_OUTPUT}")
 
 
 if __name__ == "__main__":

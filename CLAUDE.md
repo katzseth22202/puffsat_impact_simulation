@@ -103,7 +103,7 @@ conventions. Scope is [ADR-0050](docs/adr/0050-walled-thermal-nozzle-methane-cha
 [ADR-0051](docs/adr/0051-walled-nozzle-grid-geometry-and-the-load-case.md); results are in
 [`docs/walled_nozzle_asks_answered.md`](docs/walled_nozzle_asks_answered.md) (W1-W9, asks N9.0
 and N10) and [`docs/walled_nozzle_grid_and_wall.md`](docs/walled_nozzle_grid_and_wall.md)
-(W10-W23, asks N16 and N9 items 1-7). Its Python is
+(W10-W24, asks N16 and N9 items 1-7). Its Python is
 `python/puffsat/walled_nozzle/` plus the top-level `python/puffsat/eos_methane.py`, and its
 outputs are under `data/results/walled_nozzle/`.
 
@@ -111,9 +111,9 @@ outputs are under `data/results/walled_nozzle/`.
 make walled-nozzle-chamber    # N10.4b + N9.0: the solved chamber charge and the sealed-vessel clock
 make walled-nozzle-hydrogen   # N10: the Project 242 validation and the pure-hydrogen rung
 make walled-nozzle-freeze     # N10.1-3: the Bray freeze race, throat sensitivity, exit Isp
-make walled-nozzle-propellants # N10.3: the H2 / CH4 / H2O / NH3 ladder, both Isp conventions
+make walled-nozzle-propellants # N10.3: the H2 / CH4 / H2O / NH3 ladder, real and effective Isp
 make walled-nozzle-surface    # N16: the conversion surface over chamber T, volume and throat area
-make walled-nozzle-wall       # N9.1-7: the front, the gate, the wall loads, the throat
+make walled-nozzle-wall       # N9.1-7 + W24: the front, the gate, the wall loads, the throat trade
 make walled-nozzle-test       # that study's tests alone
 ```
 

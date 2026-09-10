@@ -140,3 +140,4 @@ __pycache__/
 !/data/results/walled_nozzle/wall_front.csv
 !/data/results/walled_nozzle/wall_strike.csv
 !/data/results/walled_nozzle/wall_bartz.csv
+!/data/results/walled_nozzle/wall_throat_life.csv

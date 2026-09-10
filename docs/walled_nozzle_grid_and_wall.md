@@ -28,19 +28,22 @@ produced it. Every figure came from a run; the [provenance table](#provenance) s
 | **N9 item 7** (convective flux) | **Answered.** The paper's Bartz-like 123–281 MW/m² is a good *liner* number (we get 93–174 at 10 kK and 200 m³) and roughly 2–3× low at the *throat*. | **yes** (W14) |
 | **N9 item 5** (throat carbon) | **Answered, and there is no self-healing to be had.** The exhaust is **undersaturated** in carbon at any wall temperature graphite survives, so it *erodes* the throat rather than plating it. The boundary layer settles the fork with 5 decades to spare. | **yes** (W15) |
 | **N16** — `held(T, ρ)` | **Answered, and it retires the fit.** The exponent is **not −0.21 and not constant**: it runs 0 to −0.25 for methane and 0 to −0.42 for water, vanishing at both ends. | **yes** (W16) |
-| **N16** — the temperature dial | **Answered, and it reverses.** **Hotter is better, monotonically.** Across the grid 6,000 K returns 497–743 s net where 12,000 K returns 800–1,156 s net. | **yes** (W17) |
+| **N16** — the temperature dial | **Answered, and it reverses.** **Hotter is better, monotonically.** Across the grid 6,000 K returns 497–743 s effective where 12,000 K returns 800–1,156 s effective. | **yes** (W17) |
 | **N16** — the volume dial | **Answered, and "free" is wrong.** Volume buys slug ratio and costs freeze margin; the optimum is interior and moves with temperature. | **yes** (W18) |
 | **N16** — the throat dial | **Answered, and there is a wall.** The chemistry **does** freeze past `A/A*` ≈ 140. The store returned **peaks near `A/A*` = 56 and then falls**. | **yes** (W19, W20) |
-| **N16** — water on the same grid | **Answered, and it loses everywhere.** Water returns **52–83%** of methane's net impulse at every one of the 128 grid cells, including at 400 m³ and at the cold end. | **yes** (W21) |
+| **the throat's price** (raised here, not asked) | **Priced, and the paper states no replacement interval.** Narrowing from 7 m² buys **+22% at 2 m²** and +31% at 1 m², but throat life goes as `A*^1.6` — **a factor of three per halving** — because the cost is blowdown *dwell*, not peak flux. | **yes** (W24) |
+| **N16** — water on the same grid | **Answered, and it loses everywhere.** Water returns **52–83%** of methane's effective impulse at every one of the 128 grid cells, including at 400 m³ and at the cold end. | **yes** (W21) |
 | **N16** — the named configuration | **Priced, with plain methane beside it, and the hydrogen fraction swept.** Methane beats the 90% water + 10% H₂ mix by 4–12% at the ask's own point. Hydrogen is a real dial worth +18–23% over pure water. | **yes** (W22) |
 | **N13** (exit-plane velocity distribution) | **Not started, and confirmed unreachable from here.** It needs a 2-D solve; see [Deferred](#deferred-with-cost). | no |
 | **N11** (radiative escape, carbon-bearing plume) | **Not started.** | no |
 
-**Fourteen items fall out, W10–W23.** **If you read only four:** **W17** (the temperature dial
+**Fifteen items fall out, W10–W24.** **If you read only four:** **W17** (the temperature dial
 runs the other way, which unwinds the whole "Going hotter was considered and declined" section),
-**W19** (the deep throat's impulse does not arrive — the chemistry freezes first), **W10** (items
-1–4 close for the chamber you were going to build), and **W16** (the `ρ^-0.21` hack, replaced by
-the computed surface).
+**W24** (narrowing the throat is worth +22 to +35%, priced in throat life at a factor of three per
+halving — and the paper's stated 8 → 28 ms cost corresponds to a 2 m² throat and no deeper),
+**W10** (items 1–4 close for the chamber you were going to build), and **W16** (the `ρ^-0.21`
+hack, replaced by the computed surface). **W19** remains the one to read before quoting any deep
+throat.
 
 **Eight of the ask's stated premises did not survive**, three of them paper-side beliefs that
 reverse outright; they are collected in
@@ -485,7 +488,7 @@ hot end, and the whole row is flat to within 1% at 12,000 K. Two effects cross:
 
 At 10,000 K and above the second effect catches the first and the curve turns over. **100 m³ at
 12,000 K is the best cell in the grid that also empties inside 400 ms and keeps its chemistry**, at
-**1,093 s net** — so the paper's 100 m³ recommendation is right, for a reason it did not give, and
+**1,093 s effective** — so the paper's 100 m³ recommendation is right, for a reason it did not give, and
 only in company with a *hotter* chamber rather than a cooler one.
 
 ---
@@ -592,7 +595,7 @@ impulse".
 
 **Now:** water is carried as roughly competitive and better at large volume.
 
-**Should be:** water's net impulse is **52–83% of methane's** at every cell of the grid.
+**Should be:** water's effective impulse is **52–83% of methane's** at every cell of the grid.
 The ratio, water ÷ methane:
 
 | `T_c` \ chamber | 50 m³ | 100 m³ | 200 m³ | 400 m³ |
@@ -609,7 +612,7 @@ water freezes and methane has not yet.)
 conventions, so every normalisation the paper applies — vessel mass, `eta_geom`, the drift term —
 cancels. **The ratio survives the conventions; an absolute number would not.** The best it ever
 gets is 0.800, at 6,000 K and 400 m³ — which is also the worst corner of the grid in absolute
-terms (706 s net for methane, 565 for water). **The debit narrows the gap** by ~6 points, because
+terms (706 s effective for methane, 565 for water). **The debit narrows the gap** by ~6 points, because
 water's larger `k` means a smaller per-kilogram debit (85–208 s against methane's 167–422 s), but
 it never closes it.
 
@@ -684,7 +687,7 @@ dissociation equilibrium. Le Chatelier puts the real mixture's held store **abov
 the conclusion is safe in the direction it matters.
 
 **At a throat that does not freeze** (0.5 m², `A/A*` = 56.5, the W19 recommendation), methane at
-100 m³ and 8,000 K returns **884 s net** and at 12,000 K **1,093 s net**, both as hard numbers
+100 m³ and 8,000 K returns **884 s effective** and at 12,000 K **1,093 s effective**, both as hard numbers
 rather than brackets.
 
 ---
@@ -738,7 +741,7 @@ rather than a compromise. Methane at 12,000 K through a 0.5 m² throat:
 | 200 m³ | 723 bar | 3,951 K | 0.657 | −0.15 (freezing) | 1,081 s | 99 ms |
 
 **The impulse is flat across all three** — 12 s out of 1,093, well inside every uncertainty in
-this document, and flatter on the net convention than on the gross one. So the choice is not an impulse choice at all:
+this document, and flatter on the corrected convention than on the credit-only one. So the choice is not an impulse choice at all:
 
 - **150 m³** is 2.9× softer on the contraction's arrival load, and 0.29 decades thinner on freeze
   margin. Its exit at 3,998 K is 2 K below the condensed-carbon floor, so it is quoted as a bound.
@@ -754,6 +757,118 @@ contraction load is under 5 MJ/m².
 it obliquely near the bore and normally near the axis; treating it as a flat end wall overstates
 the normal component near the rim. And the bulk term is an energy-budget ceiling times a Stanton
 number, not a boundary-layer solve — the same weakness W12 carries, on the same footing.
+
+---
+
+### W24. Narrowing the throat is worth +22 to +35%, and it is priced in throat life at a factor of three per halving
+
+**Locate:** W6 recommended a narrower throat and W19 found a wall past `A/A*` ≈ 140, but neither
+priced the cost. This item crosses the two, measured from the ask's **own 7 m² throat** at its own
+200 m³ chamber and 10,000 K.
+
+**Now:** the ask treats the throat as free to choose, and the paper's only stated cost of
+narrowing is the pulse stretching from 8 ms to 28 ms.
+
+**Should be:** the pulse stretch is real but it is not the binding cost. **The throat is a
+consumable** (W15: it plates nothing back at any survivable wall temperature), and narrowing it
+shortens its life as `A*^1.6` — a factor of three for every halving of throat area.
+
+#### What it buys
+
+| `A*` | `A/A*` | exit `T` | conv raw / capped | **Isp effective** | vs 7 m² | per halving |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **7.00 m²** | 4.0 | 5,583 K | 0.406 / 0.406 | **738 s** | — | — |
+| 4.00 m² | 7.1 | 5,067 K | 0.468 / 0.468 | 822 s | +11.3% | +11.3% |
+| **2.00 m²** | 14.1 | 4,561 K | 0.532 / 0.532 | **902 s** | **+22.1%** | +9.7% |
+| **1.00 m²** | 28.3 | 4,159 K | 0.585 / 0.585 | **965 s** | **+30.7%** | +7.0% |
+| 0.50 m² | 56.5 | 3,831 K | 0.631 / 0.623 | 1,008 s | +36.5% | +4.4% |
+| 0.20 m² | 141.4 | 3,481 K | 0.683 / **0.629** | 1,015 s | +37.5% | +0.7% |
+| 0.10 m² | 282.7 | 3,262 K | 0.717 / **0.633** | 1,020 s | +38.1% | +0.4% |
+
+Hydrogen runs the same curve a little steeper — 1,143 s at 7 m², 1,431 s at 2 m², **1,544 s at
+1 m²** (+35.1%), then flat at about 1,630 s.
+
+**Why it flattens is in the two conversion columns.** Raw conversion climbs all the way to 0.748,
+but *capped* conversion saturates at **0.633**. Past the freeze station the equilibrium branch
+keeps releasing chemistry the real flow no longer has time to release, so **below about 0.5 m² the
+extra nozzle delivers nothing.** That is W19's wall, located: it starts to bite between 1 and
+0.5 m², not at `A/A*` = 140.
+
+#### What it costs — and the cost is dwell, not flux
+
+**This is the part that changes the recommendation.** Bartz gives the *throat* flux as `D*^-0.2`,
+so halving the throat area raises it by only about **7%** — 610 MW/m² at 7 m² against 932 at
+0.10 m², a factor 1.5 across a factor **70** in area. What doubles is the **blowdown time**,
+because the same chamber empties through a smaller hole: **8 ms at 7 m², 56 ms at 1 m², 560 ms at
+0.10 m²** — a factor 70, matching the area exactly. Fluence is flux × time, so the dwell carries
+essentially the whole cost.
+
+> **A narrower throat does not heat the throat harder. It heats it for twice as long.**
+
+Combined with W15 — the throat is eroded, not plated, at every wall temperature graphite survives
+— that dwell converts directly into a pulse count. Recession is **radial**, so an eroding throat
+*opens*, drifting back up the very trade curve it was narrowed to climb:
+
+| `A*` | `r*` | recession / pulse | `dA/A` per pulse | pulses to **+10%** area | pulses to **2×** area |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 7.00 m² | 1,493 mm | 0.04 mm | 0.01% | **1,947** | 16,524 |
+| 4.00 m² | 1,128 mm | 0.07 mm | 0.01% | 795 | 6,749 |
+| **2.00 m²** | 798 mm | 0.15 mm | 0.04% | **262** | 2,226 |
+| **1.00 m²** | 564 mm | 0.32 mm | 0.11% | **87** | 734 |
+| 0.50 m² | 399 mm | 0.68 mm | 0.34% | 29 | 242 |
+| 0.20 m² | 252 mm | 1.87 mm | 1.48% | 7 | 56 |
+| 0.10 m² | 178 mm | 4.01 mm | 4.49% | 2 | 18 |
+
+**The exponent is derived, not fitted, which is why it is the part to trust.** Flux goes as
+`A*^-0.1` and blowdown as `A*^-1`, so recession goes as `A*^-1.1`; a fixed *fractional* area
+growth needs a recession proportional to `r* ~ A*^0.5`; so **life ~ `A*^1.6`**, a factor 3.03 per
+halving. The solved columns reproduce it to 2% across the whole ladder, and a test pins it.
+
+> **The exchange rate: each halving of throat area buys 4–10% effective Isp and costs a factor of
+> three in throat life** — and the rate worsens as you go. 7 → 2 m² pays 7× the life for +22%;
+> 1 → 0.5 m² pays 3× for +4.4%.
+
+#### The three limits, in the order they arrive
+
+1. **Diminishing returns.** Marginal gain falls under 5% per halving at 1 → 0.5 m².
+2. **The carbon floor — methane only.** Exit temperature drops under 4,000 K at 0.5 m², where
+   `eos_methane` has no condensed-carbon phase to offer. Below that the EOS quotes a gas-phase
+   equilibrium reality would partly replace with soot, so **methane's sub-0.5 m² numbers are
+   model-limited independently of everything else.** Hydrogen has no such floor — one more point
+   in its favour, and it is why hydrogen's curve can be trusted a step deeper.
+3. **Blowdown against the 400 ms pulse period.** Methane **fails at 0.10 m²** (560 ms against
+   the 400 ms budget); hydrogen still fits there (311 ms) and crosses 400 ms just below, near
+   0.08 m², since blowdown goes as `1/A*`. Either way this limit arrives well after the returns
+   have gone flat, so it never binds in practice — it is the backstop, not the constraint.
+
+#### The recommendation
+
+**2 m² if the throat is hard to service; 1 m² if it is a scheduled consumable.**
+
+- **2 m²** — +22% (methane) / +25% (hydrogen), **262 pulses** to +10% area, equilibrium branch
+  everywhere, above the carbon floor, 28 ms blowdown. This is W6's existing recommendation, and
+  the 7 → 2 m² step is exactly the 8 ms → 28 ms pulse stretch the paper already quotes: **the
+  paper's stated cost of narrowing corresponds to this throat and no deeper.**
+- **1 m²** — +31% / +35%, but **87 pulses**. Three times the erosion for a third more impulse.
+- **Below 0.5 m²** — under 1% per halving, bought at double the recession each time. Don't.
+
+**If the throat cannot be serviced at all the calculus inverts.** Total impulse delivered per
+throat goes as pulses × Isp, and that falls **50×** from 7 m² to 1 m² (1,947 × 738 against
+87 × 965). So this is not a physics optimum — it is an economics one, and the tables above are
+the exchange rate to price it with. **The paper should state a throat-replacement interval
+alongside its throat area**; at present it states neither.
+
+**What this does not price.** Bartz is far outside its fit — it was calibrated on chemical rockets
+at tens of bar and a few thousand kelvin, and this is a thousand bar at ten thousand kelvin with a
+partly ionised boundary layer — so read the exponent and not the millimetres. `ablation_depth`
+takes **no transpiration credit**, and a blowing boundary layer typically halves the net flux at
+these rates, so **every pulse count above is the pessimistic edge of a factor-of-two band**;
+the optimistic edge doubles all of them. The freeze cap is the step function known weakness 1
+records, but here it is benign: the freeze lands at `A/A*` ≈ 56–67, deep in the nozzle where
+little store remains, so the cap is nearly tight. It would not be quotable if the freeze sat at
+the throat. Nothing here prices the *structural* consequence of an opening throat — a drifting
+`A*` moves the chamber pressure and the blowdown with it, which is a coupled problem this study
+does not solve.
 
 ---
 
@@ -885,6 +1000,11 @@ exactly right (W14).
 | W22 | the mixture and the hydrogen-fraction sweep | `surface.mixture()`, scored inline | printed |
 | W20 | `T_e(A/A*)` and its local slope | `make walled-nozzle-surface` | `exit_temperature.csv` |
 | W23 | contraction arrival and bulk loads | `make walled-nozzle-wall` | printed |
+| W24 | the throat trade: Isp gain, recession per pulse, pulses to +10% and 2x area | `make walled-nozzle-wall` | `data/results/walled_nozzle/wall_throat_life.csv` |
+
+**W24's hydrogen rows are in `wall_throat_life.csv`, not `surface.csv`.** The 256-row grid carries
+methane and water only; hydrogen is run as a third fluid on the same machinery for this item, so
+that CSV is the place to look for it.
 
 Tests: `make walled-nozzle-test` (39 new tests across
 `test_walled_nozzle_surface.py` and `test_walled_nozzle_wall.py`). The two that matter most are
