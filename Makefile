@@ -777,7 +777,7 @@ water-plate-parcel-check:
 # bore, no field, a 200-673 m^3 chamber, 25 kg at 75 km/s into methane -- and it must not inherit
 # the magnetic nozzle's bag or the plate-side conventions.
 
-.PHONY: walled-nozzle-chamber walled-nozzle-hydrogen walled-nozzle-freeze walled-nozzle-propellants walled-nozzle-surface walled-nozzle-wall walled-nozzle-test
+.PHONY: walled-nozzle-chamber walled-nozzle-hydrogen walled-nozzle-freeze walled-nozzle-propellants walled-nozzle-surface walled-nozzle-wall walled-nozzle-near-term walled-nozzle-wall-layers walled-nozzle-test
 ## walled-nozzle-chamber: N10 item 4b and N9 item 0 -- the solved chamber charge (equilibrium
 ## composition, wall-cap energy density, the slug-ratio fixed point) and the sealed-vessel
 ## equilibration timescales -> data/results/walled_nozzle/chamber.csv
@@ -824,6 +824,21 @@ walled-nozzle-wall:
 	@mkdir -p data/results/walled_nozzle
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.wall
 
+## walled-nozzle-near-term: the paper's near-term chamber (asks A1-A4 of the methane-7000 K
+## list) -- 2.5 kg rod, 20 m^3, polyethylene plug; charge fixed point on the mixed feed, three
+## carbon branches (equilibrium / frozen / graphite ceiling), peak vs blowdown efficiency, the
+## H+H+M freeze clock on a 15 deg cone, and the wall's radiation + Bartz load over the blowdown.
+walled-nozzle-near-term:
+	@mkdir -p data/results/walled_nozzle/near_term
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.near_term
+
+## walled-nozzle-wall-layers: the coated steel wall under the methane 7000 K pulse -- 1-D transient
+## conduction through graphite (k bracketed) or the paper's pitch over Cr-Mo steel, on the solved
+## blowdown flux history -> data/results/walled_nozzle/near_term/wall_layers.csv
+walled-nozzle-wall-layers:
+	@mkdir -p data/results/walled_nozzle/near_term
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.wall_layers
+
 ## walled-nozzle-test: this study's tests alone
 walled-nozzle-test:
 	uv run pytest python/tests/test_eos_methane.py python/tests/test_walled_nozzle_chamber.py \
@@ -831,4 +846,6 @@ walled-nozzle-test:
 	                python/tests/test_walled_nozzle_freeze.py \
 	                python/tests/test_walled_nozzle_propellants.py \
 	                python/tests/test_walled_nozzle_surface.py \
-	                python/tests/test_walled_nozzle_wall.py
+	                python/tests/test_walled_nozzle_wall.py \
+	                python/tests/test_walled_nozzle_near_term.py \
+	                python/tests/test_walled_nozzle_wall_layers.py

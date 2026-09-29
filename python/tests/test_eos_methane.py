@@ -173,3 +173,136 @@ def test_half_dissociation_needs_thirty_times_the_chamber_density() -> None:
     assert rho_half == pytest.approx(81.5, rel=0.02)
     assert rho_half / max(CHAMBER_DENSITIES) > 30.0
     assert eos.composition(rho_half, 10000.0).hydrogen_dissociated == pytest.approx(0.46, abs=0.03)
+
+
+# --- Feeds other than pure methane (the near-term chamber) --------------------------------------
+
+A1_FEED = eos.mixture_feed("A1", [(68.8, eos.METHANE_GAS), (6.9, eos.POLYETHYLENE)])
+
+
+def test_default_feed_is_pure_methane() -> None:
+    """`METHANE` is the default everywhere and must reproduce the pre-feed EOS exactly -- an
+    explicitly built 4:1 methane feed takes the same code path and returns the same numbers."""
+    built = eos.mixture_feed("CH4", [(1.0, eos.METHANE_GAS)])
+    assert built.hc_ratio == pytest.approx(4.0, rel=1e-14)
+    assert built.reference_atomization == pytest.approx(eos.CH4.d_at, rel=1e-14)
+    assert eos.pressure_energy(3.4, 7000.0) == eos.pressure_energy(3.4, 7000.0, eos.METHANE)
+
+
+def test_polyethylene_atomisation_is_its_combustion_heat_restated() -> None:
+    """(CH2)n: 1143.3 kJ/mol of atoms less its -27 kJ/mol heat of formation, 83.4 MJ/kg."""
+    per_kg = eos.POLYETHYLENE.atomization / eos.POLYETHYLENE.mass
+    assert per_kg == pytest.approx(83.43e6, rel=2e-3)
+
+
+@pytest.mark.parametrize("temp", [1500.0, 3000.0, 5000.0, 7000.0, 10000.0])
+def test_mixed_feed_conserves_its_own_stoichiometry(temp: float) -> None:
+    """At H:C = 3.77 the general H:C row replaces CH4's divided-out form; nuclei and charge
+    must still close on the reconstructed densities."""
+    rho = 3.4
+    comp = eos.composition(rho, temp, A1_FEED)
+    n_f = rho / A1_FEED.formula_mass
+    assert comp.n_c_nuclei == pytest.approx(n_f, rel=1e-6)
+    assert comp.n_h_nuclei == pytest.approx(A1_FEED.hc_ratio * n_f, rel=1e-6)
+    charge = comp.n_hp + sum((k + 1) * n for k, n in enumerate(comp.n_c_ions))
+    assert comp.n_e == pytest.approx(charge, rel=1e-6)
+
+
+@pytest.mark.parametrize(("rho", "temp"), [(1.0, 5500.0), (3.0, 5500.0), (0.2, 10000.0)])
+def test_trace_carbon_feed_is_the_pure_hydrogen_eos(rho: float, temp: float) -> None:
+    """A hydrogen feed with 1e-5 carbon must be `walled_nozzle.hydrogen`, an independent solver
+    on the same H2 constants, to the size of the carbon it carries."""
+    from puffsat.walled_nozzle import hydrogen
+
+    feed = eos.mixture_feed("H2", [(1.0, eos.HYDROGEN_GAS), (1e-5, eos.METHANE_GAS)])
+    p, e = eos.pressure_energy(rho, temp, feed)
+    p_ref, e_ref = hydrogen.pressure_energy(rho, temp)
+    assert p == pytest.approx(p_ref, rel=5e-5)
+    assert e == pytest.approx(e_ref, rel=5e-5)
+
+
+# --- The opt-in JANAF partition-function correction --------------------------------------------
+
+
+@pytest.mark.parametrize("name", ["CH4", "CH", "C2", "C3", "C2H2", "H2"])
+@pytest.mark.parametrize("temp", [2000.0, 4000.0, 6000.0])
+def test_janaf_thermo_reproduces_janaf_up_to_heat_of_formation(name: str, temp: float) -> None:
+    """With `thermo="janaf"` a molecule's atomisation constant is JANAF's, except for the part a
+    different 0 K heat of formation explains -- which is deliberately kept (C2H's JANAF value is
+    ~92 kJ/mol out of date)."""
+    from puffsat import janaf_carbon
+
+    mol = next(m for m in eos.MOLECULES if m.name == name)
+    i = janaf_carbon.TEMPERATURES.index(temp)
+    row = {k: v[i] for k, v in janaf_carbon.LOG_KF.items()}
+    hf_j = 0.0 if name == "H2" else janaf_carbon.HF0[name]
+    offset = (
+        (
+            mol.n_c * (eos._HF0_C - janaf_carbon.HF0["C"])
+            + mol.n_h * (eos._HF0_H - janaf_carbon.HF0["H"])
+            - (eos._HF0[name] - hf_j)
+        )
+        * 1e3
+        / (eos.K_B * eos.N_A * temp)
+    )
+    expected = eos._janaf_ln_k(mol, temp, row) - offset
+    assert eos.ln_k_molecule_thermo(mol, temp, "janaf") == pytest.approx(expected, abs=0.01)
+
+
+def test_harmonic_c3_is_over_bound_thirtyfold_at_6000_k() -> None:
+    """The reason the correction exists, pinned so a future EOS change that fixes C3 directly
+    shows up here: harmonic C3 is ~30x too stable, harmonic C2 ~9x not stable enough."""
+    assert eos.janaf_correction(eos.C3, 6000.0)[0] == pytest.approx(-3.45, abs=0.05)
+    assert eos.janaf_correction(eos.C2, 6000.0)[0] == pytest.approx(2.21, abs=0.05)
+
+
+@pytest.mark.parametrize("mol_name", ["C3", "C2", "H2"])
+def test_janaf_energy_obeys_van_t_hoff(mol_name: str) -> None:
+    """`d ln K_n / dT = (E_atoms - E_molecule) / kT^2` must hold with the corrected `K` *and* the
+    corrected molecular energy -- the check that `e` and `K` are one thermodynamics."""
+    mol = next(m for m in eos.MOLECULES if m.name == mol_name)
+    temp, dt = 5000.0, 1.0
+    slope = (
+        eos.ln_k_molecule_thermo(mol, temp + dt, "janaf")
+        - eos.ln_k_molecule_thermo(mol, temp - dt, "janaf")
+    ) / (2 * dt)
+    kt = eos.K_B * temp
+    e_atoms = (mol.n_c + mol.n_h) * 1.5 * kt
+    e_mol = (
+        1.5 * kt
+        + eos._e_rot(mol, temp)
+        + eos._e_vib(mol, temp)
+        + kt * temp * eos.janaf_correction(mol, temp)[1]
+        - mol.d_at
+    )
+    assert slope * kt * temp == pytest.approx(e_atoms - e_mol, rel=1e-6)
+
+
+@pytest.mark.parametrize("hc_ratio_feed", ["hydrogen_rich", "carbon_rich"])
+@pytest.mark.parametrize("temp", [150.0, 366.0, 1200.0])
+@pytest.mark.parametrize("rho", [1e-5, 0.1, 3.0])
+def test_off_stoichiometric_feeds_converge_cold(
+    hc_ratio_feed: str, temp: float, rho: float
+) -> None:
+    """A deep expansion takes the gas to a few hundred kelvin, where a 4:1 atom-pool init is
+    decades off for a feed that is not 4:1. The molecular init must carry these."""
+    feed = (
+        eos.mixture_feed("H2+PE", [(60.0, eos.HYDROGEN_GAS), (6.9, eos.POLYETHYLENE)])
+        if hc_ratio_feed == "hydrogen_rich"
+        else A1_FEED
+    )
+    comp = eos.composition(rho, temp, feed)
+    n_f = rho / feed.formula_mass
+    assert comp.n_h_nuclei == pytest.approx(feed.hc_ratio * n_f, rel=1e-6)
+
+
+@pytest.mark.parametrize("hc_ratio", [0.05, 0.5, 1.0, 2.0])
+@pytest.mark.parametrize("temp", [2500.0, 3900.0])
+def test_carbon_rich_feeds_converge(hc_ratio: float, temp: float) -> None:
+    """A gas that has dissolved graphite from a wall can be far below H:C = 1; the molecular
+    init must not take the log of a negative CH4 share there."""
+    feed = eos.Feed("carbon-rich", hc_ratio, eos.CH4.d_at)
+    comp = eos.composition(1.0, temp, feed)
+    n_f = 1.0 / feed.formula_mass
+    assert comp.n_c_nuclei == pytest.approx(n_f, rel=1e-6)
+    assert comp.n_h_nuclei == pytest.approx(hc_ratio * n_f, rel=1e-6)

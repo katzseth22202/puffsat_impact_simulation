@@ -202,6 +202,21 @@ class IspLedger:
     exhaust_speed: float
     #: `k`: kilograms of carried slug per kilogram of impactor.
     slug_ratio: float
+    #: `P`: kilograms of *other* carried mass that leaves with the exhaust, per kilogram of
+    #: impactor -- the near-term chamber's polyethylene plug (paper eq:eta_isp). It is carried, so
+    #: it joins `k` in every denominator. Zero for ADR-0016's chamber, where the ledger reduces
+    #: exactly to its original form.
+    plug_ratio: float = 0.0
+
+    @property
+    def _expelled(self) -> float:
+        """`1 + k + P`: kilograms expelled per kilogram of impactor."""
+        return 1.0 + self.slug_ratio + self.plug_ratio
+
+    @property
+    def _carried(self) -> float:
+        """`k + P`: kilograms the vehicle lifted per kilogram of impactor."""
+        return self.slug_ratio + self.plug_ratio
 
     @property
     def isp_true(self) -> float:
@@ -218,7 +233,7 @@ class IspLedger:
     @property
     def ideal_exhaust_speed(self) -> float:
         """`w / sqrt(1+k)` [m/s] -- ADR-0016's own full-conversion identity."""
-        return CLOSING_SPEED / math.sqrt(1.0 + self.slug_ratio)
+        return CLOSING_SPEED / math.sqrt(self._expelled)
 
     @property
     def thrust_floor(self) -> float:
@@ -227,7 +242,7 @@ class IspLedger:
         Set `isp_effective = 0` and solve: the exhaust exactly cancels the arriving momentum and
         nothing is left over. Below it the burn is a brake, whatever the exhaust speed.
         """
-        return 1.0 / math.sqrt(1.0 + self.slug_ratio)
+        return 1.0 / math.sqrt(self._expelled)
 
     @property
     def pushes_backwards(self) -> bool:
@@ -241,7 +256,7 @@ class IspLedger:
         The free ride from mass the vehicle did not carry. It grows as the required slug shrinks,
         so it rewards hydrogen (+12.9%) far more than water (+2.5%).
         """
-        return 1.0 / self.slug_ratio
+        return 1.0 / self._carried
 
     @property
     def momentum_debit(self) -> float:
@@ -252,7 +267,7 @@ class IspLedger:
         charge. It is also far larger than the credit: `w/(k g0)` against `u_e/(k g0)`, and
         `u_e << w` at every point in this study.
         """
-        return CLOSING_SPEED / (self.slug_ratio * G0)
+        return CLOSING_SPEED / (self._carried * G0)
 
     @property
     def isp_carried_gross(self) -> float:
@@ -264,7 +279,7 @@ class IspLedger:
         built from it, and because the `Isp ~ 1/sqrt(mean atomised mass)` scaling law is a
         property of *this* convention rather than of the corrected one.
         """
-        return self.exhaust_speed * (1.0 + self.slug_ratio) / (self.slug_ratio * G0)
+        return self.exhaust_speed * self._expelled / (self._carried * G0)
 
     @property
     def isp_effective(self) -> float:
@@ -280,9 +295,9 @@ class IspLedger:
         return self.isp_carried_gross - self.momentum_debit
 
 
-def isp_ledger(exhaust_speed: float, slug_ratio: float) -> IspLedger:
+def isp_ledger(exhaust_speed: float, slug_ratio: float, plug_ratio: float = 0.0) -> IspLedger:
     """The Isp ledger for an achieved exhaust speed at a slug ratio. The one constructor."""
-    return IspLedger(exhaust_speed=exhaust_speed, slug_ratio=slug_ratio)
+    return IspLedger(exhaust_speed=exhaust_speed, slug_ratio=slug_ratio, plug_ratio=plug_ratio)
 
 
 def isp_scaling(state: ChamberState, reference: float) -> float:

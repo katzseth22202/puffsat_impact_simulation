@@ -103,7 +103,9 @@ conventions. Scope is [ADR-0050](docs/adr/0050-walled-thermal-nozzle-methane-cha
 [ADR-0051](docs/adr/0051-walled-nozzle-grid-geometry-and-the-load-case.md); results are in
 [`docs/walled_nozzle_asks_answered.md`](docs/walled_nozzle_asks_answered.md) (W1-W9, asks N9.0
 and N10) and [`docs/walled_nozzle_grid_and_wall.md`](docs/walled_nozzle_grid_and_wall.md)
-(W10-W24, asks N16 and N9 items 1-7). Its Python is
+(W10-W24, asks N16 and N9 items 1-7), and the paper's near-term chamber (2.5 kg rod, 20 m^3,
+methane at 7000 K) is in [`docs/walled_nozzle_near_term.md`](docs/walled_nozzle_near_term.md)
+([ADR-0052](docs/adr/0052-near-term-chamber-feeds-janaf-and-carbon-branches.md)). Its Python is
 `python/puffsat/walled_nozzle/` plus the top-level `python/puffsat/eos_methane.py`, and its
 outputs are under `data/results/walled_nozzle/`.
 
@@ -114,6 +116,8 @@ make walled-nozzle-freeze     # N10.1-3: the Bray freeze race, throat sensitivit
 make walled-nozzle-propellants # N10.3: the H2 / CH4 / H2O / NH3 ladder, real and effective Isp
 make walled-nozzle-surface    # N16: the conversion surface over chamber T, volume and throat area
 make walled-nozzle-wall       # N9.1-7 + W24: the front, the gate, the wall loads, the throat trade
+make walled-nozzle-near-term  # 2.5 kg rod / 20 m^3 near-term chamber: CH4 7000 K, H2 5500 K (ADR-0052)
+make walled-nozzle-wall-layers # coated steel wall (graphite / pitch) under the CH4 7000 K pulse
 make walled-nozzle-test       # that study's tests alone
 ```
 

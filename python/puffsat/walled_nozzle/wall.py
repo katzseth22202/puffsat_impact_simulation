@@ -708,6 +708,31 @@ def _density_at_pressure(fluid: surface.Fluid, pressure: float, temp: float) -> 
     return math.sqrt(lo * hi)
 
 
+def bartz_coefficient(
+    d_star: float,
+    viscosity: float,
+    cp: float,
+    prandtl: float,
+    p_c: float,
+    c_star: float,
+    sigma_factor: float,
+    area_ratio: float,
+) -> float:
+    """Bartz's gas-side heat-transfer coefficient `h_g` [W/m^2/K] (see `bartz_flux`).
+
+    Split out so the near-term chamber (`near_term.py`) prices its liner on the same correlation
+    rather than a copy of it.
+    """
+    return float(
+        (0.026 / d_star**0.2)
+        * (viscosity**0.2 * cp / prandtl**0.6)
+        * (p_c / c_star) ** 0.8
+        * CURVATURE_RATIO**-0.1
+        * sigma_factor
+        * area_ratio**-0.9
+    )
+
+
 @dataclass(frozen=True)
 class BartzPoint:
     """Convective flux at one station, with the transport inputs that set it."""
@@ -772,14 +797,7 @@ def bartz_flux(
     sigma_factor = 1.0 / (0.5 * (wall_temp / temp_c) + 0.5) ** 0.68
 
     def flux(cp: float) -> float:
-        h = (
-            (0.026 / d_star**0.2)
-            * (mu**0.2 * cp / prandtl**0.6)
-            * (p_c / c_star) ** 0.8
-            * CURVATURE_RATIO**-0.1
-            * sigma_factor
-            * area_ratio**-0.9
-        )
+        h = bartz_coefficient(d_star, mu, cp, prandtl, p_c, c_star, sigma_factor, area_ratio)
         return float(h * (temp_c - wall_temp))
 
     blowdown = surface.blowdown_time(rho_c, sound_c, volume, throat_area)
