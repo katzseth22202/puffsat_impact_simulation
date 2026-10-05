@@ -403,7 +403,7 @@ impl<E: Eos> Tube<E> {
         assert_eq!(x.len(), cells + 1, "need one more node than cells");
         let mass: Vec<f64> = (0..cells).map(|j| rho[j] * (x[j + 1] - x[j])).collect();
         let energy: Vec<f64> = (0..cells)
-            .map(|j| eos.energy_from_pressure(rho[j], pressure[j]))
+            .map(|j| eos.for_cell(j).energy_from_pressure(rho[j], pressure[j]))
             .collect();
         // Node velocities: average of adjacent cell velocities; ends take their neighbor.
         let nodes = cells + 1;
@@ -946,7 +946,6 @@ impl Tube<TableEos> {
     /// positions, so it tracks the moving mesh each step.
     fn radiation_fields(&self) -> RadFields {
         let n = self.cells();
-        let table = self.eos.table();
         let dx: Vec<f64> = (0..n).map(|j| self.width(j)).collect();
         let center_spacing: Vec<f64> = (0..n - 1)
             .map(|i| self.center(i + 1) - self.center(i))
@@ -956,8 +955,10 @@ impl Tube<TableEos> {
         let mut chi_planck = vec![0.0; n];
         let mut chi_ross = vec![0.0; n];
         for j in 0..n {
+            let eos = self.eos.for_cell(j);
+            let table = eos.table();
             let rho = self.density(j);
-            let t = self.eos.temperature(rho, self.energy[j]);
+            let t = eos.temperature(rho, self.energy[j]);
             temp[j] = t;
             cv_vol[j] = rho * table.cv(rho, t);
             chi_planck[j] = rho * table.kappa_planck(rho, t);
@@ -981,15 +982,16 @@ impl Tube<TableEos> {
     fn gas_conduction_fields(&self) -> Option<GasConductionFields> {
         self.eos.k_gas(self.density(0), self.energy[0])?;
         let n = self.cells();
-        let table = self.eos.table();
         let mut dx = vec![0.0; n];
         let mut temp = vec![0.0; n];
         let mut cv_vol = vec![0.0; n];
         let mut k_gas = vec![0.0; n];
         let mut cv = vec![0.0; n];
         for j in 0..n {
+            let eos = self.eos.for_cell(j);
+            let table = eos.table();
             let rho = self.density(j);
-            let t = self.eos.temperature(rho, self.energy[j]);
+            let t = eos.temperature(rho, self.energy[j]);
             let cvj = table.cv(rho, t);
             dx[j] = self.width(j);
             temp[j] = t;
@@ -1039,7 +1041,7 @@ impl Tube<TableEos> {
             let rho = self.density(j);
             m_tot += m;
             rho_mean += m * rho;
-            t_mean += m * self.eos.temperature(rho, self.energy[j]);
+            t_mean += m * self.eos.for_cell(j).temperature(rho, self.energy[j]);
         }
         (rho_mean / m_tot, t_mean / m_tot)
     }
@@ -1380,7 +1382,7 @@ impl CoupledBounce {
         let e_rad: Vec<f64> = (0..tube.cells())
             .map(|j| {
                 let rho = tube.density(j);
-                let t = tube.eos.temperature(rho, tube.energy[j]);
+                let t = tube.eos.for_cell(j).temperature(rho, tube.energy[j]);
                 consts.a * t.powi(4)
             })
             .collect();
@@ -1428,6 +1430,16 @@ impl CoupledBounce {
         (0..self.tube.cells())
             .map(|j| self.tube.mass[j] * self.tube.energy[j])
             .sum()
+    }
+
+    /// Advance the coupled hydro-radiation state by `duration`, with no bounce tail guard.
+    pub fn advance_for(&mut self, duration: f64) {
+        let mut t = 0.0;
+        while t < duration {
+            let dt = self.stable_dt().min(duration - t);
+            self.coupled_step(dt);
+            t += dt;
+        }
     }
 
     /// One implicit gray-FLD substep: transport radiation, exchange energy with the matter, and tally
@@ -1821,7 +1833,7 @@ impl AblatingBounce {
         let e_rad: Vec<f64> = (0..tube.cells())
             .map(|j| {
                 let rho = tube.density(j);
-                let t = tube.eos.temperature(rho, tube.energy[j]);
+                let t = tube.eos.for_cell(j).temperature(rho, tube.energy[j]);
                 consts.a * t.powi(4)
             })
             .collect();
@@ -1942,7 +1954,12 @@ impl AblatingBounce {
         for j in 0..k {
             let dm_j = dm * self.tube.mass[j] / m_layer;
             let rho_j = self.tube.density(j);
-            let e_vapor = self.tube.eos.table().energy(rho_j, self.ablation.t_vapor);
+            let e_vapor = self
+                .tube
+                .eos
+                .for_cell(j)
+                .table()
+                .energy(rho_j, self.ablation.t_vapor);
             let m_old = self.tube.mass[j];
             let e_old = self.tube.energy[j];
             self.tube.mass[j] = m_old + dm_j;

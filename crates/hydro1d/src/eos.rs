@@ -16,6 +16,8 @@
 //!   `e(ρ, T)=e` (or `p(ρ, T)=p`) for `T` — by a `T`-grid binary search plus an analytic inverse
 //!   of the log-log interpolant (see [`invert_field`]) — then reads off the tabulated property.
 
+use std::sync::Arc;
+
 use tables::Table;
 
 /// The EOS interface the kernel calls, per cell, with `e` the specific internal energy the
@@ -89,16 +91,53 @@ impl Eos for IdealGas {
 
 /// Tabulated equilibrium EOS (ADR-0007): a [`tables::Table`] of `(ρ, T) → (p, e, c_s, …)` queried
 /// at the kernel's `(ρ, e)` by inverting for `T` on the monotone temperature axis.
+///
+/// A **layered** `TableEos` ([`TableEos::layered`]) gives each Lagrangian cell its own material:
+/// `for_cell(j)` returns that cell's table, so hydro, radiation and ablation all read the right
+/// one. Cells never exchange mass, so each keeps its own table and energy reference.
 #[derive(Debug, Clone)]
 pub struct TableEos {
     table: Table,
+    layers: Option<Arc<Layers>>,
+}
+
+/// The per-cell material map of a layered [`TableEos`].
+#[derive(Debug)]
+struct Layers {
+    materials: Vec<TableEos>,
+    index: Vec<usize>,
 }
 
 impl TableEos {
     /// Wrap a loaded table as an EOS.
     #[must_use]
     pub fn new(table: Table) -> Self {
-        Self { table }
+        Self {
+            table,
+            layers: None,
+        }
+    }
+
+    /// A layered EOS: cell `j` uses `materials[index[j]]`. The top-level table (grids, and any
+    /// caller that does not ask per cell) is `materials[0]`'s.
+    ///
+    /// # Panics
+    /// Panics if `materials` is empty, holds a layered EOS, or `index` points past it.
+    #[must_use]
+    pub fn layered(materials: Vec<TableEos>, index: Vec<usize>) -> Self {
+        assert!(!materials.is_empty(), "need at least one material");
+        assert!(
+            materials.iter().all(|m| m.layers.is_none()),
+            "materials must not themselves be layered"
+        );
+        assert!(
+            index.iter().all(|&i| i < materials.len()),
+            "material index out of range"
+        );
+        Self {
+            table: materials[0].table.clone(),
+            layers: Some(Arc::new(Layers { materials, index })),
+        }
     }
 
     /// Borrow the underlying table (opacity lookups, grids).
@@ -141,6 +180,13 @@ impl TableEos {
 }
 
 impl Eos for TableEos {
+    fn for_cell(&self, cell: usize) -> &Self {
+        match &self.layers {
+            Some(l) => &l.materials[l.index[cell]],
+            None => self,
+        }
+    }
+
     fn pressure(&self, rho: f64, e: f64) -> f64 {
         let t = self.temperature_from_energy(rho, e);
         self.table.pressure(rho, t)
