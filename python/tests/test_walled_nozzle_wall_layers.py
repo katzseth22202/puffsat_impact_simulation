@@ -109,3 +109,52 @@ def test_chemical_heat_sink_cuts_the_thermal_term() -> None:
     base = wl.run(wl.pitch(), gas, pulses=1)
     sink = wl.run(wl.pitch(), gas, pulses=1, chem_heat=wl.CHEM_HEAT_C2H2)
     assert sink.removed_per_pulse < base.removed_per_pulse
+
+
+# --- Spray-plate extensions (ADR-0055): a substrate parameter, between-pulse cooling, respray ---
+
+
+def _no_gas() -> wl.GasHistory:
+    return _constant_gas(wl.INITIAL_TEMP, 0.0)
+
+
+def test_cooling_boundary_matches_the_convective_semi_infinite_solution() -> None:
+    """Seam (a): a coolant at `T_c` through `h` drives the bare surface along the same erfc
+    solution as a gas would, `T_c` in place of `T_g`."""
+    t_c, h = 1200.0, 4.0e4
+    cooling = wl.Cooling(h=h, temp=t_c, start=0.0, end=wl.PULSE_PERIOD)
+    run = wl.run(wl.BARE, _no_gas(), pulses=1, cooling=cooling)
+    alpha = wl.STEEL_K / (wl.STEEL_RHO * wl.STEEL_C)
+    beta = h * math.sqrt(alpha * wl.PULSE_PERIOD) / wl.STEEL_K
+    exact = wl.INITIAL_TEMP + (t_c - wl.INITIAL_TEMP) * (1.0 - math.exp(beta**2) * math.erfc(beta))
+    assert run.peak_surface == pytest.approx(exact, rel=0.01)
+
+
+def test_default_substrate_is_the_old_solver_bit_for_bit() -> None:
+    """Seam (b): passing the Cr-Mo substrate explicitly changes nothing."""
+    gas = _constant_gas(1500.0, 5.0e4)
+    assert wl.run(wl.BARE, gas, pulses=1) == wl.run(wl.BARE, gas, pulses=1, substrate=wl.CRMO)
+
+
+def test_a_passed_substrate_is_the_one_conducting() -> None:
+    """Seam (b), strengthened: a different substrate follows the erfc solution at its own
+    diffusivity, so the parameter reaches the conduction, not just the record."""
+    other = wl.Substrate("test steel", k=20.0, rho=8000.0, c=450.0)
+    t_gas, h = 1500.0, 5.0e4
+    run = wl.run(wl.bare(other), _constant_gas(t_gas, h), pulses=1, substrate=other)
+    alpha = other.k / (other.rho * other.c)
+    beta = h * math.sqrt(alpha * wl.PULSE_PERIOD) / other.k
+    exact = wl.INITIAL_TEMP + (t_gas - wl.INITIAL_TEMP) * (
+        1.0 - math.exp(beta**2) * math.erfc(beta)
+    )
+    assert run.peak_surface == pytest.approx(exact, rel=0.01)
+
+
+def test_a_cold_respray_takes_heat_out_of_the_wall() -> None:
+    """Q34: resetting the coat to a cold spray temperature each cycle leaves the steel cooler at
+    cycle end than the same cycle without it."""
+    gas = _constant_gas(2500.0, 2.0e4)
+    coat = wl.pitch(0.2e-3)
+    plain = wl.run(coat, gas, pulses=3)
+    sprayed = wl.run(coat, gas, pulses=3, respray=wl.Respray(temp=250.0, at=0.2))
+    assert sprayed.end_steel < plain.end_steel

@@ -135,6 +135,54 @@ def pitch(thickness: float = 0.2e-3) -> Coating:
 BARE = Coating("bare steel", 0.0, STEEL_K, STEEL_RHO, STEEL_C, STEEL_MELT, 0.0)
 
 
+@dataclass(frozen=True)
+class Substrate:
+    """The metal under the coating: constant conductivity, density and heat capacity."""
+
+    name: str
+    k: float
+    rho: float
+    c: float
+    melt: float = STEEL_MELT
+
+
+#: The paper's Cr-Mo steel, the default substrate.
+CRMO = Substrate("Cr-Mo steel", STEEL_K, STEEL_RHO, STEEL_C)
+
+
+def bare(substrate: Substrate) -> Coating:
+    """No coating: the substrate's own surface, capped at its melt point."""
+    return Coating(
+        f"bare {substrate.name}",
+        0.0,
+        substrate.k,
+        substrate.rho,
+        substrate.c,
+        substrate.melt,
+        0.0,
+    )
+
+
+@dataclass(frozen=True)
+class Cooling:
+    """Between-pulse spray cooling: `h` [W/m^2/K] to a coolant at `temp` [K], applied from
+    `start` to `end` [s] within each 250 ms cycle."""
+
+    h: float
+    temp: float
+    start: float
+    end: float
+
+
+@dataclass(frozen=True)
+class Respray:
+    """The coat is resprayed cold once per cycle: at time `at` [s] in the cycle its nodes are reset
+    to the spray temperature `temp` [K], replacing what the pulse consumed with fresh film."""
+
+    temp: float
+    at: float
+
+
 # --- Gas-side boundary --------------------------------------------------------------------------
 
 
@@ -224,6 +272,7 @@ class Grid:
     x: Vec
     interface: int
     coating: Coating
+    substrate: Substrate = CRMO
 
     def is_coating(self) -> NDArray[np.bool_]:
         """Per *segment* (between node i and i+1): whether it lies in the coating."""
@@ -231,7 +280,9 @@ class Grid:
         return np.asarray(mid < self.coating.thickness)
 
 
-def build_grid(coating: Coating, n_coat: int = 40, first: float = 5e-6) -> Grid:
+def build_grid(
+    coating: Coating, n_coat: int = 40, first: float = 5e-6, substrate: Substrate = CRMO
+) -> Grid:
     """Uniform nodes through the coating, then geometric growth into the steel."""
     xs = [0.0]
     if coating.thickness > 0.0:
@@ -243,7 +294,7 @@ def build_grid(coating: Coating, n_coat: int = 40, first: float = 5e-6) -> Grid:
     while xs[-1] < coating.thickness + STEEL_DEPTH:
         dx = min(dx * 1.12, 1e-3)
         xs.append(xs[-1] + dx)
-    return Grid(np.array(xs), interface, coating)
+    return Grid(np.array(xs), interface, coating, substrate)
 
 
 def _segment_props(grid: Grid, temps: Vec) -> tuple[Vec, Vec]:
@@ -251,13 +302,13 @@ def _segment_props(grid: Grid, temps: Vec) -> tuple[Vec, Vec]:
     in_coat = grid.is_coating()
     c = grid.coating
     tmid = 0.5 * (temps[1:] + temps[:-1])
-    k = np.where(in_coat, c.k, STEEL_K)
+    k = np.where(in_coat, c.k, grid.substrate.k)
     if c.c is None:
         cp = np.array([near_term.graphite_heat_capacity(float(t)) for t in tmid])
         rc_coat = c.rho * cp
     else:
         rc_coat = np.full(len(tmid), c.rho * c.c)
-    rc = np.where(in_coat, rc_coat, STEEL_RHO * STEEL_C)
+    rc = np.where(in_coat, rc_coat, grid.substrate.rho * grid.substrate.c)
     return k, rc
 
 
@@ -328,6 +379,9 @@ def run(
     dt_min: float = 1e-6,
     dt_max: float = 2e-4,
     chem_heat: float = 0.0,
+    substrate: Substrate = CRMO,
+    cooling: Cooling | None = None,
+    respray: Respray | None = None,
 ) -> WallRun:
     """March the wall through `pulses` cycles at 4 Hz, adiabatic between pulses.
 
@@ -350,8 +404,9 @@ def run(
     result -- see the sensitivity in `main`. The grid does not move as material is removed, as
     for the thermal removal already here.
     """
-    grid = build_grid(coating)
+    grid = build_grid(coating, substrate=substrate)
     n = len(grid.x)
+    coat_nodes = grid.x < coating.thickness
     temps = np.full(n, INITIAL_TEMP)
     dxs = np.diff(grid.x)
     peak_s = peak_st = INITIAL_TEMP
@@ -360,9 +415,14 @@ def run(
     chem = coating.reacts and gas.g0 > 0.0
     for pulse in range(pulses):
         t, dt = 0.0, dt_min
+        resprayed = respray is None
         while t < PULSE_PERIOD - 1e-12:
             dt = min(dt, PULSE_PERIOD - t)
+            if not resprayed and respray is not None and t + dt > respray.at:
+                dt = max(respray.at - t, 1e-9)
             tg, h, eps = gas.at(t + dt)
+            cool_on = cooling is not None and cooling.start <= t + dt <= cooling.end
+            h_c, t_c = (cooling.h, cooling.temp) if cooling is not None and cool_on else (0.0, 0.0)
             g_mass, p_gas = gas.ablation_at(t + dt) if chem else (0.0, 0.0)
             new = temps.copy()
             pinned = False
@@ -378,7 +438,8 @@ def run(
                 if chem and g_mass > 0.0:
                     phi, mdot = _blowing(g_mass, min(ts, coating.cap), p_gas)
                 q = phi * h * (tg - ts) + rad * (tg**4 - ts**4) - mdot * chem_heat
-                dq = -phi * h - 4.0 * rad * ts**3
+                q += h_c * (t_c - ts)
+                dq = -phi * h - 4.0 * rad * ts**3 - h_c
                 a = np.zeros(n)
                 b = cap / dt
                 c = np.zeros(n)
@@ -427,11 +488,16 @@ def run(
                 if new[0] >= coating.cap - 1.0:
                     time_at_cap += dt
             temps = new
+            if not resprayed and respray is not None and t + dt >= respray.at - 1e-12:
+                temps = np.where(coat_nodes, respray.temp, temps)
+                resprayed = True
             peak_s = max(peak_s, float(temps[0]))
             peak_st = max(peak_st, float(temps[grid.interface]))
             t += dt
             quiet = t > gas.time[-1]
             dt = min(dt * 1.05, 5e-3 if quiet else dt_max)
+            if cool_on:
+                dt = min(dt, 1e-3)
     return WallRun(
         coating=coating.name,
         throat_area=throat_area,
