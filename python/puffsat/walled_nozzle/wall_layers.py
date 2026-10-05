@@ -357,6 +357,10 @@ class WallRun:
     time_at_cap: float = 0.0
     #: Fraction of the convective flux that survives the blown film, at the peak (1 = no blowing).
     min_blowing_correction: float = 1.0
+    #: Heat the between-pulse cooling removed in the last cycle [J/m^2] (negative if it heated).
+    cooled_per_pulse: float = 0.0
+    #: Heat the cold respray took out of the coat in the last cycle [J/m^2].
+    respray_per_pulse: float = 0.0
 
     @property
     def verdict(self) -> str:
@@ -411,6 +415,7 @@ def run(
     dxs = np.diff(grid.x)
     peak_s = peak_st = INITIAL_TEMP
     removed = absorbed = chem_removed = time_at_cap = 0.0
+    cooled = respray_heat = 0.0
     min_corr = 1.0
     chem = coating.reacts and gas.g0 > 0.0
     for pulse in range(pulses):
@@ -487,8 +492,19 @@ def run(
                     min_corr = min(min_corr, phi)
                 if new[0] >= coating.cap - 1.0:
                     time_at_cap += dt
+            last = pulse == pulses - 1
+            if cool_on and last:
+                cooled += h_c * (float(new[0]) - t_c) * dt
             temps = new
             if not resprayed and respray is not None and t + dt >= respray.at - 1e-12:
+                if last:
+                    _, rc_now = _segment_props(grid, temps)
+                    node_cap = np.zeros(n)
+                    node_cap[:-1] += 0.5 * rc_now * dxs
+                    node_cap[1:] += 0.5 * rc_now * dxs
+                    respray_heat += float(
+                        np.sum(np.where(coat_nodes, node_cap * (temps - respray.temp), 0.0))
+                    )
                 temps = np.where(coat_nodes, respray.temp, temps)
                 resprayed = True
             peak_s = max(peak_s, float(temps[0]))
@@ -511,6 +527,8 @@ def run(
         chem_removed_per_pulse=chem_removed,
         time_at_cap=time_at_cap,
         min_blowing_correction=min_corr,
+        cooled_per_pulse=cooled,
+        respray_per_pulse=respray_heat,
     )
 
 

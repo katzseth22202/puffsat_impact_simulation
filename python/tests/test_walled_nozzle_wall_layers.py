@@ -158,3 +158,27 @@ def test_a_cold_respray_takes_heat_out_of_the_wall() -> None:
     plain = wl.run(coat, gas, pulses=3)
     sprayed = wl.run(coat, gas, pulses=3, respray=wl.Respray(temp=250.0, at=0.2))
     assert sprayed.end_steel < plain.end_steel
+
+
+def test_cooling_heat_matches_the_integrated_closed_form_flux() -> None:
+    """The heat the cooling boundary exchanges over one cycle equals the time integral of the
+    semi-infinite closed-form surface flux `h (T_c - T_i) exp(beta^2) erfc(beta)`. Reported as heat
+    removed, so it is negative when the coolant is hotter than the wall."""
+    t_c, h = 1200.0, 4.0e4
+    cooling = wl.Cooling(h=h, temp=t_c, start=0.0, end=wl.PULSE_PERIOD)
+    run = wl.run(wl.BARE, _no_gas(), pulses=1, cooling=cooling)
+    alpha = wl.STEEL_K / (wl.STEEL_RHO * wl.STEEL_C)
+    times = np.linspace(0.0, wl.PULSE_PERIOD, 20001)
+    betas = h * np.sqrt(alpha * times) / wl.STEEL_K
+    flux = np.array([h * (t_c - wl.INITIAL_TEMP) * math.exp(b * b) * math.erfc(b) for b in betas])
+    heat_in = float(np.trapezoid(flux, times))
+    assert -run.cooled_per_pulse == pytest.approx(heat_in, rel=0.02)
+
+
+def test_respray_heat_is_what_the_cold_film_takes_out() -> None:
+    """Resetting a coat at a known temperature removes `rho c L (T - T_spray)` per area."""
+    coat = wl.pitch(0.2e-3)
+    run = wl.run(coat, _no_gas(), pulses=1, respray=wl.Respray(temp=250.0, at=0.1))
+    _, rho, c, _, _ = wl.PITCH
+    expected = rho * c * 0.2e-3 * (wl.INITIAL_TEMP - 250.0)
+    assert run.respray_per_pulse == pytest.approx(expected, rel=0.05)
