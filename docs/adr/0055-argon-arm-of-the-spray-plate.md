@@ -56,6 +56,17 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
     steel. The skirt (~20 t per cm of wall thickness) is sized for its own wall pressure, which is
     far below the face's, and gets film and cooling like the face.
 
+11. **The film is pitch, kept about 150 µm thick and resprayed cold each cycle.** Standing
+    thickness insulates the steel; consumption is what each pulse costs, and the two are set
+    separately. Shielded by its vapor, pitch burns ~2-3 kg per pulse (argon) and ~0.2-0.7 kg
+    (water). At 150 µm the steel peaks at ~507 K over 1,500 pulses for both arms with no cooling
+    water. Carbon-loaded oil keeps the steel cooler (~300-490 K) but burns 4-7x more film (12-18 kg
+    per pulse for argon), so it is not adopted.
+12. **The injection ratio k is a mission trade, not a plate optimum.** On the cup, η_jet is nearly
+    flat in k: argon ~0.58 unmixed to ~0.68 premixed from k = 4 to 14. Raising k buys impulse per
+    PuffSat (β 2.3 -> 3.7) at the cost of impulse per carried kilogram (0.46 -> 0.21 w). k stays with
+    the parent's launch-mass budget (8.5-10), whose cost weights decide it.
+
 ## Considered options
 
 - **A small, thick uniform plate.** Rejected, because its mismatch between impulse and mass is
@@ -67,6 +78,8 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
 - **A flared bell wall instead of a straight skirt.** Rejected: 0.98-1.01 against the straight
   skirt's 1.02 of the 1-D impulse, for 10-30% more steel.
 - **An open flat plate.** Rejected: η_jet ~0.33, because hot merged gas spills past the rim.
+- **A carbon-loaded oil film.** Rejected for 4-7x the film consumption of pitch, when pitch at
+  150 µm already holds the steel under its aging limit without coolant.
 - **Steering by impact offset alone, as the child repo describes.** Limited, because large offsets
   break the uniform kick. Tilt and thrusters do the rest.
 

@@ -63,7 +63,11 @@ def main() -> None:
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--attempts", type=int, default=5)
     parser.add_argument("--mixture", default="2. h 1. o", help="TOPS number-fraction string")
-    parser.add_argument("--mixname", default="water")
+    parser.add_argument(
+        "--mixname",
+        default="water",
+        help="letters and digits only: TOPS returns HTTP 500 for a name with an underscore",
+    )
     args = parser.parse_args()
 
     for attempt in range(1, args.attempts + 1):

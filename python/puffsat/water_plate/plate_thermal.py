@@ -29,6 +29,7 @@ import numpy as np
 from puffsat.walled_nozzle import wall_layers as wl
 
 LEVERS = Path("data/results/water_plate/spray_levers.jsonl")
+FILMS = Path("data/results/water_plate/spray_film.jsonl")
 OUTPUT = Path("data/results/water_plate/plate_thermal.csv")
 
 #: Maraging 300 [NI76]: k 21-28 W/m/K over 20-480 C (mid value), c_p 460 J/kg/K, rho 8000.
@@ -46,6 +47,11 @@ FILM = {"argon": 150e-6, "water": 30e-6}
 PUFFSAT_MASS = {45580.0: 47.0, 65130.0: 33.0}
 
 
+#: Carbon-loaded oil film (docs/spray_plate_film_properties.md, central values): k 0.20,
+#: rho 960, c 1800, cracking cap ~1300 K (estimate, not verified), removal heat 1.6 MJ/kg.
+OIL = (0.20, 960.0, 1800.0, 1300.0, 1.6e6)
+
+
 @dataclass(frozen=True)
 class Case:
     material: str
@@ -53,6 +59,9 @@ class Case:
     tau: float
     scheme: str
     h_cool: float
+    #: "pitch" (the paper model at the step-1b thickness), or "pitch2x"/"oil2x": the film at twice
+    #: its shielded consumption per pulse (spray_film.jsonl, kappa_vapor 5e3).
+    film: str = "pitch"
 
 
 @dataclass(frozen=True)
@@ -62,6 +71,8 @@ class Row:
     tau: float
     scheme: str
     h_cool: float
+    film: str
+    film_thickness: float
     face_energy: float
     end_steel: float
     peak_steel: float
@@ -88,6 +99,32 @@ def face_energy(material: str, w: float) -> float:
     raise ValueError(f"no levers row for {material} at {w}")
 
 
+def shielded_film_kg(material: str, w: float, film: str) -> float:
+    """Film consumed per pulse [kg] on the shielded face (kappa_vapor 5e3) for `film`."""
+    with FILMS.open() as fh:
+        for line in fh:
+            r = json.loads(line)
+            run = r["run"]
+            if (
+                r["film"] == film
+                and run["material"] == material
+                and run["w"] == w
+                and run["kappa_vapor"] == 5.0e3
+            ):
+                return float(run["film_per_pulse"])
+    raise ValueError(f"no film row for {film} {material} {w}")
+
+
+def coating(case: Case) -> wl.Coating:
+    """The film: pitch at the step-1b thickness, or pitch or oil at twice its shielded use."""
+    if case.film == "pitch":
+        return wl.pitch(FILM[case.material])
+    base = "oil" if case.film == "oil2x" else "pitch"
+    k, rho, c, cap, heat = OIL if base == "oil" else wl.PITCH
+    thickness = 2.0 * shielded_film_kg(case.material, case.w, base) / (rho * FOOTPRINT)
+    return wl.Coating(f"{base} {thickness * 1e6:.0f} um", thickness, k, rho, c, cap, heat, False)
+
+
 def pulse_gas(energy: float, tau: float) -> wl.GasHistory:
     """An opaque gas whose grey emission delivers `energy` [J/m^2] over `tau` [s]."""
     temp = (energy / (tau * wl.WALL_EMISSIVITY * wl.SIGMA_SB)) ** 0.25
@@ -108,8 +145,9 @@ def run_case(case: Case) -> Row:
         if case.scheme == "water"
         else None
     )
+    coat = coating(case)
     run = wl.run(
-        wl.pitch(FILM[case.material]),
+        coat,
         pulse_gas(energy, case.tau),
         pulses=PULSES,
         substrate=MARAGING,
@@ -122,10 +160,12 @@ def run_case(case: Case) -> Row:
         tau=case.tau,
         scheme=case.scheme,
         h_cool=case.h_cool,
+        film=case.film,
+        film_thickness=coat.thickness,
         face_energy=energy,
         end_steel=run.end_steel,
         peak_steel=run.peak_steel,
-        film_removed=float(run.removed_per_pulse) * 1300.0 * FOOTPRINT,
+        film_removed=float(run.removed_per_pulse) * coat.rho * FOOTPRINT,
         cooled=run.cooled_per_pulse,
         respray=run.respray_per_pulse,
         water_kg_per_pulse=max(run.cooled_per_pulse, 0.0) * FOOTPRINT / WATER_HEAT,
@@ -143,6 +183,11 @@ def cases() -> list[Case]:
                 out.append(Case(material, w, 1e-3, "water", h))
     for tau in (3e-4, 3e-3):
         out.append(Case("argon", 45580.0, tau, "respray", 0.0))
+    for film in ("pitch2x", "oil2x"):
+        for material in ("argon", "water"):
+            for w in PUFFSAT_MASS:
+                out.append(Case(material, w, 1e-3, "respray", 0.0, film))
+                out.append(Case(material, w, 1e-3, "water", 3.0e3, film))
     return out
 
 
@@ -157,7 +202,8 @@ def main() -> None:
             writer.writerow(asdict(row))
     for r in rows:
         print(
-            f"{r.material:5} w={r.w / 1e3:5.2f} tau={r.tau * 1e3:3.1f}ms {r.scheme:7} "
+            f"{r.material:5} w={r.w / 1e3:5.2f} {r.film:7} {r.film_thickness * 1e6:4.0f}um "
+            f"tau={r.tau * 1e3:3.1f}ms {r.scheme:7} "
             f"h={r.h_cool:7.0f}: face {r.face_energy / 1e6:5.2f} MJ/m2, steel end "
             f"{r.end_steel:5.0f} K peak {r.peak_steel:5.0f} K, film {r.film_removed:5.1f} kg, "
             f"water {r.water_kg_per_pulse:5.1f} kg, under 480C={r.under_aging_limit}"

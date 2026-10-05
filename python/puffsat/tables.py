@@ -639,6 +639,9 @@ def main() -> None:
         help="build the argon arm's premixed k = 10 spray table (ADR-0055)",
     )
     parser.add_argument(
+        "--k", type=float, default=10.0, help="with --spray: the injection ratio k (default 10)"
+    )
+    parser.add_argument(
         "--argon",
         action="store_true",
         help="build the pure-argon table for the layered spray runs (ADR-0055 step 2a)",
@@ -649,7 +652,7 @@ def main() -> None:
         out_spray: Path = args.out or DEFAULT_TABLE_PATH_SPRAY
         out_spray.parent.mkdir(parents=True, exist_ok=True)
         with out_spray.open("w") as fh:
-            json.dump(build_table_spray(), fh)
+            json.dump(build_table_spray(k=args.k, tops_path=args.tops or DEFAULT_TOPS_SPRAY), fh)
         print(f"python: wrote argon spray table -> {out_spray}")
         return
 

@@ -304,6 +304,35 @@ no-gap run, and the ratios scale the 1-D real-physics 4 m column.
 - The paper's η_jet = 0.775 is still not met. The remaining levers are the injection ratio k,
   premixing, and the radiation loss.
 
+**Film choice and the injection ratio (2026-10-05).**
+
+*Pitch against oil* (`--spray-film`, then the thermal cycles):
+- **Film use.** Shielded at κ_vapor 5e3, pitch burns 1.8-2.8 kg per pulse (argon) and 0.2-0.7 kg
+  (water). Carbon-loaded oil (1.6 MJ/kg; `docs/spray_plate_film_properties.md`) burns 12-18 kg
+  and 1-4 kg.
+- **Steel heat.** Standing thickness, not consumption, insulates the steel. Pitch kept ~150 µm
+  thick holds the steel at ~507 K over 1,500 pulses for both arms, with no cooling water. Oil
+  runs it at ~300-490 K, but costs 4-7x the film. Pitch is kept (ADR-0055 decision 11).
+- **The thermal solver has no vapor shielding,** so its film-removed figures do not apply. The
+  shielded run's do.
+
+*Injection ratio k* (`--spray-k`). The cup (dish 0.10 + 4 m skirt, 1 m gap) at k = 4, 6, 8.5, 10
+and 14, both mixing bounds (stratified layers and premixed slab, on each k's mixture table):
+
+| Argon, stratified -> premixed | k = 4 | 6 | 8.5 | 10 | 14 |
+|---|---|---|---|---|---|
+| η_jet | 0.60 -> 0.69 | 0.59 -> 0.68 | 0.58 -> 0.68 | 0.58 -> 0.68 | 0.54-0.57 -> 0.68-0.69 |
+| β = J/(m w) | 2.33 -> 2.53 | 2.57 -> 2.80 | 2.80 -> 3.10 | 2.91 -> 3.27 | 3.1-3.2 -> 3.6-3.7 |
+| J per kg consumed (x w) | 0.46 -> 0.50 | 0.36 -> 0.40 | 0.29 -> 0.32 | 0.26 -> 0.30 | 0.21 -> 0.24 |
+
+- **η_jet is nearly flat in k.** Argon holds ~0.58 unmixed and ~0.68 mixed; water's unmixed value
+  slides 0.63 -> 0.49. Even premixed, nothing reaches the paper's 0.775. **Mixing is worth ~0.1 in
+  η_jet,** which is why the plug branch, which forces the merge, matters.
+- **k is a mission trade,** between impulse per scarce PuffSat and impulse per carried kilogram.
+  The parent's launch-mass budget should set it (ADR-0055 decision 12).
+- Every stratified peak stays at or under maraging's 2.5 GPa (water k = 10, 65 km/s: 2.46).
+  Premixed peaks are 0.06-0.16 GPa.
+
 **Steel temperature over a push (2026-10-05): ablative film on maraging, propellant-cooled.**
 `make water-plate-plate-thermal` drives the coated-wall solver (`walled_nozzle/wall_layers.py`,
 extended with a substrate, between-pulse cooling and a cold respray) for 1,500 pulses at 4 Hz.

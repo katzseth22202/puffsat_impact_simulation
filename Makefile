@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: water-plate-argon-table water-plate-argon-pure-table water-plate-argon-radiation water-plate-argon-ablating water-plate-argon-mixing water-plate-argon-levers water-plate-argon-2d water-plate-argon-2d-standoff water-plate-argon-2d-cup water-plate-plate-thermal water-plate-argon-test water-plate-ledger water-plate-profiles water-plate-thermo water-plate-chemistry water-plate-flow-table water-plate-flow water-plate-flow-analysis water-plate-test
+.PHONY: water-plate-argon-table water-plate-argon-pure-table water-plate-argon-radiation water-plate-argon-ablating water-plate-argon-mixing water-plate-argon-levers water-plate-argon-2d water-plate-argon-2d-standoff water-plate-argon-2d-cup water-plate-argon-film water-plate-argon-k water-plate-plate-thermal water-plate-argon-test water-plate-ledger water-plate-profiles water-plate-thermo water-plate-chemistry water-plate-flow-table water-plate-flow water-plate-flow-analysis water-plate-test
 .PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-nozzle-ledger analysis-nozzle-field analysis-nozzle-detachment analysis-nozzle-jet analysis-nozzle-snowplow analysis-continuum analysis-nozzle-fluxtube analysis-nozzle-extension analysis-nozzle-residence analysis-nozzle-front analysis-nozzle-phi analysis-replies analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-toll analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
@@ -710,6 +710,17 @@ water-plate-argon-2d-standoff: data/results/water_plate/spray_levers.jsonl
 ## the 1-D columns -> data/results/water_plate/spray_2d_cup.jsonl
 water-plate-argon-2d-cup: data/results/water_plate/spray_levers.jsonl
 	cargo run --release -p sweep -- --spray-2d-cup
+
+## water-plate-argon-film: pitch vs carbon-loaded oil on the shielded face
+## -> data/results/water_plate/spray_film.jsonl
+water-plate-argon-film: data/tables/argon.json data/tables/water_jupiter.json
+	cargo run --release -p sweep -- --spray-film
+
+## water-plate-argon-k: injection ratio k = 4-14 on the cup, both mixing bounds (needs the
+## spray_k*.json tables from `tables --spray --k K --tops ...`)
+## -> data/results/water_plate/spray_k.jsonl
+water-plate-argon-k: data/tables/argon.json data/tables/water_jupiter.json
+	cargo run --release -p sweep -- --spray-k
 
 water-plate-argon-test:
 	uv run pytest python/tests/test_water_plate_spray_eos.py

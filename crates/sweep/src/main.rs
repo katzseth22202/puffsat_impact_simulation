@@ -1350,11 +1350,26 @@ fn spray_layers_with_gap(
 
 fn run_one_spray_mix(
     arm: SprayArm,
-    (water, spray): (&Table, &Table),
+    tables: (&Table, &Table),
     speed: (f64, f64),
     depths: (f64, f64),
     pairs: usize,
     face: Option<f64>,
+    cells: usize,
+) -> SprayMixRecord {
+    let face = face.map(|kappa| (kappa, SPRAY_MIX_Q_STAR));
+    run_one_spray_mix_q(arm, tables, speed, depths, pairs, face, cells)
+}
+
+/// [`run_one_spray_mix`] with the face given as `(κ_vapor, Q*)`, for films other than the 5 MJ/kg
+/// Rung E default.
+fn run_one_spray_mix_q(
+    arm: SprayArm,
+    (water, spray): (&Table, &Table),
+    speed: (f64, f64),
+    depths: (f64, f64),
+    pairs: usize,
+    face: Option<(f64, f64)>,
     cells: usize,
 ) -> SprayMixRecord {
     let w = speed.0;
@@ -1365,8 +1380,8 @@ fn run_one_spray_mix(
             let r = CoupledBounce::new(tube, None, cfg.consts, cfg.limiter).run();
             (r.bounce, r.loss_radiative_wall, r.loss_escape_space, 0.0)
         }
-        Some(kappa) => {
-            let ablation = Ablation::new(SPRAY_MIX_Q_STAR, cfg.t0).with_vapor_opacity(kappa);
+        Some((kappa, q_star)) => {
+            let ablation = Ablation::new(q_star, cfg.t0).with_vapor_opacity(kappa);
             let r = AblatingBounce::new(tube, None, cfg.consts, cfg.limiter, ablation).run();
             (
                 r.bounce,
@@ -1384,7 +1399,7 @@ fn run_one_spray_mix(
         depth: depths.0,
         pulse_length: depths.1,
         pairs,
-        kappa_vapor: face,
+        kappa_vapor: face.map(|(kappa, _)| kappa),
         beta,
         ceiling_share: beta / (1.0 + (1.0 + SPRAY_K).sqrt()),
         face_radiation_share: rad_wall / ke,
@@ -2175,6 +2190,311 @@ fn cmd_spray_2d_cup(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
                 );
             }
         }
+    })
+}
+
+// ---- Spray plate: oil against pitch on the shielded face (ADR-0055, Q40) ------------------------
+//
+// The 4 m cloud, 4 m pulse column on the Rung E ablating face, with each film's effective heat of
+// ablation: carbon-loaded oil at 0.9 / 1.6 / 3.1 MJ/kg (docs/spray_plate_film_properties.md) and
+// pitch at 59.3 MJ/kg (the wall solver's pitch removal heat), at the sourced vapor opacity and
+// the soot-lost bound.
+
+const SPRAY_FILMS: [(&str, f64); 4] = [
+    ("oil low", 0.9e6),
+    ("oil", 1.6e6),
+    ("oil high", 3.1e6),
+    ("pitch", 59.3e6),
+];
+const RESULT_PATH_SPRAY_FILM: &str = "data/results/water_plate/spray_film.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SprayFilmRecord {
+    film: String,
+    q_star: f64,
+    run: SprayMixRecord,
+}
+
+fn cmd_spray_film(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let water = Table::load("data/tables/water_jupiter.json")?;
+    let mut cases = Vec::new();
+    for arm in SPRAY_ARMS {
+        let spray = Table::load(arm.spray_table)?;
+        for speed in SPRAY_SPEEDS {
+            for film in SPRAY_FILMS {
+                for kappa in [5.0e3, 100.0] {
+                    cases.push((arm, spray.clone(), speed, film, kappa));
+                }
+            }
+        }
+    }
+    let rows = par_map_with_progress("spray-film", &cases, |(arm, spray, speed, film, kappa)| {
+        SprayFilmRecord {
+            film: film.0.to_string(),
+            q_star: film.1,
+            run: run_one_spray_mix_q(
+                *arm,
+                (&water, spray),
+                *speed,
+                (4.0, 4.0),
+                1,
+                Some((*kappa, film.1)),
+                SPRAY_LEVER_CELLS,
+            ),
+        }
+    });
+    emit_scenario(RESULT_PATH_SPRAY_FILM, "spray-film", &rows, |r| {
+        println!(
+            "rust: {:>5} w={:>5.0} {:<8} kv={:>5.0} -> film {:>6.1} kg/pulse share {:.3} face {:.2e}",
+            r.run.material,
+            r.run.w,
+            r.film,
+            r.run.kappa_vapor.unwrap_or(0.0),
+            r.run.film_per_pulse,
+            r.run.ceiling_share,
+            r.run.face_radiation_share,
+        );
+    })
+}
+
+// ---- Spray plate: tuning the injection ratio k on the cup (ADR-0055, Q39) -----------------------
+//
+// For each k: the 1-D real-physics column at both mixing bounds (stratified layers, and the
+// premixed slab on that k's mixture table), bare and on the pitch-shielded face, times the 2-D
+// containment of the working cup (dish 0.10 + 4 m skirt, cloud 1 m off the floor) at that k's
+// spray density. The 4 m cloud, 4 m pulse and the PuffSat masses per pulse are held fixed.
+
+const SPRAY_K_VALUES: [f64; 5] = [4.0, 6.0, 8.5, 10.0, 14.0];
+const PITCH_Q_STAR: f64 = 59.3e6;
+const RESULT_PATH_SPRAY_K: &str = "data/results/water_plate/spray_k.jsonl";
+
+fn spray_k_table(k: f64) -> String {
+    if k == 10.0 {
+        "data/tables/spray_k10.json".to_string()
+    } else {
+        format!("data/tables/spray_k{k}.json")
+    }
+}
+
+/// `(tube, sigma_puffsat)`: one spray layer (at rest) on the plate, the PuffSat layer above it.
+fn k_stratified(water: &Table, spray: &Table, (w, m): (f64, f64), k: f64) -> (Tube<TableEos>, f64) {
+    let sigma_p = m / SPRAY_FOOTPRINT;
+    let per_layer = SPRAY_LEVER_CELLS / 2;
+    let dx = 4.0 / per_layer as f64;
+    let t0 = Config::production().t0;
+    let (rho_s, rho_p) = (sigma_p * k / 4.0, sigma_p / 4.0);
+    let mut positions = vec![0.0];
+    let (mut mass, mut vel, mut energy, mut index) = (vec![], vec![], vec![], vec![]);
+    for (r, u, tbl, mat) in [(rho_s, 0.0, spray, 1), (rho_p, -w, water, 0)] {
+        for _ in 0..per_layer {
+            positions.push(positions[positions.len() - 1] + dx);
+            mass.push(r * dx);
+            vel.push(u);
+            energy.push(tbl.energy(r, t0));
+            index.push(mat);
+        }
+    }
+    let n = mass.len();
+    let mut node_velocities = vec![0.0; n + 1];
+    for i in 1..n {
+        node_velocities[i] =
+            (mass[i - 1] * vel[i - 1] + mass[i] * vel[i]) / (mass[i - 1] + mass[i]);
+    }
+    node_velocities[n] = vel[n - 1];
+    let eos = TableEos::layered(
+        vec![TableEos::new(water.clone()), TableEos::new(spray.clone())],
+        index,
+    );
+    let state = LagrangianState {
+        positions,
+        node_velocities,
+        cell_masses: mass,
+        specific_energies: energy,
+    };
+    let tube = Tube::from_lagrangian(
+        state,
+        eos,
+        Boundary::Wall,
+        Boundary::Free,
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    );
+    (tube, sigma_p)
+}
+
+/// `(tube, sigma_puffsat)`: the merged slab, 4 m deep, closing at `w/(1+k)` with the merge heat
+/// less what reaching the table's reference costs (water atomization for argon's atomic table).
+fn k_premixed(table: &Table, argon: bool, (w, m): (f64, f64), k: f64) -> (Tube<TableEos>, f64) {
+    let sigma_p = m / SPRAY_FOOTPRINT;
+    let rho0 = sigma_p * (1.0 + k) / 4.0;
+    let v0 = w / (1.0 + k);
+    let charge = if argon {
+        50.94e6 / (1.0 + k) + 0.116e6 * k / (1.0 + k)
+    } else {
+        1.89e6 * k / (1.0 + k)
+    };
+    let e0 = 0.5 * w * w * k / (1.0 + k).powi(2) - charge;
+    let eos = TableEos::new(table.clone());
+    let t0 = eos.temperature(rho0, e0);
+    let cfg = Config::production();
+    let tube = Tube::slug_si(
+        cfg.gas_cells,
+        rho0,
+        v0,
+        4.0,
+        t0,
+        eos,
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    );
+    (tube, sigma_p)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SprayKRecord {
+    k: f64,
+    material: String,
+    w: f64,
+    /// "stratified" or "premixed".
+    bound: String,
+    /// 1-D share of the overtake ceiling, bare face.
+    share_1d: f64,
+    /// 2-D cup containment at this k (free cup over confined flat no-gap).
+    containment: f64,
+    relief: f64,
+    /// Delivered share and η_jet on the cup.
+    share: f64,
+    eta_jet: f64,
+    /// Impulse per PuffSat momentum `J/(m w)`.
+    beta: f64,
+    /// Impulse per kilogram consumed (PuffSat + spray + film), as a fraction of `w`.
+    impulse_per_consumed: f64,
+    peak_pressure: f64,
+    film_per_pulse: f64,
+    face_radiation_share: f64,
+}
+
+/// `(containment, relief)` of the working cup at injection ratio `k`.
+fn k_containment(k: f64) -> (f64, f64) {
+    let unit = SPRAY_2D_PULSE_M;
+    let base = SlugConfig {
+        gamma: SPRAY_2D_GAMMA,
+        mach: SPRAY_2D_MACH,
+        r_foot: 5.0 / unit,
+        length: 1.0,
+        r_plate: 10.0 / unit,
+        r_max: SPRAY_CUP_NR as f64 * SPRAY_CUP_DR,
+        z_max: SPRAY_CUP_NZ as f64 * SPRAY_CUP_DR,
+        nr: SPRAY_CUP_NR,
+        nz: SPRAY_CUP_NZ,
+        confined: false,
+        shape: PlateShape::Cup {
+            d_over_d: 0.10,
+            skirt_height: 4.0 / unit,
+            flare: 0.0,
+            thickness: SPRAY_CUP_WALL,
+        },
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    };
+    let spray = |standoff: f64| SprayCloud {
+        depth: 1.0,
+        mass_ratio: k,
+        standoff,
+    };
+    let free = run_spray_bounce(&base, spray(1.0 / unit));
+    let reference = run_spray_bounce(
+        &SlugConfig {
+            r_foot: base.r_max,
+            r_plate: base.r_max,
+            nr: 8,
+            confined: true,
+            shape: PlateShape::FlatGridAligned,
+            ..base
+        },
+        spray(0.0),
+    );
+    (
+        free.restitution_ratio() / reference.restitution_ratio(),
+        free.peak_local_pressure / reference.peak_local_pressure,
+    )
+}
+
+fn cmd_spray_k(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let containment = par_map_with_progress("spray-k-2d", &SPRAY_K_VALUES, |&k| k_containment(k));
+    let water = Table::load("data/tables/water_jupiter.json")?;
+    let argon = Table::load("data/tables/argon.json")?;
+    let mut cases = Vec::new();
+    for (ik, &k) in SPRAY_K_VALUES.iter().enumerate() {
+        let mixture = Table::load(spray_k_table(k))?;
+        for material in ["argon", "water"] {
+            for speed in SPRAY_SPEEDS {
+                for bound in ["stratified", "premixed"] {
+                    cases.push((ik, k, material, speed, bound, mixture.clone()));
+                }
+            }
+        }
+    }
+    let rows = par_map_with_progress(
+        "spray-k",
+        &cases,
+        |(ik, k, material, speed, bound, mixture)| {
+            let is_argon = *material == "argon";
+            let spray = if is_argon { &argon } else { &water };
+            let build = || {
+                if *bound == "stratified" {
+                    k_stratified(&water, spray, *speed, *k)
+                } else if is_argon {
+                    k_premixed(mixture, true, *speed, *k)
+                } else {
+                    k_premixed(&water, false, *speed, *k)
+                }
+            };
+            let cfg = Config::production();
+            let (tube, sigma_p) = build();
+            let bare = CoupledBounce::new(tube, None, cfg.consts, cfg.limiter).run();
+            let (tube, _) = build();
+            let ablation = Ablation::new(PITCH_Q_STAR, cfg.t0).with_vapor_opacity(5.0e3);
+            let shielded = AblatingBounce::new(tube, None, cfg.consts, cfg.limiter, ablation).run();
+            let (w, m) = *speed;
+            let ceiling = 1.0 + (1.0 + k).sqrt();
+            let share_1d = bare.bounce.wall_impulse / (sigma_p * w) / ceiling;
+            let (eta2d, relief) = containment[*ik];
+            let share = share_1d * eta2d;
+            let beta = share * ceiling;
+            let film = shielded.ablated_mass * SPRAY_FOOTPRINT;
+            SprayKRecord {
+                k: *k,
+                material: (*material).to_string(),
+                w,
+                bound: (*bound).to_string(),
+                share_1d,
+                containment: eta2d,
+                relief,
+                share,
+                eta_jet: (beta - 1.0) / (1.0 + k).sqrt(),
+                beta,
+                impulse_per_consumed: beta / (1.0 + k + film / m),
+                peak_pressure: bare.bounce.peak_wall_pressure * relief,
+                film_per_pulse: film,
+                face_radiation_share: bare.loss_radiative_wall / (0.5 * sigma_p * w * w),
+            }
+        },
+    );
+    emit_scenario(RESULT_PATH_SPRAY_K, "spray-k", &rows, |r| {
+        println!(
+            "rust: k={:>4.1} {:>5} w={:>5.0} {:<10} -> eta_jet {:.3} beta {:.2} J/consumed {:.3} w \
+             peak {:.2e} film {:>4.1} kg (1-D {:.3} x cup {:.3})",
+            r.k,
+            r.material,
+            r.w,
+            r.bound,
+            r.eta_jet,
+            r.beta,
+            r.impulse_per_consumed,
+            r.peak_pressure,
+            r.film_per_pulse,
+            r.share_1d,
+            r.containment,
+        );
     })
 }
 
@@ -3656,6 +3976,8 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--mesh-convergence", cmd_mesh_convergence),
     ("--transport-resolution", cmd_transport_resolution),
     ("--transport-check", cmd_transport_check),
+    ("--spray-k", cmd_spray_k),
+    ("--spray-film", cmd_spray_film),
     ("--spray-2d-cup", cmd_spray_2d_cup),
     ("--spray-2d-standoff", cmd_spray_2d_standoff),
     ("--spray-standoff", cmd_spray_standoff),

@@ -89,8 +89,10 @@ repository's `docs/spray_plate_vapor_opacity.md`. That holds while the vapor kee
 plasma side of the curtain loses it, the opacity falls to ~100, and argon needs 26-48 kg per pulse
 (step 2a). Heat numbers at production resolution are high by ~1.5-2x, so these are conservative.
 
-**Change.** Orion's ~150 µm scale is about right for argon. A 5 µm readout-sized film is far too
-thin for either fluid. Whether the curtain keeps its soot decides argon's film to within 4-5x.
+**Change.** Keep the film about **150 µm thick** (Orion's ~6 mil, 152 µm, is right), and respray
+what each pulse burns: ~2-3 kg (argon) or ~0.2-0.7 kg (water) of pitch. At that thickness the steel
+stays near 507 K over a push with no cooling water. A 5 µm readout-sized film is far too thin.
+Carbon-loaded oil keeps the steel cooler but burns 4-7x more, so the paper's pitch stands.
 
 ### P6. Argon against water: `sec:water_injected_overtake`, and the argon loading near line 1384
 
@@ -144,7 +146,8 @@ confinement or upstream merging are the open options.
 
 ### P10. η_jet = 0.775 is not reached in any survivable 1-D configuration: `sec:water_injected_overtake`, `tab:mass_interest_growth`
 
-Provisional, pending the injection ratio k and premixing. On an open 10 m plate the best
+Provisional, pending the plug study. The k sweep shows η_jet nearly flat in k on the cup: argon
+~0.58 unmixed to ~0.68 premixed from k = 4 to 14, so no choice of k reaches 0.775. On an open 10 m plate the best
 survivable case reaches η_jet ~0.33. Shaping the plate as a dish (d/D 0.10-0.15) with a 4 m
 straight skirt contains the spill and reaches **η_jet ~0.58** (argon, 45.58 km/s; ~0.56 water),
 within maraging's 2.5 GPa. The parent's growth tables are run at η_jet = 0.775 as a requirement.
