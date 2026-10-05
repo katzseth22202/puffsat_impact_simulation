@@ -325,6 +325,14 @@ The failure in which the spray is pooled into a thin, dense layer that acts as a
 gas reflects off it while keeping most of its energy, and the impulse falls toward a bare bounce.
 _Avoid_: "bounce-back" alone (collides with the **bounce ceiling**)
 
+**Plug**:
+A dense, narrow body of carried mass hung on tethers ahead of the spray plate and steered in the
+last ~100 ms into the path of one compact necklace sphere, which buries itself in it. The merged
+fireball then expands toward the plate. It works by column density (mass per area along the
+sphere's path), so it is compact, not a low-density foam.
+_Avoid_: "slug" (the tamped-nozzle study's carried mass behind a plate hole, a different geometry
+and study); "foam plug" when the plug is solid
+
 **Tapered plate**:
 A plate whose areal mass follows the delivered impulse profile, so every element receives the
 same velocity kick and the plate does not bend during the pulse.

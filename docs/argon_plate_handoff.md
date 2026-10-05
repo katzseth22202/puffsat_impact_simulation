@@ -388,6 +388,19 @@ The short form follows.
 
 ## Open
 
+- **The plug alternative (agreed 2026-10-05, after the k sweep and film comparison).** Each
+  necklace sphere arrives compact and buries itself in a **plug**: dense, narrow carried mass on
+  tethers beyond the blast radius, steered in the last ~100 ms to millimetre accuracy. This is the
+  parent's head-on rod-and-plug idea without the sliding door. The plug forces the merge that the
+  spray leaves to chance. Estimates to check first:
+  - A ~10 cm water sphere has ~140 kg/m^2 of areal mass, so its 47 kg plug wants ~400+ kg/m^2 of
+    column: ~0.4 m across and ~0.4 m long as solid polyethylene (~14 m long as 30 kg/m^3 foam).
+  - The impact makes a near-isotropic fireball (~10+ km/s expansion against ~4 km/s drift), so
+    capture depends on how much the cup encloses. A bell may pay here where it did not for spray.
+  - Layout: one plug per sphere (overlapping cones) against one ring plug. Material: polyethylene
+    first (with its ~84 MJ/kg bond toll and soot radiation bracketed, an estimate), then argon ice.
+  - Reuse the tamped-nozzle study's snowplow and column-density tools, and the 2-D standoff/cup.
+
 - The vapor opacity. κ_vapor moves argon's film between 6 and 27 kg per pulse, and only the 200
   and 1,500 values have a source. The EUV absorption of the film's vapor is the number to pin.
 - **No survivable, useful configuration yet in 2-D.** Candidate levers: a footprint much wider
