@@ -10,11 +10,11 @@ convention. The running numbers and their evidence are in this repository's
 Section labels and line numbers below are from parent `f15d43c` and child `templateArxiv.tex` as
 cloned on 2026-10-05.
 
-**Status of the numbers.** The step 1 and step 1b numbers are repository solves:
-`make water-plate-argon-radiation` and `make water-plate-argon-ablating`. They are 1-D, premixed,
-with gray flux-limited radiation. Everything else here is an estimate and is labelled as one.
-Mixing quality (step 2a), rim spill (step 2b) and the end-to-end bounce (step 3) are still to come,
-and may move several items.
+**Status of the numbers.** Steps 1, 1b and 2a are repository solves:
+`make water-plate-argon-radiation`, `make water-plate-argon-ablating` and
+`make water-plate-argon-mixing`. They are 1-D with gray flux-limited radiation, premixed (1, 1b) or
+layered (2a). Everything else here is an estimate and is labelled as one. Rim spill (step 2b) and
+the end-to-end bounce (step 3) are still to come, and may move several items.
 
 ## The setting
 
@@ -84,11 +84,13 @@ Solved, step 1b. With the film's vapor shielding the steel, film consumed per pu
 | Water | 1-5 kg | ~10-70 µm |
 
 These are at vapor opacities of 1,500-10^4 m^2/kg and Q* = 5 MJ/kg. Without shielding, argon would
-need 120+ kg per pulse.
+need 120+ kg per pulse. The sourced vapor opacity is 5e3 m^2/kg (range 2e3-3e4), from this
+repository's `docs/spray_plate_vapor_opacity.md`. That holds while the vapor keeps its soot. If the
+plasma side of the curtain loses it, the opacity falls to ~100, and argon needs 26-48 kg per pulse
+(step 2a). Heat numbers at production resolution are high by ~1.5-2x, so these are conservative.
 
 **Change.** Orion's ~150 µm scale is about right for argon. A 5 µm readout-sized film is far too
-thin for either fluid. The vapor opacity is being pinned by a separate research note, and it moves
-argon's figure by about 2x.
+thin for either fluid. Whether the curtain keeps its soot decides argon's film to within 4-5x.
 
 ### P6. Argon against water: `sec:water_injected_overtake`, and the argon loading near line 1384
 
@@ -121,6 +123,18 @@ near 1-2 m: 0.5 m exceeds the steel's pressure ladder at 65 km/s, and deeper clo
 There is nothing to change. This repository models the delivered PuffSat as a disk whose areal mass
 matches the taper, which is what the existing ring plus hub bag produces.
 
+### P9. The plate survives only a merged pulse: `sec:water_injected_overtake` and `sec:segmented_steel_plate`
+
+Solved, step 2a. When a PuffSat layer reaches the plate before merging with the spray, it drives
+a shock through the spray into the steel. The converged peak is ~4.7 GPa (argon) and ~7 GPa
+(water) at 45.58 km/s with a 1 m cloud. That is 5-10x the 400-900 MPa ladder, and ~3x what the
+same pulse would put on a bare plate. Interleaving the layers does not help once resolved. The
+premixed case stays at 0.17-0.53 GPa.
+
+**Change.** State that survival assumes the PuffSat gas merges with the spray before it reaches
+the plate. The levers (a longer, more dilute arriving pulse; a standoff between cloud and plate;
+merging upstream) are being tested and may supply the number.
+
 ## Child (`puffsats_for_datacenters`)
 
 The child carries summaries of the parent, so each item follows its parent change.
@@ -132,5 +146,6 @@ The child carries summaries of the parent, so each item follows its parent chang
 - **C3, `sec:plate_aiming`.** Cap the offset (P4).
 - **C4, `sec:plate_liquid_spray`.** Add the diffuse-cloud requirement (P7). Also note that argon
   "runs hotter at the plate" is now quantified: about 10x the face radiation of water (P6).
+- **C6, `sec:plate_liquid_spray`.** Add that the plate survives only a merged pulse (P9).
 - **C5, `sec:plate_pulse_rate`.** "Of order tens of kilograms per square meter" as the survival
   floor is not the binding limit. Heat is, through the film (P5).

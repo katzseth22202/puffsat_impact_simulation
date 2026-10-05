@@ -132,6 +132,37 @@ Droplets that stop deep in the argon also help mixing, because they deposit ther
 that filling a ring's center takes radial expansion of order the ring radius, and the hub fills
 it. So the delivered shape is a disk, prescribed with its areal mass matched to the tapered plate.
 
+**Step 2a solved (2026-10-05): mixing quality, two materials with radiation.**
+`make water-plate-argon-mixing` puts the PuffSat's water gas and the cold spray in separate
+Lagrangian layers, ordered from the plate outward: spray, PuffSat, and so on. It runs 1, 4 or 16
+layer pairs on the new per-cell-material kernel (pure argon table with TOPS argon opacities). Each
+layout runs on a bare face and on ablating faces at κ_vapor 5,000 and 100. Cells never exchange
+mass, so finer interleaving is the only mixing represented. All 72 cases converged.
+`--spray-mixing-convergence` repeats the extreme cases at 192-1,536 cells.
+
+| Layered, k = 10, 1-2 m | Argon | Water |
+|---|---|---|
+| Share of overtake ceiling (premixed 0.69-0.75) | **0.64-0.67** | 0.59-0.65 |
+| Change from 1 to 16 layer pairs | +0.01 at most | up to +0.04 |
+| Face radiation, bare (premixed 2.6-4.2%) | 1.0-2.3% | 0.05-0.4% |
+| Film per pulse, κ 5,000 | 5.5-12.5 kg | 0.4-2.9 kg |
+| Film per pulse, κ 100 (soot lost) | 26-48 kg | 2-13 kg |
+| Converged peak face pressure, stratified, 1 m, 45.58 km/s | **~4.7 GPa** | **~7 GPa** |
+
+- **Poor mixing costs 0.05-0.10 of the ceiling,** converged to ±0.005. Interleaving hardly helps
+  in 1-D with real chemistry and radiation, unlike the ideal-gas estimate.
+- **Peak pressure becomes the binding limit, ahead of heat.** An unmerged PuffSat layer drives a
+  shock through the spray and into the steel, at 5-10x the 400-900 MPa ladder. That is about 3x
+  the ~1.5 GPa the same pulse would put on a bare plate (1.2 ρ w^2), because the heavy spray layer
+  compresses and reflects. Interleaving only appears to help on a coarse grid: at 16 pairs the
+  peak climbs 0.9 -> 3.7 GPa from 192 to 1,536 cells. The premixed solve (0.17-0.53 GPa) hides
+  this, because there the merge has already happened away from the plate.
+- **Face radiation is overestimated at production resolution.** It falls ~12% per grid doubling
+  (argon stratified 1.5% -> 0.74% from 192 to 1,536 cells). The heat and film numbers in steps 1,
+  1b and 2a are therefore conservative by roughly 1.5-2x.
+- **The vapor opacity matters 4-5x for film.** Argon needs 5.5-12.5 kg per pulse with sooty vapor,
+  but 26-48 kg if the curtain loses its soot. Water stays at 0.4-13 kg either way.
+
 **Pulse size for 100 t of steel.** The gas spring sets this, not steel strength. With a preloaded,
 near-constant-force spring, `J ≈ 8 m_plate ν s`. This reproduces the child repo's 3.6 g peak on a
 2.5 m stroke. At 4 Hz and 2.5 m, J is 8 MN·s per pulse, enough to carry a vehicle of about 1,090 t
@@ -188,8 +219,9 @@ The short form follows.
 
 - The vapor opacity. κ_vapor moves argon's film between 6 and 27 kg per pulse, and only the 200
   and 1,500 values have a source. The EUV absorption of the film's vapor is the number to pin.
-- Step 2a: mixing quality in 1-D. Stratified, interleaved and premixed layouts, with two materials
-  and radiation together, which needs the kernel's radiation step to read each cell's own table.
+- **Peak pressure under poor mixing.** Levers to test: a longer, lower-density arriving pulse
+  (the necklace disk's depth), a standoff between spray cloud and plate so the PuffSat's shock
+  decays before it arrives, and making the merge happen upstream of the plate.
 - Step 2b: rim spill for the delivered disk in 2-D, with the areal mass matched to the taper.
 - Step 3: **how good the bounce is**, end to end. Combine 2a's mixing with 2b's capture into one
   delivered impulse per PuffSat, quoted as the parent's η_jet. Compare it with this repository's

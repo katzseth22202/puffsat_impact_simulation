@@ -339,6 +339,10 @@ def build_table_jupiter(
 
 DEFAULT_TABLE_PATH_SPRAY = Path("data/tables/spray_k10.json")
 DEFAULT_TOPS_SPRAY = Path("data/tables/tops/tops_spray_k10_gray.html")
+DEFAULT_TABLE_PATH_ARGON = Path("data/tables/argon.json")
+DEFAULT_TOPS_ARGON = Path("data/tables/tops/tops_argon_gray.html")
+# Injection ratio that leaves a water fraction of 1e-12: pure argon for every purpose here.
+PURE_ARGON_K = 1.0e12
 
 
 def build_table_spray(
@@ -634,6 +638,11 @@ def main() -> None:
         action="store_true",
         help="build the argon arm's premixed k = 10 spray table (ADR-0055)",
     )
+    parser.add_argument(
+        "--argon",
+        action="store_true",
+        help="build the pure-argon table for the layered spray runs (ADR-0055 step 2a)",
+    )
     args = parser.parse_args()
 
     if args.spray:
@@ -642,6 +651,18 @@ def main() -> None:
         with out_spray.open("w") as fh:
             json.dump(build_table_spray(), fh)
         print(f"python: wrote argon spray table -> {out_spray}")
+        return
+
+    if args.argon:
+        out_argon: Path = args.out or DEFAULT_TABLE_PATH_ARGON
+        out_argon.parent.mkdir(parents=True, exist_ok=True)
+        table = build_table_spray(k=PURE_ARGON_K, tops_path=DEFAULT_TOPS_ARGON)
+        prov = table["provenance"]
+        assert isinstance(prov, dict)
+        prov["study"] = "spray plate, argon arm (ADR-0055): pure argon for layered runs"
+        with out_argon.open("w") as fh:
+            json.dump(table, fh)
+        print(f"python: wrote pure argon table -> {out_argon}")
         return
 
     if args.frozen_from_probe is not None:

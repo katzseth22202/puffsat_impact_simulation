@@ -35,7 +35,8 @@ use euler2d::bounce::{PlateShape, SlugConfig, eta_capture, run_slug_bounce, tape
 use hydro1d::conduction::Solid;
 use hydro1d::eos::{Eos as _, TableEos};
 use hydro1d::kernel::{
-    AblatingBounce, Ablation, CondensingBounce, CoupledBounce, TransportAudit, Tube, Viscosity,
+    AblatingBounce, Ablation, Boundary, CondensingBounce, CoupledBounce, LagrangianState,
+    TransportAudit, Tube, Viscosity,
 };
 use hydro1d::radiation::{Limiter, RadConstants};
 use serde::{Deserialize, Serialize};
@@ -1185,6 +1186,269 @@ fn cmd_spray_ablating(_args: &[String]) -> Result<(), Box<dyn std::error::Error>
             r.converged,
         );
     })
+}
+
+// ---- Spray plate, step 2a: mixing quality with two materials and radiation (ADR-0055) -----------
+//
+// The PuffSat's water gas and the cold spray start as separate layers, ordered from the plate
+// outward: spray, PuffSat, spray, PuffSat, ... with `n` pairs. `n = 1` is a stratified pulse; larger
+// `n` stands in for a pulse that has partly penetrated the cloud before the layers interact.
+// Lagrangian cells never exchange mass, so finer interleaving is the only mixing represented.
+// The water arm's spray starts as vapor at 400 K, which flatters water by ~2% of the merge heat.
+
+/// Number of spray/PuffSat layer pairs.
+const SPRAY_MIX_PAIRS: [usize; 3] = [1, 4, 16];
+/// Cells across the whole column.
+const SPRAY_MIX_CELLS: usize = 384;
+const RESULT_PATH_SPRAY_MIX: &str = "data/results/water_plate/spray_mixing.jsonl";
+
+/// The face treatment: `None` is a bare cold black face; `Some(κ)` is the Rung E ablating face at
+/// Q* = 5 MJ/kg with vapor opacity κ (5e3 the sourced value, 100 a curtain that has lost its soot).
+const SPRAY_MIX_FACES: [Option<f64>; 3] = [None, Some(5.0e3), Some(100.0)];
+const SPRAY_MIX_Q_STAR: f64 = 5.0e6;
+
+#[derive(Debug, Clone, Copy)]
+struct SprayArm {
+    name: &'static str,
+    spray_table: &'static str,
+}
+
+const SPRAY_ARMS: [SprayArm; 2] = [
+    SprayArm {
+        name: "argon",
+        spray_table: "data/tables/argon.json",
+    },
+    SprayArm {
+        name: "water",
+        spray_table: "data/tables/water_jupiter.json",
+    },
+];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SprayMixRecord {
+    material: String,
+    w: f64,
+    depth: f64,
+    pairs: usize,
+    /// Vapor opacity of the ablating face [m²/kg]; absent for the bare face.
+    kappa_vapor: Option<f64>,
+    beta: f64,
+    ceiling_share: f64,
+    face_radiation_share: f64,
+    escape_share: f64,
+    film_per_pulse: f64,
+    peak_wall_pressure: f64,
+    converged: bool,
+}
+
+/// The layered column: spray (at rest) and PuffSat water gas (closing at `w`), each `depth` deep in
+/// total, split into `pairs` alternating layers starting with spray at the plate.
+fn spray_layers(
+    water: &Table,
+    spray: &Table,
+    (w, m): (f64, f64),
+    depth: f64,
+    pairs: usize,
+    cells: usize,
+) -> (Tube<TableEos>, f64) {
+    let sigma_p = m / SPRAY_FOOTPRINT;
+    let layers = 2 * pairs;
+    let per_layer = cells / layers;
+    let dx = depth / (pairs * per_layer) as f64;
+    let t0 = Config::production().t0;
+    let (rho_s, rho_p) = (sigma_p * SPRAY_K / depth, sigma_p / depth);
+    let mut positions = vec![0.0];
+    let (mut mass, mut vel, mut energy, mut index) = (vec![], vec![], vec![], vec![]);
+    for layer in 0..layers {
+        let (r, u, tbl, mat) = if layer % 2 == 0 {
+            (rho_s, 0.0, spray, 1)
+        } else {
+            (rho_p, -w, water, 0)
+        };
+        for _ in 0..per_layer {
+            positions.push(positions[positions.len() - 1] + dx);
+            mass.push(r * dx);
+            vel.push(u);
+            energy.push(tbl.energy(r, t0));
+            index.push(mat);
+        }
+    }
+    // Interior nodes carry the mass-weighted velocity of their two half-cells, so the column's
+    // momentum is exactly the PuffSat's. The plate node is at rest; the outer node is free.
+    let n = mass.len();
+    let mut node_velocities = vec![0.0; n + 1];
+    for i in 1..n {
+        node_velocities[i] =
+            (mass[i - 1] * vel[i - 1] + mass[i] * vel[i]) / (mass[i - 1] + mass[i]);
+    }
+    node_velocities[n] = vel[n - 1];
+    let eos = TableEos::layered(
+        vec![TableEos::new(water.clone()), TableEos::new(spray.clone())],
+        index,
+    );
+    let state = LagrangianState {
+        positions,
+        node_velocities,
+        cell_masses: mass,
+        specific_energies: energy,
+    };
+    let tube = Tube::from_lagrangian(
+        state,
+        eos,
+        Boundary::Wall,
+        Boundary::Free,
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    );
+    (tube, sigma_p)
+}
+
+fn run_one_spray_mix(
+    arm: SprayArm,
+    (water, spray): (&Table, &Table),
+    speed: (f64, f64),
+    depth: f64,
+    pairs: usize,
+    face: Option<f64>,
+    cells: usize,
+) -> SprayMixRecord {
+    let w = speed.0;
+    let (tube, sigma_p) = spray_layers(water, spray, speed, depth, pairs, cells);
+    let cfg = Config::production();
+    let (bounce, rad_wall, escape, film) = match face {
+        None => {
+            let r = CoupledBounce::new(tube, None, cfg.consts, cfg.limiter).run();
+            (r.bounce, r.loss_radiative_wall, r.loss_escape_space, 0.0)
+        }
+        Some(kappa) => {
+            let ablation = Ablation::new(SPRAY_MIX_Q_STAR, cfg.t0).with_vapor_opacity(kappa);
+            let r = AblatingBounce::new(tube, None, cfg.consts, cfg.limiter, ablation).run();
+            (
+                r.bounce,
+                r.loss_radiative_wall,
+                r.loss_escape_space,
+                r.ablated_mass * SPRAY_FOOTPRINT,
+            )
+        }
+    };
+    let ke = 0.5 * sigma_p * w * w;
+    let beta = bounce.wall_impulse / (sigma_p * w);
+    SprayMixRecord {
+        material: arm.name.to_string(),
+        w,
+        depth,
+        pairs,
+        kappa_vapor: face,
+        beta,
+        ceiling_share: beta / (1.0 + (1.0 + SPRAY_K).sqrt()),
+        face_radiation_share: rad_wall / ke,
+        escape_share: escape / ke,
+        film_per_pulse: film,
+        peak_wall_pressure: bounce.peak_wall_pressure,
+        converged: bounce.converged,
+    }
+}
+
+fn cmd_spray_mixing(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let water = Table::load("data/tables/water_jupiter.json")?;
+    let mut cases = Vec::new();
+    for arm in SPRAY_ARMS {
+        let spray = Table::load(arm.spray_table)?;
+        for speed in SPRAY_SPEEDS {
+            for depth in SPRAY_ABL_DEPTH {
+                for pairs in SPRAY_MIX_PAIRS {
+                    for face in SPRAY_MIX_FACES {
+                        cases.push((arm, spray.clone(), speed, depth, pairs, face));
+                    }
+                }
+            }
+        }
+    }
+    let rows = par_map_with_progress(
+        "spray-mixing",
+        &cases,
+        |(arm, spray, speed, depth, pairs, face)| {
+            run_one_spray_mix(
+                *arm,
+                (&water, spray),
+                *speed,
+                *depth,
+                *pairs,
+                *face,
+                SPRAY_MIX_CELLS,
+            )
+        },
+    );
+    if let Some(dir) = Path::new(RESULT_PATH_SPRAY_MIX).parent() {
+        fs::create_dir_all(dir)?;
+    }
+    emit_scenario(RESULT_PATH_SPRAY_MIX, "spray-mixing", &rows, |r| {
+        println!(
+            "rust: {:>5} w={:>5.0} L={:.0} n={:>2} kv={:>6} -> share={:.3} face={:.2e} \
+             esc={:.2e} film={:>6.1} kg peak_p={:.2e} converged={}",
+            r.material,
+            r.w,
+            r.depth,
+            r.pairs,
+            r.kappa_vapor
+                .map_or("bare".to_string(), |k| format!("{k:.0}")),
+            r.ceiling_share,
+            r.face_radiation_share,
+            r.escape_share,
+            r.film_per_pulse,
+            r.peak_wall_pressure,
+            r.converged,
+        );
+    })
+}
+
+const RESULT_PATH_SPRAY_MIX_CONV: &str = "data/results/water_plate/spray_mixing_convergence.jsonl";
+
+/// Grid convergence of step 2a on its extreme cases: stratified and 16 pairs, both fluids, at the
+/// cold speed, 1 m deep, bare face, at 192 / 384 / 768 / 1536 cells.
+fn cmd_spray_mixing_convergence(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let water = Table::load("data/tables/water_jupiter.json")?;
+    let mut cases = Vec::new();
+    for arm in SPRAY_ARMS {
+        let spray = Table::load(arm.spray_table)?;
+        for pairs in [1, 16] {
+            for cells in [192, 384, 768, 1536] {
+                cases.push((arm, spray.clone(), pairs, cells));
+            }
+        }
+    }
+    let rows = par_map_with_progress(
+        "spray-mixing-convergence",
+        &cases,
+        |(arm, spray, pairs, cells)| {
+            let mut r = run_one_spray_mix(
+                *arm,
+                (&water, spray),
+                SPRAY_SPEEDS[0],
+                1.0,
+                *pairs,
+                None,
+                *cells,
+            );
+            r.depth = *cells as f64; // reused as the cell count in this file only
+            r
+        },
+    );
+    emit_scenario(
+        RESULT_PATH_SPRAY_MIX_CONV,
+        "spray-mixing-convergence",
+        &rows,
+        |r| {
+            println!(
+                "rust: {:>5} n={:>2} cells={:>5.0} -> share={:.4} face={:.3e} peak_p={:.3e}",
+                r.material,
+                r.pairs,
+                r.depth,
+                r.ceiling_share,
+                r.face_radiation_share,
+                r.peak_wall_pressure,
+            );
+        },
+    )
 }
 
 // ---- Heavy-plate 16–28 km/s scenario sweep (special scenario, design §12.1 / ADR-0027) ----------
@@ -2665,6 +2929,8 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--mesh-convergence", cmd_mesh_convergence),
     ("--transport-resolution", cmd_transport_resolution),
     ("--transport-check", cmd_transport_check),
+    ("--spray-mixing-convergence", cmd_spray_mixing_convergence),
+    ("--spray-mixing", cmd_spray_mixing),
     ("--spray-ablating", cmd_spray_ablating),
     ("--spray", cmd_spray),
     ("--jupiter", cmd_jupiter),

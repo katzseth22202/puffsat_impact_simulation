@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: water-plate-argon-table water-plate-argon-radiation water-plate-argon-ablating water-plate-argon-test water-plate-ledger water-plate-profiles water-plate-thermo water-plate-chemistry water-plate-flow-table water-plate-flow water-plate-flow-analysis water-plate-test
+.PHONY: water-plate-argon-table water-plate-argon-pure-table water-plate-argon-radiation water-plate-argon-ablating water-plate-argon-mixing water-plate-argon-test water-plate-ledger water-plate-profiles water-plate-thermo water-plate-chemistry water-plate-flow-table water-plate-flow water-plate-flow-analysis water-plate-test
 .PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-nozzle-ledger analysis-nozzle-field analysis-nozzle-detachment analysis-nozzle-jet analysis-nozzle-snowplow analysis-continuum analysis-nozzle-fluxtube analysis-nozzle-extension analysis-nozzle-residence analysis-nozzle-front analysis-nozzle-phi analysis-replies analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-toll analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
@@ -674,8 +674,20 @@ water-plate-argon-radiation: data/tables/spray_k10.json data/tables/water_jupite
 water-plate-argon-ablating: data/tables/spray_k10.json data/tables/water_jupiter.json
 	cargo run --release -p sweep -- --spray-ablating
 
+## water-plate-argon-pure-table: pure argon (k = 1e12) for the layered runs, TOPS argon opacities.
+water-plate-argon-pure-table: data/tables/argon.json
+
+data/tables/argon.json: python/puffsat/water_plate/spray_eos.py python/puffsat/tables.py python/puffsat/tops.py data/tables/tops/tops_argon_gray.html
+	PYTHONPATH=python $(PY) -m puffsat.tables --argon
+
+## water-plate-argon-mixing: step 2a, PuffSat and spray as separate radiating layers (1, 4, 16
+## pairs) on bare and vapor-shielded faces -> data/results/water_plate/spray_mixing.jsonl
+water-plate-argon-mixing: data/tables/argon.json data/tables/water_jupiter.json
+	cargo run --release -p sweep -- --spray-mixing
+
 water-plate-argon-test:
 	uv run pytest python/tests/test_water_plate_spray_eos.py
+	cargo test --release -p hydro1d --test layered
 
 water-plate-thermo:
 	PYTHONPATH=python uv run --extra sci python -m puffsat.water_plate.thermodynamics

@@ -62,6 +62,11 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
   65.13.
 - Q9 resolved: the necklace is the parent's ring plus hub bag, delivered as a disk whose areal mass
   is matched to the taper (decision 6 stands). Q8 resolved: the necklace matches the taper.
+- Step 2a (layered, two materials with radiation): poor mixing costs 0.05-0.10 of the ceiling, and
+  an unmerged PuffSat layer drives a converged ~4.7-7 GPa shock into the steel. **Peak pressure,
+  not heat, binds when the pulse reaches the plate unmerged.** Decision 7 is amended accordingly.
+  Face radiation at production resolution is high by ~1.5-2x, so the film figures are
+  conservative.
 - Apart from those solves, every number above is a provisional estimate from 1-D ideal-gas or back-of-envelope work. None
   comes from a repository solve, and each must be replaced as the arm runs. The summary for the
   companion repos is [`argon_plate_handoff.md`](../argon_plate_handoff.md).
