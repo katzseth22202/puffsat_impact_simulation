@@ -86,11 +86,14 @@ fn spray_holds_k_times_the_slug_mass_at_rest() {
 fn layered_1d_ratio(cells_per_m: usize) -> f64 {
     let p0 = 1.0 / (GAMMA * MACH * MACH);
     let rho_s = K * 1.0 / DEPTH;
-    let zones = [(DEPTH, rho_s, 0.0), (1.0, 1.0, -1.0)];
+    // Cell counts are integers per unit length; DEPTH = 2 so the spray zone gets twice the slug's.
+    let zones = [
+        (2 * cells_per_m, DEPTH, rho_s, 0.0),
+        (cells_per_m, 1.0, 1.0, -1.0),
+    ];
     let mut positions = vec![0.0];
     let (mut mass, mut vel, mut energy) = (vec![], vec![], vec![]);
-    for (len, rho, u) in zones {
-        let n = (len * cells_per_m as f64).round() as usize;
+    for (n, len, rho, u) in zones {
         let dx = len / n as f64;
         for _ in 0..n {
             positions.push(positions[positions.len() - 1] + dx);
