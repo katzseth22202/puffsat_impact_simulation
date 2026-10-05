@@ -231,6 +231,36 @@ At 2x resolution `eta_capture` moves 1.5-2.5%; relief at 16 m moves 0.36 -> 0.40
   footprint radius and 10 m plate; unmerged (stratified) pulse. A wider footprint, a dished plate,
   or merging the pulse before it reaches the plate could each change this, and are untested.
 
+**Steel temperature over a push (2026-10-05): ablative film on maraging, propellant-cooled.**
+`make water-plate-plate-thermal` drives the coated-wall solver (`walled_nozzle/wall_layers.py`,
+extended with a substrate, between-pulse cooling and a cold respray) for 1,500 pulses at 4 Hz.
+Each pulse's radiant energy comes from the solved 4 m cloud, 4 m pulse rows (argon 11.1-12.9
+MJ/m^2, water 0.5-2.5 MJ/m^2). The film is pitch as a stand-in for the carbon-loaded oil:
+150 µm for argon, 30 µm for water. The substrate is maraging 300 with a 753 K aging limit. The
+pulse lasts 1 ms (bracketed 0.3-3 ms).
+
+| Cycle | Argon steel peak | Water steel peak |
+|---|---|---|
+| no cooling | 1,295 K (fails) | 1,346-1,348 K (fails) |
+| cold film respray only | **507 K** | 991-993 K (fails) |
+| + water spray, h 300 (floating) | 488 K, 0.3 kg/pulse | 915-916 K (fails) |
+| + water spray, h 3,000 (wetting) | 418 K, 1.1 kg | **678-679 K, 1.5 kg** |
+| + water spray, h 30,000 | 375 K, 1.6 kg | 552-553 K, 1.9-2.0 kg |
+
+- **Cooling is mandatory.** The uncooled steel ratchets to ~1,290 K.
+- **Argon: the cold film respray alone is enough.** No water is needed. The pulse-length bracket
+  gives 408-664 K, still under the limit.
+- **Water needs ~1.5-2 kg of wetting spray per pulse,** despite 5-23x less radiation on the face.
+  The steel's heat is set by conduction through the film from its ablating surface, so it tracks
+  the film's thickness, not the radiant load.
+- **Caveat: the film is nearly consumed every pulse,** ~95% for argon (14 of ~15 kg) and all of
+  it for water at 65 km/s (3.0 of 3.1 kg). The solver keeps the film at full thickness as it
+  ablates (ADR-0053's fixed grid), so it over-credits the insulation. The film should be specified
+  at no less than ~2x its consumption, and the run repeated at that thickness.
+- The water spray is a coolant consumable that boils off before the pulse, not propellant. The
+  sequence is spray water 10-100 ms after a pulse, then the film at 200 ms, with nothing liquid
+  left at 250 ms.
+
 **Pulse size for 100 t of steel.** The gas spring sets this, not steel strength. With a preloaded,
 near-constant-force spring, `J ≈ 8 m_plate ν s`. This reproduces the child repo's 3.6 g peak on a
 2.5 m stroke. At 4 Hz and 2.5 m, J is 8 MN·s per pulse, enough to carry a vehicle of about 1,090 t
