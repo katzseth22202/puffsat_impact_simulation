@@ -39,10 +39,24 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
 8. **Water is charged only for bonds that re-form while the gas still presses on the plate.** The
    31% return by 250 µs from Step 11 is preliminary. The argon arm's flow solve should replace it.
 
+9. **The plate is maraging steel (300/350 class), with no in-plane prestress.** The face allowable
+   is **2.5 GPa** peak normal stress. It is set by the Hugoniot elastic limit, because the ~0.1-1
+   ms pulse outlasts the ~7 µs stress-wave transit (impulse governs bending, but pressure governs
+   the face). The source is `docs/spray_plate_steel_face_limits.md` (measured HELs: HY-100 1.89
+   GPa, Thomas et al. 2018; maraging 350 4.8 ± 2.0 GPa, Gust & Royce 1970). Prestress would allow
+   ~3.5 GPa, but a 20 m, 4 cm plate buckles under 1-4 MPa of in-plane load, so a rim band cannot
+   apply it. The bulk must stay well below maraging's ~480 °C aging temperature, which tightens
+   decision 7's 500 K bulk rise. Aramid serves only in tension (gas bags, tendons). Ceramic tiles
+   do not raise the steel's limit, because the steel behind them sees the full pressure.
+
 ## Considered options
 
 - **A small, thick uniform plate.** Rejected, because its mismatch between impulse and mass is
   independent of thickness (decision 3).
+- **A Kevlar (aramid) face under an ablative.** Rejected: 0.14-0.23 GPa compressive strength and
+  a ~200 °C limit.
+- **In-plane prestress by a rim band.** Rejected: the thin plate buckles long before the useful
+  prestress (0.5 Y) is reached.
 - **Steering by impact offset alone, as the child repo describes.** Limited, because large offsets
   break the uniform kick. Tilt and thrusters do the rest.
 
