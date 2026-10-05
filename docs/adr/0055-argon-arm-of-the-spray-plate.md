@@ -49,6 +49,13 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
    decision 7's 500 K bulk rise. Aramid serves only in tension (gas bags, tendons). Ceramic tiles
    do not raise the steel's limit, because the steel behind them sees the full pressure.
 
+10. **The plate is a shallow cup: a dish (d/D 0.10-0.15) with a 4 m straight skirt at the
+    10 m rim.** The spray cloud sits ~1 m off the floor. Spill past the rim was the largest single
+    loss. Containing it raises η_jet from ~0.33 to ~0.58 (argon, 45.58 km/s; step 2d), and the
+    gap lowers the face peak. The skirt is straight: a flared wall gave no more impulse for more
+    steel. The skirt (~20 t per cm of wall thickness) is sized for its own wall pressure, which is
+    far below the face's, and gets film and cooling like the face.
+
 ## Considered options
 
 - **A small, thick uniform plate.** Rejected, because its mismatch between impulse and mass is
@@ -57,6 +64,9 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
   a ~200 °C limit.
 - **In-plane prestress by a rim band.** Rejected: the thin plate buckles long before the useful
   prestress (0.5 Y) is reached.
+- **A flared bell wall instead of a straight skirt.** Rejected: 0.98-1.01 against the straight
+  skirt's 1.02 of the 1-D impulse, for 10-30% more steel.
+- **An open flat plate.** Rejected: η_jet ~0.33, because hot merged gas spills past the rim.
 - **Steering by impact offset alone, as the child repo describes.** Limited, because large offsets
   break the uniform kick. Tilt and thrusters do the rest.
 
