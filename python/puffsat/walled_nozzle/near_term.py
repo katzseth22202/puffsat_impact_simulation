@@ -403,6 +403,65 @@ def graphite_saturation_density(temp: float) -> float:
     return math.exp(ln_n + graphite_chemical_potential(temp) / (eos_methane.K_B * temp))
 
 
+def carbon_blowing_parameter(temp: float, pressure: float, thermo: str = "janaf") -> float:
+    """`B'` [kg C / kg H]: pure-H2 edge gas held at `(temp, pressure)` in equilibrium with
+    unit-activity graphite -- the ablation blowing parameter the hydrocode ask (N18, revised,
+    2026-10-04) wants cross-checked against `aim_is_all_you_need`'s Cantera table.
+
+    Monatomic carbon is pinned at `graphite_saturation_density(temp)` -- the same saturation
+    condition `GraphiteCeiling` uses, just read the other way: there, feed carbon in excess of
+    saturation condenses; here, the feed carries no carbon at all, so every carbon nucleus in the
+    equilibrium gas was picked up from the solid. The two free unknowns, atomic hydrogen and
+    electron density, are each closed by **bisection, nested rather than a joint Newton step**:
+    a Saha ion stage `k` carries `n_e^-(k+1)`, so the charge residual spans tens of decades in
+    curvature right where a finite-difference Jacobian needs to resolve it, and it is singular in
+    exactly the regime an under-guessed `n_e` walks the solve into. Both residuals are monotone in
+    their own unknown (charge strictly falls as `n_e` rises; pressure strictly rises as `n_H`
+    rises), so nested bisection is exact where Newton on this pair is not, at the cost of a few
+    thousand cheap evaluations rather than a handful of expensive ones.
+
+    `B' = n_C_nuclei(gas) M_C / n_H_nuclei(gas) M_H`, both sums running over every species the
+    mass-action network returns -- CH4, C2H2 and friends on the carbon side, H2 and H on the
+    hydrogen side. **This module's species set has no `C4H2`**, which the companion's Cantera run
+    finds significant at 3900 K; the two tables should therefore agree closely at 2500 K, where
+    `CH4` carries the carbon, and this module should read low at 3900 K, in a known direction.
+    """
+    ln_nc = math.log(graphite_saturation_density(temp))
+    ln_p_target = math.log(pressure)
+
+    def charge_of(ln_nh: float, ln_ne: float) -> float:
+        c = eos_methane.species_from_log(ln_nc, ln_nh, ln_ne, temp, thermo)
+        return c.n_hp + sum((j + 1) * n for j, n in enumerate(c.n_c_ions))
+
+    def solve_ln_ne(ln_nh: float) -> float:
+        """`log(charge) - ln_ne`, strictly decreasing in `ln_ne`: bisect it to zero."""
+        lo, hi = -80.0, 90.0
+        for _ in range(150):
+            mid = 0.5 * (lo + hi)
+            if math.log(charge_of(ln_nh, mid)) - mid > 0.0:
+                lo = mid
+            else:
+                hi = mid
+        return 0.5 * (lo + hi)
+
+    def pressure_at(ln_nh: float) -> tuple[float, float]:
+        ln_ne = solve_ln_ne(ln_nh)
+        c = eos_methane.species_from_log(ln_nc, ln_nh, ln_ne, temp, thermo)
+        return c.n_total * eos_methane.K_B * temp, ln_ne
+
+    lo, hi = -80.0, 90.0
+    for _ in range(150):
+        mid = 0.5 * (lo + hi)
+        p, _ = pressure_at(mid)
+        if math.log(p) < ln_p_target:
+            lo = mid
+        else:
+            hi = mid
+    ln_nh = 0.5 * (lo + hi)
+    comp = eos_methane.species_from_log(ln_nc, ln_nh, solve_ln_ne(ln_nh), temp, thermo)
+    return (comp.n_c_nuclei * eos_methane.M_C) / (comp.n_h_nuclei * eos_methane.M_H)
+
+
 class GraphiteCeiling(Branch):
     """Gas-phase equilibrium plus condensed carbon wherever the gas is supersaturated.
 
@@ -1352,6 +1411,17 @@ def main() -> None:
             f"  total={r.total_cost[0]:.3f}-{r.total_cost[1]:.3f}"
             f"  tau(R/4)>={r.tau_quarter_radius:.2e}"
         )
+    print("\nHydrocode ask N18 item 3: B' [kg C/kg H], pure-H2 edge over unit-activity graphite")
+    print("(cross-check against aim_is_all_you_need's Cantera/NASA-Glenn table)")
+    for t, p_bar, companion in (
+        (2500.0, 62.0, 0.19),
+        (2500.0, 818.0, 0.70),
+        (3700.0, 300.0, 3.75),
+        (3900.0, 62.0, 5.36),
+        (3900.0, 818.0, 5.28),
+    ):
+        b = carbon_blowing_parameter(t, p_bar * 1.0e5)
+        print(f"  T={t:5.0f} K  p={p_bar:5.0f} bar   ours {b:6.3f}   companion {companion:6.3f}")
     print(f"\nwrote {OUTPUT_DIR}/")
 
 

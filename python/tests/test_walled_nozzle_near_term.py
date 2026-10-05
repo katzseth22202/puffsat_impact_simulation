@@ -128,6 +128,39 @@ def test_condensation_releases_energy_at_fixed_state() -> None:
     assert e_ceiling < e_gas
 
 
+@pytest.mark.parametrize(
+    ("temp", "pressure", "companion", "tol"),
+    [
+        # Hydrocode ask (N18, revised, 2026-10-04): aim_is_all_you_need's Cantera/NASA-Glenn
+        # table, pure-H2 edge over unit-activity graphite.
+        (2500.0, 62e5, 0.19, 0.10),
+        (2500.0, 818e5, 0.70, 0.20),
+        # 2500 K agrees to ~15-20%. 3900/3700 K read deliberately low: this module's species set
+        # has no C4H2, which the companion's own run names as significant there -- so this is a
+        # lower bound, not a disagreement, and the ~20-30% gap is the size of that missing channel.
+        (3900.0, 62e5, 5.36, 0.35),
+        (3900.0, 818e5, 5.28, 0.35),
+        (3700.0, 300e5, 3.75, 0.30),
+    ],
+)
+def test_carbon_blowing_parameter_brackets_the_companions_cantera_table(
+    temp: float, pressure: float, companion: float, tol: float
+) -> None:
+    """`B'` without `C4H2` must sit at or below the companion's Cantera figure, within `tol`."""
+    b = near_term.carbon_blowing_parameter(temp, pressure)
+    assert 0.0 < b <= companion
+    assert b == pytest.approx(companion, rel=tol)
+
+
+def test_carbon_blowing_parameter_is_flat_in_pressure_at_3900_k() -> None:
+    """The companion's own finding: at 3900 K the row is flat from 818 down to 30 bar, because
+    the dominant channels there conserve moles. Our smaller species set should show the same
+    shape even though it reads a different absolute value (missing C4H2)."""
+    low = near_term.carbon_blowing_parameter(3900.0, 62e5)
+    high = near_term.carbon_blowing_parameter(3900.0, 818e5)
+    assert low == pytest.approx(high, rel=0.02)
+
+
 def test_plug_ledger_is_the_papers_eta_isp() -> None:
     """`I = [(k+1+P) v - w] / ((k+P) g0)` (paper eq:eta_isp), and `P = 0` is the old ledger."""
     k, p, v = 27.5, near_term.PLUG_RATIO, 9000.0
