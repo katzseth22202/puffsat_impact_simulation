@@ -38,6 +38,25 @@ pub enum PlateProfile {
         /// Rim-to-floor depth `d` (so `depth = (d/D)·2·r_plate`).
         depth: f64,
     },
+    /// A [`Self::Dish`] floor with a wall rising from its rim (ADR-0055): the spray plate's skirt
+    /// or flared bell. The wall's inner face runs `r_in(z) = r_plate + flare·(z − z_rim)` from the
+    /// rim height `z_rim = z0 + depth` up to `z_rim + skirt_height`, and the wall is `thickness`
+    /// thick in `r`. Below the rim it is a straight continuation, so floor and wall join. A zero
+    /// `skirt_height` is exactly the dish.
+    Cup {
+        /// Floor (dish) radius, where the wall starts.
+        r_plate: f64,
+        /// Floor height on the axis.
+        z0: f64,
+        /// Floor rim-to-axis depth.
+        depth: f64,
+        /// Wall height above the rim.
+        skirt_height: f64,
+        /// Outward flare of the wall, `dr/dz` (0 is a straight cylinder).
+        flare: f64,
+        /// Wall thickness in `r` (at least two cells, so ghost cells have solid behind them).
+        thickness: f64,
+    },
 }
 
 impl PlateProfile {
@@ -47,7 +66,10 @@ impl PlateProfile {
     pub fn z_surface(&self, r: f64) -> f64 {
         match *self {
             Self::InclinedPlane { z0, slope } => z0 + slope * r,
-            Self::Dish { r_plate, z0, depth } => {
+            Self::Dish { r_plate, z0, depth }
+            | Self::Cup {
+                r_plate, z0, depth, ..
+            } => {
                 let rr = (r / r_plate).min(1.0);
                 z0 + depth * rr * rr
             }
@@ -59,7 +81,7 @@ impl PlateProfile {
     pub fn slope(&self, r: f64) -> f64 {
         match *self {
             Self::InclinedPlane { slope, .. } => slope,
-            Self::Dish { r_plate, depth, .. } => {
+            Self::Dish { r_plate, depth, .. } | Self::Cup { r_plate, depth, .. } => {
                 if r >= r_plate {
                     0.0
                 } else {
@@ -75,6 +97,19 @@ impl PlateProfile {
         match *self {
             Self::InclinedPlane { .. } => true,
             Self::Dish { r_plate, .. } => r <= r_plate,
+            Self::Cup {
+                r_plate,
+                skirt_height,
+                flare,
+                thickness,
+                ..
+            } => {
+                if skirt_height > 0.0 {
+                    r <= r_plate + flare.max(0.0) * skirt_height + thickness
+                } else {
+                    r <= r_plate
+                }
+            }
         }
     }
 
@@ -89,14 +124,85 @@ impl PlateProfile {
     pub fn normal(&self, z: f64, r: f64) -> (f64, f64) {
         match *self {
             Self::InclinedPlane { .. } => self.top_normal(r),
-            Self::Dish { r_plate, .. } => {
-                let (d_top, d_side) = (self.top_distance(z, r), r - r_plate);
-                if d_side > d_top {
-                    (0.0, 1.0)
+            Self::Dish { r_plate, .. } => self.dish_normal(z, r, r_plate),
+            Self::Cup { r_plate, .. } => {
+                if self.floor_solid(z, r) || !self.wall_solid(z, r) {
+                    self.dish_normal(z, r, r_plate)
                 } else {
-                    self.top_normal(r)
+                    self.wall_normal(z, r)
                 }
             }
+        }
+    }
+
+    /// The dish's normal: its top surface, or its rim side face where that is nearer.
+    fn dish_normal(&self, z: f64, r: f64, r_plate: f64) -> (f64, f64) {
+        let (d_top, d_side) = (self.top_distance(z, r), r - r_plate);
+        if d_side > d_top {
+            (0.0, 1.0)
+        } else {
+            self.top_normal(r)
+        }
+    }
+
+    /// The cup wall's geometry `(r_in(z), wall top, flare, thickness)`; `None` without a wall.
+    fn wall(&self, z: f64) -> Option<(f64, f64, f64, f64)> {
+        match *self {
+            Self::Cup {
+                r_plate,
+                z0,
+                depth,
+                skirt_height,
+                flare,
+                thickness,
+            } if skirt_height > 0.0 => {
+                let z_rim = z0 + depth;
+                let r_in = r_plate + flare * (z - z_rim).max(0.0);
+                Some((r_in, z_rim + skirt_height, flare, thickness))
+            }
+            _ => None,
+        }
+    }
+
+    /// The floor part of the solid (the dish).
+    fn floor_solid(&self, z: f64, r: f64) -> bool {
+        let r_plate = match *self {
+            Self::Dish { r_plate, .. } | Self::Cup { r_plate, .. } => r_plate,
+            Self::InclinedPlane { .. } => return z < self.z_surface(r),
+        };
+        r <= r_plate && z < self.z_surface(r)
+    }
+
+    /// The wall's signed distance (negative inside): the slab between its inner and outer faces,
+    /// capped by its lip. `None` without a wall.
+    fn wall_distance(&self, z: f64, r: f64) -> Option<(f64, f64, f64)> {
+        let (r_in, z_top, flare, thickness) = self.wall(z)?;
+        let scale = 1.0 / (1.0 + flare * flare).sqrt();
+        let d_inner = (r_in - r) * scale;
+        let d_outer = (r - r_in - thickness) * scale;
+        Some((d_inner, d_outer, z - z_top))
+    }
+
+    /// The wall part of the solid.
+    fn wall_solid(&self, z: f64, r: f64) -> bool {
+        self.wall_distance(z, r)
+            .is_some_and(|(a, b, c)| a.max(b).max(c) < 0.0)
+    }
+
+    /// The normal of the wall face nearest a point inside the wall: inner (toward the axis, tilted
+    /// up by the flare), outer, or the lip.
+    fn wall_normal(&self, z: f64, r: f64) -> (f64, f64) {
+        let Some((d_inner, d_outer, d_top)) = self.wall_distance(z, r) else {
+            return (1.0, 0.0);
+        };
+        let flare = self.wall(z).map_or(0.0, |w| w.2);
+        let scale = 1.0 / (1.0 + flare * flare).sqrt();
+        if d_top >= d_inner && d_top >= d_outer {
+            (1.0, 0.0)
+        } else if d_inner >= d_outer {
+            (flare * scale, -scale)
+        } else {
+            (-flare * scale, scale)
         }
     }
 
@@ -118,7 +224,10 @@ impl PlateProfile {
     /// Whether the point `(z, r)` lies inside the solid plate.
     #[must_use]
     pub fn is_solid(&self, z: f64, r: f64) -> bool {
-        self.covers(r) && z < self.z_surface(r)
+        match *self {
+            Self::Cup { .. } => self.floor_solid(z, r) || self.wall_solid(z, r),
+            _ => self.covers(r) && z < self.z_surface(r),
+        }
     }
 
     /// Signed distance to the solid's boundary, negative inside. The dish is the intersection of
@@ -130,6 +239,13 @@ impl PlateProfile {
         match *self {
             Self::InclinedPlane { .. } => self.top_distance(z, r),
             Self::Dish { r_plate, .. } => self.top_distance(z, r).max(r - r_plate),
+            Self::Cup { r_plate, .. } => {
+                let floor = self.top_distance(z, r).max(r - r_plate);
+                match self.wall_distance(z, r) {
+                    Some((a, b, c)) => floor.min(a.max(b).max(c)),
+                    None => floor,
+                }
+            }
         }
     }
 }
@@ -219,5 +335,64 @@ mod tests {
             p.signed_distance(0.0, 1.0) < 0.0,
             "below the surface ⇒ negative"
         );
+    }
+
+    fn cup(skirt_height: f64, flare: f64) -> PlateProfile {
+        PlateProfile::Cup {
+            r_plate: 2.0,
+            z0: 0.1,
+            depth: 0.2,
+            skirt_height,
+            flare,
+            thickness: 0.2,
+        }
+    }
+
+    #[test]
+    fn cup_wall_is_solid_and_its_interior_is_fluid() {
+        let c = cup(1.0, 0.0);
+        // Rim at z = 0.3; the wall spans r in [2.0, 2.2] up to z = 1.3.
+        assert!(c.is_solid(0.8, 2.1)); // inside the wall
+        assert!(!c.is_solid(0.8, 1.9)); // inside the cup
+        assert!(!c.is_solid(0.8, 2.3)); // outside the wall
+        assert!(!c.is_solid(1.4, 2.1)); // above the lip
+        assert!(c.is_solid(0.05, 1.0)); // the floor still there
+    }
+
+    #[test]
+    fn cup_inner_face_points_at_the_axis_and_up_when_flared() {
+        let straight = cup(1.0, 0.0);
+        let (nz, nr) = straight.normal(0.8, 2.01);
+        assert_relative_eq!(nz, 0.0, epsilon = 1e-12);
+        assert_relative_eq!(nr, -1.0, epsilon = 1e-12);
+        let flared = cup(1.0, 0.5);
+        // Inner face at z = 0.8 sits at r = 2.0 + 0.5 * 0.5 = 2.25.
+        let (nz, nr) = flared.normal(0.8, 2.26);
+        assert!(nz > 0.0 && nr < 0.0, "({nz}, {nr})");
+        assert_relative_eq!(nz * nz + nr * nr, 1.0, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn a_cup_without_a_wall_is_the_dish() {
+        let c = cup(0.0, 0.0);
+        let d = PlateProfile::Dish {
+            r_plate: 2.0,
+            z0: 0.1,
+            depth: 0.2,
+        };
+        for &(z, r) in &[
+            (0.05, 0.5),
+            (0.25, 1.9),
+            (0.4, 2.05),
+            (0.2, 2.5),
+            (0.15, 1.0),
+        ] {
+            assert_eq!(c.is_solid(z, r), d.is_solid(z, r), "solid at ({z}, {r})");
+            assert_eq!(c.covers(r), d.covers(r), "covers at {r}");
+            if d.is_solid(z, r) {
+                assert_eq!(c.normal(z, r), d.normal(z, r), "normal at ({z}, {r})");
+                assert_eq!(c.signed_distance(z, r), d.signed_distance(z, r));
+            }
+        }
     }
 }

@@ -41,6 +41,46 @@ pub enum PlateShape {
         /// Depth-to-diameter ratio `d/D` (`D = 2·r_plate`).
         d_over_d: f64,
     },
+    /// The dish with a wall rising from its rim: a skirt (`flare = 0`) or a flared bell
+    /// (ADR-0055). Zero `skirt_height` runs exactly as [`Self::Dish`].
+    Cup {
+        /// Floor depth-to-diameter ratio `d/D`.
+        d_over_d: f64,
+        /// Wall height above the rim.
+        skirt_height: f64,
+        /// Outward flare `dr/dz` of the wall (0 is a straight cylinder).
+        flare: f64,
+        /// Wall thickness in `r` (two or more cells).
+        thickness: f64,
+    },
+}
+
+/// The immersed profile for a dished or cupped plate, `None` for the grid-aligned flat plate.
+/// The floor is raised four cells off the domain bottom so solid always underlies it.
+fn immersed_profile(cfg: &SlugConfig) -> Option<PlateProfile> {
+    let dz = cfg.z_max / cfg.nz as f64;
+    let z0 = 4.0 * dz;
+    match cfg.shape {
+        PlateShape::FlatGridAligned => None,
+        PlateShape::Dish { d_over_d } => Some(PlateProfile::Dish {
+            r_plate: cfg.r_plate,
+            z0,
+            depth: d_over_d * 2.0 * cfg.r_plate,
+        }),
+        PlateShape::Cup {
+            d_over_d,
+            skirt_height,
+            flare,
+            thickness,
+        } => Some(PlateProfile::Cup {
+            r_plate: cfg.r_plate,
+            z0,
+            depth: d_over_d * 2.0 * cfg.r_plate,
+            skirt_height,
+            flare,
+            thickness,
+        }),
+    }
 }
 
 /// A slug-bounce configuration (normalized `ρ₀ = 1`, `v = 1`; incident Mach `M` sets the cold
@@ -227,16 +267,11 @@ pub fn init_slug_grid(cfg: &SlugConfig) -> Grid2D {
             g.set_plate_radius(Some(cfg.r_plate));
             0.0
         }
-        PlateShape::Dish { d_over_d } => {
+        PlateShape::Dish { .. } | PlateShape::Cup { .. } => {
             g.bc_zlo = Bc::Transmissive; // the immersed surface, not z = 0, is the wall
-            let z0 = 4.0 * dz;
-            let depth = d_over_d * 2.0 * cfg.r_plate;
-            g.set_plate_profile(Some(PlateProfile::Dish {
-                r_plate: cfg.r_plate,
-                z0,
-                depth,
-            }));
-            z0 + depth
+            let profile = immersed_profile(cfg).expect("a dished or cupped plate");
+            g.set_plate_profile(Some(profile));
+            profile.z_surface(cfg.r_plate) // the rim
         }
     };
 
@@ -283,19 +318,16 @@ pub struct SprayCloud {
     pub standoff: f64,
 }
 
-/// The slug grid with a resting spray cloud between it and a grid-aligned flat plate. The cloud
-/// fills `z ∈ [s, s + depth)`, `s` the standoff, at density `k·ρ₀·L/depth` and the slug's radial
-/// profile, at rest and at the slug's cold pressure; the gap below it is ambient, and the slug sits
-/// on top of it, `z ∈ [s + depth, s + depth + L)`.
-///
-/// # Panics
-/// Panics for a dished plate: the spray path is flat-plate only.
+/// The slug grid with a resting spray cloud between it and the plate. Over the local floor height
+/// `z_f(r)` (0 for the flat plate, the dish surface otherwise) the cloud fills
+/// `z ∈ [z_f + s, z_f + s + depth)`, `s` the standoff, at density `k·ρ₀·L/depth` and the slug's
+/// radial profile, at rest and at the slug's cold pressure; the gap below it is ambient. The slug
+/// sits flat on top of the cloud at the rim, `z ∈ [z_rim + s + depth, z_rim + s + depth + L)`.
 #[must_use]
 pub fn init_spray_grid(cfg: &SlugConfig, spray: SprayCloud) -> Grid2D {
-    assert!(
-        cfg.shape == PlateShape::FlatGridAligned,
-        "the spray cloud is defined on the grid-aligned flat plate"
-    );
+    let profile = immersed_profile(cfg);
+    let floor = |r: f64| profile.map_or(0.0, |p| p.z_surface(r));
+    let z_rim = floor(cfg.r_plate);
     let mut g = init_slug_grid(&SlugConfig {
         length: 0.0,
         ..*cfg
@@ -312,8 +344,9 @@ pub fn init_spray_grid(cfg: &SlugConfig, spray: SprayCloud) -> Grid2D {
         let z = (iz as f64 + 0.5) * dz;
         let r = (ir as f64 + 0.5) * dr;
         let weight = core_rho * taper_weight(r, cfg.r_foot, cfg.taper_frac);
-        let (bottom, top) = (spray.standoff, spray.standoff + spray.depth);
-        if z >= bottom && z < top && spray_rho * weight > rho_amb {
+        let bottom = floor(r) + spray.standoff;
+        let top = z_rim + spray.standoff + spray.depth;
+        if z >= bottom && z < bottom + spray.depth && spray_rho * weight > rho_amb {
             Prim::new(spray_rho * weight, 0.0, 0.0, p0)
         } else if z >= top && z < top + cfg.length && weight > rho_amb {
             let v_r = cfg.alpha_div * v * r / cfg.r_foot;

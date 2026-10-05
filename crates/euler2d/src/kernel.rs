@@ -146,10 +146,7 @@ impl Grid2D {
         if let Some(profile) = self.plate_profile {
             (0..self.nr)
                 .filter(|&ir| profile.covers(self.r_center(ir)))
-                .filter_map(|ir| {
-                    self.surface_cell(ir)
-                        .map(|iz| self.prim(iz, ir).p * self.r_center(ir) * self.dr)
-                })
+                .map(|ir| self.column_axial_force(ir))
                 .sum()
         } else {
             let rp = self.plate_radius.unwrap_or(f64::INFINITY);
@@ -169,7 +166,11 @@ impl Grid2D {
         if let Some(profile) = self.plate_profile {
             (0..self.nr)
                 .filter(|&ir| profile.covers(self.r_center(ir)))
-                .filter_map(|ir| self.surface_cell(ir).map(|iz| self.prim(iz, ir).p))
+                .flat_map(|ir| {
+                    (1..self.nz)
+                        .filter(move |&iz| !self.is_solid(iz, ir) && self.is_solid(iz - 1, ir))
+                        .map(move |iz| self.prim(iz, ir).p)
+                })
                 .fold(0.0_f64, f64::max)
         } else {
             let rp = self.plate_radius.unwrap_or(f64::INFINITY);
@@ -180,10 +181,24 @@ impl Grid2D {
         }
     }
 
-    /// The lowest fluid cell in column `ir` — the cell whose pressure acts on the immersed surface —
-    /// or `None` if the entire column is solid.
-    fn surface_cell(&self, ir: usize) -> Option<usize> {
-        (0..self.nz).find(|&iz| !self.is_solid(iz, ir))
+    /// Axial force of column `ir` on the immersed solid (`2π` dropped): `+p·r·dr` for every fluid
+    /// cell resting on solid (gas pushing the plate down), `−p·r·dr` for every fluid cell under an
+    /// overhang (a flared wall's outer face, gas pushing up). A dish column has exactly one
+    /// `+` term, its surface cell, as before the cup existed.
+    fn column_axial_force(&self, ir: usize) -> f64 {
+        let mut force = 0.0;
+        for iz in 0..self.nz {
+            if self.is_solid(iz, ir) {
+                continue;
+            }
+            if iz > 0 && self.is_solid(iz - 1, ir) {
+                force += self.prim(iz, ir).p * self.r_center(ir) * self.dr;
+            }
+            if iz + 1 < self.nz && self.is_solid(iz + 1, ir) {
+                force -= self.prim(iz, ir).p * self.r_center(ir) * self.dr;
+            }
+        }
+        force
     }
 
     /// Total axial momentum `Σ ρu_z dV` (with the common `2π` dropped, as in [`Self::plate_force`]).

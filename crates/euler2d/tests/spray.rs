@@ -216,3 +216,88 @@ fn the_plate_feels_nothing_before_gas_can_cross_the_gap() {
         "plate force moved from {ambient:e} to {now:e} before gas could arrive"
     );
 }
+
+fn dish_or_cup(shape: PlateShape, nr: usize, nz: usize) -> SlugConfig {
+    SlugConfig {
+        shape,
+        ..cfg(1.0, 2.0, 3.0, nr, nz, false)
+    }
+}
+
+/// Seam 1 (cup): a cup whose wall has zero height is the dish, bit for bit.
+#[test]
+fn a_cup_without_a_wall_runs_exactly_as_the_dish() {
+    let dish = run_spray_bounce(
+        &dish_or_cup(PlateShape::Dish { d_over_d: 0.1 }, 24, 80),
+        SPRAY,
+    );
+    let cup = run_spray_bounce(
+        &dish_or_cup(
+            PlateShape::Cup {
+                d_over_d: 0.1,
+                skirt_height: 0.0,
+                flare: 0.0,
+                thickness: 0.25,
+            },
+            24,
+            80,
+        ),
+        SPRAY,
+    );
+    assert_eq!(dish.wall_impulse.to_bits(), cup.wall_impulse.to_bits());
+    assert_eq!(
+        dish.peak_local_pressure.to_bits(),
+        cup.peak_local_pressure.to_bits()
+    );
+}
+
+/// Seam 1 (flat): a zero-depth dish with the spray matches the grid-aligned flat plate within the
+/// existing IBM-vs-grid tolerance (10%, as `eta_capture.rs` uses).
+#[test]
+fn a_flat_immersed_spray_plate_matches_the_grid_aligned_one() {
+    let grid = run_spray_bounce(&cfg(1.0, 2.0, 3.0, 24, 80, false), SPRAY);
+    let ibm = run_spray_bounce(
+        &dish_or_cup(PlateShape::Dish { d_over_d: 0.0 }, 24, 80),
+        SPRAY,
+    );
+    let rel = (ibm.restitution_ratio() - grid.restitution_ratio()).abs() / grid.restitution_ratio();
+    assert!(
+        rel < 0.10,
+        "IBM {} vs grid {} (rel {rel:.3})",
+        ibm.restitution_ratio(),
+        grid.restitution_ratio()
+    );
+}
+
+/// Seam 2: a tall straight skirt at the footprint edge keeps most of what the confined run keeps,
+/// and more than the open plate.
+#[test]
+fn a_tall_straight_skirt_approaches_the_confined_result() {
+    let denom = run_spray_bounce(&confined(80), SPRAY);
+    let open = run_spray_bounce(
+        &dish_or_cup(PlateShape::Dish { d_over_d: 0.0 }, 24, 80),
+        SPRAY,
+    );
+    let skirted = run_spray_bounce(
+        &SlugConfig {
+            r_plate: 1.0,
+            ..dish_or_cup(
+                PlateShape::Cup {
+                    d_over_d: 0.0,
+                    skirt_height: 6.0,
+                    flare: 0.0,
+                    thickness: 0.25,
+                },
+                24,
+                80,
+            )
+        },
+        SPRAY,
+    );
+    let (eta_open, eta_skirt) = (eta_capture(&open, &denom), eta_capture(&skirted, &denom));
+    assert!(eta_skirt > eta_open, "skirt {eta_skirt} vs open {eta_open}");
+    assert!(
+        eta_skirt > 0.85,
+        "a tall skirt keeps {eta_skirt} of the confined impulse"
+    );
+}
