@@ -991,7 +991,14 @@ struct SprayRecord {
     converged: bool,
 }
 
-fn run_one_spray(mat: SprayMaterial, table: &Table, w: f64, m: f64, depth: f64) -> SprayRecord {
+/// The merged pulse as a hot slab closing on the plate: `(tube, config, sigma_puffsat, rho0, t0, e0)`.
+fn spray_slab(
+    mat: SprayMaterial,
+    table: &Table,
+    w: f64,
+    m: f64,
+    depth: f64,
+) -> (Tube<TableEos>, Config, f64, f64, f64, f64) {
     let sigma_p = m / SPRAY_FOOTPRINT;
     let rho0 = sigma_p * (1.0 + SPRAY_K) / depth;
     let v0 = w / (1.0 + SPRAY_K);
@@ -1012,6 +1019,11 @@ fn run_one_spray(mat: SprayMaterial, table: &Table, w: f64, m: f64, depth: f64) 
         eos,
         Viscosity::VON_NEUMANN_RICHTMYER,
     );
+    (tube, cfg, sigma_p, rho0, t0, e0)
+}
+
+fn run_one_spray(mat: SprayMaterial, table: &Table, w: f64, m: f64, depth: f64) -> SprayRecord {
+    let (tube, cfg, sigma_p, rho0, t0, e0) = spray_slab(mat, table, w, m, depth);
     let result = CoupledBounce::new(tube, None, cfg.consts, cfg.limiter).run();
     let ke = 0.5 * sigma_p * w * w;
     let beta = result.bounce.wall_impulse / result.bounce.incident_momentum;
@@ -1061,6 +1073,115 @@ fn cmd_spray(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             r.face_radiation_share,
             r.escape_share,
             r.peak_wall_pressure,
+            r.converged,
+        );
+    })
+}
+
+// ---- Spray plate, step 1b: the same pulse on an ablating, vapor-shielded face (ADR-0055) --------
+//
+// The film boils at `ṁ = q_in / Q*` and its vapor forms a curtain of optical depth
+// `κ_vapor · ablated mass` in front of the steel (Rung E, ADR-0014). The vapor is carried with the
+// cloud's own EOS, so only its shielding and its mass are represented, not its chemistry.
+
+/// Spray-cloud depths [m] at the working point found in step 1.
+const SPRAY_ABL_DEPTH: [f64; 2] = [1.0, 2.0];
+/// Effective heat of ablation [J/kg], ADR-0014's 2-10 MJ/kg band.
+const SPRAY_ABL_Q_STAR: [f64; 3] = [2.0e6, 5.0e6, 10.0e6];
+/// Vapor gray opacity [m²/kg]: 0 unshielded; 200 the Rung E calibration; 1500 the child repo's
+/// 20%-carbon film at Bond & Bergstrom's 7.5 m²/g (550 nm); 1e4 an EUV photoabsorption estimate.
+const SPRAY_ABL_KAPPA: [f64; 4] = [0.0, 200.0, 1500.0, 1.0e4];
+const RESULT_PATH_SPRAY_ABL: &str = "data/results/water_plate/spray_ablating.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SprayAblatingRecord {
+    material: String,
+    w: f64,
+    depth: f64,
+    q_star: f64,
+    kappa_vapor: f64,
+    beta: f64,
+    ceiling_share: f64,
+    /// Radiation that still reaches the steel, over the pulse's kinetic energy.
+    face_radiation_share: f64,
+    escape_share: f64,
+    /// Film boiled off per pulse over the whole footprint [kg].
+    film_per_pulse: f64,
+    /// Film per pulse over the PuffSat mass per pulse.
+    film_over_puffsat: f64,
+    peak_wall_pressure: f64,
+    converged: bool,
+}
+
+fn run_one_spray_ablating(
+    mat: SprayMaterial,
+    table: &Table,
+    (w, m): (f64, f64),
+    depth: f64,
+    q_star: f64,
+    kappa_vapor: f64,
+) -> SprayAblatingRecord {
+    let (tube, cfg, sigma_p, ..) = spray_slab(mat, table, w, m, depth);
+    let ablation = Ablation::new(q_star, cfg.t0).with_vapor_opacity(kappa_vapor);
+    let result = AblatingBounce::new(tube, None, cfg.consts, cfg.limiter, ablation).run();
+    let ke = 0.5 * sigma_p * w * w;
+    let beta = result.bounce.wall_impulse / result.bounce.incident_momentum;
+    let film = result.ablated_mass * SPRAY_FOOTPRINT;
+    SprayAblatingRecord {
+        material: mat.name.to_string(),
+        w,
+        depth,
+        q_star,
+        kappa_vapor,
+        beta,
+        ceiling_share: beta / (1.0 + (1.0 + SPRAY_K).sqrt()),
+        face_radiation_share: result.loss_radiative_wall / ke,
+        escape_share: result.loss_escape_space / ke,
+        film_per_pulse: film,
+        film_over_puffsat: film / m,
+        peak_wall_pressure: result.bounce.peak_wall_pressure,
+        converged: result.bounce.converged,
+    }
+}
+
+fn cmd_spray_ablating(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cases = Vec::new();
+    for mat in SPRAY_MATERIALS {
+        let table = Table::load(mat.table)?;
+        for speed in SPRAY_SPEEDS {
+            for depth in SPRAY_ABL_DEPTH {
+                for q_star in SPRAY_ABL_Q_STAR {
+                    for kappa in SPRAY_ABL_KAPPA {
+                        cases.push((mat, table.clone(), speed, depth, q_star, kappa));
+                    }
+                }
+            }
+        }
+    }
+    let rows = par_map_with_progress(
+        "spray-ablating",
+        &cases,
+        |(mat, table, speed, depth, q, kappa)| {
+            run_one_spray_ablating(*mat, table, *speed, *depth, *q, *kappa)
+        },
+    );
+    if let Some(dir) = Path::new(RESULT_PATH_SPRAY_ABL).parent() {
+        fs::create_dir_all(dir)?;
+    }
+    emit_scenario(RESULT_PATH_SPRAY_ABL, "spray-ablating", &rows, |r| {
+        println!(
+            "rust: {:>5} w={:>5.0} L={:.0} Q*={:.0e} kv={:>6.0} -> share={:.3} face={:.2e} \
+             esc={:.2e} film={:>7.1} kg ({:.2} x m) converged={}",
+            r.material,
+            r.w,
+            r.depth,
+            r.q_star,
+            r.kappa_vapor,
+            r.ceiling_share,
+            r.face_radiation_share,
+            r.escape_share,
+            r.film_per_pulse,
+            r.film_over_puffsat,
             r.converged,
         );
     })
@@ -2544,6 +2665,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--mesh-convergence", cmd_mesh_convergence),
     ("--transport-resolution", cmd_transport_resolution),
     ("--transport-check", cmd_transport_check),
+    ("--spray-ablating", cmd_spray_ablating),
     ("--spray", cmd_spray),
     ("--jupiter", cmd_jupiter),
     ("--heavyplate", cmd_heavyplate),

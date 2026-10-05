@@ -56,6 +56,12 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
   face for argon and 0.17-2.7% for water, against the ~0.07% that steel plus film absorb. Decision
   7 is therefore confirmed as binding. The impulse lands near 0.7 of the ceiling for both, so argon
   is not yet shown to beat water.
-- Apart from that solve, every number above is a provisional estimate from 1-D ideal-gas or back-of-envelope work. None
+- On an ablating, vapor-shielded face (step 1b), heat becomes film mass. That is 6-18 kg per pulse
+  for argon and 1-5 kg for water at the sourced-to-estimated vapor opacities, so the film is
+  tens to hundreds of microns, not 5 µm. Argon then leads water by ~10% at 45.58 km/s and ties it at
+  65.13.
+- Q9 resolved: the necklace is the parent's ring plus hub bag, delivered as a disk whose areal mass
+  is matched to the taper (decision 6 stands). Q8 resolved: the necklace matches the taper.
+- Apart from those solves, every number above is a provisional estimate from 1-D ideal-gas or back-of-envelope work. None
   comes from a repository solve, and each must be replaced as the arm runs. The summary for the
   companion repos is [`argon_plate_handoff.md`](../argon_plate_handoff.md).

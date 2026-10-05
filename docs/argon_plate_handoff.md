@@ -87,6 +87,49 @@ What it changes:
   absorber with no vapor shielding. The repository's ablating-wall solver (Rung E) models the
   film's vapor absorbing radiation before it reaches the steel, and is the next run.
 
+**Step 1b solved (2026-10-05): the same pulse on an ablating, vapor-shielded face.**
+`make water-plate-argon-ablating` runs the Rung E ablating wall: the film boils at
+`q_in / Q*`, and its vapor forms a curtain of optical depth `κ_vapor × ablated mass`. Swept over Q*
+2/5/10 MJ/kg (ADR-0014) and κ_vapor 0 / 200 (the Rung E calibration) / 1,500 (the child repo's
+20%-carbon film at Bond & Bergstrom's 7.5 m^2/g, 550 nm) / 10^4 (an EUV photoabsorption estimate,
+not sourced), at depths of 1 and 2 m. All 96 cases converged.
+
+Film per pulse at 1 m depth, Q* = 5 MJ/kg:
+
+| | unshielded | κ 200 | κ 1,500 | κ 10^4 |
+|---|---|---|---|---|
+| Argon 45.58 km/s | 124 kg | 27 kg | 13 kg | 6 kg |
+| Argon 65.13 km/s | 118 kg | 33 kg | 18 kg | 9 kg |
+| Water 45.58 km/s | 14 kg | 4.7 kg | 2.2 kg | 0.9 kg |
+| Water 65.13 km/s | 27 kg | 10 kg | 5.3 kg | 2.5 kg |
+
+- **Shielding makes argon affordable.** At κ 1,500-10^4, argon costs 6-18 kg of film per pulse,
+  1-4% of its 470 kg of spray, against 1-5 kg for water. The film must be about 75-230 µm thick for
+  argon and 10-70 µm for water. The child repo's 5 µm is too thin, and Orion's 150 µm was about
+  right.
+- **Argon's advantage returns at the cold end.** On the ablating wall argon reaches 0.74-0.75 of
+  the ceiling at 45.58 km/s against water's 0.68, about 10% ahead. At 65.13 km/s they tie at
+  about 0.745. Water is still favoured, because its table returns all of its bond energy.
+- Boiled film joins the exhaust, which raises the impulse slightly (0.77-0.80 unshielded).
+- **Still premixed.** Poor mixing leaves unmixed PuffSat gas stagnating near 1 GJ/kg, far hotter
+  than the merged ~85 MJ/kg. Those pockets radiate as T^4, partly screened from the face by the
+  argon. That is step 2, and it needs the 1-D kernel's radiation to handle two materials.
+
+**PuffSat droplets (estimate).** Taking a 1 m cloud (ρ ≈ 6.6 kg/m^3, ~6 kg/m^2 of argon):
+- An unbroken drop of radius `r` stops after ~2.7 ρ_water r of column, so up to ~2 mm stop inside
+  the cloud.
+- Aerodynamic breakup comes first, after ~10 r √(ρ_water ρ_gas) ≈ 810 r, which shatters drops up
+  to ~7 mm.
+- A stopped fragment needs ~2.5 MJ/kg to boil, against ~85 MJ/kg around it.
+
+The requirement is that **the largest surviving PuffSat fragment is at most about 1 mm**, which
+keeps a 2x margin. The parent caps fragments by foam-grid spacing, so that spacing must meet this.
+Droplets that stop deep in the argon also help mixing, because they deposit there.
+
+**The necklace is the parent's ring plus hub bag** (`templateArxiv.tex:533-547`). The parent notes
+that filling a ring's center takes radial expansion of order the ring radius, and the hub fills
+it. So the delivered shape is a disk, prescribed with its areal mass matched to the tapered plate.
+
 **Pulse size for 100 t of steel.** The gas spring sets this, not steel strength. With a preloaded,
 near-constant-force spring, `J ≈ 8 m_plate ν s`. This reproduces the child repo's 3.6 g peak on a
 2.5 m stroke. At 4 Hz and 2.5 m, J is 8 MN·s per pulse, enough to carry a vehicle of about 1,090 t
@@ -125,8 +168,10 @@ The limit scales with stroke × pulse rate.
 - `sec:plate_liquid_spray` should state the **spray-cloud** requirement and the cushion-bounce
   failure.
 - `sec:plate_aiming`: impact offset is capped at about 0.5 m by the taper.
-- `sec:plate_ablative_film`: the film's thickness is set by heat once more than about 0.07% of
-  pulse energy reaches the face, not only by the readout.
+- `sec:plate_ablative_film`: heat sets the film's thickness, not the readout. That is about
+  75-230 µm for argon and 10-70 µm for water, with vapor shielding. The 5 µm readout film is too
+  thin, and Orion's 150 µm was about right.
+- Parent PuffSat design: state the ≤1 mm largest-fragment requirement on the foam-grid spacing.
 - Once the argon arm has solved values, replace the provisional η_jet ≈ 0.83 bound.
 
 - **Argon's case in `sec:plate_liquid_spray` needs a heat caveat.** The premixed solve puts about
@@ -135,8 +180,9 @@ The limit scales with stroke × pulse rate.
 
 ## Open
 
-- Vapor shielding: rerun step 1 on the ablating wall. If shielding does not cut face radiation by
-  one to two decades, the film mass decides argon against water.
+- The vapor opacity. κ_vapor moves argon's film between 6 and 27 kg per pulse, and only the 200
+  and 1,500 values have a source. The EUV absorption of the film's vapor is the number to pin.
+- Step 2: mixing quality, with two materials and radiation.
 
 - The necklace geometry: ring radius, sphere count, and the target delivered shape.
 - The fraction of pulse energy radiated onto the face, argon versus water. This decides film mass
