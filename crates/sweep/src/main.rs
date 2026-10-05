@@ -1926,6 +1926,124 @@ fn cmd_spray_standoff(_args: &[String]) -> Result<(), Box<dyn std::error::Error>
     })
 }
 
+// ---- Spray plate, step 2c: merge before the plate, in 2-D (ADR-0055) --------------------------
+//
+// The 4 m cloud lifted off the 10 m plate by a gap the Eulerian kernel carries as ambient gas, so
+// the PuffSat merges in the cloud and the merged gas crosses the gap. Each gap runs free and
+// confined. Both are compared to the confined no-gap run, the 2-D twin of the valid 1-D column.
+// The ratios scale step 2a's real-physics no-gap numbers (effective-γ geometry, as in step 2b).
+
+/// Gaps [m] between plate and cloud.
+const SPRAY_2D_GAPS_M: [usize; 5] = [0, 1, 2, 4, 8];
+const SPRAY_2D_GAP_CLOUD_M: usize = 4;
+const RESULT_PATH_SPRAY_2D_GAP: &str = "data/results/water_plate/spray_2d_standoff.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct Spray2dGapRecord {
+    gap: f64,
+    nr: usize,
+    nz: usize,
+    /// Free run at this gap, over the confined no-gap run: impulse and peak facesheet pressure.
+    impulse_vs_1d: f64,
+    peak_vs_1d: f64,
+    /// Confined run at this gap, over the confined no-gap run: what the gap does without spill.
+    confined_impulse_vs_1d: f64,
+    confined_peak_vs_1d: f64,
+}
+
+fn spray_2d_gap_case(gap_m: usize, refine: usize) -> Spray2dGapRecord {
+    let unit = SPRAY_2D_PULSE_M;
+    // Units of the 4 m pulse; gaps and depth are multiples of 1 m, so quarters of a unit.
+    let column_quarters = SPRAY_2D_GAP_CLOUD_M + gap_m + 4 + 8;
+    let z_max = column_quarters as f64 / 4.0;
+    let nz = refine * SPRAY_2D_NZ_PER_UNIT * column_quarters / 4;
+    let config = |gap: usize, confined: bool| {
+        let base = SlugConfig {
+            gamma: SPRAY_2D_GAMMA,
+            mach: SPRAY_2D_MACH,
+            r_foot: 5.0 / unit,
+            length: 1.0,
+            r_plate: 10.0 / unit,
+            r_max: 14.0 / unit,
+            z_max,
+            nr: refine * SPRAY_2D_NR,
+            nz,
+            confined: false,
+            shape: PlateShape::FlatGridAligned,
+            taper_frac: 0.0,
+            alpha_div: 0.0,
+        };
+        let cfg = if confined {
+            SlugConfig {
+                r_foot: base.r_max,
+                r_plate: base.r_max,
+                nr: 8,
+                confined: true,
+                ..base
+            }
+        } else {
+            base
+        };
+        let spray = SprayCloud {
+            depth: SPRAY_2D_GAP_CLOUD_M as f64 / unit,
+            mass_ratio: SPRAY_K,
+            standoff: gap as f64 / unit,
+        };
+        run_spray_bounce(&cfg, spray)
+    };
+    let reference = config(0, true);
+    let free = config(gap_m, false);
+    let confined = config(gap_m, true);
+    Spray2dGapRecord {
+        gap: gap_m as f64,
+        nr: refine * SPRAY_2D_NR,
+        nz,
+        impulse_vs_1d: free.restitution_ratio() / reference.restitution_ratio(),
+        peak_vs_1d: free.peak_local_pressure / reference.peak_local_pressure,
+        confined_impulse_vs_1d: confined.restitution_ratio() / reference.restitution_ratio(),
+        confined_peak_vs_1d: confined.peak_local_pressure / reference.peak_local_pressure,
+    }
+}
+
+fn cmd_spray_2d_standoff(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cases: Vec<(usize, usize)> = SPRAY_2D_GAPS_M.iter().map(|&g| (g, 1)).collect();
+    cases.push((2, 2));
+    let rows = par_map_with_progress("spray-2d-standoff", &cases, |&(g, refine)| {
+        spray_2d_gap_case(g, refine)
+    });
+    // The valid 1-D real-physics no-gap columns: 4 m cloud, 4 m pulse (step 2a').
+    let columns: Vec<SprayMixRecord> = fs::read_to_string(RESULT_PATH_SPRAY_LEVERS)?
+        .lines()
+        .map(serde_json::from_str::<SprayMixRecord>)
+        .collect::<Result<_, _>>()?;
+    emit_scenario(RESULT_PATH_SPRAY_2D_GAP, "spray-2d-standoff", &rows, |r| {
+        println!(
+            "rust: gap={:>3.0} m nr={:>3} -> impulse x{:.3} peak x{:.3} (confined: x{:.3}, x{:.3})",
+            r.gap,
+            r.nr,
+            r.impulse_vs_1d,
+            r.peak_vs_1d,
+            r.confined_impulse_vs_1d,
+            r.confined_peak_vs_1d,
+        );
+        if r.nr == SPRAY_2D_NR {
+            for c in columns.iter().filter(|c| {
+                c.depth == SPRAY_2D_GAP_CLOUD_M as f64 && c.pulse_length == SPRAY_2D_PULSE_M
+            }) {
+                let share = c.ceiling_share * r.impulse_vs_1d;
+                println!(
+                    "rust:   {:>5} w={:>5.0}: share {:.3} (eta_jet {:.3}), peak {:.2e} Pa",
+                    c.material,
+                    c.w,
+                    share,
+                    (share * (1.0 + (1.0 + SPRAY_K).sqrt()) - 1.0) / (1.0 + SPRAY_K).sqrt(),
+                    c.peak_wall_pressure * r.peak_vs_1d,
+                );
+            }
+        }
+    })
+}
+
 // ---- Heavy-plate 16–28 km/s scenario sweep (special scenario, design §12.1 / ADR-0027) ----------
 //
 // A 100 kg pulse on a tripled 30 m-diameter (`R = 15 m`) pusher plate of mass `≤ 40 t`, swept
@@ -3404,6 +3522,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--mesh-convergence", cmd_mesh_convergence),
     ("--transport-resolution", cmd_transport_resolution),
     ("--transport-check", cmd_transport_check),
+    ("--spray-2d-standoff", cmd_spray_2d_standoff),
     ("--spray-standoff", cmd_spray_standoff),
     ("--spray-2d", cmd_spray_2d),
     ("--spray-levers-shielded", cmd_spray_levers_shielded),

@@ -253,6 +253,29 @@ The overloads last 1-30 µs, a few steel stress-wave transit times (~7 µs). On 
 2.5 GPa allowable, every 4 m cloud passes except water at 65 km/s (2.7 GPa for a few µs), and the
 1-2 m clouds exceed it for ~5-16 µs a pulse.
 
+**Merge before the plate, in 2-D (2026-10-05).** `--spray-2d-standoff` lifts the 4 m cloud off
+the 10 m plate by a gap carried as ambient gas (the Eulerian kernel holds it natively). Each gap
+runs free and confined, compared to the confined no-gap run, which is the 2-D twin of the valid
+1-D column. Those ratios scale step 2a's real-physics 4 m numbers. Gap 0 reproduces step 2b
+exactly.
+
+| Gap | 0 m | 1 m | 2 m |
+|---|---|---|---|
+| Impulse vs 1-D column | 0.790 | 0.768 | 0.727 (2x grid 0.721) |
+| Peak vs 1-D column | 1.00 | 0.76 | 0.55 (2x grid **0.37**) |
+| Argon share (η_jet); peak 45.58 / 65.13 | 0.50 (0.35); 1.2 / 1.7 GPa | 0.48 (0.33); 0.90 / 1.3 | 0.46 (0.29); 0.65 / 0.96 |
+| Water peak 45.58 / 65.13 | 1.8 / 2.7 GPa | 1.4 / 2.1 | 1.0 / 1.5 |
+
+- **A 1-2 m gap cuts the peak 25-45%** (more on the finer grid) for 3-8% less impulse. A 1 m gap
+  brings water at 65 km/s under maraging's 2.5 GPa.
+- **It does not recover the premixed ~3 mw.** Confined, the gap raises the impulse 7-12% (a
+  partial-merge gain), but spill past the rim takes more. The delivered impulse stays near
+  η_jet 0.3, ~2.1 mw against the bare plate's 1.63.
+- **The 4 m and 8 m gap rows are not trusted.** Their confined runs return 4.4-4.7x the no-gap
+  impulse, above the overtake ceiling, so something in them is wrong and their free rows are
+  suspect too. Under investigation.
+- **The peak relief is not grid-converged.** It moves 0.55 -> 0.37 at 2 m. The impulse is.
+
 **Steel temperature over a push (2026-10-05): ablative film on maraging, propellant-cooled.**
 `make water-plate-plate-thermal` drives the coated-wall solver (`walled_nozzle/wall_layers.py`,
 extended with a substrate, between-pulse cooling and a cold respray) for 1,500 pulses at 4 Hz.
