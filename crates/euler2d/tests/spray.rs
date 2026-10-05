@@ -24,6 +24,7 @@ const DEPTH: f64 = 2.0;
 const SPRAY: SprayCloud = SprayCloud {
     depth: DEPTH,
     mass_ratio: K,
+    standoff: 0.0,
 };
 
 fn cfg(r_foot: f64, r_plate: f64, r_max: f64, nr: usize, nz: usize, confined: bool) -> SlugConfig {
@@ -148,4 +149,70 @@ fn free_never_beats_confined_and_a_wide_column_captures_more() {
         "{eta_tall}, {eta_wide}"
     );
     assert!(eta_wide > eta_tall, "wide {eta_wide} vs tall {eta_tall}");
+}
+
+/// Seam 2 (standoff, ADR-0055 step 2c): moving the cloud off the plate keeps its mass, and leaves
+/// the gap between plate and cloud as ambient gas.
+#[test]
+fn a_standoff_keeps_the_spray_mass_and_leaves_an_ambient_gap() {
+    let gap = 1.0;
+    let near = init_spray_grid(&confined(120), SPRAY);
+    let far = init_spray_grid(
+        &confined(120),
+        SprayCloud {
+            standoff: gap,
+            ..SPRAY
+        },
+    );
+    let spray_mass = |g: &euler2d::kernel::Grid2D| -> f64 {
+        let mut m = 0.0;
+        for iz in 0..g.nz() {
+            for ir in 0..g.nr() {
+                let p = g.prim(iz, ir);
+                if p.rho > 1.0e-2 && p.uz == 0.0 {
+                    m += p.rho * g.cell_volume(ir);
+                }
+            }
+        }
+        m
+    };
+    assert!((spray_mass(&far) - spray_mass(&near)).abs() < 1e-9 * spray_mass(&near));
+    let dz = 8.0 / 120.0;
+    for iz in 0..g_cells_below(gap, dz) {
+        assert!(
+            far.prim(iz, 0).rho < 1.0e-2,
+            "cell {iz} inside the gap is not ambient"
+        );
+    }
+}
+
+fn g_cells_below(z: f64, dz: f64) -> usize {
+    let mut n = 0;
+    while (n as f64 + 1.0) * dz <= z {
+        n += 1;
+    }
+    n
+}
+
+/// Seam 3: nothing reaches the plate before gas can cross the gap. The fastest gas is the cold
+/// spray's free-expansion front, `2 c0 / (γ - 1)`. Until half that crossing time, the plate force
+/// stays at its ambient value.
+#[test]
+fn the_plate_feels_nothing_before_gas_can_cross_the_gap() {
+    let gap = 1.0;
+    let mut g = init_spray_grid(
+        &confined(120),
+        SprayCloud {
+            standoff: gap,
+            ..SPRAY
+        },
+    );
+    let ambient = g.plate_force();
+    let front_speed = 2.0 * (1.0 / MACH) / (GAMMA - 1.0);
+    g.run_to(0.5 * gap / front_speed);
+    let now = g.plate_force();
+    assert!(
+        (now - ambient).abs() < 1e-6 * ambient.abs().max(1e-12),
+        "plate force moved from {ambient:e} to {now:e} before gas could arrive"
+    );
 }

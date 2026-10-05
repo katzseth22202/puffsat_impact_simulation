@@ -278,11 +278,15 @@ pub struct SprayCloud {
     pub depth: f64,
     /// Spray mass per slug mass, the injection ratio `k`.
     pub mass_ratio: f64,
+    /// Gap between the plate and the bottom of the cloud, left as ambient gas. `0` puts the cloud
+    /// on the plate.
+    pub standoff: f64,
 }
 
 /// The slug grid with a resting spray cloud between it and a grid-aligned flat plate. The cloud
-/// fills `z ∈ [0, depth)` at density `k·ρ₀·L/depth` and the slug's radial profile, at rest and at
-/// the slug's cold pressure; the slug sits on top of it, `z ∈ [depth, depth + L)`.
+/// fills `z ∈ [s, s + depth)`, `s` the standoff, at density `k·ρ₀·L/depth` and the slug's radial
+/// profile, at rest and at the slug's cold pressure; the gap below it is ambient, and the slug sits
+/// on top of it, `z ∈ [s + depth, s + depth + L)`.
 ///
 /// # Panics
 /// Panics for a dished plate: the spray path is flat-plate only.
@@ -308,9 +312,10 @@ pub fn init_spray_grid(cfg: &SlugConfig, spray: SprayCloud) -> Grid2D {
         let z = (iz as f64 + 0.5) * dz;
         let r = (ir as f64 + 0.5) * dr;
         let weight = core_rho * taper_weight(r, cfg.r_foot, cfg.taper_frac);
-        if z < spray.depth && spray_rho * weight > rho_amb {
+        let (bottom, top) = (spray.standoff, spray.standoff + spray.depth);
+        if z >= bottom && z < top && spray_rho * weight > rho_amb {
             Prim::new(spray_rho * weight, 0.0, 0.0, p0)
-        } else if z >= spray.depth && z < spray.depth + cfg.length && weight > rho_amb {
+        } else if z >= top && z < top + cfg.length && weight > rho_amb {
             let v_r = cfg.alpha_div * v * r / cfg.r_foot;
             Prim::new(weight, -v, v_r, p0)
         } else {

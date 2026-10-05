@@ -1698,6 +1698,7 @@ fn spray_2d_case(depth_m: usize, refine: usize) -> Spray2dRecord {
     let spray = SprayCloud {
         depth,
         mass_ratio: SPRAY_K,
+        standoff: 0.0,
     };
     let base = SlugConfig {
         gamma: SPRAY_2D_GAMMA,
