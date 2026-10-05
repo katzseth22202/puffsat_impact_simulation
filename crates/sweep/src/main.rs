@@ -1228,7 +1228,10 @@ const SPRAY_ARMS: [SprayArm; 2] = [
 struct SprayMixRecord {
     material: String,
     w: f64,
+    /// Spray-cloud depth [m].
     depth: f64,
+    /// Arriving PuffSat pulse length [m].
+    pulse_length: f64,
     pairs: usize,
     /// Vapor opacity of the ablating face [m²/kg]; absent for the bare face.
     kappa_vapor: Option<f64>,
@@ -1247,23 +1250,26 @@ fn spray_layers(
     water: &Table,
     spray: &Table,
     (w, m): (f64, f64),
-    depth: f64,
+    (depth_spray, depth_pulse): (f64, f64),
     pairs: usize,
     cells: usize,
 ) -> (Tube<TableEos>, f64) {
     let sigma_p = m / SPRAY_FOOTPRINT;
     let layers = 2 * pairs;
     let per_layer = cells / layers;
-    let dx = depth / (pairs * per_layer) as f64;
+    let (dx_s, dx_p) = (
+        depth_spray / (pairs * per_layer) as f64,
+        depth_pulse / (pairs * per_layer) as f64,
+    );
     let t0 = Config::production().t0;
-    let (rho_s, rho_p) = (sigma_p * SPRAY_K / depth, sigma_p / depth);
+    let (rho_s, rho_p) = (sigma_p * SPRAY_K / depth_spray, sigma_p / depth_pulse);
     let mut positions = vec![0.0];
     let (mut mass, mut vel, mut energy, mut index) = (vec![], vec![], vec![], vec![]);
     for layer in 0..layers {
-        let (r, u, tbl, mat) = if layer % 2 == 0 {
-            (rho_s, 0.0, spray, 1)
+        let (r, u, tbl, mat, dx) = if layer % 2 == 0 {
+            (rho_s, 0.0, spray, 1, dx_s)
         } else {
-            (rho_p, -w, water, 0)
+            (rho_p, -w, water, 0, dx_p)
         };
         for _ in 0..per_layer {
             positions.push(positions[positions.len() - 1] + dx);
@@ -1306,13 +1312,13 @@ fn run_one_spray_mix(
     arm: SprayArm,
     (water, spray): (&Table, &Table),
     speed: (f64, f64),
-    depth: f64,
+    depths: (f64, f64),
     pairs: usize,
     face: Option<f64>,
     cells: usize,
 ) -> SprayMixRecord {
     let w = speed.0;
-    let (tube, sigma_p) = spray_layers(water, spray, speed, depth, pairs, cells);
+    let (tube, sigma_p) = spray_layers(water, spray, speed, depths, pairs, cells);
     let cfg = Config::production();
     let (bounce, rad_wall, escape, film) = match face {
         None => {
@@ -1335,7 +1341,8 @@ fn run_one_spray_mix(
     SprayMixRecord {
         material: arm.name.to_string(),
         w,
-        depth,
+        depth: depths.0,
+        pulse_length: depths.1,
         pairs,
         kappa_vapor: face,
         beta,
@@ -1371,7 +1378,7 @@ fn cmd_spray_mixing(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
                 *arm,
                 (&water, spray),
                 *speed,
-                *depth,
+                (*depth, *depth),
                 *pairs,
                 *face,
                 SPRAY_MIX_CELLS,
@@ -1424,7 +1431,7 @@ fn cmd_spray_mixing_convergence(_args: &[String]) -> Result<(), Box<dyn std::err
                 *arm,
                 (&water, spray),
                 SPRAY_SPEEDS[0],
-                1.0,
+                (1.0, 1.0),
                 *pairs,
                 None,
                 *cells,
@@ -1443,6 +1450,166 @@ fn cmd_spray_mixing_convergence(_args: &[String]) -> Result<(), Box<dyn std::err
                 r.material,
                 r.pairs,
                 r.depth,
+                r.ceiling_share,
+                r.face_radiation_share,
+                r.peak_wall_pressure,
+            );
+        },
+    )
+}
+
+// ---- Spray plate, step 2a': keeping an unmerged pulse off the plate (ADR-0055) -----------------
+//
+// The worst case of step 2a, stratified (one pair), on a bare face, with the spray-cloud depth and
+// the arriving pulse length swept independently. The column masses are fixed by `k`, so a deeper
+// cloud is more dilute and puts more distance between the contact and the plate, and a longer
+// pulse is more dilute and arrives over a longer time.
+
+const SPRAY_LEVER_DEPTHS: [f64; 3] = [1.0, 4.0, 16.0];
+const SPRAY_LEVER_CELLS: usize = 768;
+const RESULT_PATH_SPRAY_LEVERS: &str = "data/results/water_plate/spray_levers.jsonl";
+
+fn cmd_spray_levers(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let water = Table::load("data/tables/water_jupiter.json")?;
+    let mut cases = Vec::new();
+    for arm in SPRAY_ARMS {
+        let spray = Table::load(arm.spray_table)?;
+        for speed in SPRAY_SPEEDS {
+            for depth_spray in SPRAY_LEVER_DEPTHS {
+                for depth_pulse in SPRAY_LEVER_DEPTHS {
+                    cases.push((arm, spray.clone(), speed, (depth_spray, depth_pulse)));
+                }
+            }
+        }
+    }
+    let rows = par_map_with_progress("spray-levers", &cases, |(arm, spray, speed, depths)| {
+        run_one_spray_mix(
+            *arm,
+            (&water, spray),
+            *speed,
+            *depths,
+            1,
+            None,
+            SPRAY_LEVER_CELLS,
+        )
+    });
+    emit_scenario(RESULT_PATH_SPRAY_LEVERS, "spray-levers", &rows, |r| {
+        println!(
+            "rust: {:>5} w={:>5.0} cloud={:>4.0} pulse={:>4.0} -> share={:.3} face={:.2e} \
+             esc={:.2e} peak_p={:.2e} converged={}",
+            r.material,
+            r.w,
+            r.depth,
+            r.pulse_length,
+            r.ceiling_share,
+            r.face_radiation_share,
+            r.escape_share,
+            r.peak_wall_pressure,
+            r.converged,
+        );
+    })
+}
+
+const RESULT_PATH_SPRAY_LEVERS_SHIELDED: &str =
+    "data/results/water_plate/spray_levers_shielded.jsonl";
+
+/// The candidate design point (16 m cloud, 1 m and 4 m pulses) on the ablating faces, for its film
+/// cost per pulse.
+fn cmd_spray_levers_shielded(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let water = Table::load("data/tables/water_jupiter.json")?;
+    let mut cases = Vec::new();
+    for arm in SPRAY_ARMS {
+        let spray = Table::load(arm.spray_table)?;
+        for speed in SPRAY_SPEEDS {
+            for pulse in [1.0, 4.0] {
+                for face in [Some(5.0e3), Some(100.0)] {
+                    cases.push((arm, spray.clone(), speed, pulse, face));
+                }
+            }
+        }
+    }
+    let rows = par_map_with_progress(
+        "spray-levers-shielded",
+        &cases,
+        |(arm, spray, speed, pulse, face)| {
+            run_one_spray_mix(
+                *arm,
+                (&water, spray),
+                *speed,
+                (16.0, *pulse),
+                1,
+                *face,
+                SPRAY_LEVER_CELLS,
+            )
+        },
+    );
+    emit_scenario(
+        RESULT_PATH_SPRAY_LEVERS_SHIELDED,
+        "spray-levers-shielded",
+        &rows,
+        |r| {
+            println!(
+                "rust: {:>5} w={:>5.0} pulse={:>2.0} kv={:>5} -> share={:.3} face={:.2e} film={:>6.1} kg peak_p={:.2e}",
+                r.material,
+                r.w,
+                r.pulse_length,
+                r.kappa_vapor
+                    .map_or("bare".to_string(), |k| format!("{k:.0}")),
+                r.ceiling_share,
+                r.face_radiation_share,
+                r.film_per_pulse,
+                r.peak_wall_pressure,
+            );
+        },
+    )
+}
+
+const RESULT_PATH_SPRAY_LEVERS_CONV: &str =
+    "data/results/water_plate/spray_levers_convergence.jsonl";
+
+/// Grid convergence of step 2a' at its candidate design point: a 16 m cloud, 1 m and 4 m pulses,
+/// both fluids, both speeds, at 384 / 768 / 1536 cells.
+fn cmd_spray_levers_convergence(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let water = Table::load("data/tables/water_jupiter.json")?;
+    let mut cases = Vec::new();
+    for arm in SPRAY_ARMS {
+        let spray = Table::load(arm.spray_table)?;
+        for speed in SPRAY_SPEEDS {
+            for pulse in [1.0, 4.0] {
+                for cells in [384, 768, 1536] {
+                    cases.push((arm, spray.clone(), speed, pulse, cells));
+                }
+            }
+        }
+    }
+    let rows = par_map_with_progress(
+        "spray-levers-convergence",
+        &cases,
+        |(arm, spray, speed, pulse, cells)| {
+            let mut r = run_one_spray_mix(
+                *arm,
+                (&water, spray),
+                *speed,
+                (16.0, *pulse),
+                1,
+                None,
+                *cells,
+            );
+            r.pairs = *cells; // reused as the cell count in this file only
+            r
+        },
+    );
+    emit_scenario(
+        RESULT_PATH_SPRAY_LEVERS_CONV,
+        "spray-levers-convergence",
+        &rows,
+        |r| {
+            println!(
+                "rust: {:>5} w={:>5.0} pulse={:>2.0} cells={:>4} -> share={:.4} face={:.3e} peak_p={:.3e}",
+                r.material,
+                r.w,
+                r.pulse_length,
+                r.pairs,
                 r.ceiling_share,
                 r.face_radiation_share,
                 r.peak_wall_pressure,
@@ -2929,6 +3096,9 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--mesh-convergence", cmd_mesh_convergence),
     ("--transport-resolution", cmd_transport_resolution),
     ("--transport-check", cmd_transport_check),
+    ("--spray-levers-shielded", cmd_spray_levers_shielded),
+    ("--spray-levers-convergence", cmd_spray_levers_convergence),
+    ("--spray-levers", cmd_spray_levers),
     ("--spray-mixing-convergence", cmd_spray_mixing_convergence),
     ("--spray-mixing", cmd_spray_mixing),
     ("--spray-ablating", cmd_spray_ablating),

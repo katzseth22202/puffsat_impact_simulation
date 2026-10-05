@@ -163,6 +163,47 @@ mass, so finer interleaving is the only mixing represented. All 72 cases converg
 - **The vapor opacity matters 4-5x for film.** Argon needs 5.5-12.5 kg per pulse with sooty vapor,
   but 26-48 kg if the curtain loses its soot. Water stays at 0.4-13 kg either way.
 
+**Step 2a' solved (2026-10-05): keeping an unmerged pulse off the plate.**
+`make water-plate-argon-levers` takes step 2a's worst case (stratified, bare face, 768 cells) and
+sweeps the spray-cloud depth and the arriving pulse length independently at 1, 4 and 16 m. The
+column masses are fixed by `k`, so a deeper cloud is more dilute and adds distance between contact
+and plate. The 1 m / 1 m row reproduces step 2a's 4.627 GPa exactly.
+
+Peak face pressure, argon / water, at 45.58 km/s:
+
+| | 1 m cloud | 4 m cloud | 16 m cloud |
+|---|---|---|---|
+| 1 m pulse | 4.6 / 6.8 GPa | 1.3 / 2.1 | **0.32 / 0.54** |
+| 4 m pulse | 2.7 / 5.4 | 1.2 / 1.8 | **0.33 / 0.55** |
+| 16 m pulse | 0.46 / 1.0 | 0.72 / 1.4 | 0.31 / 0.46 |
+
+- **A deep spray cloud is the lever that works.** The PuffSat's shock decays crossing it. At
+  16 m, the converged peaks (384-1,536 cells, rising 2-4% per doubling) extrapolate to ~0.34 /
+  0.52 GPa for argon and ~0.57 / 0.77 GPa for water, at 45.58 / 65.13 km/s. Argon sits inside the
+  700 MPa rung. Water is marginal at the fast end.
+- **A long pulse alone is a trap.** On a 1 m cloud, a 16 m pulse lowers the peak but drops the
+  impulse to ~0.47 of the ceiling, and radiates up to 18% of the pulse's energy to space.
+- **The cost of depth.** The impulse falls from ~0.65 to ~0.58-0.60 of the ceiling. Argon's face
+  radiation rises to 3.8-5.2%, and unlike the 1 m case it does not fall with resolution. Water's
+  stays at ~0.1-0.4%.
+
+**Design point: 16 m cloud, 4 m pulse,** on shielded faces
+(`--spray-levers-shielded`):
+
+| | Argon | Water |
+|---|---|---|
+| Share of overtake ceiling | 0.616-0.626 | 0.575-0.607 |
+| η_jet equivalent | ~0.50 | ~0.45 |
+| Film per pulse, κ 5,000 | 10-15 kg (2-3% of spray) | 1.1-3.3 kg |
+| Film per pulse, κ 100 | 51-61 kg (11-13% of spray) | 5.8-14 kg |
+| Peak face pressure | 0.35-0.64 GPa | 0.56-0.77 GPa |
+
+Argon leads water by 2-7% in impulse and has more pressure margin, at 3-10x the film. Both are
+well below the parent's η_jet = 0.775 in every survivable 1-D configuration, before rim spill. The
+premixed solve's ~0.65 is the ceiling if the merge could be made to happen upstream of the plate.
+In 2-D a 16 m column over a 10 m footprint will spill sideways, and lateral relief will also lower
+the peak, so step 2b must sweep cloud depth rather than inherit 16 m.
+
 **Pulse size for 100 t of steel.** The gas spring sets this, not steel strength. With a preloaded,
 near-constant-force spring, `J ≈ 8 m_plate ν s`. This reproduces the child repo's 3.6 g peak on a
 2.5 m stroke. At 4 Hz and 2.5 m, J is 8 MN·s per pulse, enough to carry a vehicle of about 1,090 t
@@ -219,9 +260,8 @@ The short form follows.
 
 - The vapor opacity. κ_vapor moves argon's film between 6 and 27 kg per pulse, and only the 200
   and 1,500 values have a source. The EUV absorption of the film's vapor is the number to pin.
-- **Peak pressure under poor mixing.** Levers to test: a longer, lower-density arriving pulse
-  (the necklace disk's depth), a standoff between spray cloud and plate so the PuffSat's shock
-  decays before it arrives, and making the merge happen upstream of the plate.
+- Step 2b: rim spill in 2-D, sweeping cloud depth 4-16 m at a 4 m pulse. Lateral relief may let a
+  shallower cloud pass the pressure gate with less spill and less radiation.
 - Step 2b: rim spill for the delivered disk in 2-D, with the areal mass matched to the taper.
 - Step 3: **how good the bounce is**, end to end. Combine 2a's mixing with 2b's capture into one
   delivered impulse per PuffSat, quoted as the parent's η_jet. Compare it with this repository's

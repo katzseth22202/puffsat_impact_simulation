@@ -67,6 +67,10 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
   not heat, binds when the pulse reaches the plate unmerged.** Decision 7 is amended accordingly.
   Face radiation at production resolution is high by ~1.5-2x, so the film figures are
   conservative.
+- Step 2a': a **deep spray cloud (16 m) with a 4 m pulse** brings the unmerged peak to ~0.34-0.52
+  GPa for argon and ~0.57-0.77 GPa for water (converged), at 0.62 / 0.58-0.60 of the ceiling,
+  η_jet ~0.50 / ~0.45. A long pulse alone collapses the impulse. Every survivable 1-D
+  configuration sits well below the parent's η_jet = 0.775.
 - Apart from those solves, every number above is a provisional estimate from 1-D ideal-gas or back-of-envelope work. None
   comes from a repository solve, and each must be replaced as the arm runs. The summary for the
   companion repos is [`argon_plate_handoff.md`](../argon_plate_handoff.md).
