@@ -777,7 +777,7 @@ water-plate-parcel-check:
 # bore, no field, a 200-673 m^3 chamber, 25 kg at 75 km/s into methane -- and it must not inherit
 # the magnetic nozzle's bag or the plate-side conventions.
 
-.PHONY: walled-nozzle-chamber walled-nozzle-hydrogen walled-nozzle-freeze walled-nozzle-propellants walled-nozzle-surface walled-nozzle-wall walled-nozzle-near-term walled-nozzle-wall-layers walled-nozzle-test
+.PHONY: walled-nozzle-chamber walled-nozzle-hydrogen walled-nozzle-freeze walled-nozzle-propellants walled-nozzle-surface walled-nozzle-wall walled-nozzle-near-term walled-nozzle-wall-layers walled-nozzle-wall-layers-hydrogen walled-nozzle-test
 ## walled-nozzle-chamber: N10 item 4b and N9 item 0 -- the solved chamber charge (equilibrium
 ## composition, wall-cap energy density, the slug-ratio fixed point) and the sealed-vessel
 ## equilibration timescales -> data/results/walled_nozzle/chamber.csv
@@ -838,6 +838,12 @@ walled-nozzle-near-term:
 walled-nozzle-wall-layers:
 	@mkdir -p data/results/walled_nozzle/near_term
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.wall_layers
+
+## walled-nozzle-wall-layers-hydrogen: N18 item 1 -- pitch over Cr-Mo steel under the hydrogen
+## 5500 K pulse with continuous chemical ablation and blowing -> wall_layers_hydrogen.csv
+walled-nozzle-wall-layers-hydrogen:
+	@mkdir -p data/results/walled_nozzle/near_term
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.wall_layers --hydrogen
 
 ## walled-nozzle-test: this study's tests alone
 walled-nozzle-test:

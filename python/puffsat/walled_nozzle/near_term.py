@@ -1018,6 +1018,16 @@ def _fluid(sol: ChamberSolution) -> surface.Fluid:
     )
 
 
+def liner_heat_capacities(sol: ChamberSolution) -> tuple[float, float]:
+    """`(frozen, equilibrium)` heat capacity [J/kg/K] of the peak chamber state: the two ends of
+    the `c_p` bracket `bartz_liner` takes its low and high edges from."""
+    temp = sol.pairing.temp
+    comp = eos_methane.composition(sol.rho, temp, sol.feed)
+    mean_mass = sol.rho / comp.n_total
+    cp_eq = wall.frozen_heat_capacity(_fluid(sol), sol.rho, temp)
+    return 2.5 * eos_methane.K_B / mean_mass, cp_eq
+
+
 def bartz_liner(
     sol: ChamberSolution, tab: Isentrope, throat_area: float, wall_temp: float
 ) -> tuple[float, float]:
@@ -1034,8 +1044,7 @@ def bartz_liner(
     c_star = sol.pressure / ex.flux_star
     comp = eos_methane.composition(sol.rho, temp, sol.feed)
     mean_mass = sol.rho / comp.n_total
-    cp_eq = wall.frozen_heat_capacity(_fluid(sol), sol.rho, temp)
-    cp_fr = 2.5 * eos_methane.K_B / mean_mass
+    cp_fr, cp_eq = liner_heat_capacities(sol)
     d_star = 2.0 * math.sqrt(throat_area / math.pi)
     area_ratio = math.pi * sol.radius**2 / throat_area
     sigma = 1.0 / (0.5 * (wall_temp / temp) + 0.5) ** 0.68
