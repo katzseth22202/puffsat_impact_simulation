@@ -231,6 +231,28 @@ At 2x resolution `eta_capture` moves 1.5-2.5%; relief at 16 m moves 0.36 -> 0.40
   footprint radius and 10 m plate; unmerged (stratified) pulse. A wider footprint, a dished plate,
   or merging the pulse before it reaches the plate could each change this, and are untested.
 
+**Merge before the plate, 1-D attempt (2026-10-05): the method failed; spike widths recovered.**
+`--spray-standoff` placed the spray cloud 0.5-4 m off the plate, with a near-empty gap
+(2e-4 kg/m^3) between them. **Every gap > 0 case failed numerically:** peaks of 10^11-10^12 Pa,
+near-zero impulse, and most never converged. The arriving shock crushes the near-empty gap cells
+against the plate far beyond the table, and the time step collapses. A Lagrangian grid cannot
+carry a near-vacuum gap, so the standoff needs the 2-D Eulerian kernel, whose ambient gas
+represents the gap natively. Those rows are discarded.
+
+The gap = 0 rows are valid (they reproduce step 2a'), and give the **spike width** (Q29), the time
+the face spends above each allowable:
+
+| Unmerged pulse, no gap | Peak (45.58 / 65.13 km/s) | Time > 0.7 GPa | Time > 1.5 GPa |
+|---|---|---|---|
+| Argon, 1 m cloud | 2.7 / 4.6 GPa | 28 / 24 µs | 16 / 14 µs |
+| Argon, 2 m cloud | 2.2 / 3.2 GPa | 26 / 27 µs | 4 / 9 µs |
+| Argon, 4 m cloud | 1.2 / 1.7 GPa | 13 / 19 µs | 0 / 1 µs |
+| Water, 4 m cloud | 1.8 / 2.7 GPa | 14 / 17 µs | 0 / 4 µs |
+
+The overloads last 1-30 µs, a few steel stress-wave transit times (~7 µs). On maraging's
+2.5 GPa allowable, every 4 m cloud passes except water at 65 km/s (2.7 GPa for a few µs), and the
+1-2 m clouds exceed it for ~5-16 µs a pulse.
+
 **Steel temperature over a push (2026-10-05): ablative film on maraging, propellant-cooled.**
 `make water-plate-plate-thermal` drives the coated-wall solver (`walled_nozzle/wall_layers.py`,
 extended with a substrate, between-pulse cooling and a cold respray) for 1,500 pulses at 4 Hz.

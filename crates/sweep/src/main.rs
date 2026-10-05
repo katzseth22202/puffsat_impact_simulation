@@ -1257,6 +1257,33 @@ fn spray_layers(
     pairs: usize,
     cells: usize,
 ) -> (Tube<TableEos>, f64) {
+    spray_layers_with_gap(
+        water,
+        spray,
+        (w, m),
+        (depth_spray, depth_pulse),
+        pairs,
+        cells,
+        0.0,
+    )
+}
+
+/// Density of the near-empty standoff between plate and spray cloud [kg/m³] (2x the table floor).
+const SPRAY_GAP_RHO: f64 = 2.0e-4;
+/// Cells across the standoff, when there is one.
+const SPRAY_GAP_CELLS: usize = 16;
+
+/// [`spray_layers`] with a standoff of `gap` metres of near-empty spray gas between the plate and
+/// the cloud. `gap = 0` builds exactly the column [`spray_layers`] always built.
+fn spray_layers_with_gap(
+    water: &Table,
+    spray: &Table,
+    (w, m): (f64, f64),
+    (depth_spray, depth_pulse): (f64, f64),
+    pairs: usize,
+    cells: usize,
+    gap: f64,
+) -> (Tube<TableEos>, f64) {
     let sigma_p = m / SPRAY_FOOTPRINT;
     let layers = 2 * pairs;
     let per_layer = cells / layers;
@@ -1268,6 +1295,16 @@ fn spray_layers(
     let (rho_s, rho_p) = (sigma_p * SPRAY_K / depth_spray, sigma_p / depth_pulse);
     let mut positions = vec![0.0];
     let (mut mass, mut vel, mut energy, mut index) = (vec![], vec![], vec![], vec![]);
+    if gap > 0.0 {
+        let dx = gap / SPRAY_GAP_CELLS as f64;
+        for _ in 0..SPRAY_GAP_CELLS {
+            positions.push(positions[positions.len() - 1] + dx);
+            mass.push(SPRAY_GAP_RHO * dx);
+            vel.push(0.0);
+            energy.push(spray.energy(SPRAY_GAP_RHO, t0));
+            index.push(1);
+        }
+    }
     for layer in 0..layers {
         let (r, u, tbl, mat, dx) = if layer % 2 == 0 {
             (rho_s, 0.0, spray, 1, dx_s)
@@ -1767,6 +1804,125 @@ fn cmd_spray_2d(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             );
         },
     )
+}
+
+// ---- Spray plate, step 2c: merge just before the plate (ADR-0055) ------------------------------
+//
+// The spray cloud stands off the plate by a near-empty gap, so the PuffSat merges inside the cloud
+// and the merged gas crosses the gap before it presses on the plate. Stratified pulse, bare face,
+// 768 cells. Each row also reports how long the face stays above each candidate allowable, from
+// the wall-pressure history.
+
+// Gaps > 0 fail numerically here: the near-empty gap cells are crushed far off the table and
+// the time step collapses. A gap needs the 2-D Eulerian kernel; this sweep keeps gap = 0 for the
+// spike widths.
+const SPRAY_STANDOFF_GAPS: [f64; 1] = [0.0];
+const SPRAY_STANDOFF_DEPTHS: [f64; 3] = [1.0, 2.0, 4.0];
+const SPRAY_STANDOFF_PULSE: f64 = 4.0;
+/// Candidate face allowables [Pa] for the time-above-limit columns.
+const SPRAY_ALLOWABLES: [f64; 4] = [0.4e9, 0.7e9, 1.0e9, 1.5e9];
+const RESULT_PATH_SPRAY_STANDOFF: &str = "data/results/water_plate/spray_standoff.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SprayStandoffRecord {
+    material: String,
+    w: f64,
+    gap: f64,
+    depth: f64,
+    ceiling_share: f64,
+    face_radiation_share: f64,
+    escape_share: f64,
+    peak_wall_pressure: f64,
+    /// Seconds the face pressure exceeds each of [`SPRAY_ALLOWABLES`].
+    time_above: [f64; 4],
+    converged: bool,
+}
+
+/// Total time a sampled `(t, p)` history spends above `level` (trapezoid over sample intervals).
+fn time_above(history: &[(f64, f64)], level: f64) -> f64 {
+    history
+        .windows(2)
+        .filter(|w| 0.5 * (w[0].1 + w[1].1) > level)
+        .map(|w| w[1].0 - w[0].0)
+        .sum()
+}
+
+fn run_one_spray_standoff(
+    arm: SprayArm,
+    (water, spray): (&Table, &Table),
+    speed: (f64, f64),
+    depth: f64,
+    gap: f64,
+) -> SprayStandoffRecord {
+    let w = speed.0;
+    let (tube, sigma_p) = spray_layers_with_gap(
+        water,
+        spray,
+        speed,
+        (depth, SPRAY_STANDOFF_PULSE),
+        1,
+        SPRAY_LEVER_CELLS,
+        gap,
+    );
+    let cfg = Config::production();
+    let (r, history) = CoupledBounce::new(tube, None, cfg.consts, cfg.limiter).run_with_history();
+    let ke = 0.5 * sigma_p * w * w;
+    let beta = r.bounce.wall_impulse / (sigma_p * w);
+    SprayStandoffRecord {
+        material: arm.name.to_string(),
+        w,
+        gap,
+        depth,
+        ceiling_share: beta / (1.0 + (1.0 + SPRAY_K).sqrt()),
+        face_radiation_share: r.loss_radiative_wall / ke,
+        escape_share: r.loss_escape_space / ke,
+        peak_wall_pressure: r.bounce.peak_wall_pressure,
+        time_above: SPRAY_ALLOWABLES.map(|level| time_above(&history, level)),
+        converged: r.bounce.converged,
+    }
+}
+
+fn cmd_spray_standoff(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let water = Table::load("data/tables/water_jupiter.json")?;
+    let mut cases = Vec::new();
+    for arm in SPRAY_ARMS {
+        let spray = Table::load(arm.spray_table)?;
+        for speed in SPRAY_SPEEDS {
+            for depth in SPRAY_STANDOFF_DEPTHS {
+                for gap in SPRAY_STANDOFF_GAPS {
+                    cases.push((arm, spray.clone(), speed, depth, gap));
+                }
+            }
+        }
+    }
+    let rows = par_map_with_progress(
+        "spray-standoff",
+        &cases,
+        |(arm, spray, speed, depth, gap)| {
+            run_one_spray_standoff(*arm, (&water, spray), *speed, *depth, *gap)
+        },
+    );
+    if let Some(dir) = Path::new(RESULT_PATH_SPRAY_STANDOFF).parent() {
+        fs::create_dir_all(dir)?;
+    }
+    emit_scenario(RESULT_PATH_SPRAY_STANDOFF, "spray-standoff", &rows, |r| {
+        println!(
+            "rust: {:>5} w={:>5.0} cloud={:.0} gap={:>3.1} -> share={:.3} face={:.2e} \
+             peak={:.2e} t>0.4/0.7/1.0/1.5GPa={:.0}/{:.0}/{:.0}/{:.0} us converged={}",
+            r.material,
+            r.w,
+            r.depth,
+            r.gap,
+            r.ceiling_share,
+            r.face_radiation_share,
+            r.peak_wall_pressure,
+            r.time_above[0] * 1e6,
+            r.time_above[1] * 1e6,
+            r.time_above[2] * 1e6,
+            r.time_above[3] * 1e6,
+            r.converged,
+        );
+    })
 }
 
 // ---- Heavy-plate 16–28 km/s scenario sweep (special scenario, design §12.1 / ADR-0027) ----------
@@ -3247,6 +3403,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--mesh-convergence", cmd_mesh_convergence),
     ("--transport-resolution", cmd_transport_resolution),
     ("--transport-check", cmd_transport_check),
+    ("--spray-standoff", cmd_spray_standoff),
     ("--spray-2d", cmd_spray_2d),
     ("--spray-levers-shielded", cmd_spray_levers_shielded),
     ("--spray-levers-convergence", cmd_spray_levers_convergence),
