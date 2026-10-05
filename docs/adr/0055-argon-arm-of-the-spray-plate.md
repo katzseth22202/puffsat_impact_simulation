@@ -71,6 +71,10 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
   GPa for argon and ~0.57-0.77 GPa for water (converged), at 0.62 / 0.58-0.60 of the ceiling,
   η_jet ~0.50 / ~0.45. A long pulse alone collapses the impulse. Every survivable 1-D
   configuration sits well below the parent's η_jet = 0.775.
+- Step 2b (2-D geometry): on the 10 m plate with a 5 m footprint, `eta_capture` falls from 0.79
+  (4 m cloud) to 0.30 (16 m). Lateral relief arrives only for clouds deeper than ~8 m. **No cloud
+  depth gives both a survivable peak and a useful impulse in this geometry.** The best is argon at
+  8 m and 45.58 km/s: 0.64 GPa at η_jet ~0.2. The design point of step 2a' is withdrawn.
 - Apart from those solves, every number above is a provisional estimate from 1-D ideal-gas or back-of-envelope work. None
   comes from a repository solve, and each must be replaced as the arm runs. The summary for the
   companion repos is [`argon_plate_handoff.md`](../argon_plate_handoff.md).

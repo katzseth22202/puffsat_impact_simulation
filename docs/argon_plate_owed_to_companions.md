@@ -10,9 +10,9 @@ convention. The running numbers and their evidence are in this repository's
 Section labels and line numbers below are from parent `f15d43c` and child `templateArxiv.tex` as
 cloned on 2026-10-05.
 
-**Status of the numbers.** Steps 1, 1b, 2a and 2a' are repository solves:
+**Status of the numbers.** Steps 1, 1b, 2a, 2a' and 2b are repository solves:
 `make water-plate-argon-radiation`, `make water-plate-argon-ablating`,
-`make water-plate-argon-mixing` and `make water-plate-argon-levers`. They are 1-D with gray flux-limited radiation, premixed (1, 1b) or
+`make water-plate-argon-mixing`, `make water-plate-argon-levers` and `make water-plate-argon-2d`. They are 1-D with gray flux-limited radiation, premixed (1, 1b) or
 layered (2a). Everything else here is an estimate and is labelled as one. Rim spill (step 2b) and
 the end-to-end bounce (step 3) are still to come, and may move several items.
 
@@ -135,14 +135,19 @@ Solved, step 2a'. A deep spray cloud is the fix: at 16 m deep with a 4 m pulse, 
 peak falls to ~0.34-0.52 GPa (argon) and ~0.57-0.77 GPa (water). A longer pulse on its own lowers
 the peak but collapses the impulse to ~0.47 of the ceiling.
 
-**Change.** State that the spray cloud must be deep, of order 16 m in 1-D, so the PuffSat's shock
-decays before it reaches the plate. Step 2b's 2-D run may lower that depth.
+**Withdrawn by step 2b.** In 2-D a cloud that deep spills sideways off the 10 m plate and keeps
+only 30% of the impulse. Shallow clouds keep the impulse but get no pressure relief.
+
+**Change.** State that survival of an unmerged pulse is unresolved. No cloud depth on the 10 m
+plate gives both a survivable peak and a useful impulse. A wider footprint, a dished plate, side
+confinement or upstream merging are the open options.
 
 ### P10. η_jet = 0.775 is not reached in any survivable 1-D configuration: `sec:water_injected_overtake`, `tab:mass_interest_growth`
 
-Provisional, pending steps 2b and 3. At the deep-cloud design point the delivered impulse is 0.62
-(argon) and 0.58-0.60 (water) of the overtake ceiling, η_jet ~0.50 and ~0.45, before rim spill.
-The premixed bound is ~0.65. The parent's growth tables are run at η_jet = 0.775 as a requirement.
+Provisional, pending the open levers. Before rim spill (1-D), the deep-cloud case delivered
+η_jet ~0.50 (argon) and ~0.45 (water). With rim spill (2-D, step 2b), the best survivable case
+on the 10 m plate is η_jet ~0.2. The premixed 1-D bound is ~0.65. The parent's growth tables are
+run at η_jet = 0.775 as a requirement.
 
 **Change.** None yet. Step 3 will give the end-to-end number. Flagged now because the gap is large
 enough to move the doubling times.

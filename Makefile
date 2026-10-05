@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: water-plate-argon-table water-plate-argon-pure-table water-plate-argon-radiation water-plate-argon-ablating water-plate-argon-mixing water-plate-argon-levers water-plate-argon-test water-plate-ledger water-plate-profiles water-plate-thermo water-plate-chemistry water-plate-flow-table water-plate-flow water-plate-flow-analysis water-plate-test
+.PHONY: water-plate-argon-table water-plate-argon-pure-table water-plate-argon-radiation water-plate-argon-ablating water-plate-argon-mixing water-plate-argon-levers water-plate-argon-2d water-plate-argon-test water-plate-ledger water-plate-profiles water-plate-thermo water-plate-chemistry water-plate-flow-table water-plate-flow water-plate-flow-analysis water-plate-test
 .PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-nozzle-ledger analysis-nozzle-field analysis-nozzle-detachment analysis-nozzle-jet analysis-nozzle-snowplow analysis-continuum analysis-nozzle-fluxtube analysis-nozzle-extension analysis-nozzle-residence analysis-nozzle-front analysis-nozzle-phi analysis-replies analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-toll analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
@@ -689,6 +689,12 @@ water-plate-argon-mixing: data/tables/argon.json data/tables/water_jupiter.json
 ## length (1/4/16 m each) -> data/results/water_plate/spray_levers.jsonl
 water-plate-argon-levers: data/tables/argon.json data/tables/water_jupiter.json
 	cargo run --release -p sweep -- --spray-levers
+
+## water-plate-argon-2d: step 2b, rim spill and lateral relief (effective-gamma 2-D, free vs
+## confined) at cloud depths 4-16 m, assembled onto the 1-D real-physics columns ->
+## data/results/water_plate/spray_2d.jsonl and spray_2d_columns.jsonl
+water-plate-argon-2d: data/tables/argon.json data/tables/water_jupiter.json
+	cargo run --release -p sweep -- --spray-2d
 
 water-plate-argon-test:
 	uv run pytest python/tests/test_water_plate_spray_eos.py

@@ -204,6 +204,33 @@ premixed solve's ~0.65 is the ceiling if the merge could be made to happen upstr
 In 2-D a 16 m column over a 10 m footprint will spill sideways, and lateral relief will also lower
 the peak, so step 2b must sweep cloud depth rather than inherit 16 m.
 
+**Step 2b solved (2026-10-05): rim spill and lateral relief in 2-D.**
+`make water-plate-argon-2d` uses the ADR-0003/0008 geometry method: the resting spray cloud and the
+arriving 4 m slug as one effective-γ gas (γ 1.4, Mach 20), 5 m footprint radius on the 10 m plate.
+Each depth runs free and confined. `eta_capture` = free/confined impulse, and the relief factor =
+free/confined peak facesheet pressure. Both multiply the 1-D real-physics column at the same depth.
+At 2x resolution `eta_capture` moves 1.5-2.5%; relief at 16 m moves 0.36 -> 0.40.
+
+| Spray cloud depth | 4 m | 8 m | 12 m | 16 m |
+|---|---|---|---|---|
+| `eta_capture` (impulse kept on the 10 m plate) | **0.79** | **0.61** | **0.44** | **0.30** |
+| Pressure relief factor | 1.00 | 1.00 | 0.68 | 0.36-0.40 |
+| Argon delivered share (η_jet) | 0.50 (0.35) | 0.38 (0.19) | 0.27 (0.05) | 0.18 (< 0) |
+| Argon peak, 45.58 / 65.13 km/s | 1.2 / 1.7 GPa | 0.64 / 0.94 | 0.29 / 0.44 | 0.12 / 0.18 |
+| Water peak, 45.58 / 65.13 km/s | 1.8 / 2.7 GPa | 1.0 / 1.4 | 0.48 / 0.63 | 0.20 / 0.26 |
+
+- **The deep cloud that fixed pressure in 1-D throws the impulse away in 2-D.** A 20 m column over
+  a 10 m-wide footprint spills sideways past the plate. At 16 m the plate gets less than the
+  PuffSat's own momentum.
+- **Shallow clouds keep the impulse but get no pressure relief.** The peak lands on axis before
+  any relief from the cloud's edge arrives (relief factor exactly 1 at 4 and 8 m).
+- **No depth gives both in this geometry.** The best survivable case is argon at 8 m and
+  45.58 km/s: 0.64 GPa at η_jet ~0.2. Water fails pressure at every depth that keeps useful
+  impulse.
+- **Caveats.** Effective-γ geometry with no radiation or real EOS in 2-D; flat plate; fixed 5 m
+  footprint radius and 10 m plate; unmerged (stratified) pulse. A wider footprint, a dished plate,
+  or merging the pulse before it reaches the plate could each change this, and are untested.
+
 **Pulse size for 100 t of steel.** The gas spring sets this, not steel strength. With a preloaded,
 near-constant-force spring, `J ≈ 8 m_plate ν s`. This reproduces the child repo's 3.6 g peak on a
 2.5 m stroke. At 4 Hz and 2.5 m, J is 8 MN·s per pulse, enough to carry a vehicle of about 1,090 t
@@ -260,8 +287,9 @@ The short form follows.
 
 - The vapor opacity. κ_vapor moves argon's film between 6 and 27 kg per pulse, and only the 200
   and 1,500 values have a source. The EUV absorption of the film's vapor is the number to pin.
-- Step 2b: rim spill in 2-D, sweeping cloud depth 4-16 m at a 4 m pulse. Lateral relief may let a
-  shallower cloud pass the pressure gate with less spill and less radiation.
+- **No survivable, useful configuration yet in 2-D.** Candidate levers: a footprint much wider
+  than the cloud is deep (a larger plate), a dished plate (ADR-0021 raises capture), side
+  confinement, and merging the pulse upstream so a shallow merged slab arrives.
 - Step 2b: rim spill for the delivered disk in 2-D, with the areal mass matched to the taper.
 - Step 3: **how good the bounce is**, end to end. Combine 2a's mixing with 2b's capture into one
   delivered impulse per PuffSat, quoted as the parent's η_jet. Compare it with this repository's

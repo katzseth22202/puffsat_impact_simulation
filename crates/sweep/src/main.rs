@@ -31,7 +31,10 @@ use std::fs;
 use std::io::Write as _;
 use std::path::Path;
 
-use euler2d::bounce::{PlateShape, SlugConfig, eta_capture, run_slug_bounce, taper_sigma_stats};
+use euler2d::bounce::{
+    PlateShape, SlugConfig, SprayCloud, eta_capture, run_slug_bounce, run_spray_bounce,
+    taper_sigma_stats,
+};
 use hydro1d::conduction::Solid;
 use hydro1d::eos::{Eos as _, TableEos};
 use hydro1d::kernel::{
@@ -1618,6 +1621,154 @@ fn cmd_spray_levers_convergence(_args: &[String]) -> Result<(), Box<dyn std::err
     )
 }
 
+// ---- Spray plate, step 2b: rim spill and lateral relief in 2-D (ADR-0055) ----------------------
+//
+// The ADR-0003/0008 geometry method: the resting spray cloud and the arriving slug as one
+// effective-γ gas, run free (spilling past the 10 m plate) and confined (plane wave). Their ratios
+// give `eta_capture` (impulse kept) and the lateral relief of the peak facesheet pressure. Both
+// multiply the 1-D real-physics column of step 2a' at the same depths. Lengths are in units of the
+// 4 m pulse: footprint radius 1.25 (5 m), plate radius 2.5 (10 m), domain radius 3.5.
+
+/// Spray-cloud depths [m].
+const SPRAY_2D_DEPTHS_M: [usize; 4] = [4, 8, 12, 16];
+const SPRAY_2D_PULSE_M: f64 = 4.0;
+const SPRAY_2D_GAMMA: f64 = 1.4;
+const SPRAY_2D_MACH: f64 = 20.0;
+/// Radial cells across the 3.5-unit domain at production resolution; axial cells per unit length.
+const SPRAY_2D_NR: usize = 112;
+const SPRAY_2D_NZ_PER_UNIT: usize = 32;
+const RESULT_PATH_SPRAY_2D: &str = "data/results/water_plate/spray_2d.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct Spray2dRecord {
+    depth: f64,
+    nr: usize,
+    nz: usize,
+    eta_capture: f64,
+    /// Peak facesheet pressure, free over confined: the lateral relief factor.
+    relief: f64,
+    ratio_free: f64,
+    ratio_confined: f64,
+}
+
+fn spray_2d_case(depth_m: usize, refine: usize) -> Spray2dRecord {
+    let unit = SPRAY_2D_PULSE_M;
+    let depth = depth_m as f64 / unit;
+    // The column (depth + 1 pulse length) plus 2 units of headroom for the rebound; depth_m is a
+    // multiple of 4, so this is an integer number of units.
+    let nz = refine * SPRAY_2D_NZ_PER_UNIT * (depth_m / 4 + 3);
+    let z_max = (depth_m / 4 + 3) as f64;
+    let spray = SprayCloud {
+        depth,
+        mass_ratio: SPRAY_K,
+    };
+    let base = SlugConfig {
+        gamma: SPRAY_2D_GAMMA,
+        mach: SPRAY_2D_MACH,
+        r_foot: 5.0 / unit,
+        length: 1.0,
+        r_plate: 10.0 / unit,
+        r_max: 14.0 / unit,
+        z_max,
+        nr: refine * SPRAY_2D_NR,
+        nz,
+        confined: false,
+        shape: PlateShape::FlatGridAligned,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    };
+    let free = run_spray_bounce(&base, spray);
+    let confined = run_spray_bounce(
+        &SlugConfig {
+            r_foot: base.r_max,
+            r_plate: base.r_max,
+            nr: 8,
+            confined: true,
+            ..base
+        },
+        spray,
+    );
+    Spray2dRecord {
+        depth: depth_m as f64,
+        nr: base.nr,
+        nz,
+        eta_capture: eta_capture(&free, &confined),
+        relief: free.peak_local_pressure / confined.peak_local_pressure,
+        ratio_free: free.restitution_ratio(),
+        ratio_confined: confined.restitution_ratio(),
+    }
+}
+
+fn cmd_spray_2d(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cases: Vec<(usize, usize)> = SPRAY_2D_DEPTHS_M.iter().map(|&d| (d, 1)).collect();
+    cases.extend([(4, 2), (16, 2)]);
+    let geometry =
+        par_map_with_progress("spray-2d", &cases, |&(d, refine)| spray_2d_case(d, refine));
+    emit_scenario(RESULT_PATH_SPRAY_2D, "spray-2d", &geometry, |r| {
+        println!(
+            "rust: 2-D cloud={:>2.0} m nr={:>3} nz={:>3} -> eta_capture={:.4} relief={:.3} \
+             (free {:.4}, confined {:.4})",
+            r.depth, r.nr, r.nz, r.eta_capture, r.relief, r.ratio_free, r.ratio_confined,
+        );
+    })?;
+
+    // The 1-D real-physics column at the same depths, bare and on the sourced shielded face.
+    let water = Table::load("data/tables/water_jupiter.json")?;
+    let mut cases_1d = Vec::new();
+    for arm in SPRAY_ARMS {
+        let spray = Table::load(arm.spray_table)?;
+        for speed in SPRAY_SPEEDS {
+            for &d in &SPRAY_2D_DEPTHS_M {
+                for face in [None, Some(5.0e3)] {
+                    cases_1d.push((arm, spray.clone(), speed, d as f64, face));
+                }
+            }
+        }
+    }
+    let rows_1d = par_map_with_progress(
+        "spray-2d-columns",
+        &cases_1d,
+        |(arm, spray, speed, depth, face)| {
+            run_one_spray_mix(
+                *arm,
+                (&water, spray),
+                *speed,
+                (*depth, SPRAY_2D_PULSE_M),
+                1,
+                *face,
+                SPRAY_LEVER_CELLS,
+            )
+        },
+    );
+    emit_scenario(
+        "data/results/water_plate/spray_2d_columns.jsonl",
+        "spray-2d-columns",
+        &rows_1d,
+        |r| {
+            let g = geometry
+                .iter()
+                .find(|g| g.depth == r.depth && g.nr == SPRAY_2D_NR)
+                .expect("a production 2-D row at every depth");
+            println!(
+                "rust: {:>5} w={:>5.0} cloud={:>2.0} kv={:>5} -> 1-D share={:.3} peak={:.2e} \
+                 film={:>5.1} kg | 2-D share={:.3} eta_jet={:.3} peak={:.2e}",
+                r.material,
+                r.w,
+                r.depth,
+                r.kappa_vapor
+                    .map_or("bare".to_string(), |k| format!("{k:.0}")),
+                r.ceiling_share,
+                r.peak_wall_pressure,
+                r.film_per_pulse,
+                r.ceiling_share * g.eta_capture,
+                (r.ceiling_share * g.eta_capture * (1.0 + (1.0 + SPRAY_K).sqrt()) - 1.0)
+                    / (1.0 + SPRAY_K).sqrt(),
+                r.peak_wall_pressure * g.relief,
+            );
+        },
+    )
+}
+
 // ---- Heavy-plate 16–28 km/s scenario sweep (special scenario, design §12.1 / ADR-0027) ----------
 //
 // A 100 kg pulse on a tripled 30 m-diameter (`R = 15 m`) pusher plate of mass `≤ 40 t`, swept
@@ -3096,6 +3247,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--mesh-convergence", cmd_mesh_convergence),
     ("--transport-resolution", cmd_transport_resolution),
     ("--transport-check", cmd_transport_check),
+    ("--spray-2d", cmd_spray_2d),
     ("--spray-levers-shielded", cmd_spray_levers_shielded),
     ("--spray-levers-convergence", cmd_spray_levers_convergence),
     ("--spray-levers", cmd_spray_levers),
