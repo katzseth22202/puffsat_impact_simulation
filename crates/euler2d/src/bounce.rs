@@ -267,7 +267,68 @@ pub fn init_slug_grid(cfg: &SlugConfig) -> Grid2D {
 /// Run one flat-plate slug bounce and return its wall impulse / incident momentum / peak force.
 #[must_use]
 pub fn run_slug_bounce(cfg: &SlugConfig) -> Bounce2D {
-    let mut g = init_slug_grid(cfg);
+    run_bounce(init_slug_grid(cfg), cfg.nz)
+}
+
+/// A spray cloud resting on the plate under the slug (ADR-0055): `depth` deep over the slug's
+/// footprint and radial profile, holding `mass_ratio` times the slug's mass per unit area.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SprayCloud {
+    /// Cloud depth above the plate (same length units as the slug).
+    pub depth: f64,
+    /// Spray mass per slug mass, the injection ratio `k`.
+    pub mass_ratio: f64,
+}
+
+/// The slug grid with a resting spray cloud between it and a grid-aligned flat plate. The cloud
+/// fills `z ∈ [0, depth)` at density `k·ρ₀·L/depth` and the slug's radial profile, at rest and at
+/// the slug's cold pressure; the slug sits on top of it, `z ∈ [depth, depth + L)`.
+///
+/// # Panics
+/// Panics for a dished plate: the spray path is flat-plate only.
+#[must_use]
+pub fn init_spray_grid(cfg: &SlugConfig, spray: SprayCloud) -> Grid2D {
+    assert!(
+        cfg.shape == PlateShape::FlatGridAligned,
+        "the spray cloud is defined on the grid-aligned flat plate"
+    );
+    let mut g = init_slug_grid(&SlugConfig {
+        length: 0.0,
+        ..*cfg
+    });
+    let dz = cfg.z_max / cfg.nz as f64;
+    let dr = cfg.r_max / cfg.nr as f64;
+    let v = 1.0;
+    let p0 = 1.0 / (cfg.gamma * cfg.mach * cfg.mach);
+    let rho_amb = 1.0e-3;
+    let p_amb = p0 * 1.0e-3;
+    let core_rho = taper_mass_factor(cfg.taper_frac);
+    let spray_rho = spray.mass_ratio * cfg.length / spray.depth;
+    g.init(|iz, ir| {
+        let z = (iz as f64 + 0.5) * dz;
+        let r = (ir as f64 + 0.5) * dr;
+        let weight = core_rho * taper_weight(r, cfg.r_foot, cfg.taper_frac);
+        if z < spray.depth && spray_rho * weight > rho_amb {
+            Prim::new(spray_rho * weight, 0.0, 0.0, p0)
+        } else if z >= spray.depth && z < spray.depth + cfg.length && weight > rho_amb {
+            let v_r = cfg.alpha_div * v * r / cfg.r_foot;
+            Prim::new(weight, -v, v_r, p0)
+        } else {
+            Prim::new(rho_amb, 0.0, 0.0, p_amb)
+        }
+    });
+    g
+}
+
+/// Run one spray-plate bounce: the slug arrives through the resting cloud onto the flat plate.
+/// `incident_momentum` is the slug's, since the cloud starts at rest.
+#[must_use]
+pub fn run_spray_bounce(cfg: &SlugConfig, spray: SprayCloud) -> Bounce2D {
+    run_bounce(init_spray_grid(cfg, spray), cfg.nz)
+}
+
+/// Integrate the plate impulse on an initialized grid until the force has decayed (ADR-0001).
+fn run_bounce(mut g: Grid2D, nz: usize) -> Bounce2D {
     let incident_momentum = g.axial_momentum().abs();
 
     // Integrate the plate impulse (trapezoid) until the force has stayed below the 10⁻³-of-peak
@@ -282,7 +343,7 @@ pub fn run_slug_bounce(cfg: &SlugConfig) -> Bounce2D {
     let mut steps_below = 0_usize;
     let window = 40;
     let mut force_old = g.plate_force();
-    let max_steps = 400 * cfg.nz + 50_000;
+    let max_steps = 400 * nz + 50_000;
     let mut steps = 0;
     while steps < max_steps {
         let dt = g.stable_dt();
