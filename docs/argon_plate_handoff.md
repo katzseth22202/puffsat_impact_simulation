@@ -429,6 +429,18 @@ The short form follows.
   - Layout: one plug per sphere (overlapping cones) against one ring plug. Material: polyethylene
     first (with its ~84 MJ/kg bond toll and soot radiation bracketed, an estimate), then argon ice.
   - Reuse the tamped-nozzle study's snowplow and column-density tools, and the 2-D standoff/cup.
+  - **Step 1 done (closed form, 2026-10-05).** The tamped-nozzle ballistic fireball, mirrored for
+    the overtake: the blob drifts toward the plate at V = w/(1+k) and expands isotropically at
+    u = w√k/(1+k), and elements moving toward the plate reflect specularly. Catching all of them,
+    `β = (1+k)[u(1-μ0²)/2 + V(1-μ0)]/w` with `μ0 = -1/√k`, which is **β 2.74, η_jet 0.52 at
+    k = 10**. That is below the spray cup's 0.58 unmixed. A plug 4 m off the floor gives 0.45, and
+    8 m gives 0.27. Sizing: ten 4.7 kg spheres (10 cm radius, ~140 kg/m^2) want plugs 15-19 cm in
+    radius: 0.44-0.73 m long as solid polyethylene, 0.26-0.43 m as argon ice, 14-23 m as foam.
+  - **Why it trails the spray:** merging at a point makes an isotropic fireball, and ~34% of it
+    leaves away from the plate. The spray's broad slab expands mostly along the axis. The plug
+    trades the mixing risk for a geometry loss. Two things could recover it: pressure-mediated
+    loading beating the ballistic model (the tamped study's hypothesis), and enclosing the plug
+    deep in the cup, so its walls turn the fireball toward the mouth (a short chamber).
 
 - The vapor opacity. κ_vapor moves argon's film between 6 and 27 kg per pulse, and only the 200
   and 1,500 values have a source. The EUV absorption of the film's vapor is the number to pin.
