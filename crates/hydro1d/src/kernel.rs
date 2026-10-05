@@ -193,7 +193,17 @@ trait BounceStepper {
     /// Fire the slug at the wall and integrate to the `10⁻³`-of-peak tail guard, returning the
     /// wall impulse and the restitution it implies.
     fn run_bounce_loop(&mut self) -> BounceResult {
+        self.run_bounce_loop_recording(None)
+    }
+
+    /// [`Self::run_bounce_loop`], optionally recording the physical wall pressure `(t, p)` before
+    /// every step and once at the end. Recording reads state only, so it changes no result.
+    fn run_bounce_loop_recording(
+        &mut self,
+        mut history: Option<&mut Vec<(f64, f64)>>,
+    ) -> BounceResult {
         let incident = self.total_momentum().abs();
+        let mut t = 0.0;
         let mut wall_impulse = 0.0;
         let mut peak: f64 = 0.0;
         let mut peak_pressure: f64 = 0.0;
@@ -203,6 +213,9 @@ trait BounceStepper {
         let mut converged = false;
 
         for _ in 0..self.max_steps() {
+            if let Some(h) = history.as_deref_mut() {
+                h.push((t, self.wall_pressure()));
+            }
             peak = peak.max(force_old);
             peak_pressure = peak_pressure.max(self.wall_pressure());
             peak_temperature = peak_temperature.max(self.wall_temperature());
@@ -215,9 +228,13 @@ trait BounceStepper {
             }
             let dt = self.stable_dt();
             self.step(dt);
+            t += dt;
             let force_new = self.wall_force();
             wall_impulse += 0.5 * dt * (force_old + force_new);
             force_old = force_new;
+        }
+        if let Some(h) = history {
+            h.push((t, self.wall_pressure()));
         }
 
         BounceResult {
@@ -719,6 +736,13 @@ impl<E: Eos> Tube<E> {
     /// momentum bookkeeping). This is the elastic bookkeeping check (ADR-0001).
     pub fn run_bounce(&mut self) -> BounceResult {
         self.run_bounce_loop()
+    }
+
+    /// [`Self::run_bounce`], also returning the physical wall pressure history `(t, p)`.
+    pub fn run_bounce_with_history(&mut self) -> (BounceResult, Vec<(f64, f64)>) {
+        let mut history = Vec::new();
+        let result = self.run_bounce_loop_recording(Some(&mut history));
+        (result, history)
     }
 
     /// Fire the slug at an **idealized absorbing wall** — ADR-0001's dead-stick (`f → 0.5`) limit.
@@ -1507,7 +1531,18 @@ impl CoupledBounce {
     /// Fire the coupled slug at the wall, integrating to the same `10⁻³`-of-peak tail guard as
     /// [`Tube::run_bounce`], and return the restitution plus the loss-channel decomposition.
     pub fn run(&mut self) -> CoupledBounceResult {
-        let bounce = self.run_bounce_loop();
+        self.run_recording(None)
+    }
+
+    /// [`Self::run`], also returning the physical wall pressure history `(t, p)`.
+    pub fn run_with_history(&mut self) -> (CoupledBounceResult, Vec<(f64, f64)>) {
+        let mut history = Vec::new();
+        let result = self.run_recording(Some(&mut history));
+        (result, history)
+    }
+
+    fn run_recording(&mut self, history: Option<&mut Vec<(f64, f64)>>) -> CoupledBounceResult {
+        let bounce = self.run_bounce_loop_recording(history);
         if let Some(audit) = self.transport_audit.as_mut() {
             audit.finish();
         }
@@ -1980,7 +2015,18 @@ impl AblatingBounce {
     /// Fire the ablating slug at the wall, integrating to the same `10⁻³`-of-peak tail guard as
     /// [`CoupledBounce::run`], and return the restitution, loss decomposition, and ablation tally.
     pub fn run(&mut self) -> AblatingBounceResult {
-        let bounce = self.run_bounce_loop();
+        self.run_recording(None)
+    }
+
+    /// [`Self::run`], also returning the physical wall pressure history `(t, p)`.
+    pub fn run_with_history(&mut self) -> (AblatingBounceResult, Vec<(f64, f64)>) {
+        let mut history = Vec::new();
+        let result = self.run_recording(Some(&mut history));
+        (result, history)
+    }
+
+    fn run_recording(&mut self, history: Option<&mut Vec<(f64, f64)>>) -> AblatingBounceResult {
+        let bounce = self.run_bounce_loop_recording(history);
         AblatingBounceResult {
             bounce,
             loss_radiative_wall: self.loss_radiative_wall,
