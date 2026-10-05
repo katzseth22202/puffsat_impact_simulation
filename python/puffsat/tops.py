@@ -111,6 +111,18 @@ def _interp_loglog(tops_grid: Vec, target: Vec, ln_field: Vec, axis: int) -> Vec
     return np.asarray(lo * (1.0 - w) + hi * w, dtype=np.float64)
 
 
+def resample(tops: TopsGray, rho_grid: Vec, t_grid: Vec) -> tuple[Vec, Vec]:
+    """`(kappa_R, kappa_P)` on `(rho_grid, t_grid)`, log-log bilinear, held at the pull's edges.
+
+    Below the TOPS temperature floor this holds the floor value rather than splicing in a
+    water-calibrated Kramers shape, which grows as T^-3.5 and would make cold argon opaque."""
+    out = []
+    for field in (tops.kappa_rosseland, tops.kappa_planck):
+        ln_on_rho = _interp_loglog(tops.rho_grid, rho_grid, np.log(field), axis=0)
+        out.append(np.exp(_interp_loglog(tops.t_grid, t_grid, ln_on_rho, axis=1)))
+    return out[0], out[1]
+
+
 def stitch_opacity(
     rho_grid: Vec,
     t_grid: Vec,

@@ -52,6 +52,10 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
   8 MN·s at 4 Hz and a 2.5 m stroke. That is about 47-49 kg of PuffSat plus 470-490 kg of argon at
   45.58 km/s. Fiber mass in the gas spring tracks force times stroke, not area, so bag pressure is
   a free choice.
-- Every number above is a provisional estimate from 1-D ideal-gas or back-of-envelope work. None
+- The first solve (premixed, 1-D, cold black face) puts 1.5-11% of pulse kinetic energy onto the
+  face for argon and 0.17-2.7% for water, against the ~0.07% that steel plus film absorb. Decision
+  7 is therefore confirmed as binding. The impulse lands near 0.7 of the ceiling for both, so argon
+  is not yet shown to beat water.
+- Apart from that solve, every number above is a provisional estimate from 1-D ideal-gas or back-of-envelope work. None
   comes from a repository solve, and each must be replaced as the arm runs. The summary for the
   companion repos is [`argon_plate_handoff.md`](../argon_plate_handoff.md).

@@ -337,6 +337,62 @@ def build_table_jupiter(
     }
 
 
+DEFAULT_TABLE_PATH_SPRAY = Path("data/tables/spray_k10.json")
+DEFAULT_TOPS_SPRAY = Path("data/tables/tops/tops_spray_k10_gray.html")
+
+
+def build_table_spray(
+    k: float = 10.0,
+    tops_path: Path = DEFAULT_TOPS_SPRAY,
+    extend_to: float | None = RHO_EXTEND_TO,
+) -> dict[str, object]:
+    """The argon arm's premixed spray table (ADR-0055): atomic H/O/Ar Saha EOS at injection ratio
+    `k` on the Jupiter grid, with TOPS gray means for the same mixture held at the pull's edges."""
+    from puffsat.water_plate import spray_eos
+
+    rho_grid = jupiter_rho_grid(extend_to)
+    t_grid = np.geomspace(T_RANGE_JUPITER[0], T_RANGE_JUPITER[1], N_T_JUPITER)
+    p, e, cs = spray_eos.eos_grid(spray_eos.SprayMixture(k=k), rho_grid, t_grid)
+    kappa_r, kappa_p = tops.resample(tops.load_tops_gray(tops_path), rho_grid, t_grid)
+    prov: dict[str, object] = {
+        "schema": "ADR-0007",
+        "generated_by": "puffsat.tables.build_table_spray",
+        "study": "spray plate, argon arm (ADR-0055)",
+        "injection_ratio_k": k,
+        "grid": {
+            "rho_range": [float(rho_grid[0]), float(rho_grid[-1])],
+            "T_range": list(T_RANGE_JUPITER),
+            "units": "rho kg/m^3, T K, p Pa, e J/kg, c_s m/s, kappa m^2/kg",
+        },
+        "eos": {
+            "model": "atomic Saha mixture: H, O, Ar, all ionization stages, shared n_e",
+            "energy_reference": "neutral ground-state atoms at T->0 = 0",
+            "omitted": "water molecules: the bond energy is charged before the table and never "
+            "returned (floor case)",
+            "atomic_data": "NIST ASD ionization energies (data/tables/nist/), ground terms only",
+        },
+        "opacity": {
+            "status": "TOPS gray Rosseland/Planck means for H:O:Ar = 2:1:4.51 (k = 10)",
+            "tops_pull": str(tops_path),
+            "below_floor": "held at the 5802 K floor value (no Kramers splice)",
+            "above_rho_ceiling": "held at the 30 kg/m^3 edge value",
+        },
+    }
+    return {
+        "rho_grid": [float(x) for x in rho_grid],
+        "T_grid": [float(x) for x in t_grid],
+        "shape": [len(rho_grid), len(t_grid)],
+        "fields": {
+            "p": _flatten(p),
+            "e": _flatten(e),
+            "c_s": _flatten(cs),
+            "kappa_rosseland": _flatten(kappa_r),
+            "kappa_planck": _flatten(kappa_p),
+        },
+        "provenance": prov,
+    }
+
+
 DEFAULT_TABLE_DIR_FROZEN = Path("data/tables/frozen")
 DEFAULT_TABLE_DIR_FROZEN_JUPITER = Path("data/tables/frozen_jupiter")
 
@@ -573,7 +629,20 @@ def main() -> None:
         help="output directory for --frozen-from-probe (default: data/tables/frozen, or "
         "data/tables/frozen_jupiter with --jupiter)",
     )
+    parser.add_argument(
+        "--spray",
+        action="store_true",
+        help="build the argon arm's premixed k = 10 spray table (ADR-0055)",
+    )
     args = parser.parse_args()
+
+    if args.spray:
+        out_spray: Path = args.out or DEFAULT_TABLE_PATH_SPRAY
+        out_spray.parent.mkdir(parents=True, exist_ok=True)
+        with out_spray.open("w") as fh:
+            json.dump(build_table_spray(), fh)
+        print(f"python: wrote argon spray table -> {out_spray}")
+        return
 
     if args.frozen_from_probe is not None:
         outdir = args.outdir or (

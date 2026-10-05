@@ -32,14 +32,18 @@ RHO_UP_GCC = "3.0e-2"
 N_RHO = "48"
 
 
-def fetch_water_gray(timeout_s: float = 120.0) -> bytes:
-    """One two-stage TOPS submission for water (2 H : 1 O atomic), gray means. Returns HTML."""
+def fetch_water_gray(
+    timeout_s: float = 120.0, mixture: str = "2. h 1. o", mixname: str = "water"
+) -> bytes:
+    """One two-stage TOPS submission, gray means. Returns HTML.
+
+    `mixture` is TOPS's number-fraction string; the default is water (2 H : 1 O atomic)."""
     br = mechanize.Browser()
     br.set_handle_robots(False)  # per-pyTOPSScrape: T-1 permits automated queries
     br.open(TOPS_URL, timeout=timeout_s)
     br.select_form(nr=0)
-    br.form["mixture"] = "2. h 1. o"
-    br.form["mixname"] = "water"
+    br.form["mixture"] = mixture
+    br.form["mixname"] = mixname
     br.form.find_control(name="tlow", type="select").get(T_LOW_KEV).selected = True
     br.form.find_control(name="tup", type="select").get(T_UP_KEV).selected = True
     br.form["rlow"] = RHO_LOW_GCC
@@ -58,11 +62,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch the TOPS water gray-opacity table.")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--attempts", type=int, default=5)
+    parser.add_argument("--mixture", default="2. h 1. o", help="TOPS number-fraction string")
+    parser.add_argument("--mixname", default="water")
     args = parser.parse_args()
 
     for attempt in range(1, args.attempts + 1):
         try:
-            html = fetch_water_gray()
+            html = fetch_water_gray(mixture=args.mixture, mixname=args.mixname)
             break
         except Exception as exc:  # broad on purpose — the server 500s transiently; retry them all
             print(f"python: TOPS attempt {attempt}/{args.attempts} failed: {exc}", file=sys.stderr)

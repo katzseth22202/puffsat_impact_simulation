@@ -33,7 +33,7 @@ use std::path::Path;
 
 use euler2d::bounce::{PlateShape, SlugConfig, eta_capture, run_slug_bounce, taper_sigma_stats};
 use hydro1d::conduction::Solid;
-use hydro1d::eos::TableEos;
+use hydro1d::eos::{Eos as _, TableEos};
 use hydro1d::kernel::{
     AblatingBounce, Ablation, CondensingBounce, CoupledBounce, TransportAudit, Tube, Viscosity,
 };
@@ -926,6 +926,143 @@ fn run_jupiter_sweep(base_tbl: &Table) -> Vec<JupiterRecord> {
         .collect();
     par_map_with_progress("jupiter", &cases, |&(rho, len, s)| {
         run_one_jupiter(rho, len, s, base_tbl)
+    })
+}
+
+// ---- Spray plate, argon arm: radiation share of a premixed pulse (ADR-0055) ---------------------
+//
+// The necklace charge's target state: the PuffSat's water and `k = 10` of spray already merged. In
+// the plate frame the mixture closes at `w/(1+k)` carrying the merge heat `w² k / (2(1+k)²)`, less
+// what reaching the table's energy reference costs (vaporizing the spray and, for argon, atomizing
+// the water). One material per run, so this is the premixed case only.
+
+const SPRAY_K: f64 = 10.0;
+/// Footprint area [m²]: half the radius of the 20 m tapered plate.
+const SPRAY_FOOTPRINT: f64 = std::f64::consts::PI * 25.0;
+/// (closing speed [m/s], PuffSat mass per pulse [kg]) for the 100 t plate's 8 MN·s pulse.
+const SPRAY_SPEEDS: [(f64, f64); 2] = [(45_580.0, 47.0), (65_130.0, 33.0)];
+/// Spray-cloud depth [m] the merged pulse occupies.
+const SPRAY_DEPTH: [f64; 5] = [0.5, 1.0, 2.0, 4.0, 8.0];
+const RESULT_PATH_SPRAY: &str = "data/results/water_plate/spray_radiation.jsonl";
+
+#[derive(Debug, Clone, Copy)]
+struct SprayMaterial {
+    name: &'static str,
+    table: &'static str,
+    /// Energy [J/kg of mixture] paid between the arriving gas and the table's reference.
+    charge: f64,
+}
+
+const SPRAY_MATERIALS: [SprayMaterial; 2] = [
+    SprayMaterial {
+        name: "argon",
+        table: "data/tables/spray_k10.json",
+        // Water atomization (50.94 MJ/kg, never returned in the atomic table) on 1/11 of the mass,
+        // and vaporizing liquid argon at 87 K (~0.116 MJ/kg to the 0 K atom reference) on 10/11.
+        charge: 50.94e6 / 11.0 + 0.116e6 * 10.0 / 11.0,
+    },
+    SprayMaterial {
+        name: "water",
+        table: "data/tables/water_jupiter.json",
+        // Liquid water near 300 K sits ~1.89 MJ/kg below the table's 0 K vapor reference.
+        charge: 1.89e6 * 10.0 / 11.0,
+    },
+];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SprayRecord {
+    material: String,
+    w: f64,
+    depth: f64,
+    /// PuffSat mass per footprint area [kg/m²].
+    sigma_puffsat: f64,
+    rho0: f64,
+    t0: f64,
+    e0: f64,
+    /// Wall impulse per arriving PuffSat momentum, `J / (m w)`.
+    beta: f64,
+    /// `beta` over the overtake ceiling `1 + sqrt(1 + k)`.
+    ceiling_share: f64,
+    /// Radiation absorbed by the plate face over the pulse's kinetic energy `½ m w²`.
+    face_radiation_share: f64,
+    /// Radiation escaping to space over the same.
+    escape_share: f64,
+    peak_wall_pressure: f64,
+    converged: bool,
+}
+
+fn run_one_spray(mat: SprayMaterial, table: &Table, w: f64, m: f64, depth: f64) -> SprayRecord {
+    let sigma_p = m / SPRAY_FOOTPRINT;
+    let rho0 = sigma_p * (1.0 + SPRAY_K) / depth;
+    let v0 = w / (1.0 + SPRAY_K);
+    let e0 = 0.5 * w * w * SPRAY_K / (1.0 + SPRAY_K).powi(2) - mat.charge;
+    let eos = TableEos::new(table.clone());
+    let t0 = eos.temperature(rho0, e0);
+    let cfg = Config {
+        v: v0,
+        length: depth,
+        ..Config::production()
+    };
+    let tube = Tube::slug_si(
+        cfg.gas_cells,
+        rho0,
+        v0,
+        depth,
+        t0,
+        eos,
+        Viscosity::VON_NEUMANN_RICHTMYER,
+    );
+    let result = CoupledBounce::new(tube, None, cfg.consts, cfg.limiter).run();
+    let ke = 0.5 * sigma_p * w * w;
+    let beta = result.bounce.wall_impulse / result.bounce.incident_momentum;
+    SprayRecord {
+        material: mat.name.to_string(),
+        w,
+        depth,
+        sigma_puffsat: sigma_p,
+        rho0,
+        t0,
+        e0,
+        beta,
+        ceiling_share: beta / (1.0 + (1.0 + SPRAY_K).sqrt()),
+        face_radiation_share: result.loss_radiative_wall / ke,
+        escape_share: result.loss_escape_space / ke,
+        peak_wall_pressure: result.bounce.peak_wall_pressure,
+        converged: result.bounce.converged,
+    }
+}
+
+fn cmd_spray(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cases = Vec::new();
+    for mat in SPRAY_MATERIALS {
+        let table = Table::load(mat.table)?;
+        for (w, m) in SPRAY_SPEEDS {
+            for depth in SPRAY_DEPTH {
+                cases.push((mat, table.clone(), w, m, depth));
+            }
+        }
+    }
+    let rows = par_map_with_progress("spray", &cases, |(mat, table, w, m, depth)| {
+        run_one_spray(*mat, table, *w, *m, *depth)
+    });
+    if let Some(dir) = Path::new(RESULT_PATH_SPRAY).parent() {
+        fs::create_dir_all(dir)?;
+    }
+    emit_scenario(RESULT_PATH_SPRAY, "spray", &rows, |r| {
+        println!(
+            "rust: {:>5} w={:>5.0} L={:>3.1} T0={:>7.0} -> beta={:.3} ({:.3} of ceiling) \
+             face_rad={:.2e} escape={:.2e} peak_p={:.3e} converged={}",
+            r.material,
+            r.w,
+            r.depth,
+            r.t0,
+            r.beta,
+            r.ceiling_share,
+            r.face_radiation_share,
+            r.escape_share,
+            r.peak_wall_pressure,
+            r.converged,
+        );
     })
 }
 
@@ -2407,6 +2544,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--mesh-convergence", cmd_mesh_convergence),
     ("--transport-resolution", cmd_transport_resolution),
     ("--transport-check", cmd_transport_check),
+    ("--spray", cmd_spray),
     ("--jupiter", cmd_jupiter),
     ("--heavyplate", cmd_heavyplate),
     ("--shape", cmd_shape),

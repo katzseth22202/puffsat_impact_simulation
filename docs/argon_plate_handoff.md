@@ -7,7 +7,8 @@ and `puffsats_for_datacenters` (child). Update it as the argon arm runs.
 
 **Status of every number here: provisional.** They come from a 1-D planar ideal-gas Lagrangian
 estimate with no ionization, radiation or rim spill (`todos/argon_plate/mix1d.py`, not
-committed), or from back-of-envelope algebra. None is a repository solve yet.
+committed), or from back-of-envelope algebra. The exception is the step 1 table, which is a
+repository solve (`make water-plate-argon-radiation`).
 
 ## The questions
 
@@ -54,6 +55,38 @@ toll applies, which takes water to about η_jet 0.64 (3.1 `m w`). This repositor
 returned 23-31% of the bond energy by 250 µs. That is preliminary. The study will count only the
 bonds that re-form while the gas still presses on the plate.
 
+**Step 1 solved (2026-10-05): the premixed pulse with real EOS and radiation.**
+`make water-plate-argon-radiation` runs the merged pulse (the necklace's target state) into the
+plate. It uses the repository's 1-D Lagrangian kernel with flux-limited radiation diffusion. Argon
+uses a new atomic H/O/Ar Saha table (NIST ionization energies) with TOPS gray opacities for the
+`k = 10` mixture. Water uses the equilibrium water table with TOPS water opacities. The footprint
+is 78.5 m^2, with 47 kg of PuffSat at 45.58 km/s and 33 kg at 65.13. The spray-cloud depth is
+swept from 0.5 to 8 m. All 20 cases converged.
+
+| | Argon 45.58 | Argon 65.13 | Water 45.58 | Water 65.13 |
+|---|---|---|---|---|
+| Starting temperature | 31-40 kK | 47-61 kK | 13.6-14.9 kK | 22-30 kK |
+| Share of overtake ceiling | 0.69-0.74 | 0.69-0.74 | 0.67-0.68 | 0.72-0.75 |
+| Radiation onto the face, share of pulse KE | **1.7-11%** | 1.5-8.7% | 0.17-0.74% | 0.42-2.7% |
+| Peak face pressure (0.5 m -> 8 m) | 763 -> 42 MPa | 1094 -> 60 MPa | 744 -> 43 MPa | 1148 -> 62 MPa |
+
+What it changes:
+
+- **The heat gate fails, and argon fails it by 10x more than water.** Steel plus a 5 µm film
+  take about 0.07%. Argon at 1 m depth puts 2.6% on the face, about 1.3 GJ per pulse. That is
+  roughly 130 kg of film per pulse at 10 MJ/kg, about three times the PuffSat's mass. Water at
+  0.24% needs about 12 kg. Argon runs hotter because it has fewer particles per kilogram, and
+  radiation grows as T^4.
+- **With real chemistry and radiation, argon's impulse advantage is small or gone.** Both sit near
+  0.7 of the ceiling, which is η_jet ≈ 0.58-0.68, below the parent's 0.775 requirement before any
+  rim spill. The 1-D ideal-gas bound of 0.87 was optimistic. The comparison also favours water:
+  argon here pays water's bond energy permanently, while the equilibrium water table returns it.
+- **Depth trade.** Deeper clouds radiate more and press less. 0.5 m exceeds the steel ladder at
+  65 km/s, so the working depth is about 1-2 m.
+- **Caveats.** 1-D planar, premixed, gray flux-limited diffusion. The face is a cold black
+  absorber with no vapor shielding. The repository's ablating-wall solver (Rung E) models the
+  film's vapor absorbing radiation before it reaches the steel, and is the next run.
+
 **Pulse size for 100 t of steel.** The gas spring sets this, not steel strength. With a preloaded,
 near-constant-force spring, `J ≈ 8 m_plate ν s`. This reproduces the child repo's 3.6 g peak on a
 2.5 m stroke. At 4 Hz and 2.5 m, J is 8 MN·s per pulse, enough to carry a vehicle of about 1,090 t
@@ -96,7 +129,14 @@ The limit scales with stroke × pulse rate.
   pulse energy reaches the face, not only by the readout.
 - Once the argon arm has solved values, replace the provisional η_jet ≈ 0.83 bound.
 
+- **Argon's case in `sec:plate_liquid_spray` needs a heat caveat.** The premixed solve puts about
+  10x more of the pulse onto the face for argon than for water. The 8-11% faster doubling the parent
+  credits argon with does not yet pay for that film.
+
 ## Open
+
+- Vapor shielding: rerun step 1 on the ablating wall. If shielding does not cut face radiation by
+  one to two decades, the film mass decides argon against water.
 
 - The necklace geometry: ring radius, sphere count, and the target delivered shape.
 - The fraction of pulse energy radiated onto the face, argon versus water. This decides film mass
