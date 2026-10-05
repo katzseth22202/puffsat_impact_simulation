@@ -290,3 +290,42 @@ runs ~0.06 higher and overstates the retention argument.
 _Avoid_: "recombination heating", "recombination heats the plasma" (both assert a non-monotonic
 `T(t)` this work does not find, and would be falsifiable as written); quoting 1.15 as if it held
 everywhere
+
+## Language — spray plate (water-injected and argon overtake plate)
+
+**Spray plate**:
+The overtake pusher plate whose vehicle sprays carried water or argon into the arriving PuffSat
+gas ahead of the face. One study with a water arm and an argon arm (ADR-0055).
+_Avoid_: "water plate" when the argon arm is meant; "Orion plate" (Orion sprayed nothing)
+
+**Injection ratio (`k`)**:
+Kilograms of sprayed water or argon per kilogram of arriving PuffSat, per pulse. It runs in the
+same direction as the tamped-nozzle **slug ratio** but is a separate quantity in a different
+geometry, and it carries none of that study's conventions.
+_Avoid_: "slug ratio" in this study; borrowing the tamped-nozzle `k ≈ 7` optimum
+
+**Overtake ceiling**:
+`J_max = m w (1 + √(1 + k))`, the impulse when all incoming kinetic energy leaves as backward
+exhaust at one speed. Results are quoted as a share of it.
+_Avoid_: confusing it with the **bounce ceiling** (an `e_eff` bound in the `f(v)` study)
+
+**Necklace charge**:
+A PuffSat delivered as a ring of spheres that are explosively shaped into the gas distribution
+that mixes best with the spray. The delivered shape is a design input chosen for mixing, not a
+formation process this study simulates.
+_Avoid_: "string of pearls" (reads as a line of charges along the flight axis)
+
+**Spray cloud**:
+The sprayed water or argon spread diffusely to at least the depth of the arriving pulse, so the
+PuffSat gas penetrates it and shares its energy.
+_Avoid_: "cushion", "layer" for the intended state
+
+**Cushion bounce**:
+The failure in which the spray is pooled into a thin, dense layer that acts as a wall. The PuffSat
+gas reflects off it while keeping most of its energy, and the impulse falls toward a bare bounce.
+_Avoid_: "bounce-back" alone (collides with the **bounce ceiling**)
+
+**Tapered plate**:
+A plate whose areal mass follows the delivered impulse profile, so every element receives the
+same velocity kick and the plate does not bend during the pulse.
+_Avoid_: "taper" alone (the **pulse shape** already has an *edge taper*)

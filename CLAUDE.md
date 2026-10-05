@@ -43,6 +43,9 @@ prepositioned, not a distributed injector; its provisional cold/dense EOS is
 scoped in [ADR-0043](docs/adr/0043-water-plate-cold-source-and-provisional-dense-eos.md).
 Its incoming momentum is a credit, and its injected
 water ratio and geometry must not inherit head-on-study conventions.
+Its **argon arm** (tapered 20 m plate, 100 t steel, `k = 10`, necklace charges) is scoped in
+[ADR-0055](docs/adr/0055-argon-arm-of-the-spray-plate.md); the running summary owed to the parent
+and child repos is [`docs/argon_plate_handoff.md`](docs/argon_plate_handoff.md).
 
 ## Architecture (settled)
 
