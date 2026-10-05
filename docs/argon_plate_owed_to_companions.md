@@ -25,6 +25,11 @@ cloud ahead of the plate. The working case is 100 t of plate, pulses at 4 Hz on 
   (P5).
 - **η_jet ≈ 0.58 (unmixed) to 0.68 (premixed)** for argon, against the paper's 0.775 (P11).
 - **The injection ratio k is a mission trade,** not a plate optimum (P13).
+- **Plate mass sets pulse size** through the gas spring (P14).
+
+The fluid models hold at these speeds (estimate). Atoms meet at ~10-130 eV, where momentum-transfer
+cross sections shrink to ~10^-20 m^2, yet the spray column, fixed by `k` and the pulse's areal mass,
+still gives each atom ~10^6 collisions. Only a micron-thick edge layer is non-continuum.
 
 ## Parent (`Balloon-Pulse-Propulsion`)
 
@@ -89,6 +94,14 @@ and the respray replaces only that.
 | Pitch, 150 µm | ~2-3 / ~0.2-0.7 kg | ~507 K, no coolant |
 | Oil, 2x consumption | ~12-18 / ~1-4 kg | ~300-490 K, no coolant |
 
+- **No metal interlayer** between film and steel (sourced, `docs/spray_plate_layer_properties.md`).
+  A copper alloy would cut the face's temperature spike to ~30%, but it yields on every 2.5 GPa
+  pulse (NASA's copper rocket liners thinned each cycle). Inconel 718 stays elastic but runs the
+  face 1.2-1.6x hotter.
+- **The cycle's order.** Within each 250 ms: an optional water spray to cool (~1.1 kg per pulse
+  drops the steel from ~507 K to ~417 K, if it wets), then the cold film respray, then nothing
+  liquid on the face when the next pulse arrives. Liquid left pooled acts as a wall (P7). Spray on
+  hot steel can float on its own vapor (Leidenfrost) and cool poorly.
 - **Wear mapping.** The child paper's near-infrared reflectance readout works only through films a
   few microns thick. A 150 µm film needs **thermal imaging** instead: map the face's temperature
   after each pulse, and respray where the film has thinned. This is how the parent already senses
@@ -152,7 +165,8 @@ A flared, bell-like wall did no better than a straight skirt. The skirt's wall p
 below the face's, so it can be thin, but it needs structural sizing and its own film and cooling.
 
 **Change.** Show the plate as a shallow cup: dish plus straight skirt. Note that it sits between
-the paper's "plate" and "nozzle".
+the paper's "plate" and "nozzle". The skirt's mass (~20 t per cm of wall) must come from the 100 t
+plate budget, or be added to it.
 
 ### P11. η_jet = 0.775 is not reached: `sec:water_injected_overtake`, `tab:mass_interest_growth`
 
@@ -165,7 +179,10 @@ parent's growth tables use 0.775 as a requirement.
 
 ### P12. Plate material: maraging steel at a 2.5 GPa face allowable
 
-Sourced (`docs/spray_plate_steel_face_limits.md`). The face is loaded in uniaxial strain, so its
+Sourced (`docs/spray_plate_steel_face_limits.md`). **A short pulse rescues the plate's bending,
+not its face.** The plate bends over tens of ms, so bending sees only the ~1 ms pulse's impulse.
+A stress wave crosses the steel in ~7 µs, though, so the face sees the full pressure. Orion's lesson
+that short pulses are survivable applies to the bulk structure. The face is loaded in uniaxial strain, so its
 limit is the Hugoniot elastic limit (measured HY-100 1.89 GPa; maraging 350 4.8 ± 2.0 GPa).
 In-plane prestress could raise it to ~3.5 GPa, but a 20 m, 4 cm plate buckles under 1-4 MPa of
 in-plane load, so a rim band cannot apply it. The bulk must stay below maraging's ~480 °C aging
@@ -184,6 +201,17 @@ to 0.21 w).
 **Change.** Say that k is set by the launch-mass budget's weighting of PuffSat against carried mass.
 The plate physics does not pick it.
 
+### P14. Plate mass sets pulse size through the gas spring: `sec:pusher_plate_mass_stroke`
+
+Estimate. With a preloaded gas spring (nearly constant force), the impulse one pulse can deliver is
+`J ≈ 8 m_plate ν s`. That reproduces the child paper's 3.6 g peak on a 2.5 m stroke. 100 t at 4 Hz
+and 2.5 m gives 8 MN·s per pulse, enough for a ~1,090 t vehicle at 3 g. At k = 10 that is ~47 kg of
+PuffSat plus ~470 kg of argon per pulse at 45.58 km/s. The bag's fibre mass is set by force times
+stroke (~80 MJ, ~70 kg of Vectran ideal, ~300 kg with margin), not by plate area, so bag pressure
+is a free choice.
+
+**Change.** Give the pulse-size relation, and note that plate area is free of the bag's mass.
+
 ## Child (`puffsats_for_datacenters`)
 
 The child carries summaries of the parent, so each item follows its parent change.
@@ -197,5 +225,6 @@ The child carries summaries of the parent, so each item follows its parent chang
 - **C4, `sec:plate_liquid_spray`.** Add the diffuse-cloud requirement with its depth and standoff
   (P7, P9). Quantify "argon runs hotter" as ~10x water's face radiation (P6). Give η_jet ~0.58-0.68
   (P11).
+- **C6, `sec:plate_pulse_rate`.** Add `J ≈ 8 m_plate ν s` (P14).
 - **C5, `sec:plate_pulse_rate`.** Survival is set by heat through the film and the 2.5 GPa face
   allowable, not by "tens of kilograms per square meter".
