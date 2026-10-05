@@ -144,10 +144,14 @@ confinement or upstream merging are the open options.
 
 ### P10. η_jet = 0.775 is not reached in any survivable 1-D configuration: `sec:water_injected_overtake`, `tab:mass_interest_growth`
 
-Provisional, pending the open levers. Before rim spill (1-D), the deep-cloud case delivered
-η_jet ~0.50 (argon) and ~0.45 (water). With rim spill (2-D, step 2b), the best survivable case
-on the 10 m plate is η_jet ~0.2. The premixed 1-D bound is ~0.65. The parent's growth tables are
-run at η_jet = 0.775 as a requirement.
+Provisional, pending the injection ratio k and premixing. On an open 10 m plate the best
+survivable case reaches η_jet ~0.33. Shaping the plate as a dish (d/D 0.10-0.15) with a 4 m
+straight skirt contains the spill and reaches **η_jet ~0.58** (argon, 45.58 km/s; ~0.56 water),
+within maraging's 2.5 GPa. The parent's growth tables are run at η_jet = 0.775 as a requirement.
+
+A paper consequence follows. The overtake plate becomes a shallow cup, between the paper's
+"plate" and "nozzle". `sec:water_injected_overtake` and `fig:plate_stack` should show the dish
+and skirt.
 
 **Change.** None yet. Step 3 will give the end-to-end number. Flagged now because the gap is large
 enough to move the doubling times.

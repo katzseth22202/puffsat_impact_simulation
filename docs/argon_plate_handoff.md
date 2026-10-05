@@ -276,6 +276,34 @@ exactly.
   suspect too. Under investigation.
 - **The peak relief is not grid-converged.** It moves 0.55 -> 0.37 at 2 m. The impulse is.
 
+**Containing the spill (2026-10-05): dish, skirt and flared wall in 2-D.** `--spray-2d-cup` puts
+the 4 m cloud 1 m off the 10 m plate, shaped as a dish, a cup with a straight skirt, or a cup with
+a flared wall. The kernel's new `PlateShape::Cup` puts a wall on the dish rim, and the axial force
+sums every vertical gas-solid contact. Each shape runs free and is compared to the confined flat
+no-gap run, and the ratios scale the 1-D real-physics 4 m column.
+
+| Shape | Impulse vs 1-D | Argon η_jet (45.58) | Water peak (65.13) | Added steel |
+|---|---|---|---|---|
+| open plate | 0.77 | 0.33 | 2.1 GPa | none |
+| dish 0.10 / 0.15 | 0.92 / 0.97 | 0.45 / 0.49 | 2.5 / 2.3 | none |
+| straight skirt 2 / 4 / 8 m | 0.96 / 1.02 / 1.04 | 0.48 / 0.53 / 0.55 | 2.1 | 9.9 / 19.7 / 39.5 t per cm |
+| flare 0.3 / 0.6, 4 m | 1.01 / 0.98 | 0.53 / 0.51 | 2.1 | 21.8 / 25.8 t per cm |
+| **dish 0.10 + skirt 4 m** | **1.07** (2x grid 1.06) | **0.58** | 2.5 (2x grid **1.8**) | 19.7 t per cm |
+| dish 0.10 + flare 0.3, 4 m | 1.07 | 0.57 | 2.5 | 21.8 t per cm |
+
+- **Containment doubles η_jet, 0.33 -> ~0.58.** Spill was the largest loss, and the walls recover
+  it. With the gap, a contained column now beats the 1-D column (x1.07), because the merge
+  happens before the plate.
+- **The dish is the best value:** η_jet 0.49 at d/D 0.15 for no added steel.
+- **A straight skirt beats a flare.** Keeping the gas in matters, and turning it does not.
+- **The dish focuses the peak ~18% higher,** but its relief tightens on the finer grid
+  (0.90 -> 0.67). Water at 65 km/s sits near 1.8 GPa, under maraging's 2.5 GPa.
+- **A 4 m skirt costs ~20 t per cm of wall thickness,** a real share of the 100 t. The wall sees
+  far lower pressure than the face, so it can be thinner. It needs structural sizing, and film and
+  cooling of its own.
+- The paper's η_jet = 0.775 is still not met. The remaining levers are the injection ratio k,
+  premixing, and the radiation loss.
+
 **Steel temperature over a push (2026-10-05): ablative film on maraging, propellant-cooled.**
 `make water-plate-plate-thermal` drives the coated-wall solver (`walled_nozzle/wall_layers.py`,
 extended with a substrate, between-pulse cooling and a cold respray) for 1,500 pulses at 4 Hz.

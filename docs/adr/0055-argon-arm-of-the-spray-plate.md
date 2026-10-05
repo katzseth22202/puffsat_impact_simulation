@@ -89,6 +89,9 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
   (4 m cloud) to 0.30 (16 m). Lateral relief arrives only for clouds deeper than ~8 m. **No cloud
   depth gives both a survivable peak and a useful impulse in this geometry.** The best is argon at
   8 m and 45.58 km/s: 0.64 GPa at η_jet ~0.2. The design point of step 2a' is withdrawn.
+- Steps 2c-2d: a 1-2 m standoff cuts the peak 25-45%, and **containing the spill doubles η_jet**.
+  A dish (d/D 0.10-0.15) plus a 4 m straight skirt reaches ~0.58 (argon, 45.58 km/s), against
+  0.33 open. A flare does no better than a straight skirt. The skirt costs ~20 t per cm of wall.
 - Apart from those solves, every number above is a provisional estimate from 1-D ideal-gas or back-of-envelope work. None
   comes from a repository solve, and each must be replaced as the arm runs. The summary for the
   companion repos is [`argon_plate_handoff.md`](../argon_plate_handoff.md).

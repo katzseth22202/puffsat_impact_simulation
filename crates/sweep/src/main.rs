@@ -2044,6 +2044,140 @@ fn cmd_spray_2d_standoff(_args: &[String]) -> Result<(), Box<dyn std::error::Err
     })
 }
 
+// ---- Spray plate, step 2d: containing the spill with a dish, skirt or flared wall (ADR-0055) ----
+//
+// The 4 m cloud, 1 m off the floor, on the 10 m plate shaped as a dish, a cup with a straight
+// skirt, or a cup with a flared wall. Each runs free and is compared to the confined flat no-gap
+// run (the 2-D twin of the 1-D column); the ratios scale step 2a's real-physics 4 m numbers.
+// Lengths in units of the 4 m pulse. The domain is 4.5 units wide so a flared lip fits; the cell
+// size is the step 2b production size, 0.03125.
+
+const SPRAY_CUP_DR: f64 = 0.03125;
+const SPRAY_CUP_NR: usize = 144; // 4.5 units
+const SPRAY_CUP_NZ: usize = 192; // 6 units
+/// Wall thickness in the 2-D model: four cells, so ghost cells always have solid behind them.
+const SPRAY_CUP_WALL: f64 = 4.0 * SPRAY_CUP_DR;
+const RESULT_PATH_SPRAY_CUP: &str = "data/results/water_plate/spray_2d_cup.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SprayCupRecord {
+    shape: String,
+    refine: usize,
+    impulse_vs_1d: f64,
+    peak_vs_1d: f64,
+    /// Steel added by the wall per centimetre of wall thickness [t], at 7850 kg/m^3.
+    wall_tonnes_per_cm: f64,
+}
+
+/// `(label, d/D, wall height [m], flare)`; a zero height is the plain dish.
+type CupShape = (&'static str, f64, f64, f64);
+
+const SPRAY_CUP_SHAPES: [CupShape; 10] = [
+    ("open plate", 0.0, 0.0, 0.0),
+    ("dish 0.10", 0.10, 0.0, 0.0),
+    ("dish 0.15", 0.15, 0.0, 0.0),
+    ("skirt 2 m", 0.0, 2.0, 0.0),
+    ("skirt 4 m", 0.0, 4.0, 0.0),
+    ("skirt 8 m", 0.0, 8.0, 0.0),
+    ("flare 0.3, 4 m", 0.0, 4.0, 0.3),
+    ("flare 0.6, 4 m", 0.0, 4.0, 0.6),
+    ("dish 0.10 + skirt 4 m", 0.10, 4.0, 0.0),
+    ("dish 0.10 + flare 0.3, 4 m", 0.10, 4.0, 0.3),
+];
+
+fn spray_cup_case(shape: CupShape, refine: usize) -> SprayCupRecord {
+    let (label, d_over_d, height_m, flare) = shape;
+    let unit = SPRAY_2D_PULSE_M;
+    let r_plate = 10.0 / unit;
+    let plate_shape = if height_m > 0.0 {
+        PlateShape::Cup {
+            d_over_d,
+            skirt_height: height_m / unit,
+            flare,
+            thickness: SPRAY_CUP_WALL,
+        }
+    } else {
+        PlateShape::Dish { d_over_d }
+    };
+    let base = SlugConfig {
+        gamma: SPRAY_2D_GAMMA,
+        mach: SPRAY_2D_MACH,
+        r_foot: 5.0 / unit,
+        length: 1.0,
+        r_plate,
+        r_max: SPRAY_CUP_NR as f64 * SPRAY_CUP_DR,
+        z_max: SPRAY_CUP_NZ as f64 * SPRAY_CUP_DR,
+        nr: refine * SPRAY_CUP_NR,
+        nz: refine * SPRAY_CUP_NZ,
+        confined: false,
+        shape: plate_shape,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    };
+    let spray = |standoff: f64| SprayCloud {
+        depth: 1.0,
+        mass_ratio: SPRAY_K,
+        standoff,
+    };
+    let free = run_spray_bounce(&base, spray(1.0 / unit));
+    let reference = run_spray_bounce(
+        &SlugConfig {
+            r_foot: base.r_max,
+            r_plate: base.r_max,
+            nr: 8,
+            confined: true,
+            shape: PlateShape::FlatGridAligned,
+            ..base
+        },
+        spray(0.0),
+    );
+    let r1 = 10.0;
+    let r2 = r1 + flare * height_m;
+    let wall_area = std::f64::consts::PI * (r1 + r2) * height_m * (1.0 + flare * flare).sqrt();
+    SprayCupRecord {
+        shape: label.to_string(),
+        refine,
+        impulse_vs_1d: free.restitution_ratio() / reference.restitution_ratio(),
+        peak_vs_1d: free.peak_local_pressure / reference.peak_local_pressure,
+        wall_tonnes_per_cm: wall_area * 0.01 * 7850.0 / 1000.0,
+    }
+}
+
+fn cmd_spray_2d_cup(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cases: Vec<(CupShape, usize)> = SPRAY_CUP_SHAPES.iter().map(|&s| (s, 1)).collect();
+    cases.push((SPRAY_CUP_SHAPES[0], 2));
+    cases.push((SPRAY_CUP_SHAPES[8], 2));
+    let rows = par_map_with_progress("spray-2d-cup", &cases, |&(shape, refine)| {
+        spray_cup_case(shape, refine)
+    });
+    let columns: Vec<SprayMixRecord> = fs::read_to_string(RESULT_PATH_SPRAY_LEVERS)?
+        .lines()
+        .map(serde_json::from_str::<SprayMixRecord>)
+        .collect::<Result<_, _>>()?;
+    emit_scenario(RESULT_PATH_SPRAY_CUP, "spray-2d-cup", &rows, |r| {
+        println!(
+            "rust: {:<28} x{} -> impulse x{:.3} peak x{:.3} wall {:>5.1} t/cm",
+            r.shape, r.refine, r.impulse_vs_1d, r.peak_vs_1d, r.wall_tonnes_per_cm,
+        );
+        if r.refine == 1 {
+            for c in columns
+                .iter()
+                .filter(|c| c.depth == 4.0 && c.pulse_length == 4.0)
+            {
+                let share = c.ceiling_share * r.impulse_vs_1d;
+                println!(
+                    "rust:     {:>5} w={:>5.0}: share {:.3} eta_jet {:.3} peak {:.2e} Pa",
+                    c.material,
+                    c.w,
+                    share,
+                    (share * (1.0 + (1.0 + SPRAY_K).sqrt()) - 1.0) / (1.0 + SPRAY_K).sqrt(),
+                    c.peak_wall_pressure * r.peak_vs_1d,
+                );
+            }
+        }
+    })
+}
+
 // ---- Heavy-plate 16–28 km/s scenario sweep (special scenario, design §12.1 / ADR-0027) ----------
 //
 // A 100 kg pulse on a tripled 30 m-diameter (`R = 15 m`) pusher plate of mass `≤ 40 t`, swept
@@ -3522,6 +3656,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--mesh-convergence", cmd_mesh_convergence),
     ("--transport-resolution", cmd_transport_resolution),
     ("--transport-check", cmd_transport_check),
+    ("--spray-2d-cup", cmd_spray_2d_cup),
     ("--spray-2d-standoff", cmd_spray_2d_standoff),
     ("--spray-standoff", cmd_spray_standoff),
     ("--spray-2d", cmd_spray_2d),
