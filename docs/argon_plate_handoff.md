@@ -122,8 +122,10 @@ Film per pulse at 1 m depth, Q* = 5 MJ/kg:
   to ~7 mm.
 - A stopped fragment needs ~2.5 MJ/kg to boil, against ~85 MJ/kg around it.
 
-The requirement is that **the largest surviving PuffSat fragment is at most about 1 mm**, which
-keeps a 2x margin. The parent caps fragments by foam-grid spacing, so that spacing must meet this.
+The requirement is that **the largest surviving fragment has a radius of at most 1 mm**, which
+stops it with 2x margin even without breakup. The parent's foam grid (~25 mm^2 of water per strand)
+caps fragments near 2.5 mm radius. That passes with ~2.8x margin if breakup is credited and misses
+by ~1.1x if not. Carried to the parent in `docs/argon_plate_owed_to_companions.md` (P1).
 Droplets that stop deep in the argon also help mixing, because they deposit there.
 
 **The necklace is the parent's ring plus hub bag** (`templateArxiv.tex:533-547`). The parent notes
@@ -163,6 +165,10 @@ The limit scales with stroke × pulse rate.
 
 ## Changes owed to the paper and the child repo
 
+The full, copy-ready list is [`argon_plate_owed_to_companions.md`](argon_plate_owed_to_companions.md).
+The short form follows.
+
+
 - `sec:plate_construction` should say the plate is **tapered** to the impulse profile, and why.
   Precise aim is a second reason.
 - `sec:plate_liquid_spray` should state the **spray-cloud** requirement and the cushion-bounce
@@ -182,7 +188,12 @@ The limit scales with stroke × pulse rate.
 
 - The vapor opacity. κ_vapor moves argon's film between 6 and 27 kg per pulse, and only the 200
   and 1,500 values have a source. The EUV absorption of the film's vapor is the number to pin.
-- Step 2: mixing quality, with two materials and radiation.
+- Step 2a: mixing quality in 1-D. Stratified, interleaved and premixed layouts, with two materials
+  and radiation together, which needs the kernel's radiation step to read each cell's own table.
+- Step 2b: rim spill for the delivered disk in 2-D, with the areal mass matched to the taper.
+- Step 3: **how good the bounce is**, end to end. Combine 2a's mixing with 2b's capture into one
+  delivered impulse per PuffSat, quoted as the parent's η_jet. Compare it with this repository's
+  bare-plate fudge factor `f(v)` at the same speeds.
 
 - The necklace geometry: ring radius, sphere count, and the target delivered shape.
 - The fraction of pulse energy radiated onto the face, argon versus water. This decides film mass
