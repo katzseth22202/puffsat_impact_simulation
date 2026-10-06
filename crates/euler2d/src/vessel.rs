@@ -1,0 +1,191 @@
+//! An axisymmetric closed chamber, a rocket-engine-like vessel, as an immersed boundary.
+//!
+//! The chamber is fluid where `r < r_w(z)`, for `0 <= z <= z_hi`. The port face is the grid's
+//! reflecting `z = 0` boundary. The throat at `z_hi` opens onto the grid's transmissive `z`-hi
+//! boundary. The wall contour is:
+//!
+//! - a cylinder of radius `r_c` for `0 <= z <= z_c`;
+//! - a convergence from `r_c` to the throat radius `r_t` over `z_c <= z <= z_hi`, with
+//!   `r_w = r_t + (r_c - r_t) g(s)`, `s = (z - z_c)/(z_hi - z_c)`, and
+//!   `g(s) = (1 - curve)(1 - s) + curve sqrt(1 - s^2)`.
+//!
+//! `curve = 0` is a straight cone. `curve = 1` is an elliptical (convex, bulging) nose, which turns
+//! the flow gradually and keeps the wall nearly parallel to the axis until close to the throat.
+//! `z_c = 0` drops the cylinder, leaving a pure cone or a curved cone.
+//!
+//! The solid is filled by the same ghost-cell mirror as the plate (ADR-0023 amendment). Each solid
+//! cell takes the state at its mirror image across the wall, with the wall-normal velocity
+//! reversed.
+
+/// The chamber contour.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Vessel {
+    /// Cylinder radius [m].
+    pub r_c: f64,
+    /// End of the cylinder [m] (0 for no cylinder).
+    pub z_c: f64,
+    /// Throat plane [m].
+    pub z_hi: f64,
+    /// Throat radius [m].
+    pub r_t: f64,
+    /// 0 = straight cone, 1 = elliptical nose.
+    pub curve: f64,
+}
+
+impl Vessel {
+    /// Wall radius `r_w(z)` [m].
+    #[must_use]
+    pub fn r_wall(&self, z: f64) -> f64 {
+        if z <= self.z_c {
+            return self.r_c;
+        }
+        let s = ((z - self.z_c) / (self.z_hi - self.z_c)).clamp(0.0, 1.0);
+        let g = (1.0 - self.curve) * (1.0 - s) + self.curve * (1.0 - s * s).sqrt();
+        self.r_t + (self.r_c - self.r_t) * g
+    }
+
+    /// `dr_w/dz` by central difference.
+    #[must_use]
+    pub fn slope(&self, z: f64) -> f64 {
+        let h = 1e-4 * self.z_hi;
+        (self.r_wall(z + h) - self.r_wall(z - h)) / (2.0 * h)
+    }
+
+    /// Whether `(z, r)` is wall material.
+    #[must_use]
+    pub fn is_solid(&self, z: f64, r: f64) -> bool {
+        r > self.r_wall(z)
+    }
+
+    /// Signed distance to the wall [m], positive in the fluid (linearized about the local slope).
+    #[must_use]
+    pub fn signed_distance(&self, z: f64, r: f64) -> f64 {
+        let s = self.slope(z);
+        (self.r_wall(z) - r) / (1.0 + s * s).sqrt()
+    }
+
+    /// Unit wall normal `(n_z, n_r)` pointing into the fluid.
+    #[must_use]
+    pub fn normal(&self, z: f64) -> (f64, f64) {
+        let s = self.slope(z);
+        let inv = 1.0 / (1.0 + s * s).sqrt();
+        (s * inv, -inv)
+    }
+
+    /// Chamber volume [m^3] by midpoint quadrature.
+    #[must_use]
+    pub fn volume(&self) -> f64 {
+        let n = 4000;
+        let dz = self.z_hi / f64::from(n);
+        (0..n)
+            .map(|k| {
+                let r = self.r_wall((f64::from(k) + 0.5) * dz);
+                std::f64::consts::PI * r * r * dz
+            })
+            .sum()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cylinder_and_cone_volume_matches_closed_form() {
+        let v = Vessel {
+            r_c: 1.0,
+            z_c: 2.0,
+            z_hi: 3.0,
+            r_t: 0.2,
+            curve: 0.0,
+        };
+        let cone = std::f64::consts::PI / 3.0 * 1.0 * (1.0 + 0.2 + 0.04);
+        let expected = std::f64::consts::PI * 2.0 + cone;
+        assert!((v.volume() - expected).abs() / expected < 1e-4);
+    }
+
+    // SAFE: test radii and spacings are small positive numbers, so the cell count fits a usize.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    fn chamber_grid(v: Vessel, n: usize, zhi_reflect: bool) -> crate::kernel::Grid2D {
+        use crate::kernel::{Bc, Grid2D};
+        let dz = v.z_hi / n as f64;
+        let nr = (v.r_c / dz).ceil() as usize + 3;
+        let mut g = Grid2D::new(n, nr, dz, dz, 1.4);
+        g.set_axisymmetric(true);
+        g.bc_zlo = Bc::Reflect;
+        g.bc_zhi = if zhi_reflect {
+            Bc::Reflect
+        } else {
+            Bc::Transmissive
+        };
+        g.bc_rlo = Bc::Reflect;
+        g.bc_rhi = Bc::Reflect;
+        g.set_vessel(Some(v));
+        g
+    }
+
+    #[test]
+    fn gas_at_rest_stays_at_rest_in_a_curved_chamber() {
+        use crate::state::Prim;
+        let v = Vessel {
+            r_c: 1.0,
+            z_c: 0.5,
+            z_hi: 2.0,
+            r_t: 0.2,
+            curve: 0.6,
+        };
+        let mut g = chamber_grid(v, 80, true);
+        g.init(|_, _| Prim::new(1.0, 0.0, 0.0, 1.0));
+        g.run_to(0.5);
+        for (_, _, p) in g.vessel_wall_pressures() {
+            assert!((p - 1.0).abs() < 1e-10, "wall pressure drifted to {p}");
+        }
+    }
+
+    #[test]
+    fn closed_cylinder_blast_keeps_its_mass() {
+        use crate::state::Prim;
+        // A cylinder closed at both ends: z_c = z_hi makes r_w = r_c everywhere.
+        let v = Vessel {
+            r_c: 1.0,
+            z_c: 2.0,
+            z_hi: 2.0,
+            r_t: 1.0,
+            curve: 0.0,
+        };
+        let mut g = chamber_grid(v, 80, true);
+        g.init(|iz, ir| {
+            let (z, r) = ((iz as f64 + 0.5) * 0.025, (ir as f64 + 0.5) * 0.025);
+            let hot = (z - 1.0).hypot(r) < 0.1;
+            Prim::new(1.0, 0.0, 0.0, if hot { 100.0 } else { 1.0 })
+        });
+        let mass = |g: &crate::kernel::Grid2D| -> f64 {
+            let mut m = 0.0;
+            for iz in 0..g.nz() {
+                for ir in 0..g.nr() {
+                    if !v.is_solid((iz as f64 + 0.5) * 0.025, (ir as f64 + 0.5) * 0.025) {
+                        m += g.prim(iz, ir).rho * g.cell_volume(ir);
+                    }
+                }
+            }
+            m
+        };
+        let m0 = mass(&g);
+        g.run_to(0.6);
+        assert!((mass(&g) - m0).abs() / m0 < 0.02);
+    }
+
+    #[test]
+    fn normal_points_inward_on_the_cylinder() {
+        let v = Vessel {
+            r_c: 1.0,
+            z_c: 2.0,
+            z_hi: 3.0,
+            r_t: 0.2,
+            curve: 1.0,
+        };
+        let (nz, nr) = v.normal(1.0);
+        assert!(nz.abs() < 1e-9 && (nr + 1.0).abs() < 1e-9);
+        assert!(v.signed_distance(1.0, 0.9) > 0.0 && v.is_solid(1.0, 1.1));
+    }
+}

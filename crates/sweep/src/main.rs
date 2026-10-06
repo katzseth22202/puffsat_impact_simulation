@@ -1957,6 +1957,401 @@ fn cmd_spray_standoff(_args: &[String]) -> Result<(), Box<dyn std::error::Error>
     })
 }
 
+// ---- Walled nozzle: the blast inside the 20 m^3 near-term chamber (wall spike and rise) -----
+//
+// A 1-D spherical Euler run (`euler2d::sphere`) of the rod's energy released at the chamber's
+// centre. It records the wall-pressure history: the reflected spike, the rise to the
+// quasi-static pressure, and the reverberations. Fills: a dry uniform charge, or the parent's
+// liquid share as an equilibrium heavy-gas shell near the wall (drops of 0.5-1 mm shatter and
+// follow the gas within microseconds). Delivery: one charge, two halves T_b/2 apart, or the
+// 1/4-1/2-1/4 train. The gas is γ-law, so pressures are read against the run's own
+// quasi-static pressure and scaled to the solved 496 / 818 bar in Python
+// (`puffsat.walled_nozzle.chamber_blast`).
+
+const BLAST_RADIUS: f64 = 1.684;
+const BLAST_CELLS: usize = 1684;
+const BLAST_ENERGY: f64 = 0.5 * 2.5 * 75_000.0 * 75_000.0;
+const BLAST_ROD_PLUG_KG: f64 = 6.9;
+const BLAST_DEPOSIT_RADIUS: f64 = 0.15;
+const BLAST_FILL_PA: f64 = 5.0e5;
+const BLAST_T_END: f64 = 6.0e-3;
+const BLAST_BIN: f64 = 0.5e-6;
+/// Half the breathing period of the parent's layups (1.10-1.11 ms, `chamber_fatigue.py`).
+const BLAST_HALF_PERIOD: f64 = 0.553e-3;
+const RESULT_PATH_CHAMBER_BLAST: &str = "data/results/walled_nozzle/near_term/chamber_blast.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct ChamberBlastRecord {
+    chamber: String,
+    gamma: f64,
+    fill: String,
+    liquid_fraction: f64,
+    shell_m: f64,
+    graded: bool,
+    delivery: String,
+    peak_pa: f64,
+    first_arrival_s: f64,
+    /// Bin-max wall pressure every `BLAST_BIN`.
+    time_s: Vec<f64>,
+    pressure_pa: Vec<f64>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct BlastCase {
+    chamber: &'static str,
+    charge_kg: f64,
+    gamma: f64,
+    liquid_fraction: f64,
+    shell_m: f64,
+    graded: bool,
+    delivery: &'static str,
+}
+
+fn chamber_blast_one(c: BlastCase) -> ChamberBlastRecord {
+    let volume = 4.0 / 3.0 * std::f64::consts::PI * BLAST_RADIUS.powi(3);
+    let gas_rho = c.charge_kg * (1.0 - c.liquid_fraction) / volume;
+    let inner = BLAST_RADIUS - c.shell_m;
+    let shell_volume = volume - 4.0 / 3.0 * std::f64::consts::PI * inner.max(0.0).powi(3);
+    let liquid_kg = c.charge_kg * c.liquid_fraction;
+    // Graded: liquid density rises linearly from zero at the shell's inner edge to the wall.
+    let graded_norm = if c.graded && c.shell_m > 0.0 {
+        let n = 400;
+        let dr = c.shell_m / f64::from(n);
+        (0..n)
+            .map(|k| {
+                let r = inner + (f64::from(k) + 0.5) * dr;
+                4.0 * std::f64::consts::PI * r * r * dr * (r - inner) / c.shell_m
+            })
+            .sum::<f64>()
+    } else {
+        1.0
+    };
+    let fill = move |r: f64| {
+        let liquid = if c.liquid_fraction > 0.0 && r >= inner {
+            if c.graded {
+                liquid_kg * (r - inner) / c.shell_m / graded_norm
+            } else {
+                liquid_kg / shell_volume
+            }
+        } else {
+            0.0
+        };
+        (gas_rho + liquid, 0.0, BLAST_FILL_PA)
+    };
+    let mut sphere = euler2d::sphere::Sphere1D::new(BLAST_CELLS, BLAST_RADIUS, c.gamma, fill);
+    let pieces: &[(f64, f64)] = match c.delivery {
+        "split 2" => &[(0.5, 0.0), (0.5, BLAST_HALF_PERIOD)],
+        "train 3" => &[
+            (0.25, 0.0),
+            (0.5, BLAST_HALF_PERIOD),
+            (0.25, 2.0 * BLAST_HALF_PERIOD),
+        ],
+        _ => &[(1.0, 0.0)],
+    };
+    let mut bins: Vec<f64> = Vec::new();
+    let mut first_arrival = f64::NAN;
+    let mut t = 0.0;
+    for (k, &(share, at)) in pieces.iter().enumerate() {
+        if at > t {
+            t = sphere.run_to(t, at, |time, p| {
+                record_bin(&mut bins, &mut first_arrival, time, p)
+            });
+        }
+        sphere.deposit(
+            BLAST_ENERGY * share,
+            BLAST_ROD_PLUG_KG * share,
+            BLAST_DEPOSIT_RADIUS,
+        );
+        let next = pieces.get(k + 1).map_or(BLAST_T_END, |p| p.1);
+        t = sphere.run_to(t, next, |time, p| {
+            record_bin(&mut bins, &mut first_arrival, time, p)
+        });
+    }
+    let time_s = (0..bins.len())
+        .map(|i| (i as f64 + 0.5) * BLAST_BIN)
+        .collect();
+    ChamberBlastRecord {
+        chamber: c.chamber.to_string(),
+        gamma: c.gamma,
+        fill: if c.liquid_fraction > 0.0 {
+            "liquid shell"
+        } else {
+            "dry"
+        }
+        .to_string(),
+        liquid_fraction: c.liquid_fraction,
+        shell_m: c.shell_m,
+        graded: c.graded,
+        delivery: c.delivery.to_string(),
+        peak_pa: bins.iter().copied().fold(0.0, f64::max),
+        first_arrival_s: first_arrival,
+        time_s,
+        pressure_pa: bins,
+    }
+}
+
+/// Keep the maximum wall pressure in each `BLAST_BIN`, and the first time it doubles the fill.
+fn record_bin(bins: &mut Vec<f64>, first: &mut f64, time: f64, p: f64) {
+    // SAFE: time is non-negative and bounded by BLAST_T_END, so the bin index is small.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let i = (time / BLAST_BIN) as usize;
+    if bins.len() <= i {
+        bins.resize(i + 1, 0.0);
+    }
+    bins[i] = bins[i].max(p);
+    if first.is_nan() && p > 2.0 * BLAST_FILL_PA {
+        *first = time;
+    }
+}
+
+fn cmd_chamber_blast(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cases = Vec::new();
+    for (chamber, charge_kg) in [("methane 7000 K", 68.763), ("hydrogen 5500 K", 59.913)] {
+        for gamma in [1.2, 1.4] {
+            let fills: [(f64, f64, bool); 6] = [
+                (0.0, 0.0, false),
+                (0.4, 0.4, false),
+                (0.4, 0.8, false),
+                (0.7, 0.4, false),
+                (0.7, 0.8, false),
+                (0.7, 0.8, true),
+            ];
+            for (liquid_fraction, shell_m, graded) in fills {
+                for delivery in ["single", "split 2", "train 3"] {
+                    cases.push(BlastCase {
+                        chamber,
+                        charge_kg,
+                        gamma,
+                        liquid_fraction,
+                        shell_m,
+                        graded,
+                        delivery,
+                    });
+                }
+            }
+        }
+    }
+    let rows = par_map_with_progress("chamber-blast", &cases, |c| chamber_blast_one(*c));
+    if let Some(dir) = Path::new(RESULT_PATH_CHAMBER_BLAST).parent() {
+        fs::create_dir_all(dir)?;
+    }
+    emit_scenario(RESULT_PATH_CHAMBER_BLAST, "chamber-blast", &rows, |r| {
+        println!(
+            "rust: {:>15} g={:.1} {:>12} liq={:.1} shell={:.1} graded={} {:>8} -> peak={:.2e} Pa \
+             arrival={:.0} us",
+            r.chamber,
+            r.gamma,
+            r.fill,
+            r.liquid_fraction,
+            r.shell_m,
+            r.graded,
+            r.delivery,
+            r.peak_pa,
+            r.first_arrival_s * 1e6,
+        );
+    })
+}
+
+// ---- Walled nozzle: the blast in a rocket-shaped 20 m^3 chamber (2-D axisymmetric) ----------
+//
+// The sphere is the worst case: the blast reaches the whole wall at once and refocuses at the
+// centre. A rocket chamber spreads the arrival over its wall. The question is whether its
+// convergence focuses the shock instead. Four 20 m^3 contours (`euler2d::vessel`), each with the
+// rod's energy released one port-face radius inside the port. The wall pressure is recorded along
+// the contour and the port face.
+
+const VESSEL_THROAT_R: f64 = 0.2178; // sqrt(0.149 m^2 / pi)
+const VESSEL_VOLUME: f64 = 20.0;
+const VESSEL_T_END: f64 = 4.0e-3;
+const VESSEL_BIN: f64 = 2.0e-6;
+const RESULT_PATH_VESSEL_BLAST: &str = "data/results/walled_nozzle/near_term/vessel_blast.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct VesselBlastRecord {
+    shape: String,
+    chamber: String,
+    gamma: f64,
+    cell_m: f64,
+    r_c: f64,
+    z_c: f64,
+    z_hi: f64,
+    curve: f64,
+    deposit_z: f64,
+    /// Station positions along the wall: side wall rows, then the port face.
+    station_z: Vec<f64>,
+    station_r: Vec<f64>,
+    time_s: Vec<f64>,
+    /// `pressure_pa[bin][station]`, the bin maximum.
+    pressure_pa: Vec<Vec<f64>>,
+}
+
+/// Solve the free length (cylinder end `z_c`, or `z_hi` with no cylinder) for 20 m^3.
+fn vessel_for_volume(r_c: f64, nose: Option<f64>, curve: f64) -> euler2d::vessel::Vessel {
+    let make = |len: f64| match nose {
+        Some(n) => euler2d::vessel::Vessel {
+            r_c,
+            z_c: len,
+            z_hi: len + n,
+            r_t: VESSEL_THROAT_R,
+            curve,
+        },
+        None => euler2d::vessel::Vessel {
+            r_c,
+            z_c: 0.0,
+            z_hi: len,
+            r_t: VESSEL_THROAT_R,
+            curve,
+        },
+    };
+    let (mut lo, mut hi) = (0.0, 20.0);
+    for _ in 0..80 {
+        let mid = 0.5 * (lo + hi);
+        if make(mid).volume() < VESSEL_VOLUME {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    make(0.5 * (lo + hi))
+}
+
+#[allow(clippy::too_many_lines)]
+fn vessel_blast_one(
+    shape: &str,
+    vessel: euler2d::vessel::Vessel,
+    chamber: &str,
+    charge_kg: f64,
+    gamma: f64,
+    cell: f64,
+) -> VesselBlastRecord {
+    use euler2d::kernel::{Bc, Grid2D};
+    use euler2d::state::Prim;
+    // SAFE: chamber lengths and the cell size are positive and small, so the counts fit a usize.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let (nz, nr) = (
+        (vessel.z_hi / cell).ceil() as usize,
+        (vessel.r_c / cell).ceil() as usize + 3,
+    );
+    let mut g = Grid2D::new(nz, nr, cell, cell, gamma);
+    g.set_axisymmetric(true);
+    g.bc_zlo = Bc::Reflect;
+    g.bc_zhi = Bc::Transmissive;
+    g.bc_rlo = Bc::Reflect;
+    g.bc_rhi = Bc::Reflect;
+    g.set_vessel(Some(vessel));
+    let rho_fill = charge_kg / VESSEL_VOLUME;
+    let deposit_z = vessel.r_c.min(0.5 * vessel.z_hi);
+    // Deposit over the cells whose centres fall inside the sphere, normalised by their actual
+    // volume, so the energy and mass added are exact whatever the grid.
+    let inside = |iz: usize, ir: usize| {
+        let (z, r) = ((iz as f64 + 0.5) * cell, (ir as f64 + 0.5) * cell);
+        (z - deposit_z).hypot(r) < BLAST_DEPOSIT_RADIUS
+    };
+    let v_dep: f64 = (0..nz)
+        .flat_map(|iz| (0..nr).map(move |ir| (iz, ir)))
+        .filter(|&(iz, ir)| inside(iz, ir))
+        .map(|(_, ir)| 2.0 * std::f64::consts::PI * (ir as f64 + 0.5) * cell * cell * cell)
+        .sum();
+    g.init(|iz, ir| {
+        if inside(iz, ir) {
+            Prim::new(
+                rho_fill + BLAST_ROD_PLUG_KG / v_dep,
+                0.0,
+                0.0,
+                BLAST_FILL_PA + (gamma - 1.0) * BLAST_ENERGY / v_dep,
+            )
+        } else {
+            Prim::new(rho_fill, 0.0, 0.0, BLAST_FILL_PA)
+        }
+    });
+    let stations = g.vessel_wall_pressures();
+    let keep: Vec<usize> = (0..stations.len()).step_by(2).collect();
+    let mut bins: Vec<Vec<f64>> = Vec::new();
+    let mut t = 0.0;
+    while t < VESSEL_T_END {
+        let dt = g.stable_dt().min(VESSEL_T_END - t);
+        g.step(dt);
+        t += dt;
+        // SAFE: t is non-negative and bounded by VESSEL_T_END.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let b = (t / VESSEL_BIN) as usize;
+        if bins.len() <= b {
+            bins.resize(b + 1, vec![0.0; keep.len()]);
+        }
+        let walls = g.vessel_wall_pressures();
+        for (j, &k) in keep.iter().enumerate() {
+            bins[b][j] = bins[b][j].max(walls[k].2);
+        }
+    }
+    VesselBlastRecord {
+        shape: shape.to_string(),
+        chamber: chamber.to_string(),
+        gamma,
+        cell_m: cell,
+        r_c: vessel.r_c,
+        z_c: vessel.z_c,
+        z_hi: vessel.z_hi,
+        curve: vessel.curve,
+        deposit_z,
+        station_z: keep.iter().map(|&k| stations[k].0).collect(),
+        station_r: keep.iter().map(|&k| stations[k].1).collect(),
+        time_s: (0..bins.len())
+            .map(|i| (i as f64 + 0.5) * VESSEL_BIN)
+            .collect(),
+        pressure_pa: bins,
+    }
+}
+
+fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let shapes = [
+        (
+            "cylinder + 45 deg cone",
+            vessel_for_volume(1.4, Some(1.4 - VESSEL_THROAT_R), 0.0),
+        ),
+        (
+            "cylinder + elliptical nose",
+            vessel_for_volume(1.4, Some(1.4), 1.0),
+        ),
+        ("curved cone", vessel_for_volume(1.8, None, 1.0)),
+        ("straight cone", vessel_for_volume(1.8, None, 0.0)),
+    ];
+    let fine = args.iter().any(|a| a == "--fine");
+    let mut cases = Vec::new();
+    for (shape, v) in shapes {
+        for (chamber, charge) in [("methane 7000 K", 68.763), ("hydrogen 5500 K", 59.913)] {
+            for gamma in [1.2, 1.4] {
+                cases.push((shape, v, chamber, charge, gamma, 0.02));
+            }
+        }
+    }
+    if fine {
+        cases.retain(|c| {
+            c.0 == "cylinder + elliptical nose" && c.2 == "methane 7000 K" && c.4 < 1.3
+        });
+        for c in &mut cases {
+            c.5 = 0.01;
+        }
+    }
+    let rows = par_map_with_progress("vessel-blast", &cases, |&(s, v, ch, m, g, cell)| {
+        vessel_blast_one(s, v, ch, m, g, cell)
+    });
+    let path = if fine {
+        "data/results/walled_nozzle/near_term/vessel_blast_fine.jsonl"
+    } else {
+        RESULT_PATH_VESSEL_BLAST
+    };
+    if let Some(dir) = Path::new(path).parent() {
+        fs::create_dir_all(dir)?;
+    }
+    emit_scenario(path, "vessel-blast", &rows, |r| {
+        let peak = r.pressure_pa.iter().flatten().copied().fold(0.0, f64::max);
+        println!(
+            "rust: {:>27} {:>15} g={:.1} cell={:.2} r_c={:.2} z_c={:.2} z_hi={:.2} -> peak={:.2e} Pa",
+            r.shape, r.chamber, r.gamma, r.cell_m, r.r_c, r.z_c, r.z_hi, peak
+        );
+    })
+}
+
 // ---- Spray plate: the face-pressure history at the 150 t design point (fatigue and spall) ----
 //
 // The stratified (unmerged) pulse on a bare face at k = 8.52 and the 12 MN·s pulse's PuffSat
@@ -4766,6 +5161,8 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--spray-film", cmd_spray_film),
     ("--spray-2d-cup", cmd_spray_2d_cup),
     ("--spray-2d-standoff", cmd_spray_2d_standoff),
+    ("--vessel-blast", cmd_vessel_blast),
+    ("--chamber-blast", cmd_chamber_blast),
     ("--spray-face-history", cmd_spray_face_history),
     ("--spray-standoff", cmd_spray_standoff),
     ("--spray-2d", cmd_spray_2d),

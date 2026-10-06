@@ -16,6 +16,7 @@
 use crate::plate::PlateProfile;
 use crate::riemann::{DirCons, DirFlux, DirState, hllc_flux, phys_flux};
 use crate::state::{Cons, Prim};
+use crate::vessel::Vessel;
 
 /// A domain-edge boundary condition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +56,8 @@ pub struct Grid2D {
     /// mirror, ADR-0023 amendment). When `Some`, solid cells under the surface are refilled before
     /// each sweep and the wall impulse is taken at the surface cell. `None` ⇒ the grid-aligned path.
     plate_profile: Option<PlateProfile>,
+    /// A closed axisymmetric chamber wall `r_w(z)` (see [`crate::vessel`]); `None` for none.
+    vessel: Option<Vessel>,
     /// Conserved cells, `idx(iz, ir) = iz·nr + ir`.
     u: Vec<Cons>,
     /// `z = 0` (plate) and `z = z_max` boundaries.
@@ -86,6 +89,7 @@ impl Grid2D {
             axisymmetric: false,
             plate_radius: None,
             plate_profile: None,
+            vessel: None,
             u: vec![placeholder; nz * nr],
             bc_zlo: Bc::Transmissive,
             bc_zhi: Bc::Transmissive,
@@ -114,6 +118,39 @@ impl Grid2D {
     /// immersed surface, not the grid edge, is the wall).
     pub fn set_plate_profile(&mut self, profile: Option<PlateProfile>) {
         self.plate_profile = profile;
+    }
+
+    /// Impose a closed chamber wall `r_w(z)` as a ghost-cell immersed boundary. Use with a
+    /// reflecting `z`-lo boundary (the port face) and a transmissive `z`-hi (the throat).
+    pub fn set_vessel(&mut self, vessel: Option<Vessel>) {
+        self.vessel = vessel;
+    }
+
+    /// Wall pressures `(z, r, p)` at the fluid cell next to the chamber wall: one per axial row
+    /// along the side wall, then one per radial column along the port face (`iz = 0`). Empty
+    /// without a vessel.
+    #[must_use]
+    pub fn vessel_wall_pressures(&self) -> Vec<(f64, f64, f64)> {
+        let Some(v) = self.vessel else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for iz in 0..self.nz {
+            let z = self.z_center(iz);
+            if let Some(ir) = (0..self.nr)
+                .rev()
+                .find(|&ir| !v.is_solid(z, self.r_center(ir)))
+            {
+                out.push((z, v.r_wall(z), self.prim(iz, ir).p));
+            }
+        }
+        for ir in 0..self.nr {
+            let r = self.r_center(ir);
+            if !v.is_solid(self.z_center(0), r) {
+                out.push((0.0, r, self.prim(0, ir).p));
+            }
+        }
+        out
     }
 
     /// Radial coordinate of cell `ir`'s center.
@@ -358,11 +395,51 @@ impl Grid2D {
     /// one [`Self::apply_immersed_bc`] is a no-op, so the verification suite is untouched.
     pub fn step(&mut self, dt: f64) {
         self.apply_immersed_bc();
+        self.apply_vessel_bc();
         self.sweep(Axis::Z, 0.5 * dt);
         self.apply_immersed_bc();
+        self.apply_vessel_bc();
         self.sweep(Axis::R, dt);
         self.apply_immersed_bc();
+        self.apply_vessel_bc();
         self.sweep(Axis::Z, 0.5 * dt);
+    }
+
+    /// The chamber wall's ghost-cell mirror: every wall cell takes the state at its image across
+    /// the wall, with the wall-normal velocity reversed. No-op without a vessel.
+    #[allow(clippy::similar_names)]
+    fn apply_vessel_bc(&mut self) {
+        let Some(v) = self.vessel else {
+            return;
+        };
+        for iz in 0..self.nz {
+            let z = self.z_center(iz);
+            let (n_z, n_r) = v.normal(z);
+            for ir in 0..self.nr {
+                let r = self.r_center(ir);
+                if !v.is_solid(z, r) {
+                    continue;
+                }
+                let dist = v.signed_distance(z, r); // < 0 in the wall
+                let z_img = (z - 2.0 * dist * n_z).clamp(0.0, self.z_center(self.nz - 1));
+                let r_img = (r - 2.0 * dist * n_r).max(0.0);
+                let mut jr = nearest_index(r_img, self.dr, self.nr);
+                let jz = nearest_index(z_img, self.dz, self.nz);
+                while jr > 0 && v.is_solid(self.z_center(jz), self.r_center(jr)) {
+                    jr -= 1;
+                }
+                let src = self.prim(jz, jr);
+                let u_n = src.uz * n_z + src.ur * n_r;
+                let mirrored = Prim::new(
+                    src.rho,
+                    src.uz - 2.0 * u_n * n_z,
+                    src.ur - 2.0 * u_n * n_r,
+                    src.p,
+                );
+                let k = self.idx(iz, ir);
+                self.u[k] = Cons::from_prim(mirrored, self.gamma);
+            }
+        }
     }
 
     /// Refill solid cells under an immersed plate surface by mirroring the adjacent fluid across the

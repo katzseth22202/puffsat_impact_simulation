@@ -141,3 +141,7 @@ __pycache__/
 !/data/results/walled_nozzle/wall_strike.csv
 !/data/results/walled_nozzle/wall_bartz.csv
 !/data/results/walled_nozzle/wall_throat_life.csv
+
+# The chamber-blast wall histories are bulk (~10 MB); the Python summary CSV is committed.
+/data/results/walled_nozzle/near_term/chamber_blast.jsonl
+/data/results/walled_nozzle/near_term/vessel_blast*.jsonl

@@ -20,4 +20,6 @@ pub mod merge;
 pub mod moments;
 pub mod plate;
 pub mod riemann;
+pub mod sphere;
 pub mod state;
+pub mod vessel;

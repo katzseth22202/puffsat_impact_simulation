@@ -174,12 +174,19 @@ def pressure_ratio(t: NDArray[np.float64], ramp: float, efold: float) -> NDArray
 def breathing_response(
     period: float, zeta: float, ramp: float, efold: float, duration: float = PULSE_PERIOD
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """`x(t)` for `x'' + 2 zeta w x' + w^2 x = w^2 f(t)`, by Newmark average acceleration."""
+    """`x(t)` under the ramp-and-blowdown load, for the period's own time grid."""
+    t = np.arange(0.0, duration, period / 400.0, dtype=np.float64)
+    return t, breathing_response_to(period, zeta, t, pressure_ratio(t, ramp, efold))
+
+
+def breathing_response_to(
+    period: float, zeta: float, t: NDArray[np.float64], f: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """`x(t)` for `x'' + 2 zeta w x' + w^2 x = w^2 f(t)` on a uniform grid `t`, by Newmark
+    average acceleration (unconditionally stable, second order)."""
     omega = 2.0 * math.pi / period
-    dt = period / 400.0
-    t = np.arange(0.0, duration, dt, dtype=np.float64)
-    f = pressure_ratio(t, ramp, efold)
-    x = np.zeros_like(t)
+    dt = float(t[1] - t[0])
+    x = np.zeros_like(f)
     v = 0.0
     a = omega**2 * (f[0] - x[0])
     c = 2.0 * zeta * omega
@@ -190,7 +197,7 @@ def breathing_response(
         v_new = 2.0 / dt * (x[n] - x[n - 1]) - v
         a = 4.0 / dt**2 * (x[n] - x[n - 1]) - 4.0 / dt * v - a
         v = v_new
-    return t, x
+    return x
 
 
 # ---- Rainflow (ASTM E1049) ------------------------------------------------------------------

@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import csv
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -126,15 +127,23 @@ def stacks() -> list[Stack]:
 def response(
     stack: Stack, amplitude: float, decay: float, cells_thin: int = 8
 ) -> list[tuple[Layer, NDArray[np.float64]]]:
-    """Peak-tension history per layer: returns each layer's `sigma(t, x)` max over x at each t.
+    """Peak tension per layer and cell for `p(t) = amplitude exp(-t/decay)`, instant rise.
 
-    Load: `p(t) = amplitude exp(-t/decay)`, instantaneous rise. Runs for three round trips of
-    the whole stack after the spike has decayed.
+    Runs for eight decay times plus six round trips of the whole stack.
     """
+    transit = sum(layer.thickness / layer.speed for layer in stack.layers)
+    return response_to(
+        stack, lambda t: amplitude * math.exp(-t / decay), 8.0 * decay + 6.0 * transit, cells_thin
+    )
+
+
+def response_to(
+    stack: Stack, load: Callable[[float], float], duration: float, cells_thin: int = 8
+) -> list[tuple[Layer, NDArray[np.float64]]]:
+    """Peak tension per layer and cell [Pa], bias included, under an inner-face pressure `load(t)`."""
     dt = min(layer.thickness / layer.speed for layer in stack.layers) / cells_thin
     cells = [max(2, round(layer.thickness / (layer.speed * dt))) for layer in stack.layers]
-    transit = sum(n * dt for n in cells)
-    steps = int((8.0 * decay + 6.0 * transit) / dt)
+    steps = int(duration / dt)
     z = [layer.impedance for layer in stack.layers]
     r = [np.zeros(n) for n in cells]
     s = [np.zeros(n) for n in cells]
@@ -142,7 +151,7 @@ def response(
     peak = [np.full(n, -math.inf) for n in cells]
     last = len(cells) - 1
     for k in range(steps):
-        p = amplitude * math.exp(-k * dt / decay)
+        p = load(k * dt)
         out_r = [float(a[-1]) for a in r]
         out_s = [float(a[0]) for a in s]
         for i in range(len(cells)):
