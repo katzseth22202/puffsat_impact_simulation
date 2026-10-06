@@ -70,7 +70,10 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
     separately. Shielded by its vapor, pitch burns ~2-3 kg per pulse (argon) and ~0.2-0.7 kg
     (water). At 150 µm the steel peaks at ~507 K over 1,500 pulses for both arms with no cooling
     water. Carbon-loaded oil keeps the steel cooler (~300-490 K) but burns 4-7x more film (12-18 kg
-    per pulse for argon), so it is not adopted.
+    per pulse for argon), so it is not adopted. *Amended (Q64):* at the 12 MN·s pulse the standing
+    film is ~225-300 µm (steel ~340-400 K), since the steel's temperature is set by thickness and
+    a bigger pulse only burns more film. A thermal map after each pulse aims the respray at the
+    thinned areas, unlike Orion's whole-plate spray.
 12. **The injection ratio k is a mission trade, not a plate optimum.** On the cup, η_jet is nearly
     flat in k: argon ~0.58 unmixed to ~0.68 premixed from k = 4 to 14. Raising k buys impulse per
     PuffSat (β 2.3 -> 3.7) at the cost of impulse per carried kilogram (0.46 -> 0.21 w). k stays with

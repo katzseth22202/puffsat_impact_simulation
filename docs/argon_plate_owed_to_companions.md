@@ -52,8 +52,8 @@ face-pressure results carry over per unit area except where marked.
 - **The floor slides inside a skirt fixed to the vehicle,** like a piston, so the skirt never takes
   the floor's kick. The skirt and the bowl's steep band carry hoop tension in a carbon wrap (P10).
 - **Maraging steel, tapered, aimed to 10 cm.** The face allowable is 2.5 GPa (P2, P3, P12).
-- **A thick ablative film, ~150 µm, preferably pitch,** resprayed each cycle and mapped thermally
-  (P5). Its check at the 12 MN·s pulse is still owed.
+- **A thick ablative film, ~225-300 µm standing, preferably pitch.** A thermal map after each
+  pulse shows where it has thinned, and the respray goes only there (P5).
 - **Two designs (P11).** The spray cup flies first at η_jet = 0.6 (0.57 unmixed to 0.67 fully
   mixed). The plug, once perfected for the nozzle, reaches η_jet ~0.70 but needs last-minute
   aiming. Neither reaches the paper's 0.775.
@@ -114,8 +114,15 @@ and the respray replaces only that.
 
 - **Thickness.** At ~150 µm standing, the maraging stays near 507 K over a 1,500-pulse push for
   both argon and water, with no cooling water, at the first study's 8 MN·s pulse. A floor as thin
-  as 15 mm changes this by ~10 K (518 K). At the 12 MN·s pulse each pulse carries ~2x the energy
-  per area, and that rerun is still owed. That is under its 753 K aging limit. A film at twice
+  as 15 mm changes this by ~10 K (518 K). **At the 12 MN·s pulse** (~2x the energy per area, 22-25
+  MJ/m^2 on the footprint) the steel peaks at the same 507 K under 150 µm, 400 K under 225 µm and
+  342 K under 300 µm (30 mm floor). The pitch surface sits at its cap, so standing thickness, not
+  pulse size, sets the steel temperature; the extra energy goes into consumption.
+- **Recommended standing film at 12 MN·s: ~225-300 µm.** Consumption doubles with the pulse. The
+  vapor-shielded estimate scales to ~4-6 kg per pulse, well under the ~15 kg a 150 µm film holds
+  over the footprint. The unshielded wall model removes ~28-33 kg per pulse, which would burn
+  through 150 µm within one pulse if the vapor curtain is weaker than assumed. A thicker standing
+  film buys that margin and runs the steel cooler; the respray still replaces only what burns. That is under its 753 K aging limit. A film at twice
   its consumption (36-55 µm argon, 3-13 µm water) is too thin: the steel reaches 800-2,500 K.
   Orion's ~6 mil (152 µm, GA-5009 Vol. III) is the right scale.
 - **Consumption.** Shielded by its own vapor (κ_vapor ~5e3 m^2/kg, sourced in
@@ -140,13 +147,21 @@ and the respray replaces only that.
   drops the steel from ~507 K to ~417 K, if it wets), then the cold film respray, then nothing
   liquid on the face when the next pulse arrives. Liquid left pooled acts as a wall (P7). Spray on
   hot steel can float on its own vapor (Leidenfrost) and cool poorly.
-- **Wear mapping.** The child paper's near-infrared reflectance readout works only through films a
-  few microns thick. A 150 µm film needs **thermal imaging** instead: map the face's temperature
-  after each pulse, and respray where the film has thinned. This is how the parent already senses
-  the chamber's pitch.
+- **Wear mapping, and a respray aimed where it is needed.** The child paper's near-infrared
+  reflectance readout works only through films a few microns thick. A 225-300 µm film needs
+  **thermal imaging** instead: map the face's temperature after each pulse. Where the film has
+  thinned, the steel behind it runs hotter, so the map shows where to respray. This is how the
+  parent already senses the chamber's pitch. **It is a departure from Orion,** which sprayed its
+  anti-ablation oil over the whole plate between pulses because it had no way to see wear. Here
+  the respray goes only where the map shows loss, so it replaces the ~4-6 kg each pulse burns
+  rather than recoating the bowl (~120 kg of standing film at 225 µm over ~410 m^2), and none of it
+  is wasted on film that is still thick.
 
-**Change.** Specify a ~150 µm ablative film, pitch preferred. Replace the thin-film optimization
-with thermal-imaging wear mapping, and add the oil-versus-pitch trade.
+**Change.** Specify a **~225-300 µm standing ablative film, pitch preferred**: thick enough that
+a weak vapor curtain cannot burn through it in one 12 MN·s pulse, and it holds the steel at
+~340-400 K. Replace the thin-film optimization with thermal-imaging wear mapping and a targeted
+respray, and say how this differs from Orion's whole-plate oil spray. Add the oil-versus-pitch
+trade.
 
 ### P6. Argon against water: `sec:water_injected_overtake`, and the argon loading near line 1384
 
@@ -367,9 +382,10 @@ reasons above. The collision point is the one to keep. Name the spray cloud as t
 
 The child carries summaries of the parent, so each item follows its parent change.
 
-- **C1, `sec:plate_ablative_film`.** Replace the 5 µm readout-sized film with a ~150 µm film, and
-  the near-infrared readout with thermal-imaging wear mapping (P5). Drop the "0.1% of the pulse"
-  film mass.
+- **C1, `sec:plate_ablative_film`.** Replace the 5 µm readout-sized film with a ~225-300 µm
+  standing film, and the near-infrared readout with thermal-imaging wear mapping and a respray
+  aimed only where the film has thinned, unlike Orion's whole-plate spray (P5). Drop the "0.1% of
+  the pulse" film mass.
 - **C2, `sec:plate_construction`.** Add the taper and aim (P2, P3), maraging steel (P12), and the
   deep bowl with its 2 m skirt fixed to the vehicle and the floor sliding inside it (P10).
 - **C3, `sec:plate_aiming`.** Cap the offset (P4).

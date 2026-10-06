@@ -564,6 +564,21 @@ The short form follows.
   0.25-0.30): it is pushed outward much as the skirt is. Caveats: effective-γ 2-D on the
   production grid (the cup dropped ~1% on a finer grid), the cold-end time scale, every ring free.
 
+- **The face at 12 MN s (2026-10-05, Q64; `make water-plate-plate-thermal`).** Argon, respray,
+  30 mm floor, ~92 kg PuffSat at 45.58 km/s and ~65 kg at 65.13 km/s (face 21.9 and 25.3 MJ/m^2):
+
+  | standing pitch | steel peak | film removed per pulse (unshielded model) |
+  |---|---|---|
+  | 150 µm | 507 K | 28-33 kg |
+  | 225 µm | 400 K | 28-33 kg |
+  | 300 µm | 342 K | 28-33 kg |
+
+  The steel peak matches the 8 MN s runs exactly: the pitch surface sits at its cap, so the
+  conduction through the standing film sets the steel temperature, and a bigger pulse only burns
+  more film. The unshielded removal exceeds the ~15 kg a 150 µm film holds over the footprint (the
+  solver's grid does not thin as it removes, so it does not see burn-through). Shielded by its
+  vapor, consumption scales to ~4-6 kg per pulse. 225-300 µm standing is the recommendation.
+
 - **Gravity during the push (estimate, 2026-10-05).** 12 MN s at 4 Hz is 48 MN. On 1,500 t at
   400 km (local g 8.7 m/s^2) that is T/W 3.7 at the start, rising as argon is spent. A planar
   two-body run from rest at 400 km to 10.786 km/s takes ~250 s and spends ~700 t of argon at

@@ -64,6 +64,10 @@ class Case:
     film: str = "pitch"
     #: Steel behind the film [m]: the solver's 30 mm, or a thinner floor (70 t averages ~28 mm).
     steel_depth: float = wl.STEEL_DEPTH
+    #: PuffSat mass per pulse [kg]; 0 takes the first study's `PUFFSAT_MASS` (8 MN s).
+    puffsat_kg: float = 0.0
+    #: Pitch thickness [m] for the "pitch" film; 0 takes the step-1b `FILM`.
+    film_m: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -75,6 +79,7 @@ class Row:
     h_cool: float
     film: str
     steel_depth: float
+    puffsat_kg: float
     film_thickness: float
     face_energy: float
     end_steel: float
@@ -86,8 +91,11 @@ class Row:
     under_aging_limit: bool
 
 
-def face_energy(material: str, w: float) -> float:
-    """Radiant energy on the face per pulse [J/m^2], from the solved 4 m cloud, 4 m pulse row."""
+def face_energy(material: str, w: float, puffsat_kg: float = 0.0) -> float:
+    """Radiant energy on the face per pulse [J/m^2], from the solved 4 m cloud, 4 m pulse row.
+
+    The face takes the row's share of the pulse's kinetic energy over the footprint, so it scales
+    with the PuffSat mass per pulse (`PUFFSAT_MASS` when `puffsat_kg` is 0)."""
     with LEVERS.open() as fh:
         for line in fh:
             r = json.loads(line)
@@ -97,7 +105,7 @@ def face_energy(material: str, w: float) -> float:
                 and r["depth"] == 4.0
                 and r["pulse_length"] == 4.0
             ):
-                sigma_p = PUFFSAT_MASS[w] / FOOTPRINT
+                sigma_p = (puffsat_kg or PUFFSAT_MASS[w]) / FOOTPRINT
                 return float(r["face_radiation_share"]) * 0.5 * sigma_p * w * w
     raise ValueError(f"no levers row for {material} at {w}")
 
@@ -121,7 +129,7 @@ def shielded_film_kg(material: str, w: float, film: str) -> float:
 def coating(case: Case) -> wl.Coating:
     """The film: pitch at the step-1b thickness, or pitch or oil at twice its shielded use."""
     if case.film == "pitch":
-        return wl.pitch(FILM[case.material])
+        return wl.pitch(case.film_m or FILM[case.material])
     base = "oil" if case.film == "oil2x" else "pitch"
     k, rho, c, cap, heat = OIL if base == "oil" else wl.PITCH
     thickness = 2.0 * shielded_film_kg(case.material, case.w, base) / (rho * FOOTPRINT)
@@ -141,7 +149,7 @@ def pulse_gas(energy: float, tau: float) -> wl.GasHistory:
 
 
 def run_case(case: Case) -> Row:
-    energy = face_energy(case.material, case.w)
+    energy = face_energy(case.material, case.w, case.puffsat_kg)
     respray = None if case.scheme == "none" else wl.Respray(temp=280.0, at=0.20)
     cooling = (
         wl.Cooling(h=case.h_cool, temp=373.0, start=0.010, end=0.100)
@@ -166,6 +174,7 @@ def run_case(case: Case) -> Row:
         h_cool=case.h_cool,
         film=case.film,
         steel_depth=case.steel_depth,
+        puffsat_kg=case.puffsat_kg or PUFFSAT_MASS[case.w],
         film_thickness=coat.thickness,
         face_energy=energy,
         end_steel=run.end_steel,
@@ -198,6 +207,12 @@ def cases() -> list[Case]:
         for material in ("argon", "water"):
             for w in PUFFSAT_MASS:
                 out.append(Case(material, w, 1e-3, "respray", 0.0, "pitch", depth))
+    # The 150 t design (Q64): 12 MN s per pulse at k = 8.52 and eta_jet 0.6 (beta = 2.85), on the
+    # d/D 0.30 bowl's ~30 mm floor, with the standing film thickened if the steel needs it.
+    for w in PUFFSAT_MASS:
+        kg = 12.0e6 / (2.85 * w)
+        for film_m in (150e-6, 225e-6, 300e-6):
+            out.append(Case("argon", w, 1e-3, "respray", 0.0, "pitch", 0.030, kg, film_m))
     return out
 
 
@@ -213,7 +228,7 @@ def main() -> None:
     for r in rows:
         print(
             f"{r.material:5} w={r.w / 1e3:5.2f} {r.film:7} {r.film_thickness * 1e6:4.0f}um "
-            f"steel {r.steel_depth * 1e3:2.0f}mm "
+            f"steel {r.steel_depth * 1e3:2.0f}mm PuffSat {r.puffsat_kg:3.0f}kg "
             f"tau={r.tau * 1e3:3.1f}ms {r.scheme:7} "
             f"h={r.h_cool:7.0f}: face {r.face_energy / 1e6:5.2f} MJ/m2, steel end "
             f"{r.end_steel:5.0f} K peak {r.peak_steel:5.0f} K, film {r.film_removed:5.1f} kg, "
