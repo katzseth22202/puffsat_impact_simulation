@@ -703,6 +703,20 @@ water-plate-argon-2d: data/tables/argon.json data/tables/water_jupiter.json
 water-plate-collisionality:
 	PYTHONPATH=python $(PY) -m puffsat.water_plate.collisionality
 
+## water-plate-face-history: the 1-D stratified (unmerged) face-pressure history at the 150 t
+## design point, k = 8.52 and 12 MN s -> data/results/water_plate/spray_face_history.jsonl
+water-plate-face-history: data/tables/argon.json data/tables/water_jupiter.json
+	cargo run --release -p sweep -- --spray-face-history
+
+## water-plate-plate-fatigue: spall, stress-life and crack growth of the maraging floor over
+## 3,000 pulses, merged (2-D bowl) and unmerged -> data/results/water_plate/plate_fatigue.csv
+.PHONY: water-plate-face-history water-plate-plate-fatigue
+water-plate-plate-fatigue: data/results/water_plate/spray_face_history.jsonl
+	PYTHONPATH=python $(PY) -m puffsat.water_plate.plate_fatigue
+
+data/results/water_plate/spray_face_history.jsonl:
+	$(MAKE) water-plate-face-history
+
 ## water-plate-plate-thermal: the face over a push (1,500 pulses), ablative film on maraging 300,
 ## uncooled vs cold-film respray vs water spray -> data/results/water_plate/plate_thermal.csv
 water-plate-plate-thermal: data/results/water_plate/spray_levers.jsonl
@@ -757,7 +771,7 @@ water-plate-argon-2d-shape:
 	PYTHONPATH=python $(PY) -m puffsat.water_plate.plate_shape
 
 water-plate-argon-test:
-	uv run pytest python/tests/test_water_plate_spray_eos.py python/tests/test_water_plate_collisionality.py
+	uv run pytest python/tests/test_water_plate_spray_eos.py python/tests/test_water_plate_collisionality.py python/tests/test_water_plate_plate_fatigue.py
 	cargo test --release -p hydro1d --test layered
 
 water-plate-thermo:

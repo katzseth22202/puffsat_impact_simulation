@@ -593,6 +593,17 @@ The short form follows.
   0.25-0.30): it is pushed outward much as the skirt is. Caveats: effective-γ 2-D on the
   production grid (the cup dropped ~1% on a finer grid), the cold-end time scale, every ring free.
 
+- **Spall and fatigue over 3,000 pulses (2026-10-06; `make water-plate-plate-fatigue`;
+  `docs/spray_plate_fatigue_and_spall.md`).** Merged is the design, and it survives. The 2-D
+  bowl at 12 MN·s peaks at 0.89 GPa and rises over ~36 µs, slower than the floor's 10.6 µs
+  round trip, so the steel never goes into tension. Notched damage is 0.03 over 3,000 pulses.
+  Unmerged at the same design point (new 1-D runs, k = 8.52) peaks at 2.5-4.1 GPa with a 0.5 µs
+  rise, and reflects 0.9-3.6 GPa of tension: no spall (limit 4.1-5.4 GPa), but fatigue failure in
+  0-1,053 pulses on maraging 300 and almost at once on 350. **The merge is load-bearing for the
+  structure, and a failed merge must stop the push within a few pulses.** The requirement it sets
+  is a face-pressure rise of at least `2L/c` (~10 µs). The 2-D grid smears the merged front, so
+  the next check is a finer run near the plate.
+
 - **The face at 12 MN s (2026-10-05, Q64; `make water-plate-plate-thermal`).** Argon, respray,
   30 mm floor, ~92 kg PuffSat at 45.58 km/s and ~65 kg at 65.13 km/s (face 21.9 and 25.3 MJ/m^2):
 

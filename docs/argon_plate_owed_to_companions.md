@@ -312,8 +312,16 @@ in-plane load, so a rim band cannot apply it. The bulk must stay below maraging'
 temperature. Aramid suits only tension (gas bags, tendons): its compressive strength is
 0.14-0.23 GPa. Ceramic tiles do not help, because the steel behind them sees the full pressure.
 
-**Change.** Name maraging 300/350 as the plate steel, with a 2.5 GPa face allowable and a ~480 °C
-bulk limit.
+**Change.** Name **maraging 300** as the plate steel (amended 2026-10-06 from "300/350"), with a
+2.5 GPa face allowable and a ~480 °C bulk limit. Include the material-choice analysis below in
+`sec:plate_construction`:
+- why maraging (the face's limit under shock, not yield);
+- why 300 over 350 (double the `K_Ic`);
+- the spall and fatigue verdict over 3,000 pulses;
+- the two requirements it sets: a merged pulse, and a face-pressure rise of at least one
+  stress-wave round trip of the floor.
+
+A short paragraph and the table in `docs/spray_plate_fatigue_and_spall.md` §1 would carry it.
 
 **Notes for the paper on why maraging (added 2026-10-06).**
 - **The reason is the face's limit under shock, not yield strength.** The face is loaded in
@@ -323,11 +331,15 @@ bulk limit.
   taper and the delivered impulse set the plate's mass (P2), not yield.
 - **Prefer 300 to 350.** 300 is notably tougher, and its calculated limit (3.1-3.6 GPa) still
   clears 2.5 GPa. That figure is calculated only; the one measured value is for 350.
-- **Open: fatigue and spall.** These have not been analysed. The ~1 ms main pulse is much longer
-  than the ~7 µs it takes a stress wave to cross the steel, so the tension reflected off the back
-  face largely cancels against the incoming compression. The 1-30 µs overload spikes do not cancel,
-  and they recur ~1,500 times per push. Toughness and crack growth at the **back** face are the
-  open items.
+- **Fatigue and spall, solved (2026-10-06; `docs/spray_plate_fatigue_and_spall.md`).** Over a
+  3,000-pulse baseline the **merged** pulse leaves the 30 mm floor out of tension: notched
+  fatigue damage is 0.03, and a 0.5 mm flaw does not grow. An **unmerged** pulse kills the plate
+  in fatigue in every case. Its reflected tension is 0.9-3.6 GPa, under the 4.1-5.4 GPa spall
+  strength, but maraging 300 lasts only 0-1,053 unmerged pulses and 350 fails at once in most
+  cases. The paper should say that **the merge is a structural requirement**, that a failed
+  merge must be detected and the push stopped within a few pulses, and that the face pressure must
+  rise over at least one stress-wave round trip of the floor (~10 µs for 30 mm). A faster front
+  makes life depend on damping the design does not yet have.
 - **Layering, if used, must put the tough grade at the back.** Reflected tension and spall start
   at the back face, so a less-tough backing would put the weakest steel where the tension is. Every
   layer also sees the full ~P in compression, so the backing must clear 2.5 GPa too, which rules

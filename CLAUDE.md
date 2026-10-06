@@ -22,7 +22,8 @@ Its Python is `python/puffsat/water_plate/`, outputs are under
 `make water-plate-pressure-kinetics-audit`,
 `make water-plate-thermal-kinetics-audit`,
 `make water-plate-parcels`, `make water-plate-parcel-report`,
-`make water-plate-parcel-check`, `make water-plate-collisionality`,
+`make water-plate-parcel-check`, `make water-plate-collisionality`, `make water-plate-face-history`,
+`make water-plate-plate-fatigue`,
 and `make water-plate-test`.
 The same-state reaction-switch comparison is scoped in
 [ADR-0044](docs/adr/0044-water-plate-parcel-frozen-restarts.md).

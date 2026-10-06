@@ -1279,11 +1279,26 @@ const SPRAY_GAP_CELLS: usize = 16;
 fn spray_layers_with_gap(
     water: &Table,
     spray: &Table,
+    speed: (f64, f64),
+    depths: (f64, f64),
+    pairs: usize,
+    cells: usize,
+    gap: f64,
+) -> (Tube<TableEos>, f64) {
+    spray_layers_with_gap_k(water, spray, speed, depths, pairs, cells, gap, SPRAY_K)
+}
+
+/// [`spray_layers_with_gap`] at an explicit injection ratio `k`.
+#[allow(clippy::too_many_arguments)]
+fn spray_layers_with_gap_k(
+    water: &Table,
+    spray: &Table,
     (w, m): (f64, f64),
     (depth_spray, depth_pulse): (f64, f64),
     pairs: usize,
     cells: usize,
     gap: f64,
+    k: f64,
 ) -> (Tube<TableEos>, f64) {
     let sigma_p = m / SPRAY_FOOTPRINT;
     let layers = 2 * pairs;
@@ -1293,7 +1308,7 @@ fn spray_layers_with_gap(
         depth_pulse / (pairs * per_layer) as f64,
     );
     let t0 = Config::production().t0;
-    let (rho_s, rho_p) = (sigma_p * SPRAY_K / depth_spray, sigma_p / depth_pulse);
+    let (rho_s, rho_p) = (sigma_p * k / depth_spray, sigma_p / depth_pulse);
     let mut positions = vec![0.0];
     let (mut mass, mut vel, mut energy, mut index) = (vec![], vec![], vec![], vec![]);
     if gap > 0.0 {
@@ -1937,6 +1952,86 @@ fn cmd_spray_standoff(_args: &[String]) -> Result<(), Box<dyn std::error::Error>
             r.time_above[1] * 1e6,
             r.time_above[2] * 1e6,
             r.time_above[3] * 1e6,
+            r.converged,
+        );
+    })
+}
+
+// ---- Spray plate: the face-pressure history at the 150 t design point (fatigue and spall) ----
+//
+// The stratified (unmerged) pulse on a bare face at k = 8.52 and the 12 MN·s pulse's PuffSat
+// masses, 4 m cloud and 4 m pulse, gap 0. This is the sharpest load the face sees. The whole
+// `(t, p)` history is written so the steel's stress-wave and fatigue analysis
+// (`puffsat.water_plate.plate_fatigue`) can drive the plate with it.
+
+/// (closing speed [m/s], PuffSat mass per pulse [kg]) for 12 MN·s at η_jet 0.6 (β = 2.85).
+const FACE_HISTORY_SPEEDS: [(f64, f64); 2] = [(45_580.0, 92.0), (65_130.0, 65.0)];
+const FACE_HISTORY_K: f64 = 8.52;
+const FACE_HISTORY_DEPTH: f64 = 4.0;
+const RESULT_PATH_FACE_HISTORY: &str = "data/results/water_plate/spray_face_history.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct FaceHistoryRecord {
+    material: String,
+    w: f64,
+    puffsat_kg: f64,
+    k: f64,
+    depth: f64,
+    peak_wall_pressure: f64,
+    /// Wall impulse per unit area [Pa s].
+    wall_impulse: f64,
+    time_s: Vec<f64>,
+    pressure_pa: Vec<f64>,
+    converged: bool,
+}
+
+fn cmd_spray_face_history(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let water = Table::load("data/tables/water_jupiter.json")?;
+    let mut cases = Vec::new();
+    for arm in SPRAY_ARMS {
+        let spray = Table::load(arm.spray_table)?;
+        for speed in FACE_HISTORY_SPEEDS {
+            cases.push((arm, spray.clone(), speed));
+        }
+    }
+    let rows = par_map_with_progress("spray-face-history", &cases, |(arm, spray, speed)| {
+        let (tube, _) = spray_layers_with_gap_k(
+            &water,
+            spray,
+            *speed,
+            (FACE_HISTORY_DEPTH, FACE_HISTORY_DEPTH),
+            1,
+            SPRAY_LEVER_CELLS,
+            0.0,
+            FACE_HISTORY_K,
+        );
+        let cfg = Config::production();
+        let (r, history) =
+            CoupledBounce::new(tube, None, cfg.consts, cfg.limiter).run_with_history();
+        FaceHistoryRecord {
+            material: arm.name.to_string(),
+            w: speed.0,
+            puffsat_kg: speed.1,
+            k: FACE_HISTORY_K,
+            depth: FACE_HISTORY_DEPTH,
+            peak_wall_pressure: r.bounce.peak_wall_pressure,
+            wall_impulse: r.bounce.wall_impulse,
+            time_s: history.iter().map(|h| h.0).collect(),
+            pressure_pa: history.iter().map(|h| h.1).collect(),
+            converged: r.bounce.converged,
+        }
+    });
+    if let Some(dir) = Path::new(RESULT_PATH_FACE_HISTORY).parent() {
+        fs::create_dir_all(dir)?;
+    }
+    emit_scenario(RESULT_PATH_FACE_HISTORY, "spray-face-history", &rows, |r| {
+        println!(
+            "rust: {:>5} w={:>5.0} m={:.0} kg -> peak={:.2e} Pa samples={} converged={}",
+            r.material,
+            r.w,
+            r.puffsat_kg,
+            r.peak_wall_pressure,
+            r.time_s.len(),
             r.converged,
         );
     })
@@ -4671,6 +4766,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--spray-film", cmd_spray_film),
     ("--spray-2d-cup", cmd_spray_2d_cup),
     ("--spray-2d-standoff", cmd_spray_2d_standoff),
+    ("--spray-face-history", cmd_spray_face_history),
     ("--spray-standoff", cmd_spray_standoff),
     ("--spray-2d", cmd_spray_2d),
     ("--spray-levers-shielded", cmd_spray_levers_shielded),
