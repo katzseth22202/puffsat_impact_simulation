@@ -88,6 +88,19 @@ The slow mean-pressure ramp is harmless by comparison. Ramping over 0.4 ms again
 
 ## 4. Limits
 
+- **The fill is uniform gas here, and the design's is not.** The parent's methane chamber pumps
+  part of its charge through the liner as coolant. That part fills the chamber as warm gas. The
+  rest, from 14.1 kg of 19.6 at the low edge of the heat band to none at the top edge, is sprayed
+  in as liquid in the last 0.1 s. 0.5-1 mm drops survive within ~0.8 m of the injectors (parent
+  `tab:drop_survival`). The parent places that liquid on purpose, "so that it softens the local
+  shocks that reach the wall", and leaves the deposition unmodeled. Neither analysis here
+  includes it.
+  - The spike thresholds in §3 are wall properties and stand.
+  - The spike *estimate*, and the gas-crossing ramp in §2, are for a dry fill.
+  - A near-wall droplet layer is the design's own answer to §3's hazard. It is also a candidate
+    for slowing the rise in §2, since a two-phase layer carries pressure more slowly than gas.
+  - Neither effect is quantified. Where no liquid is left (the top of the heat band), the dry
+    numbers apply as they stand.
 - **The spike amplitude is an estimate.** It is a strong-shock Sedov blast with normal reflection
   off a rigid flat wall. A decaying, dissociating, curved blast, energy deposited along the rod's
   track, and oblique incidence will all lower it. The thresholds in §3 are the result; the
@@ -128,6 +141,11 @@ The slow mean-pressure ramp is harmless by comparison. Ramping over 0.4 ms again
     solved blast-in-vessel load is owed. Candidate mitigations, none sized: a crushable inner
     layer that attenuates the reflected shock; through-thickness reinforcement of the overwrap;
     a thicker tough outer skin that moves the reflection tension out of the carbon.
+- **`sec:carbon_overwrap`, the liquid-share paragraph ("softens the local shocks").** That
+  softening is load-bearing. Without it the overwrap's 0.12-0.22 GPa threshold sits at or under
+  the paper's own ~0.2 GPa incident estimate, before any reflection. The paper should say the
+  overwrap's survival depends on that liquid share, and that the share falls to zero at the top
+  of the heat band.
 - **The "not a high-cycle fatigue part" sentence** stays right on cycle count. It should add that
   the defect-tolerant check, not the count, is what sizes the hydrogen wall.
 
