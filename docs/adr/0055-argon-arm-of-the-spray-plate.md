@@ -78,6 +78,9 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
 - **A flared bell wall instead of a straight skirt.** Rejected: 0.98-1.01 against the straight
   skirt's 1.02 of the 1-D impulse, for 10-30% more steel.
 - **An open flat plate.** Rejected: η_jet ~0.33, because hot merged gas spills past the rim.
+- **An inward lip (a converging mouth).** Rejected: η_jet falls from 0.58 to 0.33 as the mouth
+  narrows from 20 to 12 m. Pressure on the lip's underside opposes the thrust, and a converging-only
+  nozzle leaves its jet under-expanded.
 - **A carbon-loaded oil film.** Rejected for 4-7x the film consumption of pitch, when pitch at
   150 µm already holds the steel under its aging limit without coolant.
 - **Steering by impact offset alone, as the child repo describes.** Limited, because large offsets

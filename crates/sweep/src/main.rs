@@ -32,8 +32,8 @@ use std::io::Write as _;
 use std::path::Path;
 
 use euler2d::bounce::{
-    PlateShape, SlugConfig, SprayCloud, eta_capture, run_slug_bounce, run_spray_bounce,
-    taper_sigma_stats,
+    PlateShape, SlugConfig, SprayCloud, eta_capture, init_spray_grid, run_slug_bounce,
+    run_spray_bounce, taper_sigma_stats,
 };
 use hydro1d::conduction::Solid;
 use hydro1d::eos::{Eos as _, TableEos};
@@ -2498,6 +2498,353 @@ fn cmd_spray_k(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     })
 }
 
+// ---- Plug study step 2: one compact sphere into one plug, in the cup, in 2-D (ADR-0055, Q49) -----
+//
+// One necklace sphere (10 cm radius, 15 cm long, ~4.7 kg of water) buries itself in a plug of the
+// same radius holding k = 10 times its mass (1.58 m of solid polyethylene, density ~0.95x the
+// sphere's), on the axis. The plate is one sphere's share of the 20 m plate (3.2 m radius); its
+// skirt stands in for the neighbouring fireballs. Lengths in metres, the sphere's speed 1, its
+// density 1, effective γ 1.4. Reported as J/(m w) directly, beside the spray cup on the same method.
+
+const PLUG_K: f64 = 10.0;
+const PLUG_R: f64 = 0.1;
+const PLUG_SPHERE_L: f64 = 0.15;
+const PLUG_LENGTH: f64 = 1.58;
+const PLUG_PLATE_R: f64 = 3.16;
+const PLUG_DR: f64 = 0.02;
+const RESULT_PATH_PLUG_2D: &str = "data/results/water_plate/plug_2d.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct Plug2dRecord {
+    case: String,
+    /// `J / (m w)`: plate impulse per incoming momentum.
+    beta: f64,
+    /// `beta` over the overtake ceiling `1 + √(1+k)`.
+    ceiling_share: f64,
+    peak_local_pressure: f64,
+    nr: usize,
+    nz: usize,
+}
+
+fn plug_case(label: &str, standoff: f64, skirt: f64) -> Plug2dRecord {
+    // Domain: the plate plus a 0.8 m margin; height covers the plug, the sphere and the skirt.
+    let r_max = PLUG_PLATE_R + 0.84;
+    let nr = 200;
+    let top = (standoff + PLUG_LENGTH + PLUG_SPHERE_L + 2.0).max(skirt + 2.0);
+    // Round the height up to a whole number of cells without a float-to-int cast.
+    let mut nz = 0usize;
+    while (nz as f64) * PLUG_DR < top {
+        nz += 1;
+    }
+    let shape = if skirt > 0.0 {
+        PlateShape::Cup {
+            d_over_d: 0.10,
+            skirt_height: skirt,
+            flare: 0.0,
+            thickness: 4.0 * PLUG_DR,
+        }
+    } else {
+        PlateShape::Dish { d_over_d: 0.10 }
+    };
+    let cfg = SlugConfig {
+        gamma: SPRAY_2D_GAMMA,
+        mach: SPRAY_2D_MACH,
+        r_foot: PLUG_R,
+        length: PLUG_SPHERE_L,
+        r_plate: PLUG_PLATE_R,
+        r_max,
+        z_max: nz as f64 * PLUG_DR,
+        nr,
+        nz,
+        confined: false,
+        shape,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    };
+    let r = run_spray_bounce(
+        &cfg,
+        SprayCloud {
+            depth: PLUG_LENGTH,
+            mass_ratio: PLUG_K,
+            standoff,
+        },
+    );
+    let beta = r.restitution_ratio();
+    Plug2dRecord {
+        case: label.to_string(),
+        beta,
+        ceiling_share: beta / (1.0 + (1.0 + PLUG_K).sqrt()),
+        peak_local_pressure: r.peak_local_pressure,
+        nr,
+        nz,
+    }
+}
+
+/// The working spray cup (dish 0.10 + 4 m skirt, 4 m cloud 1 m off the floor) on the same 2-D
+/// method, as `J/(m w)` directly.
+fn spray_cup_beta() -> Plug2dRecord {
+    let unit = SPRAY_2D_PULSE_M;
+    let cfg = SlugConfig {
+        gamma: SPRAY_2D_GAMMA,
+        mach: SPRAY_2D_MACH,
+        r_foot: 5.0 / unit,
+        length: 1.0,
+        r_plate: 10.0 / unit,
+        r_max: SPRAY_CUP_NR as f64 * SPRAY_CUP_DR,
+        z_max: SPRAY_CUP_NZ as f64 * SPRAY_CUP_DR,
+        nr: SPRAY_CUP_NR,
+        nz: SPRAY_CUP_NZ,
+        confined: false,
+        shape: PlateShape::Cup {
+            d_over_d: 0.10,
+            skirt_height: 4.0 / unit,
+            flare: 0.0,
+            thickness: SPRAY_CUP_WALL,
+        },
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    };
+    let r = run_spray_bounce(
+        &cfg,
+        SprayCloud {
+            depth: 1.0,
+            mass_ratio: SPRAY_K,
+            standoff: 1.0 / unit,
+        },
+    );
+    let beta = r.restitution_ratio();
+    Plug2dRecord {
+        case: "spray cup (reference)".to_string(),
+        beta,
+        ceiling_share: beta / (1.0 + (1.0 + SPRAY_K).sqrt()),
+        peak_local_pressure: r.peak_local_pressure,
+        nr: SPRAY_CUP_NR,
+        nz: SPRAY_CUP_NZ,
+    }
+}
+
+/// `--plug-2d` runs every case and the spray reference; `--plug-2d N` runs only case `N` (0-5, or
+/// 6 for the spray reference) and writes `plug_2d_N.jsonl`, so a slow case cannot cost the others.
+fn cmd_plug_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let only: Option<usize> = args
+        .iter()
+        .skip_while(|a| *a != "--plug-2d")
+        .nth(1)
+        .and_then(|a| a.parse().ok());
+    let cases: [(&str, f64, f64); 6] = [
+        ("plug 1 m off, dish only", 1.0, 0.0),
+        ("plug 1 m off, skirt 4 m", 1.0, 4.0),
+        ("plug 2 m off, skirt 4 m", 2.0, 4.0),
+        ("plug 1 m off, skirt 8 m", 1.0, 8.0),
+        ("plug 2 m off, skirt 8 m", 2.0, 8.0),
+        ("plug 4 m off, skirt 8 m", 4.0, 8.0),
+    ];
+    let (rows, path) = match only {
+        Some(i) if i < cases.len() => {
+            let (label, standoff, skirt) = cases[i];
+            (
+                vec![plug_case(label, standoff, skirt)],
+                format!("data/results/water_plate/plug_2d_{i}.jsonl"),
+            )
+        }
+        Some(_) => (
+            vec![spray_cup_beta()],
+            "data/results/water_plate/plug_2d_spray.jsonl".to_string(),
+        ),
+        None => {
+            let mut rows = par_map_with_progress("plug-2d", &cases, |&(label, standoff, skirt)| {
+                plug_case(label, standoff, skirt)
+            });
+            rows.push(spray_cup_beta());
+            (rows, RESULT_PATH_PLUG_2D.to_string())
+        }
+    };
+    emit_scenario(&path, "plug-2d", &rows, |r| {
+        println!(
+            "rust: {:<26} -> beta {:.3} ({:.3} of ceiling) peak {:.3e} [{}x{}]",
+            r.case, r.beta, r.ceiling_share, r.peak_local_pressure, r.nr, r.nz,
+        );
+    })?;
+    println!(
+        "rust: ballistic plug fireball, all toward-plate gas caught: beta 2.739 (0.635 of ceiling)"
+    );
+    Ok(())
+}
+
+// ---- Spray plate: an inward lip on the cup's skirt (ADR-0055, Q50) -----------------------------
+//
+// The working cup (dish 0.10, 4 m skirt, 4 m cloud 1 m off the floor) with its skirt leaning inward
+// (negative flare), so its mouth narrows into a wide throat. Besides the impulse and the floor's
+// peak pressure, this records the peak pressure the skirt and lip feel and how long the gas stays
+// inside the cup (time for the mass inside to fall to 1/e of its peak). Impulse is scaled onto the
+// 1-D real-physics 4 m column, as in step 2d.
+
+const SPRAY_LIP_FLARES: [f64; 5] = [0.0, -0.2, -0.4, -0.6, -1.0];
+const RESULT_PATH_SPRAY_LIP: &str = "data/results/water_plate/spray_2d_lip.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SprayLipRecord {
+    flare: f64,
+    /// Mouth diameter [m].
+    mouth: f64,
+    impulse_vs_1d: f64,
+    floor_peak_vs_1d: f64,
+    /// Peak pressure on the skirt and lip, over the confined reference's floor peak.
+    wall_peak_vs_1d: f64,
+    /// Time the gas stays in the cup, in units of the pulse's crossing time `4 m / w`.
+    residence: f64,
+}
+
+fn spray_lip_case(flare: f64) -> SprayLipRecord {
+    let unit = SPRAY_2D_PULSE_M;
+    let base = SlugConfig {
+        gamma: SPRAY_2D_GAMMA,
+        mach: SPRAY_2D_MACH,
+        r_foot: 5.0 / unit,
+        length: 1.0,
+        r_plate: 10.0 / unit,
+        r_max: SPRAY_CUP_NR as f64 * SPRAY_CUP_DR,
+        z_max: SPRAY_CUP_NZ as f64 * SPRAY_CUP_DR,
+        nr: SPRAY_CUP_NR,
+        nz: SPRAY_CUP_NZ,
+        confined: false,
+        shape: PlateShape::Cup {
+            d_over_d: 0.10,
+            skirt_height: 4.0 / unit,
+            flare,
+            thickness: SPRAY_CUP_WALL,
+        },
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    };
+    let spray = |standoff: f64| SprayCloud {
+        depth: 1.0,
+        mass_ratio: SPRAY_K,
+        standoff,
+    };
+    let reference = run_spray_bounce(
+        &SlugConfig {
+            r_foot: base.r_max,
+            r_plate: base.r_max,
+            nr: 8,
+            confined: true,
+            shape: PlateShape::FlatGridAligned,
+            ..base
+        },
+        spray(0.0),
+    );
+
+    // The free run, stepped here so the wall pressure and the cup's contents can be read.
+    let mut g = init_spray_grid(&base, spray(1.0 / unit));
+    let incident = g.axial_momentum().abs();
+    let (dz, dr) = (base.z_max / base.nz as f64, base.r_max / base.nr as f64);
+    let z_rim = 4.0 * dz + 0.10 * 2.0 * base.r_plate;
+    let z_top = z_rim + 4.0 / unit;
+    let inside = |iz: usize, ir: usize| {
+        let (z, r) = ((iz as f64 + 0.5) * dz, (ir as f64 + 0.5) * dr);
+        let r_in = base.r_plate + flare * (z - z_rim).max(0.0);
+        z < z_top && r < r_in.min(base.r_plate)
+    };
+    let cup_mass = |g: &euler2d::kernel::Grid2D| -> f64 {
+        let mut m = 0.0;
+        for iz in 0..g.nz() {
+            for ir in 0..g.nr() {
+                if inside(iz, ir) && !g.is_solid(iz, ir) {
+                    m += g.prim(iz, ir).rho * g.cell_volume(ir);
+                }
+            }
+        }
+        m
+    };
+    let wall_pressure = |g: &euler2d::kernel::Grid2D| -> f64 {
+        let mut p: f64 = 0.0;
+        for iz in 0..g.nz() {
+            for ir in 1..g.nr() - 1 {
+                let r = (ir as f64 + 0.5) * dr;
+                let beside_wall = g.is_solid(iz, ir + 1) || g.is_solid(iz, ir - 1);
+                if r > 0.5 * base.r_plate && !g.is_solid(iz, ir) && beside_wall {
+                    p = p.max(g.prim(iz, ir).p);
+                }
+            }
+        }
+        p
+    };
+    let (mut t, mut impulse, mut peak_force, mut floor_peak, mut wall_peak) =
+        (0.0, 0.0, 0.0_f64, 0.0_f64, 0.0_f64);
+    let (mut mass_peak, mut t_peak, mut t_drop) = (0.0_f64, 0.0, f64::NAN);
+    let mut force_old = g.plate_force();
+    // Arm the tail guard only once the pulse has arrived: under an inward overhang the ambient
+    // gas pushing up on the lip makes the starting net force slightly negative, and an unarmed
+    // guard would stop the run at once.
+    let ambient = force_old.abs().max(1e-30);
+    let (mut past_peak, mut quiet) = (false, 0usize);
+    for _ in 0..(400 * base.nz + 50_000) {
+        let dt = g.stable_dt();
+        g.step(dt);
+        t += dt;
+        let force = g.plate_force();
+        impulse += 0.5 * dt * (force_old + force);
+        force_old = force;
+        peak_force = peak_force.max(force);
+        floor_peak = floor_peak.max(g.max_plate_pressure());
+        wall_peak = wall_peak.max(wall_pressure(&g));
+        let m = cup_mass(&g);
+        if m > mass_peak {
+            mass_peak = m;
+            t_peak = t;
+        } else if t_drop.is_nan() && m < mass_peak / std::f64::consts::E {
+            t_drop = t;
+        }
+        let armed = peak_force > 1.0e3 * ambient;
+        if armed && force < 0.999 * peak_force {
+            past_peak = true;
+        }
+        quiet = if armed && force < 1.0e-3 * peak_force {
+            quiet + 1
+        } else {
+            0
+        };
+        if past_peak && quiet >= 40 {
+            break;
+        }
+    }
+    SprayLipRecord {
+        flare,
+        mouth: 2.0 * (10.0 + flare * 4.0),
+        impulse_vs_1d: impulse / incident / reference.restitution_ratio(),
+        floor_peak_vs_1d: floor_peak / reference.peak_local_pressure,
+        wall_peak_vs_1d: wall_peak / reference.peak_local_pressure,
+        residence: t_drop - t_peak,
+    }
+}
+
+fn cmd_spray_2d_lip(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let rows = par_map_with_progress("spray-2d-lip", &SPRAY_LIP_FLARES, |&f| spray_lip_case(f));
+    let columns: Vec<SprayMixRecord> = fs::read_to_string(RESULT_PATH_SPRAY_LEVERS)?
+        .lines()
+        .map(serde_json::from_str::<SprayMixRecord>)
+        .collect::<Result<_, _>>()?;
+    emit_scenario(RESULT_PATH_SPRAY_LIP, "spray-2d-lip", &rows, |r| {
+        println!(
+            "rust: flare {:+.1} (mouth {:>4.1} m) -> impulse x{:.3} floor peak x{:.3} wall peak \
+             x{:.3} residence {:.2} crossings",
+            r.flare, r.mouth, r.impulse_vs_1d, r.floor_peak_vs_1d, r.wall_peak_vs_1d, r.residence,
+        );
+        for c in columns
+            .iter()
+            .filter(|c| c.depth == 4.0 && c.pulse_length == 4.0)
+        {
+            let share = c.ceiling_share * r.impulse_vs_1d;
+            println!(
+                "rust:     {:>5} w={:>5.0}: eta_jet {:.3}",
+                c.material,
+                c.w,
+                (share * (1.0 + (1.0 + SPRAY_K).sqrt()) - 1.0) / (1.0 + SPRAY_K).sqrt(),
+            );
+        }
+    })
+}
+
 // ---- Heavy-plate 16–28 km/s scenario sweep (special scenario, design §12.1 / ADR-0027) ----------
 //
 // A 100 kg pulse on a tripled 30 m-diameter (`R = 15 m`) pusher plate of mass `≤ 40 t`, swept
@@ -3976,6 +4323,8 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--mesh-convergence", cmd_mesh_convergence),
     ("--transport-resolution", cmd_transport_resolution),
     ("--transport-check", cmd_transport_check),
+    ("--spray-2d-lip", cmd_spray_2d_lip),
+    ("--plug-2d", cmd_plug_2d),
     ("--spray-k", cmd_spray_k),
     ("--spray-film", cmd_spray_film),
     ("--spray-2d-cup", cmd_spray_2d_cup),

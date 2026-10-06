@@ -333,6 +333,31 @@ and 14, both mixing bounds (stratified layers and premixed slab, on each k's mix
 - Every stratified peak stays at or under maraging's 2.5 GPa (water k = 10, 65 km/s: 2.46).
   Premixed peaks are 0.06-0.16 GPa.
 
+**An inward lip on the skirt (2026-10-06): it lowers the impulse.** `--spray-2d-lip` leans the
+working cup's 4 m skirt inward (flare 0 to -1.0, mouth 20 -> 12 m), with its own stepping loop for
+wall pressure. The straight case reproduces step 2d (x1.071).
+
+| Skirt lean (mouth) | 0 (20 m) | -0.2 (18.4 m) | -0.4 (16.8 m) | -0.6 (15.2 m) | -1.0 (12 m) |
+|---|---|---|---|---|---|
+| Impulse vs 1-D | 1.071 | 0.973 | 0.898 | 0.812 | 0.770 |
+| Argon η_jet | 0.577 | 0.497 | 0.435 | 0.364 | 0.330 |
+
+- **A lip is the converging half of a nozzle without the diverging half.** Gas pressing up on the
+  lip's underside acts against the thrust, and the jet leaves near sonic with pressure still in it,
+  then expands outside where nothing catches it. For γ = 1.4 a converging-only nozzle gives ~70% of
+  the ideal thrust coefficient, below the open cup's ~87%, because free expansion off the floor
+  already turns nearly all the heat into motion.
+- **The straight-skirt cup stays the best open design.** A lip pays only with a diverging bell
+  after it, which is the heavy chamber end. Even then a pulsed chamber's decaying pressure spreads
+  its exit speed, so the ~13% speed-spread loss is close to fundamental for pulsed operation.
+- **The first lip run stopped at once:** the ambient gas under an overhang makes the starting net
+  force negative, and the kernel's tail guard then fires. The lip loop now arms its guard only
+  after the pulse arrives. `run_bounce` in `euler2d` has the same latent bug for any overhanging
+  cup, which needs a test-first fix. Step 2d's outward flares were not affected (the bug gives
+  near-zero impulse, which they did not show).
+- The "time in cup" measure did not discriminate (~19 crossings either way), because the spray's
+  own mass dominates it.
+
 **Steel temperature over a push (2026-10-05): ablative film on maraging, propellant-cooled.**
 `make water-plate-plate-thermal` drives the coated-wall solver (`walled_nozzle/wall_layers.py`,
 extended with a substrate, between-pulse cooling and a cold respray) for 1,500 pulses at 4 Hz.
