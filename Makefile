@@ -696,6 +696,13 @@ water-plate-argon-levers: data/tables/argon.json data/tables/water_jupiter.json
 water-plate-argon-2d: data/tables/argon.json data/tables/water_jupiter.json
 	cargo run --release -p sweep -- --spray-2d
 
+## water-plate-collisionality: R3, does the arriving PuffSat collide with the argon spray? ZBL
+## cross-sections at the closing speed, ion channels, the leading edge, droplets, PLX benchmark
+## -> data/results/water_plate/collisionality.csv
+.PHONY: water-plate-collisionality
+water-plate-collisionality:
+	PYTHONPATH=python $(PY) -m puffsat.water_plate.collisionality
+
 ## water-plate-plate-thermal: the face over a push (1,500 pulses), ablative film on maraging 300,
 ## uncooled vs cold-film respray vs water spray -> data/results/water_plate/plate_thermal.csv
 water-plate-plate-thermal: data/results/water_plate/spray_levers.jsonl
@@ -750,7 +757,7 @@ water-plate-argon-2d-shape:
 	PYTHONPATH=python $(PY) -m puffsat.water_plate.plate_shape
 
 water-plate-argon-test:
-	uv run pytest python/tests/test_water_plate_spray_eos.py
+	uv run pytest python/tests/test_water_plate_spray_eos.py python/tests/test_water_plate_collisionality.py
 	cargo test --release -p hydro1d --test layered
 
 water-plate-thermo:

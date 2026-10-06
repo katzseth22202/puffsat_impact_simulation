@@ -24,13 +24,42 @@ repository solve (`make water-plate-argon-radiation`).
 microseconds. Bounce-back is a question of layout. A thin, dense pooled layer acts as a wall
 (**cushion bounce**). A diffuse **spray cloud** does not.
 
-**Do the fluid models hold at these speeds?** Atoms meet at about 10-130 eV in the
-center-of-mass frame, where momentum-transfer cross sections shrink to roughly 10^-20 m^2 (an
-estimate, not sourced). The argon column is fixed by `k` and the pulse's areal mass, about 9e25
-atoms/m^2 over the footprint. That still gives about 10^6 collisions, and about 10^4 even with a
-cross section 100x smaller. Spreading the cloud deeper does not thin the column. Only spray thrown
-outside the footprint does. The fluid treatment fails only in a free-path-thick edge layer,
-microns thick. Once the gas ionizes, Coulomb collisions take over, with larger cross sections.
+**Do the fluid models hold at these speeds? Yes, by about six decades (R3, 2026-10-06;
+`make water-plate-collisionality`).** At the 150 t design point (k = 8.52, 12 MN s, 4 m cloud on
+a 5 m footprint) the argon is 2.5-3.8e25 atoms/m^3. Cold neutral water meets cold neutral argon at
+46-68 km/s, so O-Ar collides at 123-274 eV and H-Ar at 11-24 eV in the centre-of-mass frame.
+Momentum-transfer cross-sections from the ZBL screened-Coulomb potential (Ziegler, Biersack and
+Littmark 1985), integrated exactly, are 1.3-2.1e-20 m^2 for O-Ar and 2.1-3.4e-20 for H-Ar. The
+hard-sphere value at that speed (`pi r0^2`, the generous case) is 1.0-1.6e-20.
+
+| | 45.58 km/s | 65.13 km/s | 68 km/s |
+|---|---|---|---|
+| O stopping length in the spray | 1.8 µm | 4.0 µm | 4.4 µm |
+| Kn against 4 m, generous neutral | 4.5e-7 | 1.0e-6 | 1.1e-6 |
+| Momentum-relaxation lengths in the argon column | 2.2e6 | 1.0e6 | 0.9e6 |
+| Ion-neutral (Ar+-Ar reference, 1e-18 m^2) | 0.03 µm | 0.04 µm | 0.04 µm |
+| Coulomb drag, O+ in Ar+ at Te 3 eV | 3.7 µm | 19 µm | 23 µm |
+
+- **Coulomb drag is not shorter.** Its cross-section falls as `v^-4`, so at these speeds a fully
+  ionized spray stops an ion over a *longer* path than the neutrals do. That is still five
+  decades under the cloud depth. The earlier line here, that Coulomb collisions take over with
+  larger cross sections, was wrong at 50-70 km/s.
+- **Leading edge.** Kn reaches 0.1 against 4 m at a PuffSat density of 1.5-2.6e20 m^-3, which is
+  (1.6-3.9)e-5 of the pulse's mean. The mass arriving below it is 2.5e-6 to 6.7e-6 for a 1-D
+  Gaussian, 1.6e-5 to 3.9e-5 for an exponential tail and 0.6e-4 to 1.5e-4 for a 3-D Gaussian. That
+  is its *own* collisionality, though. A thin leading-edge atom still meets the spray at full
+  density and stops within microns. It is deposited, not streamed through.
+- **Droplets are the one escape.** If the argon is still liquid when the gas arrives, an atom
+  travels `4 r rho_l / (3 rho_spray)` between droplets. That reaches Kn = 0.1 at a droplet radius of
+  0.36-0.54 mm. Sub-0.1 mm spray is safe. Millimetre drops that have not boiled are not.
+- **PLX benchmark.** Argon plasma jets show collisional stagnation at stopping length / layer
+  width 0.3-0.6 (Merritt et al., Phys. Plasmas 21, 055703 (2014), oblique, ~40 km/s). They
+  interpenetrate at 40 and turn to stagnation by about 5 (Moser and Hsu, Phys. Plasmas 22, 055707
+  (2015), head-on, v_rel ≈ 90 km/s). This study sits at ~1e-6, about six decades on the
+  collisional side of a measured boundary. PLX checks the criterion, not our cross-sections:
+  its collisions are Coulomb at ~1e20 m^-3, and ours are neutral at ~3e25 m^-3.
+- Spreading the cloud deeper does not thin the column, which `k` fixes. Only spray thrown outside
+  the footprint, or spray still in large drops, can leak.
 
 **Share of the overtake ceiling at `k = 10`** (ceiling 4.32 `m w`; a bare elastic bounce is 2, or
 0.46). The stratified and pearl rows are extrapolated from 10/20/40 cells per layer. The

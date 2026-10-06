@@ -315,6 +315,27 @@ temperature. Aramid suits only tension (gas bags, tendons): its compressive stre
 **Change.** Name maraging 300/350 as the plate steel, with a 2.5 GPa face allowable and a ~480 °C
 bulk limit.
 
+**Notes for the paper on why maraging (added 2026-10-06).**
+- **The reason is the face's limit under shock, not yield strength.** The face is loaded in
+  uniaxial strain, so what limits it is the Hugoniot elastic limit. Maraging's sets 2.5 GPa
+  against 1.5 GPa for HY-100 or 4340, and the stratified pulses peak at 1.8-2.5 GPa. The paper
+  should not claim that a stronger steel thins the plate in proportion to its yield strength. The
+  taper and the delivered impulse set the plate's mass (P2), not yield.
+- **Prefer 300 to 350.** 300 is notably tougher, and its calculated limit (3.1-3.6 GPa) still
+  clears 2.5 GPa. That figure is calculated only; the one measured value is for 350.
+- **Open: fatigue and spall.** These have not been analysed. The ~1 ms main pulse is much longer
+  than the ~7 µs it takes a stress wave to cross the steel, so the tension reflected off the back
+  face largely cancels against the incoming compression. The 1-30 µs overload spikes do not cancel,
+  and they recur ~1,500 times per push. Toughness and crack growth at the **back** face are the
+  open items.
+- **Layering, if used, must put the tough grade at the back.** Reflected tension and spall start
+  at the back face, so a less-tough backing would put the weakest steel where the tension is. Every
+  layer also sees the full ~P in compression, so the backing must clear 2.5 GPa too, which rules
+  out HY-100 (1.89 GPa measured). A bonded steel-on-steel joint barely reflects the wave, so it
+  becomes a place to crack and peel apart. Maraging 300 all the way through is simpler.
+- **Orion is not the precedent.** Orion's plate material is not established here, and this case
+  does not depend on it.
+
 ### P13. The injection ratio k is a mission trade: `sec:water_injected_overtake`, the growth ledger
 
 Solved (`make water-plate-argon-k`). On the cup, η_jet is nearly flat from k = 4 to 14. Raising k

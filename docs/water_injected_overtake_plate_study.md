@@ -472,8 +472,10 @@ that density gives about 291.36 K. The collision pays subsequent heating and
 phase changes. No feed energy or momentum has been added.
 
 The existing 1D Lagrangian kernel tracks the material contact and its pressure
-waves. There is **no interpenetration or heat exchange across that contact**,
-distributed source, droplet physics, radial escape, finite plate boundary,
+waves. There is **no interpenetration or heat exchange across that contact**
+(justified for vapour spray: Kn ~ 1e-6 at the closing speed, see the R3 entry in
+[`argon_plate_handoff.md`](argon_plate_handoff.md); unjustified for unboiled drops
+larger than ~0.4 mm), distributed source, droplet physics, radial escape, finite plate boundary,
 radiation, wall heat loss, ablation or plate recoil. This is a stratified
 prepositioned-water reference, **not Stage 1's immediate local spray mixing**.
 The footprint is an area normalization, not a selected finite plate design.
