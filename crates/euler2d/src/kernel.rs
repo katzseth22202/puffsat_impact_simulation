@@ -181,6 +181,55 @@ impl Grid2D {
         }
     }
 
+    /// Gas pressure on the dish floor's risers (ADR-0055, Q63): one `(z, r, p)` per cell row
+    /// between the floor's axis height and its rim. In each row the first solid cell outward from
+    /// the axis is the floor, `r` is that cell's inner face, and the fluid cell just inside carries
+    /// the pressure. Each row is a ring of the bowl pushed outward over `dz`, the load its hoop
+    /// carries. Empty for a flat floor.
+    #[must_use]
+    pub fn floor_riser_pressure(&self) -> Vec<(f64, f64, f64)> {
+        let Some((z_axis, z_rim)) = self.plate_profile.and_then(|p| p.floor_span()) else {
+            return Vec::new();
+        };
+        (0..self.nz)
+            .filter(|&iz| {
+                let z = self.z_center(iz);
+                z >= z_axis && z < z_rim
+            })
+            .filter_map(|iz| {
+                (1..self.nr).find(|&ir| self.is_solid(iz, ir)).map(|ir| {
+                    (
+                        self.z_center(iz),
+                        ir as f64 * self.dr,
+                        self.prim(iz, ir - 1).p,
+                    )
+                })
+            })
+            .collect()
+    }
+
+    /// Gas pressure on the cup wall's inner face (ADR-0055): one `(z, p)` per cell row whose centre
+    /// lies between the floor's rim and the wall's lip. Above the rim the floor is not solid, so in
+    /// each row the first solid cell outward from the axis is the wall, and the fluid cell just
+    /// inside it carries the face pressure. Empty without a wall.
+    #[must_use]
+    pub fn skirt_face_pressure(&self) -> Vec<(f64, f64)> {
+        let Some((z_rim, z_top)) = self.plate_profile.and_then(|p| p.wall_span()) else {
+            return Vec::new();
+        };
+        (0..self.nz)
+            .filter(|&iz| {
+                let z = self.z_center(iz);
+                z >= z_rim && z < z_top
+            })
+            .filter_map(|iz| {
+                (1..self.nr)
+                    .find(|&ir| self.is_solid(iz, ir))
+                    .map(|ir| (self.z_center(iz), self.prim(iz, ir - 1).p))
+            })
+            .collect()
+    }
+
     /// Axial force of column `ir` on the immersed solid (`2π` dropped): `+p·r·dr` for every fluid
     /// cell resting on solid (gas pushing the plate down), `−p·r·dr` for every fluid cell under an
     /// overhang (a flared wall's outer face, gas pushing up). A dish column has exactly one

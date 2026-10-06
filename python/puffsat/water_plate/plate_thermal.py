@@ -62,6 +62,8 @@ class Case:
     #: "pitch" (the paper model at the step-1b thickness), or "pitch2x"/"oil2x": the film at twice
     #: its shielded consumption per pulse (spray_film.jsonl, kappa_vapor 5e3).
     film: str = "pitch"
+    #: Steel behind the film [m]: the solver's 30 mm, or a thinner floor (70 t averages ~28 mm).
+    steel_depth: float = wl.STEEL_DEPTH
 
 
 @dataclass(frozen=True)
@@ -72,6 +74,7 @@ class Row:
     scheme: str
     h_cool: float
     film: str
+    steel_depth: float
     film_thickness: float
     face_energy: float
     end_steel: float
@@ -153,6 +156,7 @@ def run_case(case: Case) -> Row:
         substrate=MARAGING,
         cooling=cooling,
         respray=respray,
+        steel_depth=case.steel_depth,
     )
     return Row(
         material=case.material,
@@ -161,6 +165,7 @@ def run_case(case: Case) -> Row:
         scheme=case.scheme,
         h_cool=case.h_cool,
         film=case.film,
+        steel_depth=case.steel_depth,
         film_thickness=coat.thickness,
         face_energy=energy,
         end_steel=run.end_steel,
@@ -188,6 +193,11 @@ def cases() -> list[Case]:
             for w in PUFFSAT_MASS:
                 out.append(Case(material, w, 1e-3, "respray", 0.0, film))
                 out.append(Case(material, w, 1e-3, "water", 3.0e3, film))
+    # The 70 t floor (ADR-0055, Q57): ~28 mm on average, ~15 mm at a thinned rim.
+    for depth in (0.028, 0.015):
+        for material in ("argon", "water"):
+            for w in PUFFSAT_MASS:
+                out.append(Case(material, w, 1e-3, "respray", 0.0, "pitch", depth))
     return out
 
 
@@ -203,6 +213,7 @@ def main() -> None:
     for r in rows:
         print(
             f"{r.material:5} w={r.w / 1e3:5.2f} {r.film:7} {r.film_thickness * 1e6:4.0f}um "
+            f"steel {r.steel_depth * 1e3:2.0f}mm "
             f"tau={r.tau * 1e3:3.1f}ms {r.scheme:7} "
             f"h={r.h_cool:7.0f}: face {r.face_energy / 1e6:5.2f} MJ/m2, steel end "
             f"{r.end_steel:5.0f} K peak {r.peak_steel:5.0f} K, film {r.film_removed:5.1f} kg, "

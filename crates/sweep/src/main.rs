@@ -32,8 +32,9 @@ use std::io::Write as _;
 use std::path::Path;
 
 use euler2d::bounce::{
-    PlateShape, SlugConfig, SprayCloud, eta_capture, init_spray_grid, run_slug_bounce,
-    run_spray_bounce, taper_sigma_stats,
+    PlateShape, SlugConfig, SprayCloud, TrailingPearl, eta_capture, init_spray_grid,
+    run_slug_bounce, run_spray_bounce, run_spray_bounce_with_ambient, run_spray_bounce_with_pearl,
+    run_spray_bounce_with_skirt_history, taper_sigma_stats,
 };
 use hydro1d::conduction::Solid;
 use hydro1d::eos::{Eos as _, TableEos};
@@ -2087,7 +2088,7 @@ struct SprayCupRecord {
 /// `(label, d/D, wall height [m], flare)`; a zero height is the plain dish.
 type CupShape = (&'static str, f64, f64, f64);
 
-const SPRAY_CUP_SHAPES: [CupShape; 10] = [
+const SPRAY_CUP_SHAPES: [CupShape; 12] = [
     ("open plate", 0.0, 0.0, 0.0),
     ("dish 0.10", 0.10, 0.0, 0.0),
     ("dish 0.15", 0.15, 0.0, 0.0),
@@ -2098,6 +2099,8 @@ const SPRAY_CUP_SHAPES: [CupShape; 10] = [
     ("flare 0.6, 4 m", 0.0, 4.0, 0.6),
     ("dish 0.10 + skirt 4 m", 0.10, 4.0, 0.0),
     ("dish 0.10 + flare 0.3, 4 m", 0.10, 4.0, 0.3),
+    ("dish 0.10 + skirt 8 m", 0.10, 8.0, 0.0),
+    ("dish 0.10 + skirt 12 m", 0.10, 12.0, 0.0),
 ];
 
 fn spray_cup_case(shape: CupShape, refine: usize) -> SprayCupRecord {
@@ -2512,6 +2515,11 @@ const PLUG_SPHERE_L: f64 = 0.15;
 const PLUG_LENGTH: f64 = 1.58;
 const PLUG_PLATE_R: f64 = 3.16;
 const PLUG_DR: f64 = 0.02;
+/// The ambient (vacuum stand-in) as a fraction of the sphere's density. The default 10⁻³ would weigh
+/// ~5 times the plug on this domain, tamp the fireball and hold the plate above the quiet cutoff, so
+/// the run integrated to its step cap (β 52, 12 times the ceiling); at 10⁻⁶ it is ~5% of the
+/// sphere (`crates/euler2d/tests/plug_ambient.rs`).
+const PLUG_AMBIENT: f64 = 1.0e-6;
 const RESULT_PATH_PLUG_2D: &str = "data/results/water_plate/plug_2d.jsonl";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -2526,14 +2534,16 @@ struct Plug2dRecord {
     nz: usize,
 }
 
-fn plug_case(label: &str, standoff: f64, skirt: f64) -> Plug2dRecord {
+/// One plug case on cells `PLUG_DR / refine` wide (`refine` 1 is the production grid).
+fn plug_case(label: &str, standoff: f64, skirt: f64, refine: usize) -> Plug2dRecord {
     // Domain: the plate plus a 0.8 m margin; height covers the plug, the sphere and the skirt.
     let r_max = PLUG_PLATE_R + 0.84;
-    let nr = 200;
+    let nr = 200 * refine;
+    let dr = PLUG_DR / refine as f64;
     let top = (standoff + PLUG_LENGTH + PLUG_SPHERE_L + 2.0).max(skirt + 2.0);
     // Round the height up to a whole number of cells without a float-to-int cast.
     let mut nz = 0usize;
-    while (nz as f64) * PLUG_DR < top {
+    while (nz as f64) * dr < top {
         nz += 1;
     }
     let shape = if skirt > 0.0 {
@@ -2553,7 +2563,7 @@ fn plug_case(label: &str, standoff: f64, skirt: f64) -> Plug2dRecord {
         length: PLUG_SPHERE_L,
         r_plate: PLUG_PLATE_R,
         r_max,
-        z_max: nz as f64 * PLUG_DR,
+        z_max: nz as f64 * dr,
         nr,
         nz,
         confined: false,
@@ -2561,13 +2571,14 @@ fn plug_case(label: &str, standoff: f64, skirt: f64) -> Plug2dRecord {
         taper_frac: 0.0,
         alpha_div: 0.0,
     };
-    let r = run_spray_bounce(
+    let r = run_spray_bounce_with_ambient(
         &cfg,
         SprayCloud {
             depth: PLUG_LENGTH,
             mass_ratio: PLUG_K,
             standoff,
         },
+        PLUG_AMBIENT,
     );
     let beta = r.restitution_ratio();
     Plug2dRecord {
@@ -2625,12 +2636,19 @@ fn spray_cup_beta() -> Plug2dRecord {
 
 /// `--plug-2d` runs every case and the spray reference; `--plug-2d N` runs only case `N` (0-5, or
 /// 6 for the spray reference) and writes `plug_2d_N.jsonl`, so a slow case cannot cost the others.
+/// `--plug-2d N R` runs case `N` on an `R`-times finer grid into `plug_2d_N_xR.jsonl`.
 fn cmd_plug_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let only: Option<usize> = args
         .iter()
         .skip_while(|a| *a != "--plug-2d")
         .nth(1)
         .and_then(|a| a.parse().ok());
+    let refine: usize = args
+        .iter()
+        .skip_while(|a| *a != "--plug-2d")
+        .nth(2)
+        .and_then(|a| a.parse().ok())
+        .unwrap_or(1);
     let cases: [(&str, f64, f64); 6] = [
         ("plug 1 m off, dish only", 1.0, 0.0),
         ("plug 1 m off, skirt 4 m", 1.0, 4.0),
@@ -2642,10 +2660,12 @@ fn cmd_plug_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let (rows, path) = match only {
         Some(i) if i < cases.len() => {
             let (label, standoff, skirt) = cases[i];
-            (
-                vec![plug_case(label, standoff, skirt)],
-                format!("data/results/water_plate/plug_2d_{i}.jsonl"),
-            )
+            let path = if refine > 1 {
+                format!("data/results/water_plate/plug_2d_{i}_x{refine}.jsonl")
+            } else {
+                format!("data/results/water_plate/plug_2d_{i}.jsonl")
+            };
+            (vec![plug_case(label, standoff, skirt, refine)], path)
         }
         Some(_) => (
             vec![spray_cup_beta()],
@@ -2653,7 +2673,7 @@ fn cmd_plug_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         ),
         None => {
             let mut rows = par_map_with_progress("plug-2d", &cases, |&(label, standoff, skirt)| {
-                plug_case(label, standoff, skirt)
+                plug_case(label, standoff, skirt, 1)
             });
             rows.push(spray_cup_beta());
             (rows, RESULT_PATH_PLUG_2D.to_string())
@@ -2669,6 +2689,325 @@ fn cmd_plug_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "rust: ballistic plug fireball, all toward-plate gas caught: beta 2.739 (0.635 of ceiling)"
     );
     Ok(())
+}
+
+// ---- Spray plate: the skirt's outward load (ADR-0055, Q56) --------------------------------------
+//
+// The working spray (4 m cloud, 1 m off the floor, k = 10) in cups with a straight skirt, recording
+// the gas pressure on the skirt's inner face row by row through the bounce. `skirt_hoop.py` scales
+// the histories to the real pulse and sizes the liner and fibre wrap.
+
+const RESULT_PATH_SPRAY_SKIRT: &str = "data/results/water_plate/spray_2d_skirt.jsonl";
+
+/// `(label, d/D, skirt height [m])`.
+const SKIRT_LOAD_CASES: [(&str, f64, f64); 3] = [
+    ("dish 0.10 + skirt 4 m", 0.10, 4.0),
+    ("dish 0.10 + skirt 8 m", 0.10, 8.0),
+    ("flat + skirt 4 m", 0.0, 4.0),
+];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SprayskirtRecord {
+    case: String,
+    d_over_d: f64,
+    skirt_m: f64,
+    /// Length unit [m] (the pulse length) and the plate radius in that unit.
+    unit_m: f64,
+    r_plate: f64,
+    /// Floor impulse, `∫ Σ p r dr dt` with the common 2π dropped (as `Bounce2D`).
+    wall_impulse: f64,
+    incident_momentum: f64,
+    /// Row heights, sample times and face pressures (`pressure[i][j]` at `time[i]`, row `z[j]`).
+    z: Vec<f64>,
+    time: Vec<f64>,
+    pressure: Vec<Vec<f64>>,
+}
+
+fn spray_skirt_case(case: (&str, f64, f64)) -> SprayskirtRecord {
+    let (label, d_over_d, skirt_m) = case;
+    let unit = SPRAY_2D_PULSE_M;
+    let cfg = SlugConfig {
+        shape: PlateShape::Cup {
+            d_over_d,
+            skirt_height: skirt_m / unit,
+            flare: 0.0,
+            thickness: SPRAY_CUP_WALL,
+        },
+        ..pearl_cup_cfg(SPRAY_CUP_NZ)
+    };
+    let (r, history) = run_spray_bounce_with_skirt_history(&cfg, pearl_cloud(SPRAY_K));
+    SprayskirtRecord {
+        case: label.to_string(),
+        d_over_d,
+        skirt_m,
+        unit_m: unit,
+        r_plate: cfg.r_plate,
+        wall_impulse: r.wall_impulse,
+        incident_momentum: r.incident_momentum,
+        z: history.z,
+        time: history.time,
+        pressure: history.pressure,
+    }
+}
+
+/// `--spray-2d-skirt`: the skirt's face-pressure histories for each case.
+fn cmd_spray_2d_skirt(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let rows = par_map_with_progress("spray-2d-skirt", &SKIRT_LOAD_CASES, |&c| {
+        spray_skirt_case(c)
+    });
+    emit_scenario(RESULT_PATH_SPRAY_SKIRT, "spray-2d-skirt", &rows, |r| {
+        println!(
+            "rust: {:<24} -> beta {:.3}, {} wall rows, {} samples",
+            r.case,
+            r.wall_impulse / r.incident_momentum,
+            r.z.len(),
+            r.time.len(),
+        );
+    })
+}
+
+// ---- Spray plate: the 150 t plate's shape (ADR-0055, Q62-Q63) ---------------------------------
+//
+// Dish depth against skirt height at the paper's k = 8.52: each shape's impulse against the 1-D
+// confined column, and the face-pressure histories on its skirt and on its dish's risers, which
+// `plate_shape.py` sizes into liner and wrap. Histories keep every fourth step to bound the file.
+
+const SHAPE_K: f64 = 8.52;
+const SHAPE_DEPTHS: [f64; 5] = [0.10, 0.15, 0.20, 0.25, 0.30];
+const SHAPE_SKIRTS_M: [f64; 3] = [0.0, 2.0, 4.0];
+const SHAPE_DECIMATE: usize = 4;
+const RESULT_PATH_SPRAY_SHAPE: &str = "data/results/water_plate/spray_2d_shape.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SprayShapeRecord {
+    d_over_d: f64,
+    skirt_m: f64,
+    k: f64,
+    unit_m: f64,
+    r_plate: f64,
+    impulse_vs_1d: f64,
+    beta: f64,
+    wall_impulse: f64,
+    incident_momentum: f64,
+    skirt_z: Vec<f64>,
+    band_z: Vec<f64>,
+    band_r: Vec<f64>,
+    time: Vec<f64>,
+    skirt_pressure: Vec<Vec<f64>>,
+    band_pressure: Vec<Vec<f64>>,
+}
+
+fn spray_shape_case(d_over_d: f64, skirt_m: f64) -> SprayShapeRecord {
+    let unit = SPRAY_2D_PULSE_M;
+    let r_plate = 10.0 / unit;
+    // Headroom for the dish's depth on top of the default domain, in whole cells.
+    let depth = d_over_d * 2.0 * r_plate;
+    let mut extra = 0usize;
+    while (extra as f64) * SPRAY_CUP_DR < depth {
+        extra += 1;
+    }
+    let nz = SPRAY_CUP_NZ + extra;
+    let shape = if skirt_m > 0.0 {
+        PlateShape::Cup {
+            d_over_d,
+            skirt_height: skirt_m / unit,
+            flare: 0.0,
+            thickness: SPRAY_CUP_WALL,
+        }
+    } else {
+        PlateShape::Dish { d_over_d }
+    };
+    let base = SlugConfig {
+        shape,
+        ..pearl_cup_cfg(nz)
+    };
+    let (free, h) = run_spray_bounce_with_skirt_history(&base, pearl_cloud(SHAPE_K));
+    let reference = run_spray_bounce(
+        &SlugConfig {
+            r_foot: base.r_max,
+            r_plate: base.r_max,
+            nr: 8,
+            confined: true,
+            shape: PlateShape::FlatGridAligned,
+            ..base
+        },
+        SprayCloud {
+            standoff: 0.0,
+            ..pearl_cloud(SHAPE_K)
+        },
+    );
+    let keep = |i: &usize| i % SHAPE_DECIMATE == 0;
+    SprayShapeRecord {
+        d_over_d,
+        skirt_m,
+        k: SHAPE_K,
+        unit_m: unit,
+        r_plate,
+        impulse_vs_1d: free.restitution_ratio() / reference.restitution_ratio(),
+        beta: free.restitution_ratio(),
+        wall_impulse: free.wall_impulse,
+        incident_momentum: free.incident_momentum,
+        skirt_z: h.z,
+        band_z: h.band_z,
+        band_r: h.band_r,
+        time: (0..h.time.len()).filter(keep).map(|i| h.time[i]).collect(),
+        skirt_pressure: (0..h.pressure.len())
+            .filter(keep)
+            .map(|i| h.pressure[i].clone())
+            .collect(),
+        band_pressure: (0..h.band_pressure.len())
+            .filter(keep)
+            .map(|i| h.band_pressure[i].clone())
+            .collect(),
+    }
+}
+
+/// `--spray-2d-shape`: every dish depth and skirt height at k = 8.52, with wall histories.
+fn cmd_spray_2d_shape(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let cases: Vec<(f64, f64)> = SHAPE_DEPTHS
+        .iter()
+        .flat_map(|&d| SHAPE_SKIRTS_M.iter().map(move |&h| (d, h)))
+        .collect();
+    let rows = par_map_with_progress("spray-2d-shape", &cases, |&(d, h)| spray_shape_case(d, h));
+    emit_scenario(RESULT_PATH_SPRAY_SHAPE, "spray-2d-shape", &rows, |r| {
+        println!(
+            "rust: dish {:.2} + skirt {:>2.0} m -> impulse x{:.3} of 1-D, beta {:.3}, {} skirt rows, \
+             {} band rows",
+            r.d_over_d,
+            r.skirt_m,
+            r.impulse_vs_1d,
+            r.beta,
+            r.skirt_z.len(),
+            r.band_z.len(),
+        );
+    })
+}
+
+// ---- Spray plate: a trailing pearl in formation behind the lead (ADR-0055, Q54) -----------------
+//
+// The working cup (dish 0.10 + 4 m skirt, 4 m cloud 1 m off the floor, k = 10 on the lead) with a
+// second PuffSat of the same architecture trailing the lead by `gap` (tail to front), holding a
+// `share` of the lead's mass. Each case is scored on the total incoming mass: the spray is
+// `k_eff = k / (1 + share)` times it, and the fair baseline is one PuffSat carrying that total mass
+// into the same cloud (the same cup run at `k_eff`). Lengths in units of the 4 m pulse.
+
+const PEARL_SHARES: [f64; 4] = [0.05, 0.10, 0.20, 0.30];
+/// Gaps from the lead's tail to the pearl's front [m]; centre to centre is 4 m more.
+const PEARL_GAPS_M: [f64; 5] = [5.0, 10.0, 15.0, 25.0, 40.0];
+const RESULT_PATH_SPRAY_PEARL: &str = "data/results/water_plate/spray_2d_pearl.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SprayPearlRecord {
+    share: f64,
+    gap_m: f64,
+    /// Plate impulse per total incoming momentum (lead + pearl).
+    beta: f64,
+    /// `(beta - 1) / √(1 + k_eff)`, `k_eff = k / (1 + share)`.
+    eta_jet: f64,
+    /// The single-PuffSat baseline at the same total mass.
+    eta_jet_single: f64,
+    peak_local_pressure: f64,
+    nz: usize,
+}
+
+/// The working cup's configuration with `nz` cells of height.
+fn pearl_cup_cfg(nz: usize) -> SlugConfig {
+    let unit = SPRAY_2D_PULSE_M;
+    SlugConfig {
+        gamma: SPRAY_2D_GAMMA,
+        mach: SPRAY_2D_MACH,
+        r_foot: 5.0 / unit,
+        length: 1.0,
+        r_plate: 10.0 / unit,
+        r_max: SPRAY_CUP_NR as f64 * SPRAY_CUP_DR,
+        z_max: nz as f64 * SPRAY_CUP_DR,
+        nr: SPRAY_CUP_NR,
+        nz,
+        confined: false,
+        shape: PlateShape::Cup {
+            d_over_d: 0.10,
+            skirt_height: 4.0 / unit,
+            flare: 0.0,
+            thickness: SPRAY_CUP_WALL,
+        },
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    }
+}
+
+fn pearl_cloud(mass_ratio: f64) -> SprayCloud {
+    SprayCloud {
+        depth: 1.0,
+        mass_ratio,
+        standoff: 1.0 / SPRAY_2D_PULSE_M,
+    }
+}
+
+/// `eta_jet` of the single-PuffSat cup at spray ratio `k`.
+fn pearl_single_eta(k: f64) -> f64 {
+    let r = run_spray_bounce(&pearl_cup_cfg(SPRAY_CUP_NZ), pearl_cloud(k));
+    (r.restitution_ratio() - 1.0) / (1.0 + k).sqrt()
+}
+
+fn spray_pearl_case(share: f64, gap_m: f64, eta_jet_single: f64) -> SprayPearlRecord {
+    let unit = SPRAY_2D_PULSE_M;
+    let gap = gap_m / unit;
+    // Height: standoff + cloud + lead + gap + pearl, plus the default domain's 3.75 units of
+    // headroom above the lead, rounded up to whole cells without a float-to-int cast.
+    let top = 1.0 / unit + 1.0 + 1.0 + gap + 1.0 + 3.75;
+    let mut nz = SPRAY_CUP_NZ;
+    while (nz as f64) * SPRAY_CUP_DR < top {
+        nz += 1;
+    }
+    let r = run_spray_bounce_with_pearl(
+        &pearl_cup_cfg(nz),
+        pearl_cloud(SPRAY_K),
+        TrailingPearl {
+            mass_ratio: share,
+            gap,
+        },
+    );
+    let beta = r.restitution_ratio();
+    let k_eff = SPRAY_K / (1.0 + share);
+    SprayPearlRecord {
+        share,
+        gap_m,
+        beta,
+        eta_jet: (beta - 1.0) / (1.0 + k_eff).sqrt(),
+        eta_jet_single,
+        peak_local_pressure: r.peak_local_pressure,
+        nz,
+    }
+}
+
+/// `--spray-2d-pearl`: every share and gap on the working cup, each beside its single-PuffSat
+/// baseline at the same total mass.
+fn cmd_spray_2d_pearl(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let singles = par_map_with_progress("pearl-baseline", &PEARL_SHARES, |&share| {
+        pearl_single_eta(SPRAY_K / (1.0 + share))
+    });
+    let cases: Vec<(f64, f64, f64)> = PEARL_SHARES
+        .iter()
+        .zip(&singles)
+        .flat_map(|(&share, &single)| PEARL_GAPS_M.iter().map(move |&gap| (share, gap, single)))
+        .collect();
+    let rows = par_map_with_progress("spray-2d-pearl", &cases, |&(share, gap, single)| {
+        spray_pearl_case(share, gap, single)
+    });
+    emit_scenario(RESULT_PATH_SPRAY_PEARL, "spray-2d-pearl", &rows, |r| {
+        println!(
+            "rust: pearl {:>4.0}% gap {:>4.0} m -> beta {:.3} eta_jet {:.3} vs single {:.3} \
+             ({:+.3}) peak {:.3e} [nz {}]",
+            100.0 * r.share,
+            r.gap_m,
+            r.beta,
+            r.eta_jet,
+            r.eta_jet_single,
+            r.eta_jet - r.eta_jet_single,
+            r.peak_local_pressure,
+            r.nz,
+        );
+    })
 }
 
 // ---- Spray plate: an inward lip on the cup's skirt (ADR-0055, Q50) -----------------------------
@@ -4325,6 +4664,9 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--transport-check", cmd_transport_check),
     ("--spray-2d-lip", cmd_spray_2d_lip),
     ("--plug-2d", cmd_plug_2d),
+    ("--spray-2d-pearl", cmd_spray_2d_pearl),
+    ("--spray-2d-skirt", cmd_spray_2d_skirt),
+    ("--spray-2d-shape", cmd_spray_2d_shape),
     ("--spray-k", cmd_spray_k),
     ("--spray-film", cmd_spray_film),
     ("--spray-2d-cup", cmd_spray_2d_cup),

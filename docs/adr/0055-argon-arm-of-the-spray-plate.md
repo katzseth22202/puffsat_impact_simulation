@@ -16,7 +16,9 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
 1. **The argon arm lives in this repository, beside the water arm.** It shares the injection ratio
    `k`, the four overtake speeds (45.58 / 56.53 / 61.83 / 65.13 km/s) and the overtake geometry. It
    reuses the shared hydrocode kernels where they fit, and adds its own where they do not.
-2. **Working case: `k = 10` and 100 t of steel plate.**
+2. **Working case: `k = 10` and 100 t of steel plate.** *Amended (Q59-Q62):* the design case is
+   now the parent ledger's 150 t plate at its k = 8.52, with 12 MN·s per pulse at 4 Hz (~92 kg of
+   PuffSat at 45.58 km/s). The 100 t, k = 10 runs stand as the study's first pass.
 3. **The plate is a tapered plate, 20 m in loaded diameter.** Its areal mass follows the delivered
    impulse, so every element takes the same kick, about 80 m/s per 8 MN·s pulse. A uniform plate
    cannot be used at any thickness. A footprint covering half the radius gives the struck region
@@ -53,8 +55,15 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
     10 m rim.** The spray cloud sits ~1 m off the floor. Spill past the rim was the largest single
     loss. Containing it raises η_jet from ~0.33 to ~0.58 (argon, 45.58 km/s; step 2d), and the
     gap lowers the face peak. The skirt is straight: a flared wall gave no more impulse for more
-    steel. The skirt (~20 t per cm of wall thickness) is sized for its own wall pressure, which is
-    far below the face's, and gets film and cooling like the face.
+    steel. The skirt gets film and cooling like the face. *Amended (Q56-Q58):* the skirt's load is
+    not small. Its base takes ~20 kPa s per pulse against the floor's 25, so a 4 m skirt built as a
+    thin maraging liner with a carbon or aramid hoop wrap weighs ~23-60 t (carbon on a dished floor
+    at the light end). The skirt is fixed to the vehicle and the floor slides inside it as a piston,
+    so the skirt never takes the floor's kick; a rigid joint would carry a ρcΔv stress wave of
+    ~1-3 GPa. The cost is a hot sliding seal at the floor's rim, and the floor alone is the sprung
+    mass. *Amended again (Q62-Q63):* inside 150 t at 12 MN·s, a deep bowl (d/D 0.25-0.30) with a
+    2 m skirt beats the shallow dish with a 4 m skirt by ~0.02 in η_jet (0.60-0.61 unmixed) and
+    cuts the skirt to 16-18 t; the bowl's steep band takes 23-36 t of its own hoop wrap.
 
 11. **The film is pitch, kept about 150 µm thick and resprayed cold each cycle.** Standing
     thickness insulates the steel; consumption is what each pulse costs, and the two are set
@@ -66,6 +75,15 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
     flat in k: argon ~0.58 unmixed to ~0.68 premixed from k = 4 to 14. Raising k buys impulse per
     PuffSat (β 2.3 -> 3.7) at the cost of impulse per carried kilogram (0.46 -> 0.21 w). k stays with
     the parent's launch-mass budget (8.5-10), whose cost weights decide it.
+13. **The spray cup is the initial design, at an η_jet = 0.6 baseline; the plug follows it.** The
+    plug reaches ~0.81 of the ceiling in the cup against the spray cup's 0.71 (2-D, converged),
+    roughly η_jet ~0.70, and needs no exploding liquid PuffSat, only two solid bodies meeting. It
+    waits because each plug must be steered into a sphere's path to millimetres in the last
+    ~100 ms, which the paper has yet to prove for the head-on nozzle, and because its best cases
+    want an 8 m skirt. The growth ledger and cost model are owed for both designs. The plug is
+    argon ice held in a cage of stronger material that carries the tethers, stored cold and
+    deployed seconds before each pulse. Polyethylene is rejected: its ~84 MJ/kg bond energy is as
+    large as the ~86 MJ/kg the collision dissipates at 45.58 km/s and k = 10.
 
 ## Considered options
 
@@ -81,6 +99,12 @@ plate, caps plate mass, or says how the plate survives repeated pulses.
 - **An inward lip (a converging mouth).** Rejected: η_jet falls from 0.58 to 0.33 as the mouth
   narrows from 20 to 12 m. Pressure on the lip's underside opposes the thrust, and a converging-only
   nozzle leaves its jet under-expanded.
+- **A tamper on the rebound (a trailing pearl or a tethered sheet).** Rejected. A second PuffSat
+  trailing the lead by 5-40 m with 5-30% of its mass lowers η_jet by 0.03-0.18 against one PuffSat
+  of the same total mass. It is 0.5-3% of the rebounding gas, it meets that gas head-on and turns
+  its energy to heat, and its mass gets none of the spray's leverage. A tethered sheet cannot leave
+  the incoming path in the ~0.2 ms the pulse takes to pass. As stand-off reaction mass it gives
+  0.61-0.67 of the ceiling against the cloud's 0.71. The spray cloud is the tamper.
 - **A carbon-loaded oil film.** Rejected for 4-7x the film consumption of pitch, when pitch at
   150 µm already holds the steel under its aging limit without coolant.
 - **Steering by impact offset alone, as the child repo describes.** Limited, because large offsets

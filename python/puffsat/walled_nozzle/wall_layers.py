@@ -281,9 +281,13 @@ class Grid:
 
 
 def build_grid(
-    coating: Coating, n_coat: int = 40, first: float = 5e-6, substrate: Substrate = CRMO
+    coating: Coating,
+    n_coat: int = 40,
+    first: float = 5e-6,
+    substrate: Substrate = CRMO,
+    steel_depth: float = STEEL_DEPTH,
 ) -> Grid:
-    """Uniform nodes through the coating, then geometric growth into the steel."""
+    """Uniform nodes through the coating, then geometric growth into `steel_depth` of steel."""
     xs = [0.0]
     if coating.thickness > 0.0:
         xs += list(np.linspace(0.0, coating.thickness, n_coat + 1)[1:])
@@ -291,7 +295,7 @@ def build_grid(
     else:
         dx = first
     interface = len(xs) - 1
-    while xs[-1] < coating.thickness + STEEL_DEPTH:
+    while xs[-1] < coating.thickness + steel_depth:
         dx = min(dx * 1.12, 1e-3)
         xs.append(xs[-1] + dx)
     return Grid(np.array(xs), interface, coating, substrate)
@@ -386,8 +390,11 @@ def run(
     substrate: Substrate = CRMO,
     cooling: Cooling | None = None,
     respray: Respray | None = None,
+    steel_depth: float = STEEL_DEPTH,
 ) -> WallRun:
     """March the wall through `pulses` cycles at 4 Hz, adiabatic between pulses.
+
+    The steel is `steel_depth` thick behind the coating, with an adiabatic back face.
 
     Adiabatic between pulses is the no-quench case, so the steel's end-of-cycle temperature shows
     the ratchet the paper's between-pulse methane spray has to remove. Each step: build the
@@ -408,7 +415,7 @@ def run(
     result -- see the sensitivity in `main`. The grid does not move as material is removed, as
     for the thermal removal already here.
     """
-    grid = build_grid(coating, substrate=substrate)
+    grid = build_grid(coating, substrate=substrate, steel_depth=steel_depth)
     n = len(grid.x)
     coat_nodes = grid.x < coating.thickness
     temps = np.full(n, INITIAL_TEMP)

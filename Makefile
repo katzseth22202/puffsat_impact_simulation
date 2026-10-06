@@ -8,7 +8,7 @@
 PY := uv run python
 
 .PHONY: tamper-ledger tamper-test
-.PHONY: water-plate-argon-table water-plate-argon-pure-table water-plate-argon-radiation water-plate-argon-ablating water-plate-argon-mixing water-plate-argon-levers water-plate-argon-2d water-plate-argon-2d-standoff water-plate-argon-2d-cup water-plate-argon-film water-plate-argon-k water-plate-argon-2d-lip water-plate-plug-2d water-plate-plate-thermal water-plate-argon-test water-plate-ledger water-plate-profiles water-plate-thermo water-plate-chemistry water-plate-flow-table water-plate-flow water-plate-flow-analysis water-plate-test
+.PHONY: water-plate-argon-table water-plate-argon-pure-table water-plate-argon-radiation water-plate-argon-ablating water-plate-argon-mixing water-plate-argon-levers water-plate-argon-2d water-plate-argon-2d-standoff water-plate-argon-2d-cup water-plate-argon-film water-plate-argon-k water-plate-argon-2d-lip water-plate-plug-2d water-plate-argon-2d-pearl water-plate-argon-2d-skirt water-plate-argon-2d-shape water-plate-plate-thermal water-plate-argon-test water-plate-ledger water-plate-profiles water-plate-thermo water-plate-chemistry water-plate-flow-table water-plate-flow water-plate-flow-analysis water-plate-test
 .PHONY: all smoke build test lint fmt clean tables sweep analysis sensitivity sweep-geometry-m40 sweep-geometry-wide analysis-conductivity analysis-expansion analysis-nozzle-ledger analysis-nozzle-field analysis-nozzle-detachment analysis-nozzle-jet analysis-nozzle-snowplow analysis-continuum analysis-nozzle-fluxtube analysis-nozzle-extension analysis-nozzle-residence analysis-nozzle-front analysis-nozzle-phi analysis-replies analysis-recombination analysis-electrothermal analysis-plume analysis-fireball analysis-toll analysis-coupling analysis-lte analysis-opacity-bracket sweep-transport-check sweep-transport-resolution sweep-mesh-convergence analysis-transport-check sweep-probe-heavyplate-diag tables-lowv sweep-lowv analysis-lowv sweep-transitional analysis-transitional sweep-geometry analysis-geometry analysis-survivability analysis-margin sweep-ablating analysis-ablating sweep-frozen-probe tables-frozen sweep-frozen analysis-frozen tables-jupiter sweep-jupiter analysis-jupiter sweep-frozen-probe-jupiter tables-frozen-jupiter sweep-frozen-jupiter analysis-frozen-jupiter fetch-tops sweep-heavyplate analysis-heavyplate analysis-structure-heavyplate sweep-frozen-probe-heavyplate tables-frozen-heavyplate sweep-frozen-heavyplate analysis-frozen-heavyplate sweep-shape analysis-shape sweep-frozen-probe-shape tables-frozen-shape sweep-frozen-shape analysis-frozen-shape
 
 all: smoke
@@ -731,6 +731,23 @@ water-plate-argon-2d-lip: data/results/water_plate/spray_levers.jsonl
 ## alone -> data/results/water_plate/plug_2d*.jsonl
 water-plate-plug-2d:
 	cargo run --release -p sweep -- --plug-2d $(ARGS)
+
+## water-plate-argon-2d-pearl: a trailing pearl in formation behind the lead, on the working cup
+## -> data/results/water_plate/spray_2d_pearl.jsonl
+water-plate-argon-2d-pearl:
+	cargo run --release -p sweep -- --spray-2d-pearl
+
+## water-plate-argon-2d-skirt: the skirt's face-pressure histories, then the liner and wrap sized
+## to the real pulse -> data/results/water_plate/spray_2d_skirt.jsonl, skirt_hoop.csv
+water-plate-argon-2d-skirt:
+	cargo run --release -p sweep -- --spray-2d-skirt
+	PYTHONPATH=python $(PY) -m puffsat.water_plate.skirt_hoop
+
+## water-plate-argon-2d-shape: dish depth x skirt height at k = 8.52, sized into the 150 t plate
+## -> data/results/water_plate/spray_2d_shape.jsonl, plate_shape.csv
+water-plate-argon-2d-shape:
+	cargo run --release -p sweep -- --spray-2d-shape
+	PYTHONPATH=python $(PY) -m puffsat.water_plate.plate_shape
 
 water-plate-argon-test:
 	uv run pytest python/tests/test_water_plate_spray_eos.py

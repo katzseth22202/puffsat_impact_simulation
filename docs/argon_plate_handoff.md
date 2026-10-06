@@ -466,6 +466,119 @@ The short form follows.
     trades the mixing risk for a geometry loss. Two things could recover it: pressure-mediated
     loading beating the ballistic model (the tamped study's hypothesis), and enclosing the plug
     deep in the cup, so its walls turn the fireball toward the mouth (a short chamber).
+  - **Step 2, 2-D (2026-10-05; converged to ~2% on a 2x grid).** One 10 cm sphere into a
+    k = 10 plug on its 3.2 m plate share (`make water-plate-plug-2d`). The first pass was invalid.
+    Its ambient gas (10^-3 of the sphere's density) weighed ~5 times the plug on this wide domain.
+    It tamped the fireball and held the plate above the quiet cutoff, so case 0 ran to its step cap
+    at β 52, 12 times the ceiling. The plug runs now use an ambient of 10^-6, which reads the same
+    at 10^-7 (β 1.361 against 1.357). The spray cup moves 0.16% under the same change, so the
+    committed spray numbers stand (`crates/euler2d/tests/plug_ambient.rs`).
+
+    | case | β | of ceiling |
+    |---|---|---|
+    | plug 1 m off, dish only | 1.361 | 0.315 |
+    | plug 1 m off, skirt 4 m | 2.950 | 0.683 |
+    | plug 2 m off, skirt 4 m | 3.373 | 0.781 |
+    | plug 1 m off, skirt 8 m | 2.958 | 0.685 |
+    | plug 2 m off, skirt 8 m | 3.498 | 0.810 |
+    | plug 4 m off, skirt 8 m | 3.515 | 0.814 |
+    | spray cup (reference) | 3.065 | 0.710 |
+
+    In a cup, a plug 2-4 m off the floor beats the spray cup and the ballistic model (0.635). The
+    open dish loses most of the fireball. On a grid twice as fine (the sphere 10 cells in radius)
+    case 1 gives β 3.016 (+2.2%), case 4 3.548 (+1.4%) and case 5 3.485 (-0.9%), so the plug in an
+    8 m skirt holds at **0.81-0.82 of ceiling**, η_jet ~0.75-0.77 on the effective-γ method, against
+    the spray cup's 0.71 (η_jet 0.62) on the same method. The spray's real-physics η_jet (0.58-0.68)
+    has not been carried over to the plug; the ratio suggests ~0.70, an estimate.
+
+- **A trailing pearl in formation does not help (2026-10-05, Q54).** A second PuffSat of the same
+  architecture trailing the lead by 5-40 m (tail to front), holding 5-30% of its mass, on the
+  working cup (`make water-plate-argon-2d-pearl`). Every case trails a single PuffSat that carries
+  the same total mass into the same cloud. The loss grows with share and gap: η_jet −0.03 at
+  5% and 5 m, −0.18 at 30% and 40 m. The pearl is 0.5-3% of the rebounding mass, too light to
+  equalize anything. Its own mass arrives without spray to mix into, and it meets gas moving away
+  from the plate head-on, which turns its energy into heat. At long gaps it reaches an emptied cup
+  and makes a bare bounce. The spray cloud is already the tamper, in place before the pulse.
+
+- **Bare plates: tampers do not help, a deep bowl does (scratch, 2026-10-05).** Containment
+  against the 1-D column, effective-γ 2-D, production grid:
+
+  | plate | no tamper | trailing pearl (5 m) | thin layer at stand-off |
+  |---|---|---|---|
+  | flat, open | 0.769 | 0.722 (10%), 0.693 (30%) | 0.779 (1 m), 0.726 (4 m) |
+  | dish d/D 0.10 | 0.922 | 0.866 (10%), 0.856 (30%); 0.899 (30%, 2 m) | 0.875 (2 m), 0.837 (4 m) |
+
+  A bare plate loses its impulse to sideways spill, and a tamper holds the hot layer down longer,
+  so more escapes. Deeper bare dishes, no wall: d/D 0.15 0.967, 0.20 1.015, 0.25 1.060, 0.30
+  1.086, against the dish-and-skirt cup's 1.071. A 6 m bowl matches the cup with ~95 m^2 more
+  face instead of 251 m^2 of skirt. Next: the wall-load measurement (Q56) prices both.
+
+- **The skirt's real mass (2026-10-05, Q56; `make water-plate-argon-2d-skirt`).** The 2-D cup
+  records the gas pressure on the skirt's inner face, row by row, scaled so the floor carries the
+  real 8 MN s pulse. The skirt is sized as a ring (a maraging liner wrapped in fibre) whose
+  breathing mode is a single oscillator, stepped exactly through each row's pressure history.
+
+  | | dish 0.10 + 4 m skirt | dish 0.10 + 8 m skirt | flat + 4 m skirt |
+  |---|---|---|---|
+  | wall impulse at the base / mean / top [kPa s] | 19.8 / 12.4 / 5.0 | 19.9 / 9.6 / 4.0 | 24.3 / 15.9 / 6.9 |
+  | outward impulse on the whole wall | 3.1 MN s | 4.8 MN s | 4.0 MN s |
+  | aramid wrap, 2 mm liner, ε 0.5 / 0.7 / 1.0% | 60 / 43 / 31 t | 87 / 64 / 46 t | 77 / 56 / 40 t |
+  | carbon wrap, 2 mm liner, ε 0.5 / 0.7 / 1.0% | 44 / 32 / 23 t | 64 / 47 / 35 t | 57 / 41 / 30 t |
+
+  The floor averages 25.5 kPa s, and the skirt's base sees ~20. The merged layer pushes sideways
+  nearly as hard as it pushes down, and the wall must stop that push in hoop strain alone. The
+  wall pulse (~1 ms) is short against the ring's ~7 ms period, so the ring takes it as an impulse.
+  The wrap is ~12-26 cm thick at the base. **A 4 m skirt costs ~23-45 t**, not a few tonnes. It
+  buys +16% impulse per pulse over the bare d/D 0.10 dish. Caveats: effective-γ 2-D scaled to the
+  real pulse; every row is a free ring, which ignores the plate rim's support of the lowest rows;
+  the allowable is set by the liner's ~1% yield strain (an autofrettaged liner could run further).
+  The deep bowl's steep band will see a similar sideways push, so it needs the same measurement.
+
+- **A 70 t floor in a fixed skirt (2026-10-05, Q57-Q58).** The skirt mounts to the vehicle and
+  the floor slides inside it as a piston, so the skirt never takes the floor's kick (a rigid joint
+  would see a stress wave of ρcΔv, ~1-3 GPa). Thermal (`make water-plate-plate-thermal`, argon,
+  150 µm pitch, cold respray): the steel peaks at 507 K on 30 mm, 509 K on 28 mm and 518 K on
+  15 mm, all under maraging's 753 K aging limit. The film does the work, so a thinner floor costs
+  little. Pulse: the floor alone is the sprung mass, and `J = 8 m ν s` gives 5.6 MN s for 70 t at
+  4 Hz and 2.5 m. Keeping 8 MN s needs a 3.6 m stroke (floor at ±57 m/s) or 5.7 Hz. The annular gap
+  leaks hot gas (estimate, ~85 MJ/kg merged gas choked through the gap at the skirt-base pressure):
+  ~1.6 kg and ~140 MJ per pulse at 10 mm, ~0.16 kg and ~14 MJ at 1 mm. A 20 m floor grows ~22 mm in
+  diameter per 100 K, so a tight gap needs a sprung, segmented seal or a labyrinth vented outward
+  away from the gas bags.
+
+- **The 150 t plate's shape (2026-10-05, Q59-Q63; `make water-plate-argon-2d-shape`).** 12 MN s
+  per pulse at 4 Hz, k = 8.52, the skirt fixed to the vehicle and the floor sliding inside it.
+  Each shape's wall histories (skirt rows and the dish's riser rings) are sized for hoop strain
+  0.7% in carbon; the floor takes the rest of 150 t and sets the stroke.
+
+  | shape | η_jet unmixed-premixed | skirt | band wrap | floor (thickness) | stroke |
+  |---|---|---|---|---|---|
+  | dish 0.30 + 2 m skirt | 0.607-0.707 | 16 t | 36 t | 98 t (30 mm) | 2.8 m |
+  | dish 0.25 + 2 m skirt | 0.598-0.697 | 18 t | 23 t | 109 t (36 mm) | 2.8 m |
+  | dish 0.30, no skirt | 0.593-0.692 | 0 | 33 t | 117 t (36 mm) | 2.5 m |
+  | dish 0.10 + 4 m skirt (old) | 0.583-0.681 | 48 t | 1 t | 101 t (39 mm) | 3.7 m |
+  | dish 0.10, no skirt | 0.460-0.544 | 0 | 0 | 150 t (57 mm) | 2.5 m |
+
+  A deep bowl with a short skirt beats the shallow dish with a tall one, by ~0.02-0.025 in η_jet,
+  and every shape fits 150 t. The bowl's steep band needs its own hoop wrap (23-40 t at d/D
+  0.25-0.30): it is pushed outward much as the skirt is. Caveats: effective-γ 2-D on the
+  production grid (the cup dropped ~1% on a finer grid), the cold-end time scale, every ring free.
+
+- **Gravity during the push (estimate, 2026-10-05).** 12 MN s at 4 Hz is 48 MN. On 1,500 t at
+  400 km (local g 8.7 m/s^2) that is T/W 3.7 at the start, rising as argon is spent. A planar
+  two-body run from rest at 400 km to 10.786 km/s takes ~250 s and spends ~700 t of argon at
+  η_jet 0.6. Pushed horizontally the craft falls ~200 km, to ~195 km, while the stream's own
+  escape hyperbola rises ~70 km over the ~1,350 km downrange. Holding 400 km costs only ~0.13 km/s
+  (1.2%), but needs the thrust tilted up to ~16° at the start, and a plate cannot steer (the
+  ledger's ADR-0009: the push axis is the stream's velocity). The likely answer is a lob that meets
+  the stream still rising at ~1-1.2 km/s, so the booster pays the gravity loss. The ledger treats
+  the push as impulsive; owed to `aim_is_all_you_need`.
+
+- **A wide sheet at stand-off (scratch, 2026-10-05).** The k = 10 reaction mass as a thin layer
+  (25 cm, 2 cells) spanning the footprint, 1-8 m off the cup's floor. A tethered sheet cannot leave
+  the incoming path in the ~0.2 ms the pulse takes to pass, so it acts as a stand-off reaction
+  layer, not a rebound tamper. It trails the deep cloud: 0.61-0.67 of ceiling against 0.71. It
+  lowers the peak face pressure (0.78-0.95 against 1.52 in the cloud's units at 6-8 m off).
 
 - The vapor opacity. κ_vapor moves argon's film between 6 and 27 kg per pulse, and only the 200
   and 1,500 values have a source. The EUV absorption of the film's vapor is the number to pin.

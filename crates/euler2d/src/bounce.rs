@@ -325,6 +325,49 @@ pub struct SprayCloud {
 /// sits flat on top of the cloud at the rim, `z ∈ [z_rim + s + depth, z_rim + s + depth + L)`.
 #[must_use]
 pub fn init_spray_grid(cfg: &SlugConfig, spray: SprayCloud) -> Grid2D {
+    init_spray_grid_with_ambient(cfg, spray, AMBIENT_DEFAULT)
+}
+
+/// The ambient gas's density and pressure as fractions of the slug's: the vacuum stand-in.
+pub const AMBIENT_DEFAULT: f64 = 1.0e-3;
+
+/// [`init_spray_grid`] with the ambient at `ambient` times the slug's density and cold pressure.
+/// The default is a negligible share of a spray cup's mass, but not of a domain much wider than the
+/// slug (one necklace sphere on its plate share, the plug study), where it must be thinner.
+#[must_use]
+pub fn init_spray_grid_with_ambient(cfg: &SlugConfig, spray: SprayCloud, ambient: f64) -> Grid2D {
+    init_spray(cfg, spray, ambient, None)
+}
+
+/// A trailing pearl (ADR-0055): a second PuffSat of the lead's architecture (same footprint, length,
+/// radial profile, speed and temperature) flying in formation behind it, holding `mass_ratio` times
+/// the lead's mass. Its gas meets the rebound off the plate.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TrailingPearl {
+    /// Pearl mass per lead mass.
+    pub mass_ratio: f64,
+    /// Ambient gap between the lead's tail and the pearl's front (same length units as the slug).
+    pub gap: f64,
+}
+
+/// [`init_spray_grid`] with a trailing pearl: over the lead, after `gap` of ambient, the pearl
+/// fills `z ∈ [top + L + gap, top + 2L + gap)` at `mass_ratio` times the lead's density and cold
+/// pressure (so the same temperature and Mach number), moving at the lead's speed.
+#[must_use]
+pub fn init_spray_grid_with_pearl(
+    cfg: &SlugConfig,
+    spray: SprayCloud,
+    pearl: TrailingPearl,
+) -> Grid2D {
+    init_spray(cfg, spray, AMBIENT_DEFAULT, Some(pearl))
+}
+
+fn init_spray(
+    cfg: &SlugConfig,
+    spray: SprayCloud,
+    ambient: f64,
+    pearl: Option<TrailingPearl>,
+) -> Grid2D {
     let profile = immersed_profile(cfg);
     let floor = |r: f64| profile.map_or(0.0, |p| p.z_surface(r));
     let z_rim = floor(cfg.r_plate);
@@ -336,8 +379,8 @@ pub fn init_spray_grid(cfg: &SlugConfig, spray: SprayCloud) -> Grid2D {
     let dr = cfg.r_max / cfg.nr as f64;
     let v = 1.0;
     let p0 = 1.0 / (cfg.gamma * cfg.mach * cfg.mach);
-    let rho_amb = 1.0e-3;
-    let p_amb = p0 * 1.0e-3;
+    let rho_amb = ambient;
+    let p_amb = p0 * ambient;
     let core_rho = taper_mass_factor(cfg.taper_frac);
     let spray_rho = spray.mass_ratio * cfg.length / spray.depth;
     g.init(|iz, ir| {
@@ -351,6 +394,12 @@ pub fn init_spray_grid(cfg: &SlugConfig, spray: SprayCloud) -> Grid2D {
         } else if z >= top && z < top + cfg.length && weight > rho_amb {
             let v_r = cfg.alpha_div * v * r / cfg.r_foot;
             Prim::new(weight, -v, v_r, p0)
+        } else if let Some(pearl) = pearl.filter(|q| {
+            let front = top + cfg.length + q.gap;
+            z >= front && z < front + cfg.length && q.mass_ratio * weight > rho_amb
+        }) {
+            let v_r = cfg.alpha_div * v * r / cfg.r_foot;
+            Prim::new(pearl.mass_ratio * weight, -v, v_r, p0 * pearl.mass_ratio)
         } else {
             Prim::new(rho_amb, 0.0, 0.0, p_amb)
         }
@@ -365,9 +414,89 @@ pub fn run_spray_bounce(cfg: &SlugConfig, spray: SprayCloud) -> Bounce2D {
     run_bounce(init_spray_grid(cfg, spray), cfg.nz)
 }
 
+/// [`run_spray_bounce`] with a trailing pearl. `incident_momentum` is the lead's and the pearl's.
+#[must_use]
+pub fn run_spray_bounce_with_pearl(
+    cfg: &SlugConfig,
+    spray: SprayCloud,
+    pearl: TrailingPearl,
+) -> Bounce2D {
+    run_bounce(init_spray_grid_with_pearl(cfg, spray, pearl), cfg.nz)
+}
+
+/// [`run_spray_bounce`] with the ambient at `ambient` times the slug's density and pressure.
+#[must_use]
+pub fn run_spray_bounce_with_ambient(
+    cfg: &SlugConfig,
+    spray: SprayCloud,
+    ambient: f64,
+) -> Bounce2D {
+    run_bounce(init_spray_grid_with_ambient(cfg, spray, ambient), cfg.nz)
+}
+
+/// The pressure on the cup wall's inner face through a bounce (ADR-0055): `pressure[i][j]` is row
+/// `z[j]`'s face pressure at `time[i]`, sampled at the start and after every step.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SkirtHistory {
+    /// Row heights (cell centres from the rim to the wall's lip).
+    pub z: Vec<f64>,
+    /// Sample times.
+    pub time: Vec<f64>,
+    /// Face pressure per sample, one entry per row.
+    pub pressure: Vec<Vec<f64>>,
+    /// The dish floor's risers (the bowl's band): heights, ring radii, and pressure per sample.
+    pub band_z: Vec<f64>,
+    pub band_r: Vec<f64>,
+    pub band_pressure: Vec<Vec<f64>>,
+}
+
+/// [`run_spray_bounce`] that also records the skirt's face pressure every step. Recording only
+/// reads the grid, so the bounce is identical to the plain run.
+#[must_use]
+pub fn run_spray_bounce_with_skirt_history(
+    cfg: &SlugConfig,
+    spray: SprayCloud,
+) -> (Bounce2D, SkirtHistory) {
+    let g = init_spray_grid(cfg, spray);
+    let z: Vec<f64> = g.skirt_face_pressure().iter().map(|&(z, _)| z).collect();
+    let risers = g.floor_riser_pressure();
+    let mut history = SkirtHistory {
+        z,
+        time: Vec::new(),
+        pressure: Vec::new(),
+        band_z: risers.iter().map(|&(z, _, _)| z).collect(),
+        band_r: risers.iter().map(|&(_, r, _)| r).collect(),
+        band_pressure: Vec::new(),
+    };
+    let bounce = run_bounce_observed(g, cfg.nz, |g, t| {
+        history.time.push(t);
+        history
+            .pressure
+            .push(g.skirt_face_pressure().iter().map(|&(_, p)| p).collect());
+        history.band_pressure.push(
+            g.floor_riser_pressure()
+                .iter()
+                .map(|&(_, _, p)| p)
+                .collect(),
+        );
+    });
+    (bounce, history)
+}
+
 /// Integrate the plate impulse on an initialized grid until the force has decayed (ADR-0001).
-fn run_bounce(mut g: Grid2D, nz: usize) -> Bounce2D {
+fn run_bounce(g: Grid2D, nz: usize) -> Bounce2D {
+    run_bounce_observed(g, nz, |_, _| {})
+}
+
+/// [`run_bounce`] calling `observe(grid, t)` at the start and after every step.
+fn run_bounce_observed(
+    mut g: Grid2D,
+    nz: usize,
+    mut observe: impl FnMut(&Grid2D, f64),
+) -> Bounce2D {
     let incident_momentum = g.axial_momentum().abs();
+    let mut t = 0.0;
+    observe(&g, t);
 
     // Integrate the plate impulse (trapezoid) until the force has stayed below the 10⁻³-of-peak
     // cutoff for a sustained window — not merely crossed it once. A concave plate refocuses the
@@ -386,6 +515,8 @@ fn run_bounce(mut g: Grid2D, nz: usize) -> Bounce2D {
     while steps < max_steps {
         let dt = g.stable_dt();
         g.step(dt);
+        t += dt;
+        observe(&g, t);
         let force_new = g.plate_force();
         wall_impulse += 0.5 * dt * (force_old + force_new);
         peak = peak.max(force_new);

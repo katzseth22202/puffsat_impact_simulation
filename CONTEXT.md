@@ -333,6 +333,12 @@ sphere's path), so it is compact, not a low-density foam.
 _Avoid_: "slug" (the tamped-nozzle study's carried mass behind a plate hole, a different geometry
 and study); "foam plug" when the plug is solid
 
+**Trailing pearl**:
+A second, lighter PuffSat of the lead's architecture flying in formation a set gap behind it, so
+its gas meets the rebound off the spray plate as a tamper. The gap is measured from the lead's
+tail to the pearl's front.
+_Avoid_: "twin", "quasi nozzle"
+
 **Tapered plate**:
 A plate whose areal mass follows the delivered impulse profile, so every element receives the
 same velocity kick and the plate does not bend during the pulse.

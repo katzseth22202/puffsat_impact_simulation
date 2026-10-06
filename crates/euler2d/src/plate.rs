@@ -164,6 +164,32 @@ impl PlateProfile {
         }
     }
 
+    /// The dish floor's height span `(axis, rim)`. `None` for a flat floor or a plane.
+    #[must_use]
+    pub fn floor_span(&self) -> Option<(f64, f64)> {
+        match *self {
+            Self::Dish { z0, depth, .. } | Self::Cup { z0, depth, .. } if depth > 0.0 => {
+                Some((z0, z0 + depth))
+            }
+            _ => None,
+        }
+    }
+
+    /// The wall's height span `(rim, top)`, from the floor's rim to the wall's lip. `None` without
+    /// a wall.
+    #[must_use]
+    pub fn wall_span(&self) -> Option<(f64, f64)> {
+        match *self {
+            Self::Cup {
+                z0,
+                depth,
+                skirt_height,
+                ..
+            } if skirt_height > 0.0 => Some((z0 + depth, z0 + depth + skirt_height)),
+            _ => None,
+        }
+    }
+
     /// The floor part of the solid (the dish).
     fn floor_solid(&self, z: f64, r: f64) -> bool {
         let r_plate = match *self {

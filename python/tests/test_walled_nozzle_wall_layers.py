@@ -182,3 +182,33 @@ def test_respray_heat_is_what_the_cold_film_takes_out() -> None:
     _, rho, c, _, _ = wl.PITCH
     expected = rho * c * 0.2e-3 * (wl.INITIAL_TEMP - 250.0)
     assert run.respray_per_pulse == pytest.approx(expected, rel=0.05)
+
+
+def _flash(energy: float, tau: float = 1.0e-3) -> wl.GasHistory:
+    """An opaque gas radiating `energy` [J/m^2] onto a black face over `tau`, then gone."""
+    temp = (energy / (tau * wl.WALL_EMISSIVITY * wl.SIGMA_SB)) ** 0.25
+    return wl.GasHistory(
+        time=np.array([0.0, tau]),
+        temp=np.array([temp, temp]),
+        pressure=np.array([1.0e7, 1.0e7]),
+        emissivity=np.array([1.0, 1.0]),
+        h0=0.0,
+    )
+
+
+def test_default_steel_depth_is_the_old_solver_bit_for_bit() -> None:
+    """Seam: passing the default steel depth explicitly changes nothing."""
+    gas = _constant_gas(1500.0, 5.0e4)
+    assert wl.run(wl.BARE, gas, pulses=1) == wl.run(
+        wl.BARE, gas, pulses=1, steel_depth=wl.STEEL_DEPTH
+    )
+
+
+def test_a_thin_slab_holds_the_absorbed_heat_uniformly() -> None:
+    """Seam: the steel depth reaches the conduction. A 1 mm slab with an adiabatic back evens out
+    in ~0.15 s (d^2 / alpha), so by cycle end it sits at `T_i + E / (rho c d)` for the heat `E` it
+    took in -- energy conservation, thirty times the rise of the default 30 mm slab."""
+    depth = 1.0e-3
+    run = wl.run(wl.BARE, _flash(1.0e5), pulses=1, steel_depth=depth)
+    exact = wl.INITIAL_TEMP + run.absorbed_per_pulse / (wl.STEEL_RHO * wl.STEEL_C * depth)
+    assert run.end_steel == pytest.approx(exact, rel=0.01)
