@@ -963,6 +963,20 @@ walled-nozzle-wall-layers-hydrogen:
 	@mkdir -p data/results/walled_nozzle/near_term
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.wall_layers --hydrogen
 
+## walled-nozzle-chamber-fatigue: the autofrettaged Cr-Mo shell of the 20 m^3 near-term chambers,
+## crack growth under the breathing mode (hydrogen and methane) -> near_term/chamber_fatigue.csv
+walled-nozzle-chamber-fatigue:
+	@mkdir -p data/results/walled_nozzle/near_term
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.chamber_fatigue
+
+## walled-nozzle-wall-waves: spall and overwrap delamination of the layered wall under a reflected
+## blast spike -> near_term/wall_waves.csv
+walled-nozzle-wall-waves:
+	@mkdir -p data/results/walled_nozzle/near_term
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.wall_waves
+
+.PHONY: walled-nozzle-chamber-fatigue walled-nozzle-wall-waves
+
 ## walled-nozzle-test: this study's tests alone
 walled-nozzle-test:
 	uv run pytest python/tests/test_eos_methane.py python/tests/test_walled_nozzle_chamber.py \
@@ -972,4 +986,5 @@ walled-nozzle-test:
 	                python/tests/test_walled_nozzle_surface.py \
 	                python/tests/test_walled_nozzle_wall.py \
 	                python/tests/test_walled_nozzle_near_term.py \
-	                python/tests/test_walled_nozzle_wall_layers.py
+	                python/tests/test_walled_nozzle_wall_layers.py \
+	                python/tests/test_walled_nozzle_chamber_fatigue.py

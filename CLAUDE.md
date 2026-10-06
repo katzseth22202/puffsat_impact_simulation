@@ -112,7 +112,9 @@ methane at 7000 K) is in [`docs/walled_nozzle_near_term.md`](docs/walled_nozzle_
 ([ADR-0052](docs/adr/0052-near-term-chamber-feeds-janaf-and-carbon-branches.md)). Pitch under the hydrogen pulse,
 with chemical ablation and blowing coupled in (`make walled-nozzle-wall-layers-hydrogen`), is in
 [`docs/walled_nozzle_hydrogen_pitch.md`](docs/walled_nozzle_hydrogen_pitch.md)
-([ADR-0054](docs/adr/0054-hydrogen-pitch-chemical-ablation-and-blowing.md)). Its Python is
+([ADR-0054](docs/adr/0054-hydrogen-pitch-chemical-ablation-and-blowing.md)). Fatigue, spall and
+overwrap delamination of the autofrettaged wall are in
+[`docs/walled_nozzle_chamber_fatigue.md`](docs/walled_nozzle_chamber_fatigue.md). Its Python is
 `python/puffsat/walled_nozzle/` plus the top-level `python/puffsat/eos_methane.py`, and its
 outputs are under `data/results/walled_nozzle/`.
 
@@ -125,6 +127,8 @@ make walled-nozzle-surface    # N16: the conversion surface over chamber T, volu
 make walled-nozzle-wall       # N9.1-7 + W24: the front, the gate, the wall loads, the throat trade
 make walled-nozzle-near-term  # 2.5 kg rod / 20 m^3 near-term chamber: CH4 7000 K, H2 5500 K (ADR-0052)
 make walled-nozzle-wall-layers # coated steel wall (graphite / pitch) under the CH4 7000 K pulse
+make walled-nozzle-chamber-fatigue # autofrettaged Cr-Mo shell: crack growth under the breathing mode
+make walled-nozzle-wall-waves # spall and overwrap delamination under a reflected blast spike
 make walled-nozzle-test       # that study's tests alone
 ```
 
