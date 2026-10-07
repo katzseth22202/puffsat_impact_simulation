@@ -120,6 +120,12 @@ on the ASME CC2938 crack-growth curves, which is what `chamber_fatigue.py` alrea
     °C) can be sequenced before the final temper.
 - **Cost:** order 10^2-10^3 $/m^2. On ~315 m^2 of plate face that is ~$0.03-0.3M, a few percent of
   the 150 t of maraging alone.
+- **Alumina film, not an aluminium layer, on the plate face and chamber walls.** Armor-grade
+  aluminium (5083/7039) has a shock-compression limit of roughly 0.4-0.6 GPa (estimate), below even
+  the merged 0.9 GPa pulse. It would yield every pulse, ratchet thinner, and re-crack its own oxide
+  skin, which is where its hydrogen resistance comes from. 7xxx alloys also soften above
+  ~120-150 °C. **Aluminium cladding or aluminized steel suits the low-pressure parts:** the skirt
+  (5.5-9.5 MPa) and hydrogen-wetted lines.
 - **Rejected:**
   - *Tungsten:* brittle when cold, and it blisters under intense low-energy hydrogen plasma. Its
     fusion role is erosion and heat, not permeation.
