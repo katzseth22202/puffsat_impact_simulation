@@ -61,6 +61,28 @@ survival depend on damping, which nothing in the design supplies yet. Steel alon
   matched in impedance, the transmitted wave leaves instead of reflecting as tension. This is a
   wave absorber, not a toughness layer, and its bond line would see the cycling itself.
 
+## 2b. The skirt's fibre wrap does not delaminate (added 2026-10-07)
+
+The skirt is a 4 mm maraging liner wrapped in carbon or aramid (`skirt_hoop.py`). Each row's
+solved pressure history from the 12 MN s design bowl (d/D 0.30, 2 m skirt) runs through the
+layered wave model of the chamber study, with the wrap sized for 0.7% hoop strain
+(`python -m puffsat.water_plate.skirt_delamination`):
+
+| wrap | peak skirt pressure | rise | wrap (hoop-sized) | through-thickness tension in the wrap |
+|---|---|---|---|---|
+| carbon | 5.5-9.5 MPa | 0.5-1.1 ms | 27-72 mm | 0.2-2.4 MPa (<= 0.04x the 64 MPa resin) |
+| aramid | same | same | 49-129 mm | 0.1-4.0 MPa (<= 0.06x) |
+
+- **The skirt sees a different load from the chamber wall.** It carries the merged gas's
+  spreading pressure, ~10 MPa rising over half a millisecond. A stress wave crosses the wrap ~10x
+  faster than that, so almost nothing reflects as tension.
+- **The verdict is robust to the coarse 2-D grid.** Even an instantaneous front reflects at most
+  about its own amplitude as tension: ~10 MPa against 64.
+- **Not checked: a failed merge.** It would have to load the skirt ~6-7x harder to reach the
+  resin.
+- **The skirt's open issue is hydrogen.** Its maraging liner meets the water PuffSat's hydrogen,
+  as the face does. See [`hydrogen_and_wall_steels.md`](hydrogen_and_wall_steels.md).
+
 ## 3. Method
 
 - **Loads.**
