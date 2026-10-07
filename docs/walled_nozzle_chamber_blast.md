@@ -183,15 +183,38 @@ only, each layer a hoop ring; the long plug's cylinder history scaled to each vo
 - **The wrap itself survives.** Peak hoop strain is 0.8-0.9% (grid factor 1) or 1.4-1.55%
   (factor 2), against 2.1-3.3% to break. Lift-off gaps are 0.01-5 mm, layers fling at 30-200 m/s,
   and the steel's radial tension is negligible.
-- **The liner yields in hoop at every volume:** 770-815 MPa (factor 1), ~2.1 GPa (factor 2),
-  against Y = 750 MPa. **Volume does not help hoop.** A bigger chamber lowers the spike, but the
-  wall is sized to the lower quasi-static pressure, so it thins in proportion. The spike stays
-  the same multiple of the design load, an effective D of ~3 (factor 1) to ~6 (factor 2) against
-  the sizing's 1.7. This applies to every wall option, all-steel included.
-- **This is an upper bound.** It loads the hardest-hit band around its whole circumference as a
-  free ring. Axial bending to the less-loaded neighbouring wall resists a short, local band and
-  may cut the response a lot. **A shell model is owed, and it decides the D every wall is sized
-  to.**
+- **Hoop overshoot is settled by the shell model below, not by this ring.** This table's grid
+  factor 2 scales the whole history, which doubles the spike's impulse. The hoop response depends
+  on that impulse, and it is nearly grid-converged (next item). So the "factor 2" liner stresses
+  (~2.1 GPa) overstate. The factor-1 column (770-815 MPa, D ~2.0 against the sizing's 1.7) is
+  the realistic one.
+
+**Hoop overshoot with the wall connected** (`shell_response.py`). The axisymmetric shell is a
+beam on an elastic foundation along the meridian, clamped at the port ring and throat insert,
+loaded by the 0.5 cm long-plug history at every station:
+
+| wall | free ring D | connected shell D | sized for |
+|---|---|---|---|
+| monolithic steel, 20 m^3 | 1.74 | **1.66** | 1.7 |
+| multilayer steel (8 shells), 20 m^3 | 1.74 | **1.63** | 1.7 |
+| Kevlar dry wrap + 10 mm steel, 80 m^3 | 2.01 | **1.93** | 1.7 |
+
+The hoop response depends on the spike's **impulse**, because the wall's 1-2 ms period is far
+longer than the spike. The impulse converges where the peak does not:
+
+| grid | 2 cm | 1 cm | 0.5 cm |
+|---|---|---|---|
+| cylinder peak | 0.38 GPa | 0.56 | 0.76 |
+| cylinder 400 µs overpressure impulse (max) | 11.5 kPa s | 12.5 | 13.5 |
+
+- **The paper's D = 1.7 holds for steel walls** under the long plug in the rocket-shaped chamber.
+- **Dry wraps need D ~2.0-2.2.** They are stiffer for their mass, so they ring faster. That makes
+  the wrap ~20-30% thicker: ~13-25 t at 80 m^3.
+- **The earlier "D 3-6 at every volume" was an error** from doubling the impulse. Corrected here.
+- **Most of the fix is the shape and the plug.** Coupling to the neighbours adds only ~5%, because
+  under the long plug the spike is already spread along the wall.
+- **Through-thickness effects (spall, delamination) follow the peak,** which is not converged. The
+  overwrap conclusions stand.
 
 **Pitch against volume** (methane; `near_term.wall_heat` at each volume, pitch scaled from the
 20 m^3 anchors of 1.4-5.6 kg per pulse):
@@ -235,10 +258,9 @@ blackbody) grows with wall area.
 - **Deposition.** The long-plug model places the hot accreted mass where it was struck. A
   penetration model (rod erosion and crater flow) would refine where along the axis the heat
   goes.
-- **Wall response.** The per-station ring model in `vessel_blast.py` and the dry-wrap ring both
-  load a band as a free ring. Both put the steel liner past yield in hoop under the spike. A
-  shell model with axial coupling is owed; it decides whether walls must be sized for D ~3-6 or
-  whether D = 1.7 holds.
+- **Wall response.** The per-station ring in `vessel_blast.py` (thin wall, point blast) overstates
+  the overshoot. `shell_response.py` settles it for the long plug: D 1.63-1.93. It neglects
+  meridional curvature of the head and nose.
 - **Hydrogen.** Not run with a long plug.
 - **Volume trade.** Spikes are scaled as 1/V from the 20 m^3 runs, not re-solved. Nozzle
   extension mass grows with the exit diameter squared.
@@ -250,8 +272,18 @@ blackbody) grows with wall area.
   - Replace it: the plug as sized leaves 36% of the rod's energy (2.5 GJ) in the merged 6.9 kg
     at 27 km/s. Solved in 2-D, that strikes the convergent nose at 5.6-5.9 GPa and the throat at
     ~2.8 GPa on every pulse, about twice steel's ~2.9 GPa spall strength.
-  - The fix: a longer, lighter plug. ~10 kg (the 4.4 kg foam plus ~5.6 kg of frozen methane or
-    foam, 8% of the charge) over 1.75-2.5 m of the axis, denser at the back. It turns the rod's
+  - The fix: a longer plug of ~10 kg over 1.75-2.5 m of the axis, denser at the back. Make it
+    **frozen methane inside a polyethylene container** rather than polyethylene foam:
+    - CH4 carries twice polyethylene's hydrogen per carbon, so in the methane chamber the core
+      matches the charge and costs essentially no exhaust speed. A polyethylene plug costs ~0.9%.
+    - The container is the skin the paper already sizes to carry the plug's sideways pull as the
+      port window tracks the rod (1.3-5 mm for the 2.5 kg rod). Solid methane alone is weak and
+      would break up.
+    - At solid methane's ~500 kg/m^3, 10 kg over 2.5 m is a column ~5 cm in radius, close to the
+      paper's 5.5 cm plug width.
+    - It must stay below methane's 90.7 K triple point until impact.
+    - In the hydrogen chamber a methane core still raises the mean molecular mass (+8.8% for the
+      paper's plug width, against +11% for polyethylene). It is the lesser cost, not a free one. It turns the rod's
     energy into heat along the axis, so the nose falls below ~1 GPa and the wall loads become
     roughly uniform at about half the centred-blast level.
   - The penetration-depth rule sizes the minimum plug. The plug should be longer than that
@@ -267,7 +299,7 @@ blackbody) grows with wall area.
     dry carbon lighter than Vectran, because sizing is by stiffness). The cost is ~5-9% Isp,
     including the extra pitch.
   - A bonded overwrap needs ~120-160 m^3.
-  - Every option's hoop sizing waits on the shell-model D.
+  - Hoop sizing: D = 1.7 holds for steel walls (shell model 1.63-1.66); dry wraps need ~2.0-2.2.
   - State that the "softens the local shocks" role given to the liquid share does not hold. The
     drops equilibrate in microseconds and pay the same toll as the gas. The liquid serves better
     as axial plug mass.
