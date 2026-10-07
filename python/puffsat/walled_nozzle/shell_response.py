@@ -130,19 +130,54 @@ def respond(
 ) -> float:
     """Peak hoop strain `max w/R` over the run."""
     n = s.size
+    profile = respond_profile(
+        np.full(n, spec.hoop_stiffness),
+        np.full(n, spec.bending),
+        np.full(n, spec.areal_mass),
+        s,
+        radius,
+        field,
+        dt_field,
+        t_end,
+        bending,
+    )
+    return float(profile.max())
+
+
+def respond_profile(
+    hoop_stiffness: NDArray[np.float64],
+    bending_stiffness: NDArray[np.float64],
+    areal_mass: NDArray[np.float64],
+    s: NDArray[np.float64],
+    radius: NDArray[np.float64],
+    field: NDArray[np.float64],
+    dt_field: float,
+    t_end: float,
+    bending: bool = True,
+) -> NDArray[np.float64]:
+    """Peak hoop strain `w/R` at each meridian node, for a wall that varies along `s`.
+
+    `hoop_stiffness` is `sum(E t)` [N/m], `bending_stiffness` is `D` [N m] and `areal_mass` is in
+    kg/m^2, one value per node. The bending term is the second derivative of `D w_ss`, which is
+    the uniform fourth-difference stencil exactly when `D` is constant. Damping is
+    `2 zeta omega_max m`, as before.
+    """
+    n = s.size
     ds = float(s[1] - s[0])
-    k = spec.hoop_stiffness / radius**2
-    m = spec.areal_mass
-    d = spec.bending if bending else 0.0
-    omega = math.sqrt(float(k.max()) / m)
+    k = hoop_stiffness / radius**2
+    m = areal_mass
+    d = bending_stiffness if bending else np.zeros(n)
+    omega = math.sqrt(float((k / m).max()))
     dt = 0.1 / omega
-    if d > 0.0:
-        dt = min(dt, 0.2 * ds**2 / math.sqrt(d / m))
+    if float(d.max()) > 0.0:
+        dt = min(dt, 0.2 * ds**2 / math.sqrt(float((d / m).max())))
     c = 2.0 * ZETA * omega * m
+    # D at the n + 2 nodes where w_ss is formed (the ends extend the end values).
+    d_pad = np.r_[d[0], d, d[-1]]
     w = np.zeros(n)
     v = np.zeros(n)
     tail = field[-max(1, field.shape[0] // 10) :].mean(axis=0)
-    peak = 0.0
+    peak = np.zeros(n)
     steps = int(t_end / dt)
     for step in range(steps):
         t = step * dt
@@ -152,13 +187,14 @@ def respond(
         p = field[i] + (x - i) * (field[i + 1] - field[i]) if inside else tail
         # Clamped ends: w_0 = 0, with mirrored ghosts w_-1 = w_1 and w_-2 = w_2.
         wp = np.r_[w[2], w[1], w, w[-2], w[-3]]
-        b4 = (wp[:-4] - 4 * wp[1:-3] + 6 * wp[2:-2] - 4 * wp[3:-1] + wp[4:]) / ds**4
-        acc = (p - k * w - d * b4 - c * v) / m
+        moment = d_pad * (wp[:-2] - 2 * wp[1:-1] + wp[2:]) / ds**2
+        b4 = (moment[:-2] - 2 * moment[1:-1] + moment[2:]) / ds**2
+        acc = (p - k * w - b4 - c * v) / m
         acc[0] = acc[-1] = 0.0
         v += dt * acc
         w += dt * v
         w[0] = w[-1] = 0.0
-        peak = max(peak, float((w / radius).max()))
+        np.maximum(peak, w / radius, out=peak)
     return peak
 
 

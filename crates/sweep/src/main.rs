@@ -2711,7 +2711,41 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut cases = Vec::new();
     let path;
-    if args.iter().any(|a| a == "--shape-40b") {
+    if args.iter().any(|a| a == "--shape-40c") {
+        // Every wall fails at the r 2.2 m plateau: solid steel cracks, layered walls fling their
+        // outer layers. The plateau follows 1/R^2, so stand the wall off further: r 2.6 and 3.0 m,
+        // the larger closed over 3 m to keep the shoulder gentle. 0.5 cm, uniform fill.
+        use euler2d::vessel::Bulge;
+        path = "data/results/walled_nozzle/near_term/vessel_blast_shape_40c.jsonl";
+        let fill = (gases[0].0, gases[0].1 - (10.0 - 4.4));
+        let r_t = (40.0 / (VESSEL_VOLUME / 0.149) / std::f64::consts::PI).sqrt();
+        let cone_len = (1.4 - r_t) / 12.0_f64.to_radians().tan();
+        let long = vessel_sized(1.4, Some(cone_len), 0.0, 0.7, 40.0, r_t);
+        for (label, dr, ramp_out) in [
+            ("bulge r 2.6 m z 1.4-2.8, 2 m taper, plug 1.5 m", 1.2, 2.0),
+            ("bulge r 3.0 m z 1.4-2.8, 3 m taper, plug 1.5 m", 1.6, 3.0),
+        ] {
+            let b = Bulge {
+                dr,
+                z0: 1.4,
+                z1: 2.8,
+                ramp: 0.5,
+                ramp_out,
+            };
+            let mut segs = vec![rod_segment()];
+            segs.extend(plug_column(0.8, 1.5, 10.0, 500.0, true));
+            cases.push(case(
+                "shape 40 m^3 wide bulge",
+                long.with_bulge(b),
+                fill,
+                1.2,
+                0.005,
+                1.2e-3,
+                label,
+                segs,
+            ));
+        }
+    } else if args.iter().any(|a| a == "--shape-40b") {
         // The bulge's plateau cut the hammer as 1/R^2, but its steep closing shoulder (0.8 m
         // over 0.5 m, ~68 deg) faced the downstream-skewed blast and took 2.3-3 GPa. Close the
         // bulge over 2-3 m instead (max wall angle ~32 / ~23 deg). On the 40 m^3 layout; the

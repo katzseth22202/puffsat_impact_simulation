@@ -47,3 +47,35 @@ def test_neighbours_hold_back_a_narrow_struck_band() -> None:
     ring = sr.respond(STEEL, S, R, field, 1e-5, 2e-3, bending=False)
     shell = sr.respond(STEEL, S, R, field, 1e-5, 2e-3, bending=True)
     assert shell < 0.7 * ring
+
+
+def test_a_zoned_ring_settles_to_each_zones_own_membrane_strain() -> None:
+    """Two wall zones under a slow uniform load: each settles at `p R / sum(E t)` of its own."""
+    p = 5e6
+    hist = np.minimum(np.arange(40) / 30.0, 1.0) * p
+    stiff = S < 2.0
+    hoop = np.where(stiff, 2.0, 1.0) * STEEL.hoop_stiffness
+    mass = np.full(S.size, STEEL.areal_mass)
+    peak = sr.respond_profile(
+        hoop, np.zeros(S.size), mass, S, R, _uniform(hist), 1e-3, 0.04, bending=False
+    )
+    soft_static = p * 1.5 / STEEL.hoop_stiffness
+    assert peak[(S > 0.2) & (S < 1.8)].mean() == pytest.approx(0.5 * soft_static, rel=0.02)
+    assert peak[(S > 2.2) & (S < 3.8)].mean() == pytest.approx(soft_static, rel=0.02)
+
+
+def test_a_uniform_zoned_wall_matches_the_uniform_model() -> None:
+    p = 5e6
+    hist = np.minimum(np.arange(40) / 30.0, 1.0) * p
+    n = S.size
+    zoned = sr.respond_profile(
+        np.full(n, STEEL.hoop_stiffness),
+        np.full(n, STEEL.bending),
+        np.full(n, STEEL.areal_mass),
+        S,
+        R,
+        _uniform(hist),
+        1e-3,
+        0.04,
+    )
+    assert float(zoned.max()) == sr.respond(STEEL, S, R, _uniform(hist), 1e-3, 0.04)

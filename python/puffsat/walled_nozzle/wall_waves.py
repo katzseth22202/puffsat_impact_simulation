@@ -44,6 +44,15 @@ Impedances follow the parent (`sec:carbon_overwrap`):
 - glass-epoxy 2,740 and 1,850.
 
 The GRCop-84 speed of 4,700 m/s is assumed.
+
+# Unbonded interfaces
+
+A layer with `bonded=False` meets the next layer in contact only, as the shells of a
+shrink-fitted multilayer wall or a dry wrap do. The contact passes compression exactly as a bond
+does. It opens when the interface stress would exceed the shrink-fit `preload` in tension. While
+open, both faces are free (`sigma = 0`), and the gap grows at the faces' velocity difference,
+`u = (s - r)/Z`. It recloses when the gap shuts. A short pulse is then trapped in the outer layer,
+the momentum trap of spall experiments, and no tension returns inward.
 """
 
 from __future__ import annotations
@@ -68,6 +77,10 @@ RESIN_TENSION = 64.0e6
 """IM7/8552 transverse tensile strength [Pa] (Hexcel datasheet, as the parent)."""
 
 
+Load = Callable[[float], float]
+"""Inner-face pressure [Pa] against time [s]."""
+
+
 @dataclass(frozen=True)
 class Layer:
     name: str
@@ -75,6 +88,8 @@ class Layer:
     speed: float
     density: float
     strength: float
+    bonded: bool = True
+    """Whether this layer is bonded to the next one out (False: contact only)."""
 
     @property
     def impedance(self) -> float:
@@ -137,9 +152,26 @@ def response(
 
 
 def response_to(
-    stack: Stack, load: Callable[[float], float], duration: float, cells_thin: int = 8
+    stack: Stack, load: Load, duration: float, cells_thin: int = 8
 ) -> list[tuple[Layer, NDArray[np.float64]]]:
     """Peak tension per layer and cell [Pa], bias included, under inner-face pressure `load(t)`."""
+    return simulate(stack, load, duration, cells_thin).peak
+
+
+@dataclass(frozen=True)
+class Run:
+    """One wave run: peak tension per layer and cell [Pa, bias included], each layer's final
+    momentum per unit area [N s/m^2, outward positive], and each interface's final gap [m]."""
+
+    peak: list[tuple[Layer, NDArray[np.float64]]]
+    momentum: list[float]
+    gaps: list[float]
+
+
+def simulate(
+    stack: Stack, load: Load, duration: float, cells_thin: int = 8, preload: float = 0.0
+) -> Run:
+    """Waves through `stack` under inner-face pressure `load(t)`; contacts open past `preload`."""
     dt = min(layer.thickness / layer.speed for layer in stack.layers) / cells_thin
     cells = [max(2, round(layer.thickness / (layer.speed * dt))) for layer in stack.layers]
     steps = int(duration / dt)
@@ -149,6 +181,7 @@ def response_to(
     bias = _bias_profiles(stack, cells)
     peak = [np.full(n, -math.inf) for n in cells]
     last = len(cells) - 1
+    gap = [0.0] * last
     for k in range(steps):
         p = load(k * dt)
         out_r = [float(a[-1]) for a in r]
@@ -160,11 +193,21 @@ def response_to(
         s[last][-1] = -out_r[last]
         for i in range(last):
             za, zb = z[i], z[i + 1]
-            r[i + 1][0] = 2 * zb / (za + zb) * out_r[i] + (za - zb) / (za + zb) * out_s[i + 1]
-            s[i][-1] = (zb - za) / (za + zb) * out_r[i] + 2 * za / (za + zb) * out_s[i + 1]
+            joined = 2 * zb / (za + zb) * out_r[i] + (za - zb) / (za + zb) * out_s[i + 1]
+            if stack.layers[i].bonded or (gap[i] <= 0.0 and joined + out_s[i + 1] <= preload):
+                gap[i] = 0.0
+                r[i + 1][0] = joined
+                s[i][-1] = (zb - za) / (za + zb) * out_r[i] + 2 * za / (za + zb) * out_s[i + 1]
+                continue
+            # Open (or opening): both faces free; the gap grows at u_right - u_left.
+            r[i + 1][0] = -out_s[i + 1]
+            s[i][-1] = -out_r[i]
+            gap[i] = max(0.0, gap[i] + (2 * out_s[i + 1] / zb + 2 * out_r[i] / za) * dt)
         for i in range(len(cells)):
             np.maximum(peak[i], r[i] + s[i], out=peak[i])
-    return [(layer, peak[i] + bias[i]) for i, layer in enumerate(stack.layers)]
+    # rho u dx = rho (s - r)/(rho c) c dt = (s - r) dt
+    momentum = [float(np.sum(s[i] - r[i]) * dt) for i in range(len(cells))]
+    return Run([(layer, peak[i] + bias[i]) for i, layer in enumerate(stack.layers)], momentum, gap)
 
 
 def _bias_profiles(stack: Stack, cells: list[int]) -> list[NDArray[np.float64]]:

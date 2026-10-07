@@ -408,6 +408,46 @@ The tension columns are back-face tension as a fraction of the 2.9 GPa spall str
   - a 12° cone to the throat.
   The volume costs ~3% impulse per rod against 40 m^3 (volume trade).
 
+## 3f. Which wall: zone by zone (`wall_zones.py`; added 2026-10-07)
+
+`python -m puffsat.walled_nozzle.wall_zones [--histories PATH --case LABEL]`.
+- **Hoop:** each zone (head, bulge ramp, plateau, taper, cone) is sized for D = 1.7 at its own
+  radius. The allowable is the autofrettaged swing of 0.5625%, `dry_wrap.SWING`; earlier steel
+  masses here used half of it. The coupled shell (`shell_response.respond_profile`, now with
+  zoned stiffness and mass) is then solved under the real history, and any zone past the swing
+  is thickened.
+- **Spall:** the zone's hardest hits run through `wall_waves.simulate`, now with contact
+  (unbonded) interfaces that pass compression, open in tension and track the gap. It runs over
+  each spike only (-30/+100 µs), since the 1-D model has no hoop restoring force.
+- **Cracks:** a 0.5 mm penny crack parallel to the face, on the air and CC2938 hydrogen curves,
+  failing at K = 45.
+- **Fling:** `dry_wrap.simulate`'s contact chain gives the hoop strain of layers thrown off by
+  the spike. It is a free ring, so overstated.
+- The requirement is **~4,200 pulses**: one departure of a 500-600 t stack.
+
+| bulge (volume) | all steel | steel band, wrap elsewhere | multilayer (any) | **all dry wrap** |
+|---|---|---|---|---|
+| r 2.2 m (63 m^3) | 43.9 t: H2 cracks, 30 pulses | 35.3 t: H2, 131 | fling 1.3-1.4% vs 0.56% | 27.3 t: fling 3.95% vs 2.4% |
+| r 2.6 m (78.5 m^3) | 45.2 t: H2, 301 | 35.4 t: H2, 232 | fling | 27.1 t: fling 2.48% vs 2.4% |
+| **r 3.0 m (106 m^3)** | 47.1 t: H2, 662 (air 7,780) | 39.3 t: H2, 437 (air 5,600) | fling | **27.3 t: passes** |
+
+- **One spike, two fates.** The spike's few kPa s, delivered in microseconds, either reflects
+  as tension in a solid wall (cracks) or throws an unbonded wall's outer layers outward
+  (fling). The wall type moves the problem; only a smaller spike removes it.
+- **The dry wrap wins: a 10 mm liner under Kevlar, 72-199 mm by zone.**
+  - Its liner sees almost no spall (≤0.03x), because the spike is about its 3.4 µs round trip.
+  - Its wrap tolerates fling up to 2.4%.
+  - At r 3.0 m the worst fling is 1.69%. r 2.6 m misses by 3% on a free-ring estimate that
+    shell coupling lowers by 25-40%, so it probably passes.
+- **Steel fails mainly in hydrogen.** On the air curve (the alumina barrier) the steel band
+  passes at r 3.0 m with a thin margin.
+- **The taper is the hot zone in every design.** The blast still runs downstream into the
+  closing wall.
+- **Cost:** 106 m^3 is ~-7% impulse per rod against 40 m^3 (78.5 m^3: ~-5%), ~6 m across.
+  27 t per chamber against the paper's 19 t, which is a bonded overwrap that delaminates.
+- **Open:** 0.5 cm peaks (+15-25% per halving); the wrap's through-thickness stiffness (3 GPa
+  assumed); a coupled fling model would settle r 2.6 m.
+
 ## 3d. Volume, manufacture and in-orbit assembly (added 2026-10-07; scaling, not a cost model)
 
 **The steady-load steel does not grow with volume.** The charge's energy fixes `p V`
@@ -642,6 +682,12 @@ chamber keeping the 0.5 s it needs to empty and refill.**
   - **Reconcile the departing mass per chamber.** 630-780 pulses (159-194 s at 4 Hz) is a
     ~100 t craft, while the growth ledger departs 500-600 t stacks (~4,000-4,300 pulses). The
     finite-burn loss, the chamber count and the fatigue budget all depend on which.
+- **Chamber wall (§3f).** Make the near-term methane chamber a **dry Kevlar wrap over a
+  10 mm Cr-Mo liner**, ~27 t, on a bulged rocket shape:
+  - an r 2.6-3.0 m bulge around the plug, closed by a 2-3 m taper;
+  - 78-106 m^3, throat scaled for 2 Hz;
+  - solid or multilayer steel at the plug band fails (hydrogen cracks, or flung shells).
+  - Replace the 19 t bonded-overwrap figure.
 - **Hydrogen at the 2.5 kg rod.** No wall under ~50 t survives the centred spike (~2.95 GPa, at
   steel's spall strength). Say so. The levers are a larger chamber (~8-11% Isp at 60-80 m^3) or a
   smaller rod per pulse.
