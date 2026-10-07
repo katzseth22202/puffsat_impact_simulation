@@ -40,3 +40,19 @@ def test_maraging_is_scored_only_behind_a_barrier() -> None:
     assert not wz.steel_of("maraging").hydrogen_qualified
     assert wz.steel_of("steel").hydrogen_qualified
     assert wz.steel_of("maraging").spall > wz.steel_of("steel").spall
+
+
+def test_doubling_the_pulse_scales_lengths_and_times_and_keeps_pressure() -> None:
+    """Cube-root scaling: lengths and times x2^(1/3), volume x2, the same quasi-static pressure."""
+    import numpy as np
+
+    h = wz.History(
+        np.array([0.5, 1.0]), np.array([1.4, 1.4]), np.array([0.0, 1e-6]), np.ones((2, 2)), 40.0
+    )
+    big = h.scaled(2.0)
+    k = 2.0 ** (1.0 / 3.0)
+    assert big.qsp == pytest.approx(h.qsp)
+    assert big.volume == pytest.approx(80.0)
+    assert big.r[0] == pytest.approx(1.4 * k)
+    assert big.time[1] == pytest.approx(1e-6 * k)
+    assert big.length_scale == pytest.approx(k)

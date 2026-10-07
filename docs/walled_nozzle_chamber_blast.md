@@ -472,6 +472,29 @@ bending, and lifted dry layers are free rings. So r 2.6 m's miss is real.
   - maraging's hoop swing (assumed).
   - Run a 0.25 cm check of the r 3.0 m shape.
 
+## 3g. One 5 kg chamber or two 2.5 kg chambers (`wall_zones --energy 2`; added 2026-10-07)
+
+Inviscid flow has no length scale. Doubling the pulse and growing every length and time by
+`2^(1/3)` leaves every pressure unchanged, so the solved r 3.0 m history serves the 5 kg rod
+exactly, and the r 2.6 m one likewise. Only the fixed 10 mm liner and the sizing differ.
+
+| wall, r 3.0 m bulge | one 2.5 kg chamber (106 m^3) | two of them | **one 5 kg chamber (212 m^3)** |
+|---|---|---|---|
+| all dry wrap | 27.3 t, fling 1.69% | 54.6 t | **52.9 t, passes, fling 1.97% (1.2x)** |
+| maraging band (barrier), wrap elsewhere | 37.2 t | 74.4 t | 72.9 t, passes |
+
+- **The same wall mass, ~3% lighter.** The steady load is `p V`, proportional to the energy.
+- **21% less wall area** (`2^(2/3)/2`), so 21% less pitch, barrier and inspection. There is
+  also one port, plug feed and membrane set instead of two.
+- **The same chemistry and impulse per rod:** the pressure is the same.
+- **The fling margin shrinks from 1.4x to 1.2x.** The 10 mm liner does not scale, so the wrap
+  carries more of the hoop.
+- **Size:** 212 m^3, ~7.6 m across at the bulge. That fits a 9 m Starship fairing but not
+  smaller ones; ring segments either way (§3d).
+- **The trade is redundancy.** Two chambers survive one failure at half thrust; one 5 kg
+  chamber does not.
+- At r 2.6 m the 5 kg dry wrap still fails on fling, as the 2.5 kg one does.
+
 ## 3d. Volume, manufacture and in-orbit assembly (added 2026-10-07; scaling, not a cost model)
 
 **The steady-load steel does not grow with volume.** The charge's energy fixes `p V`
@@ -693,6 +716,9 @@ chamber keeping the 0.5 s it needs to empty and refill.**
   - **Use two chambers on the departing stack.** The departure burn's finite-burn loss is
     +15-18% Δv at 1 Hz, +6-8% at 2 Hz and +2-3% at 4 Hz on a 500-600 t stack. Two chambers at
     2 Hz recover the 4 Hz figure, and each still has 0.5 s to empty.
+  - **One 5 kg chamber matches two 2.5 kg chambers on wall mass** (52.9 against 54.6 t,
+    dry wrap, §3g), with 21% less area and one set of mechanisms. It gives up redundancy and
+    needs a ~7.6 m diameter. Ask: which does the mission need?
   - Recheck "on the 500-600 t stacks that depart, one chamber is best" with the finite-burn
     loss charged. The ledger does not appear to include it.
     - The answer turns on the wall: a second chamber costs ~35-50 t all steel (about a wash),

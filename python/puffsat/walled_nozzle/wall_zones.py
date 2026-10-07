@@ -145,10 +145,26 @@ class History:
     time: NDArray[np.float64]
     pressure: NDArray[np.float64]
     volume: float
+    energy: float = 1.0
+    """Pulse energy relative to the 2.5 kg rod."""
 
     @property
     def qsp(self) -> float:
-        return REAL_QSP_20 * 20.0 / self.volume
+        return REAL_QSP_20 * 20.0 / self.volume * self.energy
+
+    @property
+    def length_scale(self) -> float:
+        """`energy^(1/3)`: zone boundaries are set for the 2.5 kg chamber and scale with it."""
+        return float(self.energy ** (1.0 / 3.0))
+
+    def scaled(self, energy: float) -> History:
+        """The same chamber for `energy` times the pulse, by exact cube-root scaling. Inviscid
+        flow has no length scale, so lengths and times grow as `energy^(1/3)` and pressures are
+        unchanged."""
+        k = energy ** (1.0 / 3.0)
+        return History(
+            self.z * k, self.r * k, self.time * k, self.pressure, self.volume * energy, energy
+        )
 
 
 def load_history(path: Path = HISTORIES, case: str = CASE) -> History:
@@ -267,7 +283,9 @@ def size_hoop(
     field = np.array([np.interp(s, s_st, row) for row in h.pressure])
     dt = float(h.time[1] - h.time[0])
     names = [name for name, _, _ in ZONES]
-    zone_ix = np.array([names.index(zone_of(float(zz))) for zz in z], dtype=np.int64)
+    zone_ix = np.array(
+        [names.index(zone_of(float(zz) / h.length_scale)) for zz in z], dtype=np.int64
+    )
     t = {
         name: _initial_thickness(
             wall.kinds[name], h.qsp, float(radius[zone_ix == k].max(initial=1.4))
@@ -344,7 +362,7 @@ def crack_pulses(
 
 def spall(kind: str, t: float, h: History, zone: str) -> tuple[float, float]:
     """(worst steel tension [Pa], the steel layer's thickness [m]) over the zone's hardest hits."""
-    mask = np.array([zone_of(float(zz)) == zone for zz in h.z])
+    mask = np.array([zone_of(float(zz) / h.length_scale) == zone for zz in h.z])
     if not mask.any():
         return 0.0, t
     idx = np.flatnonzero(mask)
@@ -377,7 +395,7 @@ def fling(kind: str, t: float, h: History, zone: str) -> tuple[float, float]:
     """(peak flung-layer hoop strain, its allowable) at the zone's hardest-hit station."""
     if kind in ("steel", "maraging"):
         return 0.0, math.inf
-    idx = np.flatnonzero([zone_of(float(zz)) == zone for zz in h.z])
+    idx = np.flatnonzero([zone_of(float(zz) / h.length_scale) == zone for zz in h.z])
     if idx.size == 0:
         return 0.0, math.inf
     j = idx[int(np.argmax(h.pressure[:, idx].max(axis=0)))]
@@ -442,9 +460,12 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--histories", type=Path, default=HISTORIES)
     parser.add_argument("--case", default=CASE)
+    parser.add_argument("--energy", type=float, default=1.0, help="pulse energy / 2.5 kg rod's")
     args = parser.parse_args(argv)
     h = load_history(args.histories, args.case)
-    print(args.case)
+    if args.energy != 1.0:
+        h = h.scaled(args.energy)
+    print(f"{args.case}, pulse energy x{args.energy:g}")
     print(f"chosen chamber {h.volume:.1f} m^3, QSP {h.qsp / 1e6:.1f} MPa, swing {dw.SWING:.4%}")
     rows = []
     for wall in walls():
@@ -465,7 +486,10 @@ def main(argv: list[str] | None = None) -> None:
                 f"{min(r.pulses_h2, 9.99e8):9.3g} {r.fling_strain_pct:7.2f} "
                 f"{min(r.fling_allow_pct, 99.0):6.2f}"
             )
-    output = OUTPUT.with_name(f"wall_zones_{args.case.split(',')[0].replace(' ', '_')}.csv")
+    tag = args.case.split(",")[0].replace(" ", "_")
+    if args.energy != 1.0:
+        tag += f"_energy{args.energy:g}"
+    output = OUTPUT.with_name(f"wall_zones_{tag}.csv")
     output.parent.mkdir(parents=True, exist_ok=True)
     fields = list(ZoneResult.__dataclass_fields__)
     with output.open("w", newline="") as handle:

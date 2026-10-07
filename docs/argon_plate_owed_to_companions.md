@@ -355,6 +355,15 @@ A short paragraph and the table in `docs/spray_plate_fatigue_and_spall.md` §1 w
   in-plane stretch); its pinholes are closed by ALD or nanolaminates. Order a few percent of the
   steel's cost. The skirt liner takes the same film. Its permeation reduction under pulsed atomic
   hydrogen plasma is untested, and the paper should list that test.
+  - **Keep the barrier on both arms.** The argon arm still takes a water PuffSat, so hydrogen
+    reaches the face either way; the water slug only adds more.
+  - **The plate's risk is lower than the chamber's, but not low enough to drop the barrier.**
+    - Each pulse wets the face for well under a millisecond, not the chamber's ~0.2 s
+      blowdown.
+    - The merged pulse keeps the face in compression; the tension that grows cracks is at the
+      back, ~30 mm of steel away from where hydrogen enters.
+    - But at the plate's 400-507 K hydrogen diffuses quickly through martensite. Over thousands
+      of pulses that distance is crossed, and maraging tolerates little.
 - **Layering, if used, must put the tough grade at the back.** Reflected tension and spall start
   at the back face, so a less-tough backing would put the weakest steel where the tension is. Every
   layer also sees the full ~P in compression, so the backing must clear 2.5 GPa too, which rules
