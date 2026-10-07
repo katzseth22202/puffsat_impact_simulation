@@ -30,12 +30,20 @@ pub struct Vessel {
     pub r_t: f64,
     /// 0 = straight cone, 1 = elliptical nose.
     pub curve: f64,
+    /// Depth of the port-end head [m]; 0 for a flat port face. A 2:1 elliptical head is `r_c/2`.
+    pub h_head: f64,
+    /// Radius of the flat port opening the head closes down to [m].
+    pub r_port: f64,
 }
 
 impl Vessel {
     /// Wall radius `r_w(z)` [m].
     #[must_use]
     pub fn r_wall(&self, z: f64) -> f64 {
+        if self.h_head > 0.0 && z < self.h_head {
+            let u = 1.0 - z.max(0.0) / self.h_head;
+            return self.r_port + (self.r_c - self.r_port) * (1.0 - u * u).sqrt();
+        }
         if z <= self.z_c {
             return self.r_c;
         }
@@ -98,6 +106,8 @@ mod tests {
             z_hi: 3.0,
             r_t: 0.2,
             curve: 0.0,
+            h_head: 0.0,
+            r_port: 0.0,
         };
         let cone = std::f64::consts::PI / 3.0 * 1.0 * (1.0 + 0.2 + 0.04);
         let expected = std::f64::consts::PI * 2.0 + cone;
@@ -133,6 +143,8 @@ mod tests {
             z_hi: 2.0,
             r_t: 0.2,
             curve: 0.6,
+            h_head: 0.5,
+            r_port: 0.1,
         };
         let mut g = chamber_grid(v, 80, true);
         g.init(|_, _| Prim::new(1.0, 0.0, 0.0, 1.0));
@@ -152,6 +164,8 @@ mod tests {
             z_hi: 2.0,
             r_t: 1.0,
             curve: 0.0,
+            h_head: 0.0,
+            r_port: 0.0,
         };
         let mut g = chamber_grid(v, 80, true);
         g.init(|iz, ir| {
@@ -183,6 +197,8 @@ mod tests {
             z_hi: 3.0,
             r_t: 0.2,
             curve: 1.0,
+            h_head: 0.0,
+            r_port: 0.0,
         };
         let (nz, nr) = v.normal(1.0);
         assert!(nz.abs() < 1e-9 && (nr + 1.0).abs() < 1e-9);

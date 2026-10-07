@@ -31,12 +31,11 @@ the spike amplitude at which each material fails:
 
 # The spike
 
-The amplitude is not solved here. A Sedov blast from the rod's 7.0 GJ, crossing ~3.5 kg/m^3 of
-fill to the 1.68 m wall, arrives at 8.8-11.5 km/s, an incident shock of 2,300-4,300 bar. A strong
-shock reflecting normally off a rigid wall multiplies that by `(3 gamma - 1)/(gamma - 1)`: 8 at
-gamma 1.4, 13 at 1.2. That points to a ~2-5 GPa spike lasting tens of µs, against the 496-818 bar
-mean. This is an order-of-magnitude estimate that a decaying, real-gas, curved blast will
-soften. A solved blast-in-vessel run is owed.
+The amplitude is not solved here; `chamber_blast.py` and `vessel_blast.py` solve it (see
+`docs/walled_nozzle_chamber_blast.md`). `sedov_spike` below is the first estimate those solves
+replaced. It is a strong-shock Sedov arrival with normal reflection, using xi = 1.033 at
+gamma 1.4. An earlier version used 1.15, the gamma = 5/3 value, and overstated the shock speed
+by ~30%.
 
 Impedances follow the parent (`sec:carbon_overwrap`):
 - steel 5,900 m/s and 7,830 kg/m^3;
@@ -140,7 +139,7 @@ def response(
 def response_to(
     stack: Stack, load: Callable[[float], float], duration: float, cells_thin: int = 8
 ) -> list[tuple[Layer, NDArray[np.float64]]]:
-    """Peak tension per layer and cell [Pa], bias included, under an inner-face pressure `load(t)`."""
+    """Peak tension per layer and cell [Pa], bias included, under inner-face pressure `load(t)`."""
     dt = min(layer.thickness / layer.speed for layer in stack.layers) / cells_thin
     cells = [max(2, round(layer.thickness / (layer.speed * dt))) for layer in stack.layers]
     steps = int(duration / dt)
@@ -221,10 +220,11 @@ def evaluate(stack: Stack, decay: float) -> list[Row]:
 def sedov_spike(energy: float, density: float, radius: float, gamma: float) -> tuple[float, float]:
     """(incident, reflected) strong-shock pressure [Pa] at the wall, Sedov arrival speed.
 
-    `U = (2/5) xi^(5/2) (E/rho)^(1/2) R^(-3/2)` with xi = 1.15 at gamma 1.4 and ~1.0 lower; the
+    `U = (2/5) xi^(5/2) (E/rho)^(1/2) R^(-3/2)` with xi = 1.033 at gamma 1.4 (alpha = 0.851,
+    Kamm and Timmes) and ~1.0 lower; the
     reflected pressure is `(3 gamma - 1)/(gamma - 1)` times the incident.
     """
-    xi = 1.15 if gamma >= 1.4 else 1.0
+    xi = 1.033 if gamma >= 1.4 else 1.0
     speed = 0.4 * xi**2.5 * math.sqrt(energy / density) * radius**-1.5
     incident = 2.0 * density * speed**2 / (gamma + 1.0)
     return incident, incident * (3.0 * gamma - 1.0) / (gamma - 1.0)

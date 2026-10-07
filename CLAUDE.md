@@ -114,7 +114,9 @@ with chemical ablation and blowing coupled in (`make walled-nozzle-wall-layers-h
 [`docs/walled_nozzle_hydrogen_pitch.md`](docs/walled_nozzle_hydrogen_pitch.md)
 ([ADR-0054](docs/adr/0054-hydrogen-pitch-chemical-ablation-and-blowing.md)). Fatigue, spall and
 overwrap delamination of the autofrettaged wall are in
-[`docs/walled_nozzle_chamber_fatigue.md`](docs/walled_nozzle_chamber_fatigue.md). Its Python is
+[`docs/walled_nozzle_chamber_fatigue.md`](docs/walled_nozzle_chamber_fatigue.md); the solved blast
+inside the chamber (plug, shape, wall, volume trade) is in
+[`docs/walled_nozzle_chamber_blast.md`](docs/walled_nozzle_chamber_blast.md). Its Python is
 `python/puffsat/walled_nozzle/` plus the top-level `python/puffsat/eos_methane.py`, and its
 outputs are under `data/results/walled_nozzle/`.
 
@@ -129,6 +131,8 @@ make walled-nozzle-near-term  # 2.5 kg rod / 20 m^3 near-term chamber: CH4 7000 
 make walled-nozzle-wall-layers # coated steel wall (graphite / pitch) under the CH4 7000 K pulse
 make walled-nozzle-chamber-fatigue # autofrettaged Cr-Mo shell: crack growth under the breathing mode
 make walled-nozzle-wall-waves # spall and overwrap delamination under a reflected blast spike
+make walled-nozzle-chamber-blast # the rod's blast in a 1-D spherical chamber (euler2d::sphere)
+make walled-nozzle-vessel-blast  # the blast in 2-D rocket-shaped chambers: shape, deposition, long plug
 make walled-nozzle-test       # that study's tests alone
 ```
 

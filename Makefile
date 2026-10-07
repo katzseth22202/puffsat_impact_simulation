@@ -975,7 +975,23 @@ walled-nozzle-wall-waves:
 	@mkdir -p data/results/walled_nozzle/near_term
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.wall_waves
 
-.PHONY: walled-nozzle-chamber-fatigue walled-nozzle-wall-waves
+## walled-nozzle-chamber-blast: the rod's blast in a 1-D spherical 20 m^3 chamber (euler2d::sphere),
+## dry vs liquid-share fills, single vs split delivery -> near_term/chamber_blast.csv
+walled-nozzle-chamber-blast:
+	cargo run --release -p sweep -- --chamber-blast
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.chamber_blast
+
+## walled-nozzle-vessel-blast: the blast in rocket-shaped 2-D chambers (euler2d::vessel): four
+## contours, the domed head with its grid series, deposition geometries and the long plug
+walled-nozzle-vessel-blast:
+	cargo run --release -p sweep -- --vessel-blast
+	cargo run --release -p sweep -- --vessel-blast --domed
+	cargo run --release -p sweep -- --vessel-blast --deposition
+	cargo run --release -p sweep -- --vessel-blast --long-plug
+	cargo run --release -p sweep -- --vessel-blast --long-plug-fine
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.vessel_blast
+
+.PHONY: walled-nozzle-chamber-fatigue walled-nozzle-wall-waves walled-nozzle-chamber-blast walled-nozzle-vessel-blast
 
 ## walled-nozzle-test: this study's tests alone
 walled-nozzle-test:

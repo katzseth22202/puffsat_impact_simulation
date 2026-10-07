@@ -121,6 +121,12 @@ The slow mean-pressure ramp is harmless by comparison. Ramping over 0.4 ms again
 
 ## 5. What the paper should change (owed to `Balloon-Pulse-Propulsion`)
 
+> **Superseded in part (2026-10-07).** The spike is now solved in
+> [`walled_nozzle_chamber_blast.md`](walled_nozzle_chamber_blast.md). That note finds the paper's
+> plug leaves a 27 km/s merged plug that strikes the nose at 5-6 GPa, and that a longer plug,
+> a rocket-shaped chamber and a steel wall (or a larger chamber) answer it. Its §5 replaces the
+> spike items below. The breathing-fatigue and rise-time items here still stand.
+
 - **`sec:steel_chamber_service`, after `eq:ramp_dlf`.** "Every shell mass grows by D unless the
   pressure rise is deliberately slowed" becomes a requirement. Add:
   - At the parent's own sizing (D = 1.7, steel -0.75 Y to +0.75 Y), a 1 mm flaw in the hydrogen

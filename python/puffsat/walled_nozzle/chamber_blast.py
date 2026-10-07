@@ -1,13 +1,13 @@
 """Read the solved blast-in-vessel wall histories against the chamber wall's three failure modes.
 
 `cargo run --release -p sweep -- --chamber-blast` solves a 1-D spherical blast in the 20 m^3
-chamber (`euler2d::sphere`). It covers both chambers and γ 1.2 / 1.4, a dry fill against the
+chamber (`euler2d::sphere`). It covers both chambers and gamma 1.2 / 1.4, a dry fill against the
 parent's near-wall liquid share, and one charge against split deliveries. Each record holds the
 wall-pressure history. This module reads it three ways:
 
-1. **Scale.** The γ-law gas sets its own quasi-static pressure (QSP, the wall mean over 3-6 ms).
+1. **Scale.** The gamma-law gas sets its own quasi-static pressure (QSP, the wall mean over 3-6 ms).
    Every history is divided by it and multiplied by the solved real-gas QSP: 496 bar methane,
-   818 bar hydrogen (`chambers.csv`). Spike-to-QSP is the γ-law result; the level is the real
+   818 bar hydrogen (`chambers.csv`). Spike-to-QSP is the gamma-law result; the level is the real
    chamber's.
 2. **Breathing fatigue.** The normalised history drives the wall's breathing mode
    (`chamber_fatigue.breathing_response_to`), continued by the chamber's blowdown after 6 ms.
@@ -101,7 +101,7 @@ def evaluate(rec: dict[str, object]) -> Row:
     stack = next(
         s for s in ww.stacks() if s.name.startswith(chamber_name.split()[0]) and "with" in s.name
     )
-    start = float(rec["first_arrival_s"]) - 20e-6
+    start = float(rec["first_arrival_s"]) - 20e-6  # type: ignore[arg-type]
 
     def load(time: float) -> float:
         return float(np.interp(start + time, t, p)) * scale
