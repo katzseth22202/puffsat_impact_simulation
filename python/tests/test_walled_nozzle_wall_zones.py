@@ -33,3 +33,10 @@ def test_multilayer_keeps_hoop_and_mass_and_loses_bending() -> None:
     assert multi[0] == mono[0]
     assert multi[2] == mono[2]
     assert multi[1] == pytest.approx(mono[1] / wz.SHELLS**2)
+
+
+def test_maraging_is_scored_only_behind_a_barrier() -> None:
+    """Maraging is 'extreme' in hydrogen: no hydrogen life is credited, and it needs the barrier."""
+    assert not wz.steel_of("maraging").hydrogen_qualified
+    assert wz.steel_of("steel").hydrogen_qualified
+    assert wz.steel_of("maraging").spall > wz.steel_of("steel").spall

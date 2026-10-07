@@ -431,6 +431,20 @@ The tension columns are back-face tension as a fraction of the 2.9 GPa spall str
 | r 2.6 m (78.5 m^3) | 45.2 t: H2, 301 | 35.4 t: H2, 232 | fling | 27.1 t: fling 2.48% vs 2.4% |
 | **r 3.0 m (106 m^3)** | 47.1 t: H2, 662 (air 7,780) | 39.3 t: H2, 437 (air 5,600) | fling | **27.3 t: passes** |
 
+Maraging 300 behind the alumina barrier, scored on the air curve with spall 4.1 GPa, `K_Ic`
+66.5 and an assumed 1.2 GPa hoop swing:
+
+| bulge | maraging band, wrap elsewhere | all maraging |
+|---|---|---|
+| r 2.2 m | 33.4 t, crack life 4,220 (1.0x) | fails, 1,802 |
+| r 2.6 m | **34.1 t, 5,960 (1.4x)** | 42.5 t, passes |
+| r 3.0 m | 37.2 t, 8,270 (2.0x) | 45.0 t, passes |
+
+**Coupling the chain along the wall does not reduce the dry wrap's fling.**
+`dry_wrap.simulate_coupled` couples the liner's bending along the meridian; a narrow struck band
+flings ~5% harder. The spike hands its momentum to the wrap in microseconds, against ~0.4 ms for
+bending, and lifted dry layers are free rings. So r 2.6 m's miss is real.
+
 - **One spike, two fates.** The spike's few kPa s, delivered in microseconds, either reflects
   as tension in a solid wall (cracks) or throws an unbonded wall's outer layers outward
   (fling). The wall type moves the problem; only a smaller spike removes it.
@@ -445,8 +459,18 @@ The tension columns are back-face tension as a fraction of the 2.9 GPa spall str
   closing wall.
 - **Cost:** 106 m^3 is ~-7% impulse per rod against 40 m^3 (78.5 m^3: ~-5%), ~6 m across.
   27 t per chamber against the paper's 19 t, which is a bonded overwrap that delaminates.
-- **Open:** 0.5 cm peaks (+15-25% per halving); the wrap's through-thickness stiffness (3 GPa
-  assumed); a coupled fling model would settle r 2.6 m.
+- **Two designs survive:**
+  - **Baseline:** all dry wrap at r 3.0 m (106 m^3, 27.3 t). It does not depend on hydrogen;
+    the margin is fling, 1.4x.
+  - **Fallback and smaller:** a maraging band with wrap elsewhere at r 2.6 m (78.5 m^3,
+    34.1 t, -5% instead of -7% impulse per rod). Its margin is crack life, 1.4x, and it rests on
+    an alumina barrier untested under GPa spikes.
+- **Open:**
+  - 0.5 cm peaks (+15-25% per halving);
+  - the wrap's through-thickness stiffness (3 GPa assumed);
+  - Kevlar's breaking strain under cycling;
+  - maraging's hoop swing (assumed).
+  - Run a 0.25 cm check of the r 3.0 m shape.
 
 ## 3d. Volume, manufacture and in-orbit assembly (added 2026-10-07; scaling, not a cost model)
 
@@ -688,6 +712,8 @@ chamber keeping the 0.5 s it needs to empty and refill.**
   - 78-106 m^3, throat scaled for 2 Hz;
   - solid or multilayer steel at the plug band fails (hydrogen cracks, or flung shells).
   - Replace the 19 t bonded-overwrap figure.
+  - Name the fallback: a maraging 300 band behind a thin alumina barrier, wrap elsewhere,
+    at r 2.6 m (~34 t). List the barrier's spike test as its gating item.
 - **Hydrogen at the 2.5 kg rod.** No wall under ~50 t survives the centred spike (~2.95 GPa, at
   steel's spall strength). Say so. The levers are a larger chamber (~8-11% Isp at 60-80 m^3) or a
   smaller rod per pulse.

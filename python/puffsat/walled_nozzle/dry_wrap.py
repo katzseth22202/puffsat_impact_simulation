@@ -186,6 +186,78 @@ def simulate(wall: Wall, load: NDArray[np.float64], dt_load: float, t_end: float
     )
 
 
+def simulate_coupled(
+    fibre: Fibre,
+    e_z: float,
+    s: NDArray[np.float64],
+    radius: NDArray[np.float64],
+    wrap_t: NDArray[np.float64],
+    field: NDArray[np.float64],
+    dt_load: float,
+    t_end: float,
+    n_s: int = 4,
+    n_w: int = 40,
+) -> NDArray[np.float64]:
+    """Peak wrap hoop strain at each meridian station, the chain coupled along the wall.
+
+    Every station `s` carries the layer chain of `simulate` (liner cells bonded, wrap layers in
+    contact, preload, hoop, damping), at its own radius and wrap thickness. The liner bends: its
+    mean radial displacement feels `(D w_ss)_ss` with `D = E t^3 / 12(1 - nu^2)`, spread over
+    its cells by mass. The dry wrap's wound layers have no axial stiffness and are not coupled.
+    Both ends are clamped. `field[t, s]` is the inner-face pressure, held beyond its end.
+    """
+    nn = s.size
+    ds = float(s[1] - s[0])
+    n = n_s + n_w
+    ts = (
+        np.r_[np.full(n_s, STEEL_T / n_s), np.zeros(n_w)][:, None]
+        + np.r_[np.zeros(n_s), np.ones(n_w) / n_w][:, None] * wrap_t[None, :]
+    )
+    rho = np.r_[np.full(n_s, STEEL_RHO), np.full(n_w, fibre.density)][:, None]
+    eh = np.r_[np.full(n_s, STEEL_E), np.full(n_w, fibre.hoop_modulus)][:, None]
+    mod = np.r_[np.full(n_s, STEEL_M), np.full(n_w, e_z)][:, None]
+    half = 0.5 * ts / mod
+    kc = 1.0 / (half[:-1] + half[1:])
+    m = rho * ts
+    kh = eh * ts / radius[None, :] ** 2
+    b0 = 0.75 * 750e6 * STEEL_T / radius
+    shape = np.r_[np.arange(1, n_s) / n_s, 1.0 - np.arange(0, n_w) / n_w][:, None]
+    bias = shape * b0[None, :]
+    zeros = np.zeros((1, nn))
+    h_rest = np.r_[zeros, bias] - np.r_[bias, zeros]
+    rest_strain = h_rest * radius[None, :] / (eh * ts)
+    bonded = np.r_[np.ones(n_s - 1, dtype=bool), np.zeros(n_w, dtype=bool)][:, None]
+    damp = 2.0 * ZETA * np.sqrt(kc * 0.5 * (m[:-1] + m[1:]))
+    d_liner = STEEL_E * STEEL_T**3 / (12.0 * (1.0 - 0.3**2))
+    m_liner = STEEL_RHO * STEEL_T
+    dt = 0.2 * float(np.min(np.sqrt(np.minimum(m[:-1], m[1:]) / kc)))
+    dt = min(dt, 0.2 * ds**2 / math.sqrt(d_liner / m_liner))
+    share = m[:n_s] / m[:n_s].sum(axis=0)
+    u = np.zeros((n, nn))
+    v = np.zeros((n, nn))
+    peak = np.full(nn, -math.inf)
+    t_load = np.arange(field.shape[0]) * dt_load
+    for k in range(int(t_end / dt)):
+        t = k * dt
+        i = min(int(t / dt_load), field.shape[0] - 2)
+        f = min(max((t - t_load[i]) / dt_load, 0.0), 1.0)
+        p = field[i] + f * (field[i + 1] - field[i])
+        rel = u[:-1] - u[1:]
+        force = bias + kc * rel + damp * (v[:-1] - v[1:])
+        force = np.where(bonded, force, np.maximum(force, 0.0))
+        acc = np.r_[p[None, :], force] - np.r_[force, zeros] - h_rest - kh * u
+        w = (u[:n_s] * share).sum(axis=0)
+        wp = np.r_[w[2], w[1], w, w[-2], w[-3]]
+        b4 = (wp[:-4] - 4 * wp[1:-3] + 6 * wp[2:-2] - 4 * wp[3:-1] + wp[4:]) / ds**4
+        acc[:n_s] -= d_liner * b4[None, :] * share
+        v += dt * acc / m
+        u += dt * v
+        u[:, 0] = u[:, -1] = 0.0
+        v[:, 0] = v[:, -1] = 0.0
+        np.maximum(peak, (rest_strain + u / radius[None, :])[n_s:].max(axis=0), out=peak)
+    return peak
+
+
 def solved_load() -> tuple[NDArray[np.float64], float]:
     """The long plug's hardest-hit cylinder station [Pa, model units] and its sample spacing."""
     for line in HISTORIES.open():

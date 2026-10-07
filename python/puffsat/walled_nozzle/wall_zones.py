@@ -10,6 +10,13 @@ cone and throat. Each zone takes one of three walls:
 - **multilayer:** the same steel in 8 shrink-fitted shells in contact only: the same hoop
   stiffness and mass, 1/64 of the bending stiffness;
 - **wrap:** a 10 mm Cr-Mo liner under a dry Kevlar 49 wrap (`dry_wrap.KEVLAR`), unbonded.
+- **maraging:** monolithic maraging 300 behind the alumina hydrogen barrier. Its spall strength
+  (4.1 GPa, the low end of [M17]) and toughness (`K_Ic` 66.5 MPa m^0.5, NI76) are higher than
+  Cr-Mo's.
+  - It is rated "extreme" in hydrogen, so it is scored on the air crack curve only: the
+    barrier must work.
+  - Its allowed hoop swing is taken as 1.2 GPa (amplitude 0.6 GPa, about NI76's notched life
+    at 10^4 cycles), not +/-0.75 Y; an assumption.
 
 # Hoop
 
@@ -91,6 +98,29 @@ LINER = dw.STEEL_T
 WRAP_SPEED, WRAP_DENSITY = 2000.0, 1380.0
 """Dry aramid through the thickness (as `water_plate.skirt_delamination`), assumed."""
 K_FAIL = 45.0
+"""Cr-Mo: the parent's hydrogen floor for steels under 950 MPa [MPa m^0.5]."""
+
+
+@dataclass(frozen=True)
+class Steel:
+    name: str
+    modulus: float
+    density: float
+    speed: float
+    spall: float
+    k_fail: float
+    swing: float
+    hydrogen_qualified: bool
+
+
+CRMO = Steel("Cr-Mo", dw.STEEL_E, dw.STEEL_RHO, 5900.0, ww.STEEL_SPALL, K_FAIL, dw.SWING, True)
+MARAGING = Steel("maraging 300", 190e9, 8000.0, 5654.0, 4.1e9, 66.5, 1.2e9 / 190e9, False)
+
+
+def steel_of(kind: str) -> Steel:
+    return MARAGING if kind == "maraging" else CRMO
+
+
 CRACK_START = 0.5e-3
 ZONES: tuple[tuple[str, float, float], ...] = (
     ("head", 0.0, 0.7),
@@ -160,6 +190,11 @@ def walls() -> list[Wall]:
             {z: ("multilayer" if z in BAND else "wrap") for z in every},
         ),
         Wall("steel band, wrap elsewhere", {z: ("steel" if z in BAND else "wrap") for z in every}),
+        Wall("all maraging (barrier)", dict.fromkeys(every, "maraging")),
+        Wall(
+            "maraging band (barrier), wrap elsewhere",
+            {z: ("maraging" if z in BAND else "wrap") for z in every},
+        ),
     ]
 
 
@@ -167,7 +202,8 @@ def _initial_thickness(kind: str, qsp: float, radius: float) -> float:
     """Steel [m] for steel/multilayer, wrap [m] for wrap: sized for D = 1.7 at the swing."""
     if kind == "wrap":
         return dw.sized_wrap(qsp, radius, dw.KEVLAR)
-    return dw.DESIGN_D * qsp * radius / (dw.STEEL_E * dw.SWING)
+    mat = steel_of(kind)
+    return dw.DESIGN_D * qsp * radius / (mat.modulus * mat.swing)
 
 
 def _section(kind: str, t: float) -> tuple[float, float, float]:
@@ -179,10 +215,11 @@ def _section(kind: str, t: float) -> tuple[float, float, float]:
             sr.plate_bending(dw.STEEL_E, LINER),
             dw.STEEL_RHO * LINER + dw.KEVLAR.density * t,
         )
-    bend = sr.plate_bending(dw.STEEL_E, t)
+    mat = steel_of(kind)
+    bend = sr.plate_bending(mat.modulus, t)
     if kind == "multilayer":
-        bend = SHELLS * sr.plate_bending(dw.STEEL_E, t / SHELLS)
-    return dw.STEEL_E * t, bend, dw.STEEL_RHO * t
+        bend = SHELLS * sr.plate_bending(mat.modulus, t / SHELLS)
+    return mat.modulus * t, bend, mat.density * t
 
 
 @dataclass(frozen=True)
@@ -200,12 +237,15 @@ class ZoneResult:
     pulses_h2: float
     fling_strain_pct: float  # flung layers' peak hoop strain (0 for a bonded wall)
     fling_allow_pct: float
+    swing_pct: float
+    needs_barrier: bool  # scored on the air curve: only valid behind a working barrier
 
     @property
     def passes(self) -> bool:
+        cracks = self.pulses_air if self.needs_barrier else self.pulses_h2
         return (
-            self.peak_strain_pct <= dw.SWING * 100 * 1.001
-            and self.pulses_h2 >= REQUIRED_PULSES
+            self.peak_strain_pct <= self.swing_pct * 1.001
+            and cracks >= REQUIRED_PULSES
             and self.fling_strain_pct <= self.fling_allow_pct
         )
 
@@ -250,7 +290,9 @@ def size_hoop(
             mask = zone_ix == k
             if not mask.any():
                 continue
-            over = float(strain[mask].max()) / dw.SWING
+            kind = wall.kinds[name]
+            swing = dw.SWING if kind == "wrap" else steel_of(kind).swing
+            over = float(strain[mask].max()) / swing
             if over > 1.001:
                 grown = True
                 hoop_now = _section(wall.kinds[name], t[name])[0]
@@ -258,15 +300,16 @@ def size_hoop(
                 if wall.kinds[name] == "wrap":
                     t[name] = (target - dw.STEEL_E * LINER) / dw.KEVLAR.hoop_modulus
                 else:
-                    t[name] = target / dw.STEEL_E
+                    t[name] = target / steel_of(wall.kinds[name]).modulus
         if not grown:
             break
     return t, strain, zone_ix, static
 
 
 def _stack(kind: str, t: float) -> ww.Stack:
-    if kind == "steel":
-        return ww.Stack("steel", (ww.Layer("Cr-Mo", t, 5900.0, 7830.0, ww.STEEL_SPALL),))
+    if kind in ("steel", "maraging"):
+        mat = steel_of(kind)
+        return ww.Stack(kind, (ww.Layer(mat.name, t, mat.speed, mat.density, mat.spall),))
     if kind == "multilayer":
         shell = ww.Layer("Cr-Mo", t / SHELLS, 5900.0, 7830.0, ww.STEEL_SPALL, bonded=False)
         last = ww.Layer("Cr-Mo", t / SHELLS, 5900.0, 7830.0, ww.STEEL_SPALL)
@@ -278,13 +321,17 @@ def _stack(kind: str, t: float) -> ww.Stack:
 
 
 def crack_pulses(
-    sigma_pa: float, layer_t: float, rate: Callable[[float, float, float], float], p_bar: float
+    sigma_pa: float,
+    layer_t: float,
+    rate: Callable[[float, float, float], float],
+    p_bar: float,
+    k_fail: float = K_FAIL,
 ) -> float:
     """Pulses for an embedded penny crack parallel to the face to reach failure."""
     sigma = sigma_pa / 1e6
     if sigma <= 0.0:
         return math.inf
-    a_c = min((K_FAIL * math.pi / (2.0 * sigma)) ** 2 / math.pi, 0.5 * layer_t)
+    a_c = min((k_fail * math.pi / (2.0 * sigma)) ** 2 / math.pi, 0.5 * layer_t)
     if a_c <= CRACK_START:
         return 0.0
     edges = np.geomspace(CRACK_START, a_c, 400)
@@ -316,8 +363,9 @@ def spall(kind: str, t: float, h: History, zone: str) -> tuple[float, float]:
             return float(np.interp(t0 + tt, h.time, series)) - base
 
         run = ww.simulate(stack, load, t_peak + SPIKE_WINDOW[1] - t0, cells_thin=16)
-        worst = max(worst, max(float(a.max()) for la, a in run.peak if la.name == "Cr-Mo"))
-    layer_t = {"steel": t, "multilayer": t / SHELLS, "wrap": LINER}[kind]
+        steels = (CRMO.name, MARAGING.name)
+        worst = max(worst, max(float(a.max()) for la, a in run.peak if la.name in steels))
+    layer_t = {"steel": t, "maraging": t, "multilayer": t / SHELLS, "wrap": LINER}[kind]
     return worst, layer_t
 
 
@@ -327,7 +375,7 @@ SHELL_RINGS = dw.Fibre("Cr-Mo shells", dw.STEEL_E, dw.STEEL_RHO, dw.SWING)
 
 def fling(kind: str, t: float, h: History, zone: str) -> tuple[float, float]:
     """(peak flung-layer hoop strain, its allowable) at the zone's hardest-hit station."""
-    if kind == "steel":
+    if kind in ("steel", "maraging"):
         return 0.0, math.inf
     idx = np.flatnonzero([zone_of(float(zz)) == zone for zz in h.z])
     if idx.size == 0:
@@ -361,6 +409,8 @@ def evaluate(wall: Wall, h: History) -> list[ZoneResult]:
         tension, layer_t = spall(kind, t[name], h, name)
         flung, allow = fling(kind, t[name], h, name)
         p_bar = h.qsp / 1e5
+        mat = steel_of(kind)
+        swing = dw.SWING if kind == "wrap" else mat.swing
         out.append(
             ZoneResult(
                 wall=wall.name,
@@ -371,11 +421,17 @@ def evaluate(wall: Wall, h: History) -> list[ZoneResult]:
                 tonnes=mass * area / 1e3,
                 peak_strain_pct=float(strain[mask].max()) * 100,
                 overshoot=float(strain[mask].max() / static[mask].max()),
-                tension_over_spall=tension / ww.STEEL_SPALL,
-                pulses_air=crack_pulses(tension, layer_t, cf.rate_air, p_bar),
-                pulses_h2=crack_pulses(tension, layer_t, cf.rate_hydrogen, p_bar),
+                tension_over_spall=tension / mat.spall,
+                pulses_air=crack_pulses(tension, layer_t, cf.rate_air, p_bar, mat.k_fail),
+                pulses_h2=(
+                    crack_pulses(tension, layer_t, cf.rate_hydrogen, p_bar, mat.k_fail)
+                    if mat.hydrogen_qualified
+                    else 0.0
+                ),
                 fling_strain_pct=flung * 100,
                 fling_allow_pct=allow * 100,
+                swing_pct=swing * 100,
+                needs_barrier=not mat.hydrogen_qualified,
             )
         )
     return out
