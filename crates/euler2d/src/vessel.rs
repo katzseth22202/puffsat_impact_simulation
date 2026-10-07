@@ -13,6 +13,9 @@
 //! the flow gradually and keeps the wall nearly parallel to the axis until close to the throat.
 //! `z_c = 0` drops the cylinder, leaving a pure cone or a curved cone.
 //!
+//! An optional [`Bulge`] widens the wall locally by `dr`, with half-cosine ramps, to stand the wall
+//! off from a blast at one station (the plug's) without widening the whole chamber.
+//!
 //! The solid is filled by the same ghost-cell mirror as the plate (ADR-0023 amendment). Each solid
 //! cell takes the state at its mirror image across the wall, with the wall-normal velocity
 //! reversed.
@@ -34,12 +37,75 @@ pub struct Vessel {
     pub h_head: f64,
     /// Radius of the flat port opening the head closes down to [m].
     pub r_port: f64,
+    /// A local widening of the wall ([`Bulge::NONE`] for none).
+    pub bulge: Bulge,
+}
+
+/// A local widening: `+dr` over `z0 <= z <= z1`, ramping up over `[z0 - ramp, z0]` and down over
+/// `[z1, z1 + ramp_out]` as `dr (1 - cos(pi x))/2`, so the wall and its slope stay continuous.
+/// A long `ramp_out` makes the closing shoulder glancing to a blast travelling downstream.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Bulge {
+    /// Extra radius at the plateau [m] (>= 0).
+    pub dr: f64,
+    /// Plateau start [m].
+    pub z0: f64,
+    /// Plateau end [m].
+    pub z1: f64,
+    /// Opening ramp length [m].
+    pub ramp: f64,
+    /// Closing ramp length [m].
+    pub ramp_out: f64,
+}
+
+impl Bulge {
+    /// No bulge.
+    pub const NONE: Self = Self {
+        dr: 0.0,
+        z0: 0.0,
+        z1: 0.0,
+        ramp: 1.0,
+        ramp_out: 1.0,
+    };
+
+    /// Extra radius at `z` [m].
+    #[must_use]
+    pub fn extra(&self, z: f64) -> f64 {
+        if self.dr == 0.0 {
+            return 0.0;
+        }
+        let x = if z < self.z0 {
+            1.0 - (self.z0 - z) / self.ramp
+        } else if z > self.z1 {
+            1.0 - (z - self.z1) / self.ramp_out
+        } else {
+            1.0
+        };
+        let x = x.clamp(0.0, 1.0);
+        self.dr * 0.5 * (1.0 - (std::f64::consts::PI * x).cos())
+    }
 }
 
 impl Vessel {
-    /// Wall radius `r_w(z)` [m].
+    /// Wall radius `r_w(z)` [m], bulge included.
     #[must_use]
     pub fn r_wall(&self, z: f64) -> f64 {
+        self.r_base(z) + self.bulge.extra(z)
+    }
+
+    /// This contour with `bulge` added (the volume grows by the bulge's).
+    #[must_use]
+    pub fn with_bulge(self, bulge: Bulge) -> Self {
+        Self { bulge, ..self }
+    }
+
+    /// The largest wall radius [m]: the cylinder plus any bulge.
+    #[must_use]
+    pub fn r_max(&self) -> f64 {
+        self.r_c + self.bulge.dr
+    }
+
+    fn r_base(&self, z: f64) -> f64 {
         if self.h_head > 0.0 && z < self.h_head {
             let u = 1.0 - z.max(0.0) / self.h_head;
             return self.r_port + (self.r_c - self.r_port) * (1.0 - u * u).sqrt();
@@ -108,10 +174,57 @@ mod tests {
             curve: 0.0,
             h_head: 0.0,
             r_port: 0.0,
+            bulge: Bulge::NONE,
         };
         let cone = std::f64::consts::PI / 3.0 * 1.0 * (1.0 + 0.2 + 0.04);
         let expected = std::f64::consts::PI * 2.0 + cone;
         assert!((v.volume() - expected).abs() / expected < 1e-4);
+    }
+
+    #[test]
+    fn bulge_volume_matches_closed_form() {
+        // A closed cylinder with a bulge whose ramps are negligibly short: a step to r_c + dr
+        // over the plateau.
+        let base = Vessel {
+            r_c: 1.0,
+            z_c: 4.0,
+            z_hi: 4.0,
+            r_t: 1.0,
+            curve: 0.0,
+            h_head: 0.0,
+            r_port: 0.0,
+            bulge: Bulge::NONE,
+        };
+        let v = Vessel {
+            bulge: Bulge {
+                dr: 0.5,
+                z0: 1.0,
+                z1: 2.0,
+                ramp: 1e-6,
+                ramp_out: 1e-6,
+            },
+            ..base
+        };
+        let pi = std::f64::consts::PI;
+        let expected = pi * 4.0 + pi * (1.5 * 1.5 - 1.0) * 1.0;
+        assert!((v.volume() - expected).abs() / expected < 1e-3);
+        assert!((v.r_wall(1.5) - 1.5).abs() < 1e-12);
+        assert!((v.r_wall(0.5) - 1.0).abs() < 1e-12);
+        // Ramp midpoint is half the rise, and the wall is continuous across the ramp ends.
+        let smooth = Vessel {
+            bulge: Bulge {
+                dr: 0.5,
+                z0: 1.0,
+                z1: 2.0,
+                ramp: 0.4,
+                ramp_out: 1.0,
+            },
+            ..base
+        };
+        assert!((smooth.r_wall(0.8) - 1.25).abs() < 1e-12);
+        assert!((smooth.r_wall(2.5) - 1.25).abs() < 1e-12);
+        assert!((smooth.r_wall(0.6 + 1e-9) - 1.0).abs() < 1e-6);
+        assert!((smooth.r_wall(3.0 - 1e-9) - 1.0).abs() < 1e-6);
     }
 
     // SAFE: test radii and spacings are small positive numbers, so the cell count fits a usize.
@@ -119,7 +232,7 @@ mod tests {
     fn chamber_grid(v: Vessel, n: usize, zhi_reflect: bool) -> crate::kernel::Grid2D {
         use crate::kernel::{Bc, Grid2D};
         let dz = v.z_hi / n as f64;
-        let nr = (v.r_c / dz).ceil() as usize + 3;
+        let nr = (v.r_max() / dz).ceil() as usize + 3;
         let mut g = Grid2D::new(n, nr, dz, dz, 1.4);
         g.set_axisymmetric(true);
         g.bc_zlo = Bc::Reflect;
@@ -145,6 +258,34 @@ mod tests {
             curve: 0.6,
             h_head: 0.5,
             r_port: 0.1,
+            bulge: Bulge::NONE,
+        };
+        let mut g = chamber_grid(v, 80, true);
+        g.init(|_, _| Prim::new(1.0, 0.0, 0.0, 1.0));
+        g.run_to(0.5);
+        for (_, _, p) in g.vessel_wall_pressures() {
+            assert!((p - 1.0).abs() < 1e-10, "wall pressure drifted to {p}");
+        }
+    }
+
+    #[test]
+    fn gas_at_rest_stays_at_rest_in_a_bulged_chamber() {
+        use crate::state::Prim;
+        let v = Vessel {
+            r_c: 1.0,
+            z_c: 1.4,
+            z_hi: 2.0,
+            r_t: 0.2,
+            curve: 0.0,
+            h_head: 0.3,
+            r_port: 0.1,
+            bulge: Bulge {
+                dr: 0.4,
+                z0: 0.7,
+                z1: 0.9,
+                ramp: 0.3,
+                ramp_out: 0.3,
+            },
         };
         let mut g = chamber_grid(v, 80, true);
         g.init(|_, _| Prim::new(1.0, 0.0, 0.0, 1.0));
@@ -166,6 +307,7 @@ mod tests {
             curve: 0.0,
             h_head: 0.0,
             r_port: 0.0,
+            bulge: Bulge::NONE,
         };
         let mut g = chamber_grid(v, 80, true);
         g.init(|iz, ir| {
@@ -202,6 +344,7 @@ mod tests {
             curve: 1.0,
             h_head: 0.5,
             r_port: 0.05,
+            bulge: Bulge::NONE,
         };
         let run = |parallel: bool| {
             let mut g = chamber_grid(v, 60, false);
@@ -236,6 +379,7 @@ mod tests {
             curve: 1.0,
             h_head: 0.0,
             r_port: 0.0,
+            bulge: Bulge::NONE,
         };
         let (nz, nr) = v.normal(1.0);
         assert!(nz.abs() < 1e-9 && (nr + 1.0).abs() < 1e-9);

@@ -2181,6 +2181,9 @@ struct VesselBlastRecord {
     curve: f64,
     #[serde(default)]
     h_head: f64,
+    /// Chamber volume [m^3], bulge included.
+    #[serde(default)]
+    volume_m3: f64,
     deposit_z: f64,
     /// Station positions along the wall: side wall rows, then the port face.
     station_z: Vec<f64>,
@@ -2218,6 +2221,7 @@ fn vessel_sized(
             curve,
             h_head: head,
             r_port: if head > 0.0 { VESSEL_PORT_R } else { 0.0 },
+            bulge: euler2d::vessel::Bulge::NONE,
         }
     };
     let (mut lo, mut hi) = (0.0, 40.0);
@@ -2251,6 +2255,7 @@ fn vessel_for_volume(
             curve,
             h_head: head,
             r_port: if head > 0.0 { VESSEL_PORT_R } else { 0.0 },
+            bulge: euler2d::vessel::Bulge::NONE,
         }
     };
     let (mut lo, mut hi) = (0.0, 20.0);
@@ -2305,10 +2310,38 @@ struct VesselCase {
     /// A rod entering through the port: `(radius, density, speed, duration)`. The port cells
     /// inside `radius` are held at the rod's state while it passes.
     inflow: Option<(f64, f64, f64, f64)>,
-    /// A dense gas layer held between membranes across the chamber: `(z0, z1, fraction)` of the
-    /// charge in `[z0, z1]`, the rest uniform elsewhere, all at one temperature (so the layer's
-    /// pressure is higher). The membranes are assumed to burst instantly when the blast arrives.
-    fill_band: Option<(f64, f64, f64)>,
+    /// A dense layer of the charge: `fraction` of it in the band, the rest uniform elsewhere, all
+    /// at one temperature (so the band's pressure is higher). Held by membranes that burst
+    /// instantly when the blast arrives, or standing in for a fine liquid mist (small droplets
+    /// follow the gas within millimetres, so a dense gas is their equilibrium limit).
+    fill_band: Option<FillBand>,
+}
+
+/// Where a dense band of the charge sits: `z0 <= z < z1` and `r0 <= r < r1`.
+#[derive(Debug, Clone, Copy)]
+struct FillBand {
+    z0: f64,
+    z1: f64,
+    r0: f64,
+    r1: f64,
+    fraction: f64,
+}
+
+impl FillBand {
+    /// A layer across the whole chamber section.
+    fn slab(z0: f64, z1: f64, fraction: f64) -> Self {
+        Self {
+            z0,
+            z1,
+            r0: 0.0,
+            r1: f64::INFINITY,
+            fraction,
+        }
+    }
+
+    fn contains(&self, z: f64, r: f64) -> bool {
+        z >= self.z0 && z < self.z1 && r >= self.r0 && r < self.r1
+    }
 }
 
 /// The point blast one port-face radius inside the port, all heat (the original setup).
@@ -2334,7 +2367,7 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let (nz, nr) = (
         (vessel.z_hi / cell).ceil() as usize,
-        (vessel.r_c / cell).ceil() as usize + 3,
+        (vessel.r_max() / cell).ceil() as usize + 3,
     );
     let mut g = Grid2D::new(nz, nr, cell, cell, gamma);
     g.set_axisymmetric(true);
@@ -2354,15 +2387,15 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
             !vessel.is_solid(z, r)
         })
         .fold((0.0, 0.0), |(b, f), (iz, ir)| {
-            let (z, _) = centre(iz, ir);
+            let (z, r) = centre(iz, ir);
             let v = 2.0 * std::f64::consts::PI * (ir as f64 + 0.5) * cell * cell * cell;
-            let in_band = c.fill_band.is_some_and(|(z0, z1, _)| z >= z0 && z < z1);
+            let in_band = c.fill_band.is_some_and(|band| band.contains(z, r));
             (if in_band { b + v } else { b }, f + v)
         });
     let uniform = c.charge_kg / v_fluid;
-    let fill_rho = |z: f64| match c.fill_band {
-        Some((z0, z1, frac)) if z >= z0 && z < z1 => frac * c.charge_kg / v_band,
-        Some((_, _, frac)) => (1.0 - frac) * c.charge_kg / (v_fluid - v_band),
+    let fill_rho = |z: f64, r: f64| match c.fill_band {
+        Some(band) if band.contains(z, r) => band.fraction * c.charge_kg / v_band,
+        Some(band) => (1.0 - band.fraction) * c.charge_kg / (v_fluid - v_band),
         None => uniform,
     };
     // Each segment is spread over the cells whose centres it contains, normalised by their actual
@@ -2383,7 +2416,7 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
         .collect();
     g.init(|iz, ir| {
         let (z, r) = centre(iz, ir);
-        let base = fill_rho(z);
+        let base = fill_rho(z, r);
         let (mut rho, mut mom, mut heat) = (base, 0.0, 0.0);
         for (seg, &v) in c.segs.iter().zip(&volumes) {
             if v > 0.0 && seg.contains(z, r) {
@@ -2455,6 +2488,7 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
         z_hi: vessel.z_hi,
         curve: vessel.curve,
         h_head: vessel.h_head,
+        volume_m3: vessel.volume(),
         deposit_z: c.segs.first().map_or(0.0, |d| d.z0),
         station_z: keep.iter().map(|&k| stations[k].0).collect(),
         station_r: keep.iter().map(|&k| stations[k].1).collect(),
@@ -2677,7 +2711,180 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut cases = Vec::new();
     let path;
-    if args.iter().any(|a| a == "--membrane") {
+    if args.iter().any(|a| a == "--shape-40b") {
+        // The bulge's plateau cut the hammer as 1/R^2, but its steep closing shoulder (0.8 m
+        // over 0.5 m, ~68 deg) faced the downstream-skewed blast and took 2.3-3 GPa. Close the
+        // bulge over 2-3 m instead (max wall angle ~32 / ~23 deg). On the 40 m^3 layout; the
+        // volume grows. 0.5 cm, uniform fill.
+        use euler2d::vessel::Bulge;
+        path = "data/results/walled_nozzle/near_term/vessel_blast_shape_40b.jsonl";
+        let fill = (gases[0].0, gases[0].1 - (10.0 - 4.4));
+        let r_t = (40.0 / (VESSEL_VOLUME / 0.149) / std::f64::consts::PI).sqrt();
+        let cone_len = (1.4 - r_t) / 12.0_f64.to_radians().tan();
+        let long = vessel_sized(1.4, Some(cone_len), 0.0, 0.7, 40.0, r_t);
+        let bulge = |dr: f64, z1: f64, ramp_out: f64| Bulge {
+            dr,
+            z0: 1.4,
+            z1,
+            ramp: 0.5,
+            ramp_out,
+        };
+        for (label, b, length) in [
+            (
+                "bulge r 2.2 m z 1.4-2.8, 2 m taper, plug 1.5 m",
+                bulge(0.8, 2.8, 2.0),
+                1.5,
+            ),
+            (
+                "bulge r 2.2 m z 1.4-2.8, 3 m taper, plug 1.5 m",
+                bulge(0.8, 2.8, 3.0),
+                1.5,
+            ),
+            (
+                "bulge r 2.2 m z 1.4-3.6, 2 m taper, plug 2.5 m",
+                bulge(0.8, 3.6, 2.0),
+                2.5,
+            ),
+            (
+                "bulge r 1.8 m z 1.4-2.8, 2 m taper, plug 1.5 m",
+                bulge(0.4, 2.8, 2.0),
+                1.5,
+            ),
+        ] {
+            let mut segs = vec![rod_segment()];
+            segs.extend(plug_column(0.8, length, 10.0, 500.0, true));
+            cases.push(case(
+                "shape 40 m^3 tapered bulge",
+                long.with_bulge(b),
+                fill,
+                1.2,
+                0.005,
+                1.2e-3,
+                label,
+                segs,
+            ));
+        }
+    } else if args.iter().any(|a| a == "--shape-40") {
+        // The 40 m^3 long cone's hammer beside the plug follows a strong line blast,
+        // p ~ (E/L)/R^2, independent of the gas density (the cushion runs). So stand the wall off
+        // locally (a bulge at the plug on the 40 m^3 layout, adding volume -- at fixed volume it
+        // shortens the cylinder until the cone starts beside the plug), widen
+        // the whole chamber, or spread the stopped energy over a longer plug. Uniform fill, rod
+        // and 10 kg plug as material, 0.5 cm (1 cm smears the rod).
+        use euler2d::vessel::Bulge;
+        path = "data/results/walled_nozzle/near_term/vessel_blast_shape_40.jsonl";
+        let fill = (gases[0].0, gases[0].1 - (10.0 - 4.4));
+        let r_t = (40.0 / (VESSEL_VOLUME / 0.149) / std::f64::consts::PI).sqrt();
+        let cone = |r_c: f64, deg: f64| (r_c - r_t) / deg.to_radians().tan();
+        let bulge = |dr: f64, z0: f64, z1: f64| Bulge {
+            dr,
+            z0,
+            z1,
+            ramp: 0.5,
+            ramp_out: 0.5,
+        };
+        let long = vessel_sized(1.4, Some(cone(1.4, 12.0)), 0.0, 0.7, 40.0, r_t);
+        let plug = |front: f64, length: f64| plug_column(front, length, 10.0, 500.0, true);
+        let shapes: [(&'static str, euler2d::vessel::Vessel, f64); 6] = [
+            (
+                "40 m^3 cone, bulge r 1.8 m at z 1.4-2.8",
+                long.with_bulge(bulge(0.4, 1.4, 2.8)),
+                1.5,
+            ),
+            (
+                "40 m^3 cone, bulge r 2.2 m at z 1.4-2.8",
+                long.with_bulge(bulge(0.8, 1.4, 2.8)),
+                1.5,
+            ),
+            (
+                "40 m^3 wide r 1.7 m, 20 deg cone",
+                vessel_sized(1.7, Some(cone(1.7, 20.0)), 0.0, 0.85, 40.0, r_t),
+                1.5,
+            ),
+            (
+                "40 m^3 cone, plug 0.8-3.3 m (2.5 m long)",
+                vessel_sized(1.4, Some(cone(1.4, 12.0)), 0.0, 0.7, 40.0, r_t),
+                2.5,
+            ),
+            (
+                "40 m^3 cone, bulge r 2.2 m at z 1.4-3.6, plug 2.5 m",
+                long.with_bulge(bulge(0.8, 1.4, 3.6)),
+                2.5,
+            ),
+            (
+                "40 m^3 cone, bulge r 1.8 m at z 1.4-3.6, plug 2.5 m",
+                long.with_bulge(bulge(0.4, 1.4, 3.6)),
+                2.5,
+            ),
+        ];
+        for (label, v, length) in shapes {
+            let mut segs = vec![rod_segment()];
+            segs.extend(plug(0.8, length));
+            cases.push(case(
+                "shape 40 m^3",
+                v,
+                fill,
+                1.2,
+                0.005,
+                1.2e-3,
+                label,
+                segs,
+            ));
+        }
+    } else if args.iter().any(|a| a == "--cushion-40") {
+        // The 40 m^3 long cone's remaining hot spot is the cylinder beside the plug, where the jet
+        // stops and blasts sideways. Put most of the charge (as mist or membrane-held gas) in a
+        // ring around the plug, z 0.5-3.0 m: either filling plug-to-wall, or as a layer against
+        // the wall. Rod and 10 kg plug (0.8-2.3 m) as material, 0.5 cm.
+        path = "data/results/walled_nozzle/near_term/vessel_blast_cushion_40.jsonl";
+        let fill = (gases[0].0, gases[0].1 - (10.0 - 4.4));
+        let r_t = (40.0 / (VESSEL_VOLUME / 0.149) / std::f64::consts::PI).sqrt();
+        let cone_len = (1.4 - r_t) / 12.0_f64.to_radians().tan();
+        let v40 = vessel_sized(1.4, Some(cone_len), 0.0, 0.7, 40.0, r_t);
+        for (r0, frac, label) in [
+            (
+                0.15,
+                0.5,
+                "40 m^3 cone, 50% of charge in ring plug-to-wall, z 0.5-3 m",
+            ),
+            (
+                0.15,
+                0.8,
+                "40 m^3 cone, 80% of charge in ring plug-to-wall, z 0.5-3 m",
+            ),
+            (
+                0.9,
+                0.5,
+                "40 m^3 cone, 50% of charge in wall layer r>0.9, z 0.5-3 m",
+            ),
+            (
+                0.9,
+                0.8,
+                "40 m^3 cone, 80% of charge in wall layer r>0.9, z 0.5-3 m",
+            ),
+        ] {
+            let mut segs = vec![rod_segment()];
+            segs.extend(plug_column(0.8, 1.5, 10.0, 500.0, true));
+            let mut c = case(
+                "long cone 40 m^3",
+                v40,
+                fill,
+                1.2,
+                0.005,
+                1.2e-3,
+                label,
+                segs,
+            );
+            c.fill_band = Some(FillBand {
+                z0: 0.5,
+                z1: 3.0,
+                r0,
+                r1: f64::INFINITY,
+                fraction: frac,
+            });
+            cases.push(c);
+        }
+    } else if args.iter().any(|a| a == "--membrane") {
         // A dense gas layer in front of the nose, held by thin membranes (and a throat membrane),
         // so the jet ploughs into most of the charge before it reaches the wall. Rod and 10 kg plug
         // (0.8-2.3 m) as material, 0.5 cm.
@@ -2713,7 +2920,7 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 label20,
                 rod_plug(),
             );
-            c.fill_band = Some((domed.1.z_hi - 1.0, domed.1.z_hi, frac));
+            c.fill_band = Some(FillBand::slab(domed.1.z_hi - 1.0, domed.1.z_hi, frac));
             cases.push(c);
             let mut c = case(
                 "long cone 40 m^3",
@@ -2725,7 +2932,7 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 label40,
                 rod_plug(),
             );
-            c.fill_band = Some((v40.z_c - 1.0, v40.z_c, frac));
+            c.fill_band = Some(FillBand::slab(v40.z_c - 1.0, v40.z_c, frac));
             cases.push(c);
         }
     } else if args.iter().any(|a| a == "--nose-study-40") {

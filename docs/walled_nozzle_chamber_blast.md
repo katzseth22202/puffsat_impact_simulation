@@ -290,11 +290,11 @@ over 400 µs:
 | plug | grid | port | cylinder | nose | throat | out | max impulse |
 |---|---|---|---|---|---|---|---|
 | paper's 4.4 kg, 1.4-2.38 m | 1 cm | 1.41 | 0.87 | 2.53 | 3.69 | 10% | 53 kPa s |
-| | 0.5 cm | 2.18 | 0.86 | **4.89** | 3.80 | 6% | 66 |
-| 10 kg, 0.8-2.3 m, back-weighted | 1 cm | 0.56 | 1.32 | 1.26 | 2.02 | 41% | 43 |
-| | 0.5 cm | 2.60 | 2.45 | 3.04 | **5.49** | 12% | **134** |
-| 10 kg, 1.4-3.15 m | 0.5 cm | 3.16 | 1.33 | 5.40 | 2.02 | 3% | 83 |
-| 10 kg, 1.0-3.5 m | 0.5 cm | 2.37 | 1.25 | 3.63 | 3.91 | 1% | 77 |
+| | 0.5 cm | 1.51 | 0.86 | **4.89** | 3.80 | 6% | 66 |
+| 10 kg, 0.8-2.3 m, back-weighted | 1 cm | 0.36 | 1.32 | 1.26 | 2.02 | 41% | 43 |
+| | 0.5 cm | 1.42 | 2.45 | 3.04 | **5.49** | 12% | **134** |
+| 10 kg, 1.4-3.15 m | 0.5 cm | 1.61 | 1.33 | 5.40 | 2.02 | 3% | 83 |
+| 10 kg, 1.0-3.5 m | 0.5 cm | 1.24 | 1.25 | 3.63 | 3.91 | 1% | 77 |
 
 - **At 1 cm the rod is 3-4 cells wide.** Numerical diffusion smears it into a slow blob that
   spreads early and partly leaves through the throat. At 0.5 cm it stays coherent, penetrates as
@@ -306,13 +306,236 @@ over 400 µs:
   direct rod-plug impulses are 5-10x larger and not grid-converged. **Hoop overshoot for the real
   rod-and-plug load is open again.**
 
-Runs in flight at this writing (`--nose-study`, `--nose-study-40`, `--membrane`):
-- the 0.25 cm convergence of the 10 kg, 0.8-2.3 m case;
-- a long 12° conical nose (20 and 40 m^3);
-- a narrower chamber (r_c 1.2 m);
-- the rod entering through the port, so the plug can sit at 0.4-1.9 m;
-- a dense gas layer held by membranes: 50% or 80% of the charge in the last metre (20 m^3,
-  with a throat membrane), or 1 m before the cone (40 m^3).
+The port column excludes the port opening (r < 7.5 cm). Its axis cell carries the rod's own ram
+pressure, not a load on steel; an earlier version of this table included it.
+
+**Grid convergence.** The 10 kg, 0.8-2.3 m case at 0.25 cm: port 1.20, cylinder 3.06, nose
+3.90, throat 6.19 GPa; 4% out; 92 kPa s. **Peaks rise 15-25% per halving and are not
+converged; impulse falls.** Read every 0.5 cm peak below as a floor.
+
+### Nose, volume and dense layers (`--nose-study`, `--nose-study-40`, `--membrane`; 0.5 cm)
+
+| case | port | cylinder | nose | throat | out | impulse |
+|---|---|---|---|---|---|---|
+| 20 m^3 long 12° cone (cone starts at z 1.29) | 0.98 | 0.39 | 4.82 | 2.07 | 21% | 161 |
+| 20 m^3 narrow, r_c 1.2 m | 0.88 | 3.53 | 1.98 | 5.77 | 5% | 133 |
+| 20 m^3 domed, rod enters through the port, plug 0.4-1.9 m | 0.85 | 2.13 | 3.61 | 3.49 | 2% | 103 |
+| 20 m^3 long cone, rod enters | 0.98 | 0.94 | 4.18 | 1.31 | 29% | 132 |
+| **40 m^3 long 12° cone** (throat 0.298 m^2), plug 0.8-2.3 m | 0.41 | **2.19** | **0.81** | **0.66** | 36% | 86 |
+| 40 m^3 long cone, rod enters, plug 0.4-1.9 m | 0.57 | 2.57 | 1.41 | 0.34 | 34% | 60 |
+| 20 m^3, 50% / 80% of charge in the last metre | 1.32 / 0.93 | 2.16 / 2.88 | 4.11 / 4.14 | 3.25 / 6.66 | 11-12% | 122 / 109 |
+| 40 m^3, 50% / 80% of charge in 1 m before the cone | 0.54 / 0.40 | 3.22 / 4.62 | 0.61 / 0.84 | 0.43 / 0.26 | 62% / 25% | 48 / 52 |
+
+- **The wall nearest where the jet stops takes 2-5 GPa, whatever the shape.** At 20 m^3 every
+  nose shape leaves the plug near the convergence.
+- **The 40 m^3 long cone clears the nose and throat** (0.3-1.4 GPa). Its 4.5 m cylinder keeps
+  the plug 2.25 m from the cone. The remaining hot spot is a ~1 m band of cylinder beside the
+  plug (z 1.8-2.8 m, 2.2-2.6 GPa at ~80 µs).
+- **Dense end layers do not help the 20 m^3 nose.** Moving gas away from the plug makes the
+  40 m^3 band worse.
+
+### The plug band is a line blast: cushions fail, stand-off works (`--cushion-40`, `--shape-40`)
+
+Scored as the worst back-face tension in the steel under the solved histories (`wall_waves`,
+1-D elastic, free back), as a fraction of the 2.9 GPa spall strength:
+
+| 40 m^3 long cone, 10 kg plug | volume | 105 mm steel | 10 mm liner + dry wrap | impulse |
+|---|---|---|---|---|
+| uniform fill (reference) | 40 | 0.68-0.72 | 0.26 | 86 |
+| 50% / 80% of charge in a ring plug-to-wall, z 0.5-3 m | 40 | 0.76 / 0.75 | | 73 / 55 |
+| 50% / 80% of charge in a layer at the wall (r > 0.9 m) | 40 | 1.12 / 1.58 | | 65 / 55 |
+| wider, r_c 1.7 m, 20° cone | 40 | 0.70 | 0.20 | 60 |
+| plug 2.5 m long (0.8-3.3 m) | 40 | 0.91 | 0.37 | 59 |
+| bulge to r 1.8 m at z 1.4-2.8 (0.5 m ramps) | 47.6 | 0.85 | 0.25 | 35 |
+| bulge to r 2.2 m at z 1.4-2.8 | 56.9 | 0.99 | 0.35 | 38 |
+| bulge r 2.2 m at z 1.4-3.6, plug 2.5 m | 64.2 | 0.66 | 0.21 | 34 |
+| bulge r 1.8 m at z 1.4-3.6, plug 2.5 m | 50.8 | 0.80 | 0.27 | 37 |
+
+- **Gas or mist placed around the plug does not cushion it. A dense layer at the wall makes it
+  worse.** The band is a strong line blast. Its shock pressure at radius R is
+  `p ~ (E/L)/R^2`, independent of the ambient density. ~5.6 GJ stopped over ~1.5 m gives
+  ~2 GPa at 1.4 m, as solved. A dense layer at the wall is driven into it like a slab.
+  Small droplets follow the gas within millimetres, so mist behaves as this dense gas.
+- **Only stand-off (R) and the stopping length (L) act.**
+  - The bulge plateau follows `1/R^2`: ~0.5-1.1 GPa at r 2.2 m.
+  - The bulge's steep closing shoulder (0.8 m over 0.5 m, ~68°) faces the blast. The merged
+    body still moves downstream, so the shoulder takes 2.3-3 GPa.
+  - A longer plug moves the stop downstream, not along. The rod stops where the back-weighted
+    plug is densest.
+- **Every bulge halves the impulse** (86 -> 34-38 kPa s), which is what the hoop overshoot
+  follows.
+- **A thin liner suffers less than a thick wall.** In 10 mm of steel the round trip is
+  3.4 µs, about the spike's 2-4 µs, so the reflected tension overlaps the arriving compression
+  and cancels. In 105 mm the round trip is 36 µs, so the whole spike reflects. This is the
+  plate's rise-time rule.
+  - Caveats: the spikes are sampled every 2 µs and sharpen with resolution. The liner's
+    0.6-1.0 GPa per pulse is at or above Cr-Mo's static yield, so fatigue, not spall, decides.
+- **Hoop overshoot under the rod-and-plug load** (`shell_response` on these histories):
+  - 20 m^3 baseline: D 2.75 monolithic, 3.62 multilayer;
+  - 40 m^3 long cone: D 4.1-4.7;
+  - all against the 1.7 used for sizing.
+  - It is concentrated in the plug band. The bulges' halved impulse should bring it down;
+    rerun it on the final shape.
+
+### A tapered bulge clears most of the band (`--shape-40b`; 0.5 cm)
+
+The bulge closes over 2-3 m instead of 0.5 m (steepest wall ~32° or ~23°). It sits on the
+40 m^3 layout, so the volume grows. The throat stayed at 0.298 m^2; it should be rescaled for
+2 Hz (§3e).
+
+| case | volume | cylinder peak | 105 mm steel | 10 mm liner + dry wrap | impulse | hoop D, shell (mono / x8) |
+|---|---|---|---|---|---|---|
+| **r 2.2 m, z 1.4-2.8, 2 m taper, plug 1.5 m** | 63.3 | 1.21 GPa | **0.45** | **0.14** | 26 | **2.09 / 2.35** |
+| r 2.2 m, z 1.4-2.8, 3 m taper, plug 1.5 m | 67.6 | 1.45 | 0.51 | 0.21 | 37 | |
+| **r 2.2 m, z 1.4-3.6, 2 m taper, plug 2.5 m** | 70.5 | 1.05 | **0.35** | **0.12** | 27 | 2.75 / 2.82 |
+| r 1.8 m, z 1.4-2.8, 2 m taper, plug 1.5 m | 50.5 | 1.86 | 0.63 | 0.24 | 54 | |
+
+The tension columns are back-face tension as a fraction of the 2.9 GPa spall strength.
+
+- **Tapering the shoulder removes the shoulder hit.**
+  - The r 2.2 m bulges bring the hottest wall to ~1-1.2 GPa, half the 40 m^3 cylinder's 2.2.
+  - Steel tension falls to 0.35-0.45x spall, and 0.12-0.14x for the thin liner.
+  - The impulse falls to 26-27 kPa s, from 86.
+- **A 3 m taper is no better than 2 m.** Stand-off, not wall angle, is now the lever.
+- **r 1.8 m is not enough.**
+- **Hoop D falls to 2.1-2.8,** from 4.1-4.7, against 1.7 sized. This uses a uniform wall
+  sized at the bulge radius, so the zone-by-zone wall study sizes it properly.
+- **Chosen shape for the wall study: r 2.2 m bulge, z 1.4-2.8, 2 m taper, 1.5 m plug,
+  ~63 m^3.** The shape:
+  - a 1.4 m domed port head;
+  - widening to 4.4 m across around the plug;
+  - tapering over 2 m back to 1.4 m;
+  - a 12° cone to the throat.
+  The volume costs ~3% impulse per rod against 40 m^3 (volume trade).
+
+## 3d. Volume, manufacture and in-orbit assembly (added 2026-10-07; scaling, not a cost model)
+
+**The steady-load steel does not grow with volume.** The charge's energy fixes `p V`
+(`p ≈ (γ-1) E / V`), and a pressure vessel's minimum wall mass is `∝ ρ p V / σ`. So 20, 40
+and 80 m^3 need about the same ~50 t of steel for the quasi-static load. The wall just gets
+thinner, `t ∝ p r`:
+
+| | 20 m^3 | 80 m^3, shape scaled up | 80 m^3, same radius, 4x longer |
+|---|---|---|---|
+| radius | 1.4 m | 2.2 m | 1.4 m |
+| monolithic Cr-Mo wall | ~210 mm | ~85 mm | ~52 mm |
+| wetted area | ~32 m^2 | ~80 m^2 (x2.5) | ~110-120 m^2 (x3.5) |
+| steady-load steel | ~50 t | ~50 t | ~50 t |
+
+- **What grows is area.** Pitch respray, the alumina barrier, inspection and wall heat all
+  scale with it. Scaling the whole shape costs less area than lengthening at fixed radius.
+- **The throat grows with volume** at fixed `V/A*`: x4 the area at 80 m^3, at a quarter of the
+  pressure.
+- **Estimated vessel cost at 80 m^3: ~1-1.5x if heavy steel and forging dominate; ~2-3.5x if
+  area costs dominate. Never 4x,** since no major cost scales with volume itself.
+- **Thin walls should be cheaper per tonne to make.** 50-85 mm rings are ordinary
+  pressure-vessel and rocket-case practice. A 210 mm autofrettaged Cr-Mo forging is specialist
+  work. *Unsourced here; owed to the parent (§5).*
+- **The hammer does not shrink with volume.** The spike beside the plug depends on the plug's
+  stand-off from the wall (2-2.6 GPa at 0.5 cm, r_c 1.4 m, at both 20 and 40 m^3). A larger
+  chamber therefore becomes a **thin vessel with one armoured, possibly replaceable ring** at the
+  plug station, as solid-rocket cases and gun chambers carry thick rings locally.
+
+**In-orbit assembly: ring segments with circumferential joints only.**
+- **Split the chamber into full hoops,** never into staves. A hoop carries the hoop stress
+  `p r / t` without a joint. A circumferential joint carries only the axial load `p π r^2`,
+  i.e. half the hoop stress. A longitudinal seam would carry the full hoop load and should be
+  avoided.
+- **Every ring fits a launch fairing.** The 20 m^3 chamber is 2.8 m across and the 80 m^3
+  scaled one 4.4 m, so no ring needs splitting along its length.
+- **Joint load.** The static axial load is `p π r^2`. At 20 m^3 that is ~305 MN; at 80 m^3
+  scaled, ~190 MN, because the load falls as `V^(-1/3)` when the shape scales. A dynamic factor
+  ~2 applies on top.
+- **Joint type: a preloaded joint, not a separation clamp.**
+  - Candidates are a bolted flange, a hub clamp (high-pressure process-piping practice), or an
+    interrupted-thread "breech lock". The breech lock suits snap-together assembly: rotate a
+    fraction of a turn and it is locked.
+  - V-band ("Marman") clamps are separation joints. They hold by wedge friction and could slip
+    and fret under 3,000 GPa-hammer pulses.
+  - Preload above the separating load keeps the bolts' cyclic stress to a fraction of the
+    pulse, which is the standard defence against joint fatigue.
+  - Preload can be set and checked robotically: hydraulic tensioners, ultrasonic bolt-load
+    measurement.
+- **Where the joints go.** Put them in the quiet stations, never in the hammer band. In the
+  40 m^3 cone the wall between the plug band and the cone sees 0.2-0.4 GPa. The armoured
+  plug-band ring can itself be one segment, bolted between thin segments and swapped as a
+  maintenance item.
+- **Seals.** Each joint needs a hydrogen-tight metal seal (C-ring or similar) under the pitch,
+  shielded from the hot gas. The seal, not the joint's strength, is the likelier weak point,
+  and it is a test to list.
+
+## 3e. Pulse rate, emptying, and two chambers (added 2026-10-07; estimates)
+
+**The chamber must empty before the next rod.** A choked throat passes gas at the sound speed,
+~3.7 km/s at 7,000 K. So the blowdown e-fold is `τ ≈ V / (0.6 A* a) ≈ 60 ms` at `V/A* = 134 m`.
+The gas cools only slowly as it empties: recombination keeps the effective γ near 1.1-1.15. The
+residue is still ~4,200 K at 2.5% of the charge (no wall loss in the model, so an upper bound).
+`eta_blowdown` and the quoted Isp already follow this cooling.
+
+Fraction of the charge left when the next rod arrives (methane 7,000 K, `near_term` blowdown):
+
+| chamber | throat | at 0.25 s (4 Hz) | at 0.5 s (2 Hz) | nozzle exit, area ratio 100 |
+|---|---|---|---|---|
+| 20 m^3 | 0.149 m^2 | 2.7% | 0.2% | 4.4 m |
+| 40 m^3 | 0.30 m^2 (`V/A*` 134 m) | 2.4% | 0.1% | 6.2 m |
+| 40 m^3 | 0.25 m^2 (`V/A*` 160 m) | 4.0% | 0.3% | 5.6 m |
+| 40 m^3 | 0.149 m^2 | 13% | 2.4% | 4.4 m |
+
+- **The binding limit at 4 Hz is the refill, not the blowdown.** In what remains of the interval
+  the chamber must be recharged (~60 kg), the plug placed, and the throat membrane resealed.
+  The plug (frozen methane, below 90.7 K) would meet ~4,000 K residue. **Baseline: 2 Hz per
+  chamber**, throat ~0.25 m^2 at 40 m^3, leaving ~200 ms for the refill.
+- **A smaller throat costs little chemistry** (`eta_net` -0.5-1%). It erodes the throat only
+  +10-20% per pulse, because the heat flux scales as `p^0.8` and the pressure falls. **But it
+  multiplies the wall heat** by the longer dwell (x2-4 at a fixed 0.149 m^2), and `eta_net`
+  does not debit that heat.
+- **A hotter chamber does not pay.** At 10,000 K the charge falls to ~45 kg: +11-13% Isp,
+  -13-17% impulse per rod, and 1.6-3x the wall heat (6-15 kg of pitch per pulse at 40 m^3).
+  Counted per kilogram consumed, pitch included, the two temperatures are about even. Keep
+  7,000 K.
+
+**The pulse rate sets the departure burn's Oberth loss.** A finite burn centred on the 600 km
+periapsis of the turnaround ellipse (613,000 km apoapsis), 5.43 km/s, ~644 kN s per pulse,
+constant thrust along the velocity, on the paper's 500-600 t departing stacks:
+
+| total rate | thrust | burn | extra Δv against an impulsive burn |
+|---|---|---|---|
+| 1 Hz | 0.64 MN | 50-60 min | +800-965 m/s (+15-18%) |
+| 2 Hz | 1.29 MN | 25-30 min | +335-433 m/s (+6-8%) |
+| 4 Hz | 2.58 MN | 13-15 min | +108-149 m/s (+2-3%) |
+
+The periapsis passage takes about `r_p / v_p ≈ 11 min`. A burn much longer than that spends its
+impulse where the ship is slower. **Two chambers at 2 Hz each give the 4 Hz loss, with each
+chamber keeping the 0.5 s it needs to empty and refill.**
+
+**Whether a second chamber pays depends on the wall type.**
+- **The paper's 19 t methane wall is a bonded carbon overwrap** (18 cm), and §3 finds it
+  delaminates under the spike. Its 130 t wall (10 kg hydrogen pulse, 80 m^3) is the same
+  autofrettaged overwrap; steel alone there was 385 t. Wall mass scales about linearly with the
+  pulse energy (`p V`), so there is no hidden size penalty.
+- **On the survivable walls:**
+  - all steel: multilayer Cr-Mo, ~35-50 t per 2.5 kg chamber at any volume;
+  - dry Kevlar over a 10 mm liner: ~11-20 t at ~80 m^3, sized at D 2.0-2.2.
+- **Second chamber, all steel:** +35-50 t on a 500-600 t stack (7-9%), against ~4-5% of Δv
+  saved. About a wash or worse.
+- **Second chamber, dry wrap:** +13-22 t (2-4%), with extension. It pays.
+- **One chamber at 5 kg per rod** is the same total wall as two 2.5 kg chambers (`p V` scales
+  with energy). Cube-root scaling leaves the hammer, spall and hoop overshoot unchanged. It has
+  2^(2/3)/2 = 79% of the wall area of two chambers, so less pitch and wall heat, and one set of
+  port, plug and membrane hardware. It gives up redundancy.
+- **The stack mass per chamber is inconsistent in the parent.**
+  - The chamber requirement is 630-780 pulses per departure over 159-194 s at 4 Hz
+    (`sec:methane_7000_near_term`; used by `chamber_fatigue.py`).
+  - The 5.43 km/s burn at ~780 s consumes about half the stack, ~65 kg per pulse with charge,
+    rod and pitch. So 780 pulses is a ~100 t craft. The 500-600 t stacks of the growth ledger
+    need ~4,000-4,300 pulses (~17 min at 4 Hz).
+  - On ~100 t the Oberth loss above is negligible at any rate.
+  - On 500-600 t it applies, and the fatigue budget is 5-6x the 780 pulses
+    `chamber_fatigue.py` assumed.
+  - The parent should state which.
+- **Unchecked for the dry wrap: spall of its 10 mm liner.** Its back face rides on an unbonded
+  wrap, close to a free surface, and the plug-band spikes (2-4 µs) are about its 3.4 µs round
+  trip.
 
 ## 4. Limits
 
@@ -382,6 +605,43 @@ Runs in flight at this writing (`--nose-study`, `--nose-study-40`, `--membrane`)
   chamber. Its permeation reduction under pulsed plasma is a test to list. Keep the parent's
   sub-950 MPa Cr-Mo qualified on CC2938. Maraging is "extreme" in hydrogen and is not proposed
   for the chambers.
+- **Chamber size, manufacture and assembly (§3d). Please find supporting references.**
+  - The steady-load steel is ~constant with volume (`p V` fixed by the charge energy). A larger
+    chamber trades a thick forging for thin rings plus more surface area. Estimated
+    ~1-1.5x vessel cost at 80 m^3 if steel and forging dominate, ~2-3.5x if area costs
+    dominate. The Isp debit from area is separate.
+  - **References wanted:**
+    1. that thick (~200 mm) high-strength forgings, autofrettaged or heat-treated, cost more per
+       tonne than ~50-85 mm rings, and how much more (forging-size limits, supplier base,
+       through-hardening, inspection);
+    2. segmented pressure-vessel or rocket-case manufacture: SRM case segments and their
+       clevis joints, multilayer vessels;
+    3. preloaded circumferential joints under cyclic pressure: hub clamps, bolted flanges,
+       interrupted-thread breech closures, and metal seals for hydrogen.
+  - State that the chamber can be assembled in orbit from full-hoop rings joined
+    circumferentially. That means preloaded joints placed away from the plug's hammer band,
+    with the hammer-band ring as a replaceable armoured segment. No longitudinal seams.
+- **Pulse rate and chamber count (§3e).**
+  - State the chamber's pulse rate. It must empty and refill between rods.
+  - 4 Hz per chamber is refill-limited: plug placement in ~4,000 K residue, recharge, and the
+    throat membrane reseal. Propose **2 Hz per chamber**, with the throat scaled to the volume
+    (`V/A*` ~134-160 m).
+  - **Use two chambers on the departing stack.** The departure burn's finite-burn loss is
+    +15-18% Δv at 1 Hz, +6-8% at 2 Hz and +2-3% at 4 Hz on a 500-600 t stack. Two chambers at
+    2 Hz recover the 4 Hz figure, and each still has 0.5 s to empty.
+  - Recheck "on the 500-600 t stacks that depart, one chamber is best" with the finite-burn
+    loss charged. The ledger does not appear to include it.
+    - The answer turns on the wall: a second chamber costs ~35-50 t all steel (about a wash),
+      or ~13-22 t as a dry wrap (it pays).
+    - One chamber at 5 kg per rod is the alternative: the same total wall, ~21% less wall area,
+      no redundancy.
+    - The paper's 19 t and 130 t walls are bonded overwraps, which this study finds delaminate.
+      Scale from the survivable walls.
+  - List the refill sequence at the chosen rate as an open engineering item: plug dwell in the
+    residue, mist timing, membrane reseal.
+  - **Reconcile the departing mass per chamber.** 630-780 pulses (159-194 s at 4 Hz) is a
+    ~100 t craft, while the growth ledger departs 500-600 t stacks (~4,000-4,300 pulses). The
+    finite-burn loss, the chamber count and the fatigue budget all depend on which.
 - **Hydrogen at the 2.5 kg rod.** No wall under ~50 t survives the centred spike (~2.95 GPa, at
   steel's spall strength). Say so. The levers are a larger chamber (~8-11% Isp at 60-80 m^3) or a
   smaller rod per pulse.
