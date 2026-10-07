@@ -124,6 +124,12 @@ impl Grid2D {
         self.plate_profile = profile;
     }
 
+    /// Overwrite one cell's state. Used to hold inflow cells (a rod entering through the port).
+    pub fn set_prim(&mut self, iz: usize, ir: usize, w: Prim) {
+        let k = self.idx(iz, ir);
+        self.u[k] = Cons::from_prim(w, self.gamma);
+    }
+
     /// Run sweeps multithreaded (rayon). Results are bit-identical to the serial run, because each
     /// line's arithmetic is unchanged and lines do not share cells.
     pub fn set_parallel(&mut self, on: bool) {

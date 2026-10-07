@@ -279,6 +279,41 @@ plug's end (`--long-plug-hot`, `--plug-clear-of-nose`; values scaled to the real
 - **Until then, the §1 and §5 claim that "a ~10 kg long plug brings the wall to ~0.6 GPa" is
   unconfirmed.** The paper's short plug is still shown to hammer the nose at 5-6 GPa.
 
+## 3c. The rod and plug as material (added 2026-10-07): harder than any deposition model
+
+`--rod-plug` drops the deposition models. The 2.5 kg rod (polyethylene, 950 kg/m^3, 3.5 cm
+radius, 0.7 m) moves in at 75 km/s and penetrates a plug column of material at rest. At these
+pressures both are hydrodynamic. Peaks are in GPa, scaled to the real chamber; "out" is the share
+of the rod's 187.5 kN s that leaves through the throat; the impulse is the worst wall station's,
+over 400 µs:
+
+| plug | grid | port | cylinder | nose | throat | out | max impulse |
+|---|---|---|---|---|---|---|---|
+| paper's 4.4 kg, 1.4-2.38 m | 1 cm | 1.41 | 0.87 | 2.53 | 3.69 | 10% | 53 kPa s |
+| | 0.5 cm | 2.18 | 0.86 | **4.89** | 3.80 | 6% | 66 |
+| 10 kg, 0.8-2.3 m, back-weighted | 1 cm | 0.56 | 1.32 | 1.26 | 2.02 | 41% | 43 |
+| | 0.5 cm | 2.60 | 2.45 | 3.04 | **5.49** | 12% | **134** |
+| 10 kg, 1.4-3.15 m | 0.5 cm | 3.16 | 1.33 | 5.40 | 2.02 | 3% | 83 |
+| 10 kg, 1.0-3.5 m | 0.5 cm | 2.37 | 1.25 | 3.63 | 3.91 | 1% | 77 |
+
+- **At 1 cm the rod is 3-4 cells wide.** Numerical diffusion smears it into a slow blob that
+  spreads early and partly leaves through the throat. At 0.5 cm it stays coherent, penetrates as
+  a jet, hits harder and more locally, and little escapes. **The 1 cm "spreading helps" result was
+  largely an artifact.**
+- **Every 0.5 cm case reaches 3-5.5 GPa somewhere,** at or past steel's ~2.9 GPa spall strength.
+  The trend with resolution is unfavourable, so the 0.25 cm run decides the level.
+- **The shell model's D ~1.6-1.7 was for the deposition models' loads** (impulse 12-14 kPa s). The
+  direct rod-plug impulses are 5-10x larger and not grid-converged. **Hoop overshoot for the real
+  rod-and-plug load is open again.**
+
+Runs in flight at this writing (`--nose-study`, `--nose-study-40`, `--membrane`):
+- the 0.25 cm convergence of the 10 kg, 0.8-2.3 m case;
+- a long 12° conical nose (20 and 40 m^3);
+- a narrower chamber (r_c 1.2 m);
+- the rod entering through the port, so the plug can sit at 0.4-1.9 m;
+- a dense gas layer held by membranes: 50% or 80% of the charge in the last metre (20 m^3,
+  with a throat membrane), or 1 m before the cone (40 m^3).
+
 ## 4. Limits
 
 - **γ-law gas.** Real-gas equilibrium enters only through Γ_eff and the QSP scaling. A

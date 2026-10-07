@@ -2179,6 +2179,8 @@ struct VesselBlastRecord {
     z_c: f64,
     z_hi: f64,
     curve: f64,
+    #[serde(default)]
+    h_head: f64,
     deposit_z: f64,
     /// Station positions along the wall: side wall rows, then the port face.
     station_z: Vec<f64>,
@@ -2186,9 +2188,50 @@ struct VesselBlastRecord {
     time_s: Vec<f64>,
     /// `pressure_pa[bin][station]`, the bin maximum.
     pressure_pa: Vec<Vec<f64>>,
+    /// Mass [kg] and convected axial momentum [N s] that left through the throat.
+    #[serde(default)]
+    throat_mass_out: f64,
+    #[serde(default)]
+    throat_momentum_out: f64,
 }
 
 /// Solve the free length (cylinder end `z_c`, or `z_hi` with no cylinder) for 20 m^3.
+/// [`vessel_for_volume`] at another volume and throat radius.
+fn vessel_sized(
+    r_c: f64,
+    nose: Option<f64>,
+    curve: f64,
+    head: f64,
+    volume: f64,
+    r_t: f64,
+) -> euler2d::vessel::Vessel {
+    let make = |len: f64| {
+        let (z_c, z_hi) = match nose {
+            Some(n) => (head + len, head + len + n),
+            None => (0.0, len),
+        };
+        euler2d::vessel::Vessel {
+            r_c,
+            z_c,
+            z_hi,
+            r_t,
+            curve,
+            h_head: head,
+            r_port: if head > 0.0 { VESSEL_PORT_R } else { 0.0 },
+        }
+    };
+    let (mut lo, mut hi) = (0.0, 40.0);
+    for _ in 0..80 {
+        let mid = 0.5 * (lo + hi);
+        if make(mid).volume() < volume {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    make(0.5 * (lo + hi))
+}
+
 fn vessel_for_volume(
     r_c: f64,
     nose: Option<f64>,
@@ -2259,6 +2302,13 @@ struct VesselCase {
     t_end: f64,
     deposition: &'static str,
     segs: Vec<DepositSeg>,
+    /// A rod entering through the port: `(radius, density, speed, duration)`. The port cells
+    /// inside `radius` are held at the rod's state while it passes.
+    inflow: Option<(f64, f64, f64, f64)>,
+    /// A dense gas layer held between membranes across the chamber: `(z0, z1, fraction)` of the
+    /// charge in `[z0, z1]`, the rest uniform elsewhere, all at one temperature (so the layer's
+    /// pressure is higher). The membranes are assumed to burst instantly when the blast arrives.
+    fill_band: Option<(f64, f64, f64)>,
 }
 
 /// The point blast one port-face radius inside the port, all heat (the original setup).
@@ -2294,8 +2344,27 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
     g.bc_rhi = Bc::Reflect;
     g.set_vessel(Some(vessel));
     g.set_parallel(true); // bit-identical to serial (euler2d vessel test)
-    let rho_fill = c.charge_kg / VESSEL_VOLUME;
     let centre = |iz: usize, ir: usize| ((iz as f64 + 0.5) * cell, (ir as f64 + 0.5) * cell);
+    // Fill: uniform, or a dense band held by membranes. Volumes are summed over the fluid cells so
+    // the charge is exact on the grid.
+    let (v_band, v_fluid) = (0..nz)
+        .flat_map(|iz| (0..nr).map(move |ir| (iz, ir)))
+        .filter(|&(iz, ir)| {
+            let (z, r) = centre(iz, ir);
+            !vessel.is_solid(z, r)
+        })
+        .fold((0.0, 0.0), |(b, f), (iz, ir)| {
+            let (z, _) = centre(iz, ir);
+            let v = 2.0 * std::f64::consts::PI * (ir as f64 + 0.5) * cell * cell * cell;
+            let in_band = c.fill_band.is_some_and(|(z0, z1, _)| z >= z0 && z < z1);
+            (if in_band { b + v } else { b }, f + v)
+        });
+    let uniform = c.charge_kg / v_fluid;
+    let fill_rho = |z: f64| match c.fill_band {
+        Some((z0, z1, frac)) if z >= z0 && z < z1 => frac * c.charge_kg / v_band,
+        Some((_, _, frac)) => (1.0 - frac) * c.charge_kg / (v_fluid - v_band),
+        None => uniform,
+    };
     // Each segment is spread over the cells whose centres it contains, normalised by their actual
     // volume, so heat, mass and momentum are exact whatever the grid.
     let volumes: Vec<f64> = c
@@ -2314,7 +2383,8 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
         .collect();
     g.init(|iz, ir| {
         let (z, r) = centre(iz, ir);
-        let (mut rho, mut mom, mut heat) = (rho_fill, 0.0, 0.0);
+        let base = fill_rho(z);
+        let (mut rho, mut mom, mut heat) = (base, 0.0, 0.0);
         for (seg, &v) in c.segs.iter().zip(&volumes) {
             if v > 0.0 && seg.contains(z, r) {
                 rho += seg.mass / v;
@@ -2322,14 +2392,30 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
                 heat += seg.heat / v;
             }
         }
-        Prim::new(rho, mom / rho, 0.0, BLAST_FILL_PA + (gamma - 1.0) * heat)
+        Prim::new(
+            rho,
+            mom / rho,
+            0.0,
+            BLAST_FILL_PA * base / uniform + (gamma - 1.0) * heat,
+        )
     });
     let stations = g.vessel_wall_pressures();
     let keep: Vec<usize> = (0..stations.len()).step_by(2).collect();
     let mut bins: Vec<Vec<f64>> = Vec::new();
     let mut t = 0.0;
+    let (mut throat_mass, mut throat_momentum) = (0.0, 0.0);
     let t_end = c.t_end;
     while t < t_end {
+        if let Some((radius, rho, speed, until)) = c.inflow {
+            if t < until {
+                let rod = euler2d::state::Prim::new(rho, speed, 0.0, BLAST_FILL_PA);
+                for ir in 0..nr {
+                    if (ir as f64 + 0.5) * cell < radius {
+                        g.set_prim(0, ir, rod);
+                    }
+                }
+            }
+        }
         let dt = g.stable_dt().min(t_end - t);
         g.step(dt);
         t += dt;
@@ -2343,6 +2429,20 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
         for (j, &k) in keep.iter().enumerate() {
             bins[b][j] = bins[b][j].max(walls[k].2);
         }
+        // Outflow through the throat plane (the last row, inside the throat radius).
+        let r_t = vessel.r_wall(vessel.z_hi);
+        for ir in 0..nr {
+            let r = (ir as f64 + 0.5) * cell;
+            if r >= r_t {
+                break;
+            }
+            let w = g.prim(nz - 1, ir);
+            if w.uz > 0.0 {
+                let area = 2.0 * std::f64::consts::PI * r * cell;
+                throat_mass += w.rho * w.uz * area * dt;
+                throat_momentum += w.rho * w.uz * w.uz * area * dt;
+            }
+        }
     }
     VesselBlastRecord {
         shape: c.shape.to_string(),
@@ -2354,6 +2454,7 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
         z_c: vessel.z_c,
         z_hi: vessel.z_hi,
         curve: vessel.curve,
+        h_head: vessel.h_head,
         deposit_z: c.segs.first().map_or(0.0, |d| d.z0),
         station_z: keep.iter().map(|&k| stations[k].0).collect(),
         station_r: keep.iter().map(|&k| stations[k].1).collect(),
@@ -2361,6 +2462,8 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
             .map(|i| (i as f64 + 0.5) * VESSEL_BIN)
             .collect(),
         pressure_pa: bins,
+        throat_mass_out: throat_mass,
+        throat_momentum_out: throat_momentum,
     }
 }
 
@@ -2490,6 +2593,50 @@ fn long_plug_segments_with(
     segs
 }
 
+/// The rod as material, not as energy: 2.5 kg of polyethylene (950 kg/m^3), 3.5 cm radius and
+/// 0.7 m long, its tip just inside the port, moving in along the axis at 75 km/s.
+fn rod_segment() -> DepositSeg {
+    DepositSeg {
+        z0: 0.05,
+        z1: 0.75,
+        radius: 0.035,
+        inner: 0.0,
+        heat: 0.0,
+        mass: 2.5,
+        uz: 75_000.0,
+    }
+}
+
+/// A plug column of `total_kg` at rest over `[front, front + length]`, radius set by its mean
+/// density, in 20 slices, uniform or back-weighted (3x denser at the back).
+fn plug_column(
+    front: f64,
+    length: f64,
+    total_kg: f64,
+    density: f64,
+    back: bool,
+) -> Vec<DepositSeg> {
+    const SLICES: u32 = 20;
+    let radius = (total_kg / (density * length * std::f64::consts::PI)).sqrt();
+    let weight = |k: u32| {
+        let x = (f64::from(k) + 0.5) / f64::from(SLICES);
+        if back { 0.5 + x } else { 1.0 }
+    };
+    let norm: f64 = (0..SLICES).map(weight).sum();
+    let dz = length / f64::from(SLICES);
+    (0..SLICES)
+        .map(|k| DepositSeg {
+            z0: front + f64::from(k) * dz,
+            z1: front + f64::from(k + 1) * dz,
+            radius,
+            inner: 0.0,
+            heat: 0.0,
+            mass: total_kg * weight(k) / norm,
+            uz: 0.0,
+        })
+        .collect()
+}
+
 fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let shapes = [
         (
@@ -2525,10 +2672,219 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         t_end,
         deposition,
         segs,
+        inflow: None,
+        fill_band: None,
     };
     let mut cases = Vec::new();
     let path;
-    if args.iter().any(|a| a == "--plug-clear-of-nose") {
+    if args.iter().any(|a| a == "--membrane") {
+        // A dense gas layer in front of the nose, held by thin membranes (and a throat membrane),
+        // so the jet ploughs into most of the charge before it reaches the wall. Rod and 10 kg plug
+        // (0.8-2.3 m) as material, 0.5 cm.
+        path = "data/results/walled_nozzle/near_term/vessel_blast_membrane.jsonl";
+        let fill = (gases[0].0, gases[0].1 - (10.0 - 4.4));
+        let r_t = (40.0 / (VESSEL_VOLUME / 0.149) / std::f64::consts::PI).sqrt();
+        let cone_len = (1.4 - r_t) / 12.0_f64.to_radians().tan();
+        let v40 = vessel_sized(1.4, Some(cone_len), 0.0, 0.7, 40.0, r_t);
+        let rod_plug = || {
+            let mut segs = vec![rod_segment()];
+            segs.extend(plug_column(0.8, 1.5, 10.0, 500.0, true));
+            segs
+        };
+        for (frac, label20, label40) in [
+            (
+                0.5,
+                "20 m^3, 50% of charge in the last metre",
+                "40 m^3 cone, 50% of charge in 1 m before the cone",
+            ),
+            (
+                0.8,
+                "20 m^3, 80% of charge in the last metre",
+                "40 m^3 cone, 80% of charge in 1 m before the cone",
+            ),
+        ] {
+            let mut c = case(
+                domed.0,
+                domed.1,
+                fill,
+                1.2,
+                0.005,
+                1.2e-3,
+                label20,
+                rod_plug(),
+            );
+            c.fill_band = Some((domed.1.z_hi - 1.0, domed.1.z_hi, frac));
+            cases.push(c);
+            let mut c = case(
+                "long cone 40 m^3",
+                v40,
+                fill,
+                1.2,
+                0.005,
+                1.2e-3,
+                label40,
+                rod_plug(),
+            );
+            c.fill_band = Some((v40.z_c - 1.0, v40.z_c, frac));
+            cases.push(c);
+        }
+    } else if args.iter().any(|a| a == "--nose-study-40") {
+        // The long 12-degree cone at 40 m^3 (throat grown to keep V/A* = 134 m), plug in place
+        // and with the rod entering through the port.
+        path = "data/results/walled_nozzle/near_term/vessel_blast_nose_study_40.jsonl";
+        let r_t = (40.0 / (VESSEL_VOLUME / 0.149) / std::f64::consts::PI).sqrt();
+        let cone_len = (1.4 - r_t) / 12.0_f64.to_radians().tan();
+        let v40 = vessel_sized(1.4, Some(cone_len), 0.0, 0.7, 40.0, r_t);
+        let fill = (gases[0].0, gases[0].1 - (10.0 - 4.4));
+        let plug = |front: f64| plug_column(front, 1.5, 10.0, 500.0, true);
+        let mut segs = vec![rod_segment()];
+        segs.extend(plug(0.8));
+        cases.push(case(
+            "long cone 40 m^3",
+            v40,
+            fill,
+            1.2,
+            0.005,
+            1.2e-3,
+            "40 m^3 long cone, 10 kg 0.8-2.3 m",
+            segs,
+        ));
+        let mut c = case(
+            "long cone 40 m^3",
+            v40,
+            fill,
+            1.2,
+            0.005,
+            1.2e-3,
+            "40 m^3 long cone, rod enters, 10 kg 0.4-1.9 m",
+            plug(0.4),
+        );
+        c.inflow = Some((0.035, 950.0, 75_000.0, 0.7 / 75_000.0));
+        cases.push(c);
+    } else if args.iter().any(|a| a == "--nose-study") {
+        // Give the jet room and a glancing nose: convergence of the best case at 0.25 cm, a long
+        // 12-degree conical nose, a narrower longer chamber, and the rod entering through the port
+        // so the plug can sit closer to it.
+        path = "data/results/walled_nozzle/near_term/vessel_blast_nose_study.jsonl";
+        let cone_len = (1.4 - VESSEL_THROAT_R) / 12.0_f64.to_radians().tan();
+        let long_cone = vessel_for_volume(1.4, Some(cone_len), 0.0, 0.7);
+        let narrow = vessel_for_volume(1.2, Some(1.2), 1.0, 0.6);
+        let fill = (gases[0].0, gases[0].1 - (10.0 - 4.4));
+        let plug = |front: f64| plug_column(front, 1.5, 10.0, 500.0, true);
+        let rod_in = Some((0.035, 950.0, 75_000.0, 0.7 / 75_000.0));
+        let mut with_rod = |shape: &'static str,
+                            v: euler2d::vessel::Vessel,
+                            cell: f64,
+                            t_end: f64,
+                            label: &'static str,
+                            front: f64| {
+            let mut segs = vec![rod_segment()];
+            segs.extend(plug(front));
+            cases.push(case(shape, v, fill, 1.2, cell, t_end, label, segs));
+        };
+        with_rod(
+            domed.0,
+            domed.1,
+            0.0025,
+            0.8e-3,
+            "elliptical, 10 kg 0.8-2.3 m @ 0.25 cm",
+            0.8,
+        );
+        with_rod(
+            "long 12 deg cone",
+            long_cone,
+            0.005,
+            1.2e-3,
+            "long cone, 10 kg 0.8-2.3 m",
+            0.8,
+        );
+        with_rod(
+            "narrow r 1.2 m",
+            narrow,
+            0.005,
+            1.2e-3,
+            "narrow, 10 kg 0.8-2.3 m",
+            0.8,
+        );
+        for (shape, v, label) in [
+            (domed.0, domed.1, "elliptical, rod enters, 10 kg 0.4-1.9 m"),
+            (
+                "long 12 deg cone",
+                long_cone,
+                "long cone, rod enters, 10 kg 0.4-1.9 m",
+            ),
+        ] {
+            let mut c = case(shape, v, fill, 1.2, 0.005, 1.2e-3, label, plug(0.4));
+            c.inflow = rod_in;
+            cases.push(c);
+        }
+    } else if args.iter().any(|a| a == "--plug-position") {
+        // Give the hot remnant room to spread: shorter 10 kg plugs that finish earlier. The rod
+        // starts inside the chamber (0.05-0.75 m), so a plug cannot start before ~0.8 m without
+        // modelling the rod's entry through the port. Rod and plug as material.
+        path = "data/results/walled_nozzle/near_term/vessel_blast_plug_position.jsonl";
+        for (front, length, label) in [
+            (0.8, 1.5, "rod -> 10 kg plug, 0.8-2.3 m, back"),
+            (0.8, 1.0, "rod -> 10 kg plug, 0.8-1.8 m, back"),
+            (0.8, 0.75, "rod -> 10 kg plug, 0.8-1.55 m, back"),
+            (1.0, 1.0, "rod -> 10 kg plug, 1.0-2.0 m, back"),
+            (1.0, 0.75, "rod -> 10 kg plug, 1.0-1.75 m, back"),
+        ] {
+            let mut segs = vec![rod_segment()];
+            segs.extend(plug_column(front, length, 10.0, 500.0, true));
+            let fill = (gases[0].0, gases[0].1 - (10.0 - 4.4));
+            cases.push(case(domed.0, domed.1, fill, 1.2, 0.01, 2.0e-3, label, segs));
+        }
+    } else if args.iter().any(|a| a == "--rod-plug") {
+        // The rod and plug as material: no deposition model. 10 kg plugs of frozen methane in a
+        // polyethylene container (~500 kg/m^3), and the paper's 4.4 kg foam plug as reference.
+        let fine = args.iter().any(|a| a == "--fine");
+        path = if fine {
+            "data/results/walled_nozzle/near_term/vessel_blast_rod_plug_fine.jsonl"
+        } else {
+            "data/results/walled_nozzle/near_term/vessel_blast_rod_plug.jsonl"
+        };
+        let cell = if fine { 0.005 } else { 0.01 };
+        for (total, front, length, density, back, label) in [
+            (
+                4.4,
+                1.4,
+                0.98,
+                475.0,
+                false,
+                "rod -> paper plug 4.4 kg, 1.4-2.38 m",
+            ),
+            (
+                10.0,
+                1.0,
+                2.5,
+                500.0,
+                true,
+                "rod -> 10 kg plug, 1.0-3.5 m, back",
+            ),
+            (
+                10.0,
+                1.4,
+                1.75,
+                500.0,
+                true,
+                "rod -> 10 kg plug, 1.4-3.15 m, back",
+            ),
+            (
+                10.0,
+                0.8,
+                1.5,
+                500.0,
+                true,
+                "rod -> 10 kg plug, 0.8-2.3 m, back",
+            ),
+        ] {
+            let mut segs = vec![rod_segment()];
+            segs.extend(plug_column(front, length, total, density, back));
+            let fill = (gases[0].0, gases[0].1 - (total - 4.4));
+            cases.push(case(domed.0, domed.1, fill, 1.2, cell, 2.0e-3, label, segs));
+        }
+    } else if args.iter().any(|a| a == "--plug-clear-of-nose") {
         // Plugs that end in the cylinder, short of the nose (z_c = 2.48 m), bounded pessimistically
         // with the hot remnant: 0.8 -> 2.3 m, back-weighted.
         path = "data/results/walled_nozzle/near_term/vessel_blast_plug_clear.jsonl";
