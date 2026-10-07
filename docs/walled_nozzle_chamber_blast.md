@@ -740,6 +740,25 @@ chamber keeping the 0.5 s it needs to empty and refill.**
   - Replace the 19 t bonded-overwrap figure.
   - Name the fallback: a maraging 300 band behind a thin alumina barrier, wrap elsewhere,
     at r 2.6 m (~34 t). List the barrier's spike test as its gating item.
+- **The tests that gate the dry-wrap chamber.** No full-scale article is needed.
+  - Fling strain `v / sqrt(E/rho)`, with `v` the impulse per area over the mass per area, does
+    not depend on size.
+  - The blast obeys cube-root scaling: at 1/20 scale, 1/8,000 of the energy (~0.9 MJ) gives the
+    same pressures over 1/20 the time.
+  - Separate-effects first:
+    1. Kevlar strand and ring tension fatigue at 1-2% strain for 5,000+ cycles.
+    2. A fretting rig for dry layers slapping together.
+    3. Pressure cycling a subscale autofrettaged liner + dry-wrap vessel (COPV practice).
+    4. **Ring fling:** a 10-30 cm liner + wrap ring impulse-loaded from inside
+       (electromagnetic ring expansion, exploding wire or sheet explosive).
+    5. Gas-gun flyer-plate spall of the thin liner at µs pulse lengths.
+    6. **Hydrogen uptake** through pitch, with and without the alumina film, in a
+       reflected-shock tube or pulsed arcjet (hot dissociated gas at hundreds of bar for ms);
+       thermal desorption and crack growth afterwards.
+  - Last, to validate the blast solution rather than the materials: a subscale chamber with
+    a line-blast source (detonating cord or an exploding wire) standing in for the stopped
+    rod, with wall pressure gauges. The 75 km/s rod itself is beyond lab guns (~7-10 km/s), but
+    the wall sees only the energy per length and where it is released.
 - **Hydrogen at the 2.5 kg rod.** No wall under ~50 t survives the centred spike (~2.95 GPa, at
   steel's spall strength). Say so. The levers are a larger chamber (~8-11% Isp at 60-80 m^3) or a
   smaller rod per pulse.

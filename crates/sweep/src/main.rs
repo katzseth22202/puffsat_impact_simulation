@@ -2196,6 +2196,12 @@ struct VesselBlastRecord {
     throat_mass_out: f64,
     #[serde(default)]
     throat_momentum_out: f64,
+    /// Stagnation enthalpy `h0 = gamma/(gamma-1) p/rho + |u|^2/2` carried out [J], and the
+    /// momentum an ideal nozzle would give that outflow, `sum dm sqrt(2 h0)` [N s].
+    #[serde(default)]
+    throat_energy_out: f64,
+    #[serde(default)]
+    throat_ideal_momentum_out: f64,
 }
 
 /// Solve the free length (cylinder end `z_c`, or `z_hi` with no cylinder) for 20 m^3.
@@ -2437,6 +2443,7 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
     let mut bins: Vec<Vec<f64>> = Vec::new();
     let mut t = 0.0;
     let (mut throat_mass, mut throat_momentum) = (0.0, 0.0);
+    let (mut throat_energy, mut throat_ideal) = (0.0, 0.0);
     let t_end = c.t_end;
     while t < t_end {
         if let Some((radius, rho, speed, until)) = c.inflow {
@@ -2474,6 +2481,10 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
                 let area = 2.0 * std::f64::consts::PI * r * cell;
                 throat_mass += w.rho * w.uz * area * dt;
                 throat_momentum += w.rho * w.uz * w.uz * area * dt;
+                let dm = w.rho * w.uz * area * dt;
+                let h0 = gamma / (gamma - 1.0) * w.p / w.rho + 0.5 * (w.uz * w.uz + w.ur * w.ur);
+                throat_energy += dm * h0;
+                throat_ideal += dm * (2.0 * h0).sqrt();
             }
         }
     }
@@ -2498,6 +2509,8 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
         pressure_pa: bins,
         throat_mass_out: throat_mass,
         throat_momentum_out: throat_momentum,
+        throat_energy_out: throat_energy,
+        throat_ideal_momentum_out: throat_ideal,
     }
 }
 
@@ -2711,7 +2724,57 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut cases = Vec::new();
     let path;
-    if args.iter().any(|a| a == "--shape-40c") {
+    if args
+        .iter()
+        .any(|a| a == "--shape-40c-fine" || a == "--efficiency-r3")
+    {
+        // The r 3.0 m bulge, the chosen dry-wrap chamber. `--shape-40c-fine`: its 0.25 cm
+        // convergence over the same 1.2 ms. `--efficiency-r3`: 5 ms at 0.5 cm with the throat
+        // resized for 2 Hz (V/A* = 160 m), recording the energy the early outflow carries.
+        use euler2d::vessel::Bulge;
+        let fine = args.iter().any(|a| a == "--shape-40c-fine");
+        path = if fine {
+            "data/results/walled_nozzle/near_term/vessel_blast_shape_40c_fine.jsonl"
+        } else {
+            "data/results/walled_nozzle/near_term/vessel_blast_efficiency_r3.jsonl"
+        };
+        let fill = (gases[0].0, gases[0].1 - (10.0 - 4.4));
+        let b = Bulge {
+            dr: 1.6,
+            z0: 1.4,
+            z1: 2.8,
+            ramp: 0.5,
+            ramp_out: 3.0,
+        };
+        let r_t = if fine {
+            (40.0 / (VESSEL_VOLUME / 0.149) / std::f64::consts::PI).sqrt()
+        } else {
+            (106.0 / 160.0 / std::f64::consts::PI).sqrt()
+        };
+        let cone_len = (1.4 - r_t) / 12.0_f64.to_radians().tan();
+        let v = vessel_sized(1.4, Some(cone_len), 0.0, 0.7, 40.0, r_t).with_bulge(b);
+        let mut segs = vec![rod_segment()];
+        segs.extend(plug_column(0.8, 1.5, 10.0, 500.0, true));
+        let (cell, t_end, label) = if fine {
+            (
+                0.0025,
+                1.2e-3,
+                "bulge r 3.0 m z 1.4-2.8, 3 m taper, plug 1.5 m",
+            )
+        } else {
+            (0.005, 5.0e-3, "bulge r 3.0 m, throat for 2 Hz, 5 ms")
+        };
+        cases.push(case(
+            "shape r 3.0 m bulge",
+            v,
+            fill,
+            1.2,
+            cell,
+            t_end,
+            label,
+            segs,
+        ));
+    } else if args.iter().any(|a| a == "--shape-40c") {
         // Every wall fails at the r 2.2 m plateau: solid steel cracks, layered walls fling their
         // outer layers. The plateau follows 1/R^2, so stand the wall off further: r 2.6 and 3.0 m,
         // the larger closed over 3 m to keep the shoulder gentle. 0.5 cm, uniform fill.
