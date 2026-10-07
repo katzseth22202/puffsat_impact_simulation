@@ -358,8 +358,8 @@ A short paragraph and the table in `docs/spray_plate_fatigue_and_spall.md` §1 w
   - **Keep the barrier on both arms.** The argon arm still takes a water PuffSat, so hydrogen
     reaches the face either way; the water slug only adds more.
   - **The plate's risk is lower than the chamber's, but not low enough to drop the barrier.**
-    - Each pulse wets the face for well under a millisecond, not the chamber's ~0.2 s
-      blowdown.
+    - Each pulse wets the face for about a millisecond (the skirt's pressure rises over
+      0.5-1.1 ms), not the chamber's ~0.2 s blowdown.
     - The merged pulse keeps the face in compression; the tension that grows cracks is at the
       back, ~30 mm of steel away from where hydrogen enters.
     - But at the plate's 400-507 K hydrogen diffuses quickly through martensite. Over thousands
