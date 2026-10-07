@@ -97,6 +97,42 @@ on the ASME CC2938 crack-growth curves, which is what `chamber_fatigue.py` alrea
      A-286 (solution treated) or Nitronic 50 are negligible-rated with 0.6-0.85 GPa yield, under
      the Cr-Mo shells.
 
+## 4b. The barrier: a thin, dense ceramic film (estimates, not yet sourced)
+
+**Recommended:** a sub-micron dense **alumina** film on the steel, under the ablative.
+- **Why thin works.** A film cracks only if the elastic energy it stores exceeds its fracture
+  energy, and that energy scales with thickness. The channel-cracking estimate
+  `h_c ~ Gamma E_f / (2 sigma^2)` (alumina E ~380 GPa, assumed Gamma ~30 J/m^2) gives:
+  - crack-free to ~70 µm at the face's 0.06% thermal-mismatch strain;
+  - ~3 µm at 0.3%;
+  - ~1 µm at 0.5%.
+- **Why the plate face suits it.** The face is compressed through its thickness without in-plane
+  stretch, and it is always in compression. Reflected tension appears at the plate's back, not
+  its face. The film is far thinner than the shock and simply rides with the steel.
+- **The real limit is pinholes, not cracking.** Answers: atomic layer deposition (pinhole-free at
+  tens of nm), ceramic/metal nanolaminates, or an aluminized-and-oxidized surface that regrows
+  its oxide.
+- **Process fit to the steel.**
+  - **Maraging:** it must stay below its ~480 °C aging temperature after heat treatment, so
+    sputtered (PVD) or ALD alumina, applied after the final age. A 20 m face would be coated in
+    segments.
+  - **Cr-Mo chambers:** tempered hotter, so pack or slurry aluminizing then oxidation (~900-1100
+    °C) can be sequenced before the final temper.
+- **Cost:** order 10^2-10^3 $/m^2. On ~315 m^2 of plate face that is ~$0.03-0.3M, a few percent of
+  the 150 t of maraging alone.
+- **Rejected:**
+  - *Tungsten:* brittle when cold, and it blisters under intense low-energy hydrogen plasma. Its
+    fusion role is erosion and heat, not permeation.
+  - *CMCs:* microcracked and porous by design, so they would need a dense seal coat anyway.
+  - *Silicone:* among the most gas-permeable solids, used industrially as gas membranes. It can
+    be the ablator, not the barrier.
+  - *Copper or aluminium layers on the plate:* they yield every 2.5 GPa pulse.
+- **Risks:**
+  - Where the pitch burns through, the film meets ~3,900 K plasma and alumina melts at ~2,070
+    °C, so it depends on the respray.
+  - There is no data for the permeation reduction under thousands of shock pulses with atomic
+    hydrogen plasma. **That is a test, and the paper should list it as one.**
+
 ## 5. Sources
 
 - [L16] J. A. Lee, "Hydrogen Embrittlement", NASA/TM-2016-218602 (2016), Tables 1-4.

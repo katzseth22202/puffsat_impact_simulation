@@ -340,6 +340,13 @@ plug's end (`--long-plug-hot`, `--plug-clear-of-nose`; values scaled to the real
   - `fig:rod_port_plug` should show the longer plug.
 - **`sec:steel_chamber_service`, `eq:ramp_dlf`.** The blast's reverberation gives D = 2.0-2.3 in
   a centred sphere, not 1.7. Size with the solved D, or with the long plug's lower, spread load.
+- **Hydrogen barrier on the chamber steel** (`docs/hydrogen_and_wall_steels.md`). Dissociated
+  methane puts atomic hydrogen on the methane chamber's wall during every pulse, and the pitch is
+  not a designed barrier. Propose a thin dense alumina film on the Cr-Mo, aluminized and
+  oxidized before the final temper, under the pitch, and under the GRCop-84 liner in the hydrogen
+  chamber. Its permeation reduction under pulsed plasma is a test to list. Keep the parent's
+  sub-950 MPa Cr-Mo qualified on CC2938. Maraging is "extreme" in hydrogen and is not proposed
+  for the chambers.
 - **Hydrogen at the 2.5 kg rod.** No wall under ~50 t survives the centred spike (~2.95 GPa, at
   steel's spall strength). Say so. The levers are a larger chamber (~8-11% Isp at 60-80 m^3) or a
   smaller rod per pulse.

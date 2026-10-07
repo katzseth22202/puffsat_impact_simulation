@@ -349,6 +349,12 @@ A short paragraph and the table in `docs/spray_plate_fatigue_and_spall.md` §1 w
   NASA-HR1 (944 MPa yield) and 1900 °F-treated Inconel 718 (1075 MPa) are rated negligible or
   small. Their face allowable is roughly 1.2-1.5 GPa against maraging's 2.5, enough for the
   merged pulse but not the failed-merge one.
+  **Proposed as the design option (2026-10-07):** a sub-micron dense alumina film on the
+  maraging, under the pitch. It is sputtered or ALD-grown after the final 480 °C age, and coated
+  in segments over the 20 m face. Thin enough not to crack (the face is compressed without
+  in-plane stretch); its pinholes are closed by ALD or nanolaminates. Order a few percent of the
+  steel's cost. The skirt liner takes the same film. Its permeation reduction under pulsed atomic
+  hydrogen plasma is untested, and the paper should list that test.
 - **Layering, if used, must put the tough grade at the back.** Reflected tension and spall start
   at the back face, so a less-tough backing would put the weakest steel where the tension is. Every
   layer also sees the full ~P in compression, so the backing must clear 2.5 GPa too, which rules
