@@ -35,6 +35,9 @@ OUTPUT = Path("data/results/walled_nozzle/near_term/volume_trade.csv")
 VOLUMES = (20.0, 40.0, 60.0, 80.0, 120.0, 160.0, 240.0)
 V_PER_THROAT = nt.VOLUME / nt.THROAT_AREAS[0]
 AREA_RATIOS = (100.0, 300.0)
+PITCH_20_KG = (1.4, 5.6)
+"""Pitch removed per pulse at 20 m^3, methane, low/high flux edge: 30-120 um over 35.6 m^2 at
+~1300 kg/m^3 (`wall_layers.csv`; the near-term note's 2.0-5.4 kg). Scaled with the wall heat."""
 SPIKE_20 = {"hydrogen_5500": (2.95e9, math.nan), "methane_7000": (1.8e9, 1.25e9)}
 """(centred, long plug) converged spike at 20 m^3 [Pa]; the long plug is methane only."""
 
@@ -56,6 +59,10 @@ class Row:
     spike_centred_gpa: float
     spike_long_plug_gpa: float
     wall_area_factor: float
+    wall_heat_low_mj: float
+    wall_heat_high_mj: float
+    pitch_low_kg: float
+    pitch_high_kg: float
 
 
 def efold_time(sol: nt.ChamberSolution, br: nt.Branch, tab: nt.Isentrope, throat: float) -> float:
@@ -78,6 +85,10 @@ def run(report: nt.Report = print) -> list[Row]:
             throat = volume / V_PER_THROAT
             effs = {e.area_ratio: e for e in nt.efficiencies(sol, br, tab, AREA_RATIOS)}
             efold = efold_time(sol, br, tab, throat)
+            wh = nt.wall_heat(sol, br, tab, throat)
+            heat = (wh.fluence_low * wh.wall_area, wh.fluence_high * wh.wall_area)
+            if volume == VOLUMES[0]:
+                heat_20 = heat
             centred, plug = SPIKE_20[pairing.name]
             for ar in AREA_RATIOS:
                 eff = effs[ar]
@@ -100,6 +111,10 @@ def run(report: nt.Report = print) -> list[Row]:
                     spike_centred_gpa=centred * 20.0 / volume / 1e9,
                     spike_long_plug_gpa=plug * 20.0 / volume / 1e9,
                     wall_area_factor=(volume / 20.0) ** (2.0 / 3.0),
+                    wall_heat_low_mj=heat[0] / 1e6,
+                    wall_heat_high_mj=heat[1] / 1e6,
+                    pitch_low_kg=PITCH_20_KG[0] * heat[0] / heat_20[0],
+                    pitch_high_kg=PITCH_20_KG[1] * heat[1] / heat_20[1],
                 )
                 out.append(row)
                 report(
@@ -108,7 +123,9 @@ def run(report: nt.Report = print) -> list[Row]:
                     f"D_exit={row.exit_diameter_m:4.1f} m eta_bd={row.eta_blowdown:.3f} "
                     f"eta_net={row.eta_net:.3f} Isp_eq={row.isp_effective_s:5.0f} s "
                     f"spike={row.spike_centred_gpa:.2f}/{row.spike_long_plug_gpa:.2f} GPa "
-                    f"area x{row.wall_area_factor:.2f}"
+                    f"area x{row.wall_area_factor:.2f} wall heat {row.wall_heat_low_mj:.0f}-"
+                    f"{row.wall_heat_high_mj:.0f} MJ pitch {row.pitch_low_kg:.1f}-"
+                    f"{row.pitch_high_kg:.1f} kg"
                 )
     return out
 

@@ -132,7 +132,20 @@ and the extra comes out of the charge. The rod accretes it slice by slice: each 
 18 cases in `vessel_blast_long_plug.jsonl`. One, 20 kg over 1 m back-weighted, put 1.82 GPa at
 the throat, probably where this model places the whole merged body. Treat it as unconfirmed.
 
-**Grid series for the best long plug** (10 kg, 2.5 m, back-weighted; 2 / 1 / 0.5 cm): running at commit time, `make walled-nozzle-vessel-blast` (`--long-plug-fine`). Until it lands, read the 1 cm values above as ~1.5-2x below converged, as in the point-blast series.
+**Grid series for the best long plug** (10 kg, 2.5 m, back-weighted; `--long-plug-fine`):
+
+| | 2 cm | 1 cm | 0.5 cm |
+|---|---|---|---|
+| worst on the wall | 0.38 GPa | 0.61 | 0.92 |
+| cylinder (median) | 0.38 (0.34) | 0.56 (0.46) | 0.76 (0.61) |
+| point blast, worst, same grid | (1.01) | 1.41 | ~1.9-2.0 |
+
+The 2-D peaks are **not yet converging**: they rise ~50% per halving, and the increments have
+not started to shrink. The 1-D sphere's did converge, at ~0.65x per halving. The long plug holds
+at ~0.45x the point blast on every grid, so **its advantage is robust; its absolute level is
+not**. Scaled from the converged sphere to the cylinder's closer radius, the converged long-plug
+spike is estimated at **~1-1.5 GPa, possibly more**. Every absolute 2-D number below carries that
+uncertainty.
 
 **Volume trade** (`volume_trade.py`). Throat grown with volume at V/A* = 134 m. The Isp change
 is `sqrt(eta_net ratio)`, where eta_net is the equilibrium blowdown efficiency less the stranded
@@ -156,6 +169,45 @@ H-atom store at the Bray freeze, at A/A* = 300.
 The chamber temperature does not move with volume: it is set by energy per kilogram. The
 pressure does, and the loss is the recombination race in the nozzle. Blowdown stays 54-60 ms
 (methane) and 39-44 ms (hydrogen), well inside the 250 ms pulse period.
+
+**Dry wrap over a 10 mm steel liner** (`dry_wrap.py`; radial layer chain, wound layers in contact
+only, each layer a hoop ring; the long plug's cylinder history scaled to each volume, grid factor
+1-2):
+- **Sizing is by strain compatibility.** The liner is bonded in strain to the wrap and may swing
+  only +/-0.75 Y (0.42%). The wrap must stiffen the wall to that limit, so low-modulus fibre is
+  heavy.
+  - Vectran: 0.33 / 0.22 / 0.15 t/m^2 at 40 / 80 / 160 m^3.
+  - Kevlar 49: 0.22 / 0.16 / 0.12 t/m^2.
+  - Dry carbon tow: 0.17 / 0.13 / 0.10 t/m^2.
+  - At 80 m^3 (~90 m^2 of wall) that is roughly 11-20 t.
+- **The wrap itself survives.** Peak hoop strain is 0.8-0.9% (grid factor 1) or 1.4-1.55%
+  (factor 2), against 2.1-3.3% to break. Lift-off gaps are 0.01-5 mm, layers fling at 30-200 m/s,
+  and the steel's radial tension is negligible.
+- **The liner yields in hoop at every volume:** 770-815 MPa (factor 1), ~2.1 GPa (factor 2),
+  against Y = 750 MPa. **Volume does not help hoop.** A bigger chamber lowers the spike, but the
+  wall is sized to the lower quasi-static pressure, so it thins in proportion. The spike stays
+  the same multiple of the design load, an effective D of ~3 (factor 1) to ~6 (factor 2) against
+  the sizing's 1.7. This applies to every wall option, all-steel included.
+- **This is an upper bound.** It loads the hardest-hit band around its whole circumference as a
+  free ring. Axial bending to the less-loaded neighbouring wall resists a short, local band and
+  may cut the response a lot. **A shell model is owed, and it decides the D every wall is sized
+  to.**
+
+**Pitch against volume** (methane; `near_term.wall_heat` at each volume, pitch scaled from the
+20 m^3 anchors of 1.4-5.6 kg per pulse):
+
+| | 20 m^3 | 40 | 80 | 160 | 240 |
+|---|---|---|---|---|---|
+| wall heat per pulse (MJ) | 184-644 | 222-894 | 242-1258 | 228-1785 | 204-2194 |
+| pitch per pulse (kg) | 1.4-5.6 | 1.7-7.8 | 1.8-10.9 | 1.7-15.5 | 1.6-19.1 |
+
+The low edge (H- radiation floor plus frozen-c_p convection) barely moves. The high edge (opaque
+blackbody) grows with wall area.
+- **Mass:** at 80 m^3 the extra pitch is +0.3-4.2 t per 780-pulse departure, against ~15-25 t of
+  wall saved. Both are spent each departure, since the chamber is expended.
+- **Isp:** the pitch leaves in the exhaust. 2-5.4 kg costs 6-15 s of effective Isp (near-term
+  note), so ~11 kg at the high edge costs ~30 s (~4%). With the -5% from lower pressure, 80 m^3
+  costs **~5-6% Isp at the low flux edge and ~8-9% at the high**.
 
 **Wall materials** (wave model, the solved spike, `wall_waves.py`):
 - **Thicker steel, less carbon** (methane, 25 -> 100 mm steel): carbon tension stays 6-7x the
@@ -183,9 +235,10 @@ pressure does, and the loss is the recombination race in the nozzle. Blowdown st
 - **Deposition.** The long-plug model places the hot accreted mass where it was struck. A
   penetration model (rod erosion and crater flow) would refine where along the axis the heat
   goes.
-- **Wall response.** The per-station ring model in `vessel_blast.py` is not credible against
-  these localized impulses; it goes far past yield. Hoop fatigue under the long plug needs a
-  shell model or the global breathing mode.
+- **Wall response.** The per-station ring model in `vessel_blast.py` and the dry-wrap ring both
+  load a band as a free ring. Both put the steel liner past yield in hoop under the spike. A
+  shell model with axial coupling is owed; it decides whether walls must be sized for D ~3-6 or
+  whether D = 1.7 holds.
 - **Hydrogen.** Not run with a long plug.
 - **Volume trade.** Spikes are scaled as 1/V from the 20 m^3 runs, not re-solved. Nozzle
   extension mass grows with the exit diameter squared.
@@ -208,9 +261,13 @@ pressure does, and the loss is the recombination race in the nozzle. Blowdown st
     under the long plug) exceeds the overwrap's through-thickness strength (64 MPa resin) by
     about 5-20x everywhere. The aluminium layer and more steel do not change that.
   - The near-term wall should be steel: multilayer shrink-fitted Cr-Mo, about 35-47 t for
-    methane. Otherwise the chamber must grow:
-    - 60-80 m^3 (~4-5% Isp) for a reinforced or dry-Vectran wrap;
-    - ~120-160 m^3 (~6-7% Isp) for a plain overwrap.
+    methane. Otherwise the chamber must grow.
+  - A **dry (unbonded) wrap over a thin steel liner** cannot delaminate. Its flung layers stay at
+    0.8-1.5% hoop strain against 2.1-3.3% to break. At ~80 m^3 it weighs ~11-20 t (Kevlar 49 or
+    dry carbon lighter than Vectran, because sizing is by stiffness). The cost is ~5-9% Isp,
+    including the extra pitch.
+  - A bonded overwrap needs ~120-160 m^3.
+  - Every option's hoop sizing waits on the shell-model D.
   - State that the "softens the local shocks" role given to the liquid share does not hold. The
     drops equilibrate in microseconds and pay the same toll as the gas. The liquid serves better
     as axial plug mass.

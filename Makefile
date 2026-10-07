@@ -1003,4 +1003,5 @@ walled-nozzle-test:
 	                python/tests/test_walled_nozzle_wall.py \
 	                python/tests/test_walled_nozzle_near_term.py \
 	                python/tests/test_walled_nozzle_wall_layers.py \
-	                python/tests/test_walled_nozzle_chamber_fatigue.py
+	                python/tests/test_walled_nozzle_chamber_fatigue.py \
+	                python/tests/test_walled_nozzle_dry_wrap.py
