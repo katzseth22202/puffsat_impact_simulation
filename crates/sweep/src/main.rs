@@ -2293,6 +2293,7 @@ fn vessel_blast_one(c: &VesselCase) -> VesselBlastRecord {
     g.bc_rlo = Bc::Reflect;
     g.bc_rhi = Bc::Reflect;
     g.set_vessel(Some(vessel));
+    g.set_parallel(true); // bit-identical to serial (euler2d vessel test)
     let rho_fill = c.charge_kg / VESSEL_VOLUME;
     let centre = |iz: usize, ir: usize| ((iz as f64 + 0.5) * cell, (ir as f64 + 0.5) * cell);
     // Each segment is spread over the cells whose centres it contains, normalised by their actual
@@ -2440,6 +2441,19 @@ fn long_plug_segments(
     total_kg: f64,
     back_weighted: bool,
 ) -> Vec<DepositSeg> {
+    long_plug_segments_with(front, length, total_kg, back_weighted, false)
+}
+
+/// [`long_plug_segments`], optionally with a **hot remnant**: the heat of the collisions in the
+/// back half of the column travels with the merged body instead of staying where it was struck,
+/// a bound on how much the remnant spreads before it reaches the nose and throat.
+fn long_plug_segments_with(
+    front: f64,
+    length: f64,
+    total_kg: f64,
+    back_weighted: bool,
+    hot_remnant: bool,
+) -> Vec<DepositSeg> {
     const SLICES: u32 = 20;
     let rod = 2.5;
     let p = rod * 75_000.0;
@@ -2451,10 +2465,15 @@ fn long_plug_segments(
     let dz = length / f64::from(SLICES);
     let mut moving = rod;
     let mut segs = Vec::new();
+    let mut carried = 0.0;
     for k in 0..SLICES {
         let dm = total_kg * weight(k) / norm;
-        let heat = 0.5 * p * p * (1.0 / moving - 1.0 / (moving + dm));
+        let mut heat = 0.5 * p * p * (1.0 / moving - 1.0 / (moving + dm));
         moving += dm;
+        if hot_remnant && 2 * k >= SLICES {
+            carried += heat;
+            heat = 0.0;
+        }
         let z0 = front + f64::from(k) * dz;
         let last = k + 1 == SLICES;
         segs.push(DepositSeg {
@@ -2462,7 +2481,7 @@ fn long_plug_segments(
             z1: z0 + dz,
             radius: 0.10,
             inner: 0.0,
-            heat,
+            heat: if last { heat + carried } else { heat },
             // The last slice carries the whole merged body; the others only their heat.
             mass: if last { rod + total_kg } else { 0.0 },
             uz: if last { p / (rod + total_kg) } else { 0.0 },
@@ -2509,7 +2528,86 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut cases = Vec::new();
     let path;
-    if args.iter().any(|a| a == "--long-plug-fine") {
+    if args.iter().any(|a| a == "--plug-clear-of-nose") {
+        // Plugs that end in the cylinder, short of the nose (z_c = 2.48 m), bounded pessimistically
+        // with the hot remnant: 0.8 -> 2.3 m, back-weighted.
+        path = "data/results/walled_nozzle/near_term/vessel_blast_plug_clear.jsonl";
+        for (total, label) in [
+            (10.0, "10 kg, 0.8-2.3 m, back, hot remnant"),
+            (20.0, "20 kg, 0.8-2.3 m, back, hot remnant"),
+            (40.0, "40 kg, 0.8-2.3 m, back, hot remnant"),
+        ] {
+            let fill = (gases[0].0, gases[0].1 - (total - 4.4));
+            cases.push(case(
+                domed.0,
+                domed.1,
+                fill,
+                1.2,
+                0.01,
+                2.0e-3,
+                label,
+                long_plug_segments_with(0.8, 1.5, total, true, true),
+            ));
+        }
+        for (total, label) in [
+            (10.0, "10 kg, 0.8-2.3 m, back, cold remnant"),
+            (40.0, "40 kg, 0.8-2.3 m, back, cold remnant"),
+        ] {
+            let fill = (gases[0].0, gases[0].1 - (total - 4.4));
+            cases.push(case(
+                domed.0,
+                domed.1,
+                fill,
+                1.2,
+                0.01,
+                2.0e-3,
+                label,
+                long_plug_segments_with(0.8, 1.5, total, true, false),
+            ));
+        }
+    } else if args.iter().any(|a| a == "--long-plug-hot") {
+        path = "data/results/walled_nozzle/near_term/vessel_blast_long_plug_hot.jsonl";
+        for (total, length, label) in [
+            (4.4, 1.75, "4.4 kg, 1.75 m, back, hot remnant"),
+            (4.4, 2.5, "4.4 kg, 2.5 m, back, hot remnant"),
+            (10.0, 1.75, "10 kg, 1.75 m, back, hot remnant"),
+            (10.0, 2.5, "10 kg, 2.5 m, back, hot remnant"),
+        ] {
+            let front = domed.1.r_c.min(3.5 - length);
+            let fill = (gases[0].0, gases[0].1 - (total - 4.4));
+            cases.push(case(
+                domed.0,
+                domed.1,
+                fill,
+                1.2,
+                0.01,
+                2.0e-3,
+                label,
+                long_plug_segments_with(front, length, total, true, true),
+            ));
+        }
+    } else if args.iter().any(|a| a == "--long-plug-light") {
+        // The paper's 4.4 kg plug, only lengthened: does length alone remove the hammer?
+        path = "data/results/walled_nozzle/near_term/vessel_blast_long_plug_light.jsonl";
+        for (length, back, label) in [
+            (1.75, false, "4.4 kg, 1.75 m"),
+            (2.5, false, "4.4 kg, 2.5 m"),
+            (1.75, true, "4.4 kg, 1.75 m, back"),
+            (2.5, true, "4.4 kg, 2.5 m, back"),
+        ] {
+            let front = domed.1.r_c.min(3.5 - length);
+            cases.push(case(
+                domed.0,
+                domed.1,
+                gases[0],
+                1.2,
+                0.01,
+                2.0e-3,
+                label,
+                long_plug_segments(front, length, 4.4, back),
+            ));
+        }
+    } else if args.iter().any(|a| a == "--long-plug-fine") {
         // Grid convergence of the best long plug: 10 kg over 2.5 m, back-weighted, 2/1/0.5 cm.
         path = "data/results/walled_nozzle/near_term/vessel_blast_long_plug_fine.jsonl";
         let front = domed.1.r_c.min(3.5 - 2.5);

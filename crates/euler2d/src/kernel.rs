@@ -17,6 +17,7 @@ use crate::plate::PlateProfile;
 use crate::riemann::{DirCons, DirFlux, DirState, hllc_flux, phys_flux};
 use crate::state::{Cons, Prim};
 use crate::vessel::Vessel;
+use rayon::prelude::*;
 
 /// A domain-edge boundary condition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,6 +59,8 @@ pub struct Grid2D {
     plate_profile: Option<PlateProfile>,
     /// A closed axisymmetric chamber wall `r_w(z)` (see [`crate::vessel`]); `None` for none.
     vessel: Option<Vessel>,
+    /// Run each sweep's lines (and the vessel's mirror fill) on rayon's thread pool.
+    parallel: bool,
     /// Conserved cells, `idx(iz, ir) = iz·nr + ir`.
     u: Vec<Cons>,
     /// `z = 0` (plate) and `z = z_max` boundaries.
@@ -90,6 +93,7 @@ impl Grid2D {
             plate_radius: None,
             plate_profile: None,
             vessel: None,
+            parallel: false,
             u: vec![placeholder; nz * nr],
             bc_zlo: Bc::Transmissive,
             bc_zhi: Bc::Transmissive,
@@ -118,6 +122,12 @@ impl Grid2D {
     /// immersed surface, not the grid edge, is the wall).
     pub fn set_plate_profile(&mut self, profile: Option<PlateProfile>) {
         self.plate_profile = profile;
+    }
+
+    /// Run sweeps multithreaded (rayon). Results are bit-identical to the serial run, because each
+    /// line's arithmetic is unchanged and lines do not share cells.
+    pub fn set_parallel(&mut self, on: bool) {
+        self.parallel = on;
     }
 
     /// Impose a closed chamber wall `r_w(z)` as a ghost-cell immersed boundary. Use with a
@@ -412,9 +422,11 @@ impl Grid2D {
         let Some(v) = self.vessel else {
             return;
         };
-        for iz in 0..self.nz {
+        // Wall cells read only fluid cells and write only themselves: rows are independent.
+        let row = |iz: usize| -> Vec<(usize, Cons)> {
             let z = self.z_center(iz);
             let (n_z, n_r) = v.normal(z);
+            let mut out = Vec::new();
             for ir in 0..self.nr {
                 let r = self.r_center(ir);
                 if !v.is_solid(z, r) {
@@ -436,9 +448,17 @@ impl Grid2D {
                     src.ur - 2.0 * u_n * n_r,
                     src.p,
                 );
-                let k = self.idx(iz, ir);
-                self.u[k] = Cons::from_prim(mirrored, self.gamma);
+                out.push((self.idx(iz, ir), Cons::from_prim(mirrored, self.gamma)));
             }
+            out
+        };
+        let updates: Vec<Vec<(usize, Cons)>> = if self.parallel {
+            (0..self.nz).into_par_iter().map(row).collect()
+        } else {
+            (0..self.nz).map(row).collect()
+        };
+        for (k, c) in updates.into_iter().flatten() {
+            self.u[k] = c;
         }
     }
 
@@ -515,104 +535,135 @@ impl Grid2D {
     // similarly named — they are one momentum vector — so the lint is silenced for this routine.
     #[allow(clippy::similar_names)]
     fn sweep(&mut self, axis: Axis, dt: f64) {
-        let (n_lines, n, dx, bc_lo, bc_hi) = match axis {
-            Axis::Z => (self.nr, self.nz, self.dz, self.bc_zlo, self.bc_zhi),
-            Axis::R => (self.nz, self.nr, self.dr, self.bc_rlo, self.bc_rhi),
+        let n_lines = match axis {
+            Axis::Z => self.nr,
+            Axis::R => self.nz,
+        };
+        // Each line reads and writes only its own cells, so lines are independent. Parallel and
+        // serial runs do identical arithmetic per line and give bit-identical results.
+        let updates: Vec<Vec<Cons>> = if self.parallel {
+            (0..n_lines)
+                .into_par_iter()
+                .map(|line| self.sweep_line(axis, line, dt))
+                .collect()
+        } else {
+            (0..n_lines)
+                .map(|line| self.sweep_line(axis, line, dt))
+                .collect()
+        };
+        for (line, values) in updates.into_iter().enumerate() {
+            for (i, c) in values.into_iter().enumerate() {
+                let (iz, ir) = match axis {
+                    Axis::Z => (i, line),
+                    Axis::R => (line, i),
+                };
+                let k = self.idx(iz, ir);
+                self.u[k] = c;
+            }
+        }
+    }
+
+    /// One MUSCL-Hancock line of a sweep: the updated conserved state of the line's cells, in
+    /// order, computed from the current state without modifying it.
+    #[allow(clippy::similar_names)]
+    fn sweep_line(&self, axis: Axis, line: usize, dt: f64) -> Vec<Cons> {
+        let (n, dx, bc_lo, bc_hi) = match axis {
+            Axis::Z => (self.nz, self.dz, self.bc_zlo, self.bc_zhi),
+            Axis::R => (self.nr, self.dr, self.bc_rlo, self.bc_rhi),
         };
         let axisym_r = self.axisymmetric && axis == Axis::R;
         let gamma = self.gamma;
+        let mut out = Vec::with_capacity(n);
+        let cell = |i: usize| match axis {
+            Axis::Z => (i, line),
+            Axis::R => (line, i),
+        };
 
-        for line in 0..n_lines {
-            let cell = |i: usize| match axis {
-                Axis::Z => (i, line),
-                Axis::R => (line, i),
-            };
+        // Directional conserved state, padded with two ghost layers each side: physical cell i
+        // sits at padded index i + 2.
+        let mut p = vec![DirCons::default(); n + 4];
+        for i in 0..n {
+            let (iz, ir) = cell(i);
+            p[i + 2] = dir_cons(self.cons(iz, ir), axis);
+        }
+        // The finite plate makes the z-lo boundary depend on the line's radius: reflect on the
+        // plate (r ≤ r_plate), transmissive past its edge. Other boundaries are uniform.
+        let bc_lo_line = match (axis, self.plate_radius) {
+            (Axis::Z, Some(rp)) if self.r_center(line) > rp => Bc::Transmissive,
+            (Axis::Z, Some(_)) => Bc::Reflect,
+            _ => bc_lo,
+        };
+        fill_ghosts(&mut p, n, bc_lo_line, bc_hi);
 
-            // Directional conserved state, padded with two ghost layers each side: physical cell i
-            // sits at padded index i + 2.
-            let mut p = vec![DirCons::default(); n + 4];
-            for i in 0..n {
-                let (iz, ir) = cell(i);
-                p[i + 2] = dir_cons(self.cons(iz, ir), axis);
-            }
-            // The finite plate makes the z-lo boundary depend on the line's radius: reflect on the
-            // plate (r ≤ r_plate), transmissive past its edge. Other boundaries are uniform.
-            let bc_lo_line = match (axis, self.plate_radius) {
-                (Axis::Z, Some(rp)) if self.r_center(line) > rp => Bc::Transmissive,
-                (Axis::Z, Some(_)) => Bc::Reflect,
-                _ => bc_lo,
-            };
-            fill_ghosts(&mut p, n, bc_lo_line, bc_hi);
-
-            // MUSCL slope reconstruction + Hancock half-step predictor for every padded index that
-            // borders a physical face (1 ..= n+2). The predictor uses the plane flux (the geometric
-            // weighting enters only the corrector below). The predicted face states are validated
-            // against positivity and the stencil's signal-speed envelope, reverting to the
-            // piecewise-constant (first-order) state when the reconstruction is unphysical — see
-            // `face_states_valid`.
-            let half = 0.5 * dt / dx;
-            let mut face_l = vec![DirState::default(); n + 4];
-            let mut face_r = vec![DirState::default(); n + 4];
-            for j in 1..=n + 2 {
-                let back = p[j].axpy(-1.0, p[j - 1]);
-                let fwd = p[j + 1].axpy(-1.0, p[j]);
-                let slope = limited_slope(back, fwd, p[j], gamma);
-                let ql = p[j].axpy(-0.5, slope);
-                let qr = p[j].axpy(0.5, slope);
-                let fl = phys_flux(ql.to_state(gamma), gamma);
-                let fr = phys_flux(qr.to_state(gamma), gamma);
-                // q* = q ± ½ Δ + ½(dt/dx)(F(q_L) − F(q_R)).
-                let wl = ql.add_flux(half, fl).add_flux(-half, fr).to_state(gamma);
-                let wr = qr.add_flux(half, fl).add_flux(-half, fr).to_state(gamma);
-                let env = signal_envelope(&p[j - 1..=j + 1], gamma);
-                if face_states_valid(wl, wr, env) {
-                    face_l[j] = wl;
-                    face_r[j] = wr;
-                } else {
-                    let w0 = p[j].to_state(gamma);
-                    face_l[j] = w0;
-                    face_r[j] = w0;
-                }
-            }
-
-            // Face fluxes: face j (1 ..= n+1) sits between padded cells j and j+1.
-            let mut flux = vec![DirFlux::default(); n + 2];
-            for j in 1..=n + 1 {
-                flux[j] = hllc_flux(face_r[j], face_l[j + 1], gamma);
-            }
-
-            // Conservative corrector. Cartesian cells use F_hi − F_lo; the cylindrical radial sweep
-            // weights faces by their radius and adds the pressure source p/r to radial momentum.
-            for i in 0..n {
-                let (iz, ir) = cell(i);
-                let k = self.idx(iz, ir);
-                let f_lo = flux[i + 1];
-                let f_hi = flux[i + 2];
-                let dc = dir_cons(self.u[k], axis);
-                let updated = if axisym_r {
-                    let r_lo = i as f64 * dx;
-                    let r_hi = (i + 1) as f64 * dx;
-                    let r_c = (i as f64 + 0.5) * dx;
-                    let inv_vol = dt / (r_c * dx);
-                    let p_src = dt * Prim::from_cons(self.u[k], gamma).p / r_c;
-                    DirCons {
-                        rho: dc.rho - inv_vol * (r_hi * f_hi.rho - r_lo * f_lo.rho),
-                        mn: dc.mn - inv_vol * (r_hi * f_hi.mn - r_lo * f_lo.mn) + p_src,
-                        mt: dc.mt - inv_vol * (r_hi * f_hi.mt - r_lo * f_lo.mt),
-                        e: dc.e - inv_vol * (r_hi * f_hi.e - r_lo * f_lo.e),
-                    }
-                } else {
-                    let inv = dt / dx;
-                    DirCons {
-                        rho: dc.rho - inv * (f_hi.rho - f_lo.rho),
-                        mn: dc.mn - inv * (f_hi.mn - f_lo.mn),
-                        mt: dc.mt - inv * (f_hi.mt - f_lo.mt),
-                        e: dc.e - inv * (f_hi.e - f_lo.e),
-                    }
-                };
-                self.u[k] = floored(from_dir_cons(updated, axis), gamma);
+        // MUSCL slope reconstruction + Hancock half-step predictor for every padded index that
+        // borders a physical face (1 ..= n+2). The predictor uses the plane flux (the geometric
+        // weighting enters only the corrector below). The predicted face states are validated
+        // against positivity and the stencil's signal-speed envelope, reverting to the
+        // piecewise-constant (first-order) state when the reconstruction is unphysical — see
+        // `face_states_valid`.
+        let half = 0.5 * dt / dx;
+        let mut face_l = vec![DirState::default(); n + 4];
+        let mut face_r = vec![DirState::default(); n + 4];
+        for j in 1..=n + 2 {
+            let back = p[j].axpy(-1.0, p[j - 1]);
+            let fwd = p[j + 1].axpy(-1.0, p[j]);
+            let slope = limited_slope(back, fwd, p[j], gamma);
+            let ql = p[j].axpy(-0.5, slope);
+            let qr = p[j].axpy(0.5, slope);
+            let fl = phys_flux(ql.to_state(gamma), gamma);
+            let fr = phys_flux(qr.to_state(gamma), gamma);
+            // q* = q ± ½ Δ + ½(dt/dx)(F(q_L) − F(q_R)).
+            let wl = ql.add_flux(half, fl).add_flux(-half, fr).to_state(gamma);
+            let wr = qr.add_flux(half, fl).add_flux(-half, fr).to_state(gamma);
+            let env = signal_envelope(&p[j - 1..=j + 1], gamma);
+            if face_states_valid(wl, wr, env) {
+                face_l[j] = wl;
+                face_r[j] = wr;
+            } else {
+                let w0 = p[j].to_state(gamma);
+                face_l[j] = w0;
+                face_r[j] = w0;
             }
         }
+
+        // Face fluxes: face j (1 ..= n+1) sits between padded cells j and j+1.
+        let mut flux = vec![DirFlux::default(); n + 2];
+        for j in 1..=n + 1 {
+            flux[j] = hllc_flux(face_r[j], face_l[j + 1], gamma);
+        }
+
+        // Conservative corrector. Cartesian cells use F_hi − F_lo; the cylindrical radial sweep
+        // weights faces by their radius and adds the pressure source p/r to radial momentum.
+        for i in 0..n {
+            let (iz, ir) = cell(i);
+            let k = self.idx(iz, ir);
+            let f_lo = flux[i + 1];
+            let f_hi = flux[i + 2];
+            let dc = dir_cons(self.u[k], axis);
+            let updated = if axisym_r {
+                let r_lo = i as f64 * dx;
+                let r_hi = (i + 1) as f64 * dx;
+                let r_c = (i as f64 + 0.5) * dx;
+                let inv_vol = dt / (r_c * dx);
+                let p_src = dt * Prim::from_cons(self.u[k], gamma).p / r_c;
+                DirCons {
+                    rho: dc.rho - inv_vol * (r_hi * f_hi.rho - r_lo * f_lo.rho),
+                    mn: dc.mn - inv_vol * (r_hi * f_hi.mn - r_lo * f_lo.mn) + p_src,
+                    mt: dc.mt - inv_vol * (r_hi * f_hi.mt - r_lo * f_lo.mt),
+                    e: dc.e - inv_vol * (r_hi * f_hi.e - r_lo * f_lo.e),
+                }
+            } else {
+                let inv = dt / dx;
+                DirCons {
+                    rho: dc.rho - inv * (f_hi.rho - f_lo.rho),
+                    mn: dc.mn - inv * (f_hi.mn - f_lo.mn),
+                    mt: dc.mt - inv * (f_hi.mt - f_lo.mt),
+                    e: dc.e - inv * (f_hi.e - f_lo.e),
+                }
+            };
+            out.push(floored(from_dir_cons(updated, axis), gamma));
+        }
+        out
     }
 }
 

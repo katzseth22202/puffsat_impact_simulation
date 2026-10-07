@@ -249,6 +249,36 @@ blackbody) grows with wall area.
   - Aluminium (5083 class) and magnesium alloys spall at roughly 1-1.5 and 0.6-1 GPa. Magnesium
     also forms a hydride in hot hydrogen and loses strength above ~150-250 °C.
 
+## 3b. Caveat added 2026-10-07: the long plug's result rests on where the remnant's energy goes
+
+The long-plug model leaves each collision's heat where the collision happened, and sends the
+merged remnant on as a cold, 10 cm-wide body. Two bounding runs show that choice decides the
+answer:
+
+| plug (back-weighted) | ends at | cold remnant, worst | hot remnant*, worst |
+|---|---|---|---|
+| 4.4 kg (paper's mass), 2.5 m | 3.5 m (near the throat) | 0.48-0.67 GPa | ~7.9 GPa |
+| 10 kg, 2.5 m | 3.5 m | 0.61 GPa | ~5.4 GPa |
+| 10 kg, 1.5 m | 2.3 m (in the cylinder) | ~3.5 GPa | ~7.5 GPa |
+| 40 kg, 1.5 m | 2.3 m | ~1.8 GPa | ~2.1 GPa |
+
+\*The heat of the back half of the collisions travels with the remnant and is released at the
+plug's end (`--long-plug-hot`, `--plug-clear-of-nose`; values scaled to the real chamber).
+
+- **The good long-plug numbers came largely from the remnant leaving through the throat.** It
+  starts close to the throat and, in the cold model, stays narrow. End the plug in the cylinder
+  and the remnant crosses the chamber and strikes the nose, as the paper's short plug does. Only a
+  very heavy plug (40 kg, 58% of the methane charge) slows it to ~2 GPa.
+- **Momentum cannot be dissipated, only routed.** The rod's 187.5 kN s ends on the far wall or
+  leaves through the throat. A plug converts kinetic energy to heat (p²/2M left moving), but not
+  momentum.
+- **Neither bound is the physics.** **Owed: a direct rod-into-plug simulation** in the 2-D solver.
+  The 2.5 kg rod as dense material at 75 km/s penetrating a dense plug column, both
+  hydrodynamic at these pressures, with no deposition model. It decides whether a long plug
+  aimed at the throat lets the remnant leave cleanly, or whether a heavy plug is needed.
+- **Until then, the §1 and §5 claim that "a ~10 kg long plug brings the wall to ~0.6 GPa" is
+  unconfirmed.** The paper's short plug is still shown to hammer the nose at 5-6 GPa.
+
 ## 4. Limits
 
 - **γ-law gas.** Real-gas equilibrium enters only through Γ_eff and the QSP scaling. A

@@ -340,6 +340,15 @@ A short paragraph and the table in `docs/spray_plate_fatigue_and_spall.md` §1 w
   merge must be detected and the push stopped within a few pulses, and that the face pressure must
   rise over at least one stress-wave round trip of the floor (~10 µs for 30 mm). A faster front
   makes life depend on damping the design does not yet have.
+- **Hydrogen (added 2026-10-07; `docs/hydrogen_and_wall_steels.md`).** Maraging steel is among
+  the worst steels in hydrogen: 18Ni-250 keeps 0.12 of its notched strength in 69 MPa H2, rated
+  "extreme" (NASA/TM-2016-218602, Table 3). The water PuffSat dissociates at the face, so atomic
+  hydrogen strikes it every pulse. The pitch film is not a designed hydrogen barrier. The paper
+  should either put a designed barrier between the maraging and the pitch (sprayed aluminium, an
+  aluminide or alumina; aluminium is rated negligible) or name a hydrogen-tolerant face alloy.
+  NASA-HR1 (944 MPa yield) and 1900 °F-treated Inconel 718 (1075 MPa) are rated negligible or
+  small. Their face allowable is roughly 1.2-1.5 GPa against maraging's 2.5, enough for the
+  merged pulse but not the failed-merge one.
 - **Layering, if used, must put the tough grade at the back.** Reflected tension and spall start
   at the back face, so a less-tough backing would put the weakest steel where the tension is. Every
   layer also sees the full ~P in compression, so the backing must clear 2.5 GPa too, which rules

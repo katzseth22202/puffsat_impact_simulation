@@ -189,6 +189,43 @@ mod tests {
         assert!((mass(&g) - m0).abs() / m0 < 0.02);
     }
 
+    /// The multithreaded sweep must reproduce the serial one bit for bit: a blast in a domed,
+    /// curved chamber with an open throat, run both ways, compared cell by cell with `==`.
+    #[test]
+    fn parallel_sweeps_are_bit_identical_to_serial() {
+        use crate::state::Prim;
+        let v = Vessel {
+            r_c: 1.0,
+            z_c: 1.2,
+            z_hi: 2.0,
+            r_t: 0.2,
+            curve: 1.0,
+            h_head: 0.5,
+            r_port: 0.05,
+        };
+        let run = |parallel: bool| {
+            let mut g = chamber_grid(v, 60, false);
+            g.set_parallel(parallel);
+            let cell = v.z_hi / 60.0;
+            g.init(|iz, ir| {
+                let (z, r) = ((iz as f64 + 0.5) * cell, (ir as f64 + 0.5) * cell);
+                let hot = (z - 0.8).hypot(r) < 0.12;
+                Prim::new(1.0, 0.0, 0.0, if hot { 500.0 } else { 1.0 })
+            });
+            g.run_to(0.15);
+            g
+        };
+        let (serial, parallel) = (run(false), run(true));
+        for iz in 0..serial.nz() {
+            for ir in 0..serial.nr() {
+                assert!(
+                    serial.cons(iz, ir) == parallel.cons(iz, ir),
+                    "cell ({iz}, {ir}) differs between serial and parallel runs"
+                );
+            }
+        }
+    }
+
     #[test]
     fn normal_points_inward_on_the_cylinder() {
         let v = Vessel {

@@ -6,6 +6,9 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[dependencies]
+rayon = { workspace = true }
+
 [dev-dependencies]
 # hydro1d is a TEST-only dependency: its exact Riemann solver is the Sod oracle and its 1D
 # Lagrangian bounce is the independent-kernel cross-check for eta_capture. The two kernels do not
