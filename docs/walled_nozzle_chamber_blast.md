@@ -459,6 +459,13 @@ bending, and lifted dry layers are free rings. So r 2.6 m's miss is real.
   closing wall.
 - **Cost:** 106 m^3 is ~-7% impulse per rod against 40 m^3 (78.5 m^3: ~-5%), ~6 m across.
   27 t per chamber against the paper's 19 t, which is a bonded overwrap that delaminates.
+- **The r 3.0 m dry wrap holds at 0.25 cm** (`--shape-40c-fine`; `wall_zones ... --suffix fine`).
+  - The band peak falls 0.89 -> 0.67 GPa and the impulse 10 -> 9 kPa s.
+  - The cone near the throat picks up a later 0.68 GPa hit at ~380 µs (spall 0.04x, fling
+    1.01%).
+  - The worst fling is unchanged, 1.69% -> 1.68% (1.43x against 2.4%), and the wrap sizes to
+    24.9 t.
+  - The maraging-band fallback passes at 35.2 t.
 - **Two designs survive:**
   - **Baseline:** all dry wrap at r 3.0 m (106 m^3, 27.3 t). It does not depend on hydrogen;
     the margin is fling, 1.4x.
@@ -580,6 +587,16 @@ Fraction of the charge left when the next rod arrives (methane 7,000 K, `near_te
   -13-17% impulse per rod, and 1.6-3x the wall heat (6-15 kg of pitch per pulse at 40 m^3).
   Counted per kilogram consumed, pitch included, the two temperatures are about even. Keep
   7,000 K.
+
+**Early escape costs ~0.4%** (`--efficiency-r3`: the r 3.0 m chamber, throat 0.66 m^2 for 2 Hz,
+5 ms at 0.5 cm, recording each outflow parcel's stagnation enthalpy `h0`).
+- In the first 5 ms, 5.5 kg (7% of the charge) leaves carrying 0.79 GJ (11% of the rod's
+  energy).
+- Its uniformity `(sum dm sqrt(2 h0))^2 / (2 M E)` is 0.956.
+- Adding the rest of the charge's ideal isentropic blowdown gives 1,023 kN s, against 1,027 kN s
+  had everything thermalized first: a ratio of 0.996 (gamma-law, ideal nozzle).
+- So assuming full thermalization in the volume trade is sound. A bigger chamber gains nothing
+  from thermalizing faster; its cost remains the lower-pressure chemistry.
 
 **The pulse rate sets the departure burn's Oberth loss.** A finite burn centred on the 600 km
 periapsis of the turnaround ellipse (613,000 km apoapsis), 5.43 km/s, ~644 kN s per pulse,

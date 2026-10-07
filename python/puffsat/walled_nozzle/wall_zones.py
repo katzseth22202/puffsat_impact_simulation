@@ -461,6 +461,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--histories", type=Path, default=HISTORIES)
     parser.add_argument("--case", default=CASE)
     parser.add_argument("--energy", type=float, default=1.0, help="pulse energy / 2.5 kg rod's")
+    parser.add_argument("--suffix", default="", help="appended to the output name, e.g. fine")
     args = parser.parse_args(argv)
     h = load_history(args.histories, args.case)
     if args.energy != 1.0:
@@ -489,6 +490,8 @@ def main(argv: list[str] | None = None) -> None:
     tag = args.case.split(",")[0].replace(" ", "_")
     if args.energy != 1.0:
         tag += f"_energy{args.energy:g}"
+    if args.suffix:
+        tag += f"_{args.suffix}"
     output = OUTPUT.with_name(f"wall_zones_{tag}.csv")
     output.parent.mkdir(parents=True, exist_ok=True)
     fields = list(ZoneResult.__dataclass_fields__)
