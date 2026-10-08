@@ -223,6 +223,79 @@ The column length is the target length a 4.8 cm graphite ball must sweep: `k m /
   there, so a lattice should survive far longer than a second as long as its struts can see cold
   sky.
 
+## Result 6: argon gas bags at 66 km/s, 1 moving : 2 at rest -- `argon_bags_k2.csv`
+
+`make xray-collision-argon-bags` (`argon_bags.py`, `multigroup.py`). A 10 kg argon impactor at
+66 km/s meets 20 kg of argon at rest in the ship's frame (k = 2). The centre-of-mass motion takes
+a third of the 21.8 GJ, and the heat is Q = 14.5 GJ. Both bodies are taken to be at the same
+uniform density at the moment of impact. The question is whether more than half of Q leaves as
+light, and whether the light is trapped.
+
+**Why a multigroup check.** The gray model cannot see where the light sits relative to argon's
+absorption. Cold argon is opaque above its 15.76 eV ionization edge (~1e5 m^2/kg) and clear below
+its 11.6 eV resonance lines (< 0.01 m^2/kg). That is the right range for a ~4 eV fireball.
+`multigroup.py` re-runs the same one-zone fireball from a new TOPS pull of 120 log groups over
+1-300 eV (`data/tables/tops/tops_argon_groups.html`). Each group uses the gray model's thin/thick
+bridge. The Planck and Rosseland group means in emission bracket line saturation inside a group.
+The cold-target column is a lower bound. It removes everything the whole unshocked target
+`rho0 R_target` would absorb at 0.5 eV, and counts it as lost.
+
+| density at impact [kg/m^3] | impactor cloud radius | gray | **multigroup** | after cold target | < 11.6 eV | > 30 eV | half the light out by |
+|---|---|---|---|---|---|---|---|
+| 16 (intact 10 atm bag) | 0.53 m | 0.09 | -- | -- | -- | -- | -- |
+| 1 | 1.3 m | 0.20 | -- | -- | -- | -- | -- |
+| 0.1 | 2.9 m | 0.35 | -- | -- | -- | -- | -- |
+| 1e-2 | 6.2 m | 0.57 | **0.50-0.52** | 0.40-0.42 | 0.35-0.37 | 0.014 | 0.42 ms |
+| 3e-3 | 9.3 m | 0.72 | **0.66-0.68** | 0.50-0.54 | 0.45-0.46 | 0.031 | 0.39 ms |
+| 1e-3 | 13 m | 0.88 | **0.83-0.85** | 0.65-0.69 | 0.55-0.57 | 0.042 | 0.25 ms |
+| 3e-4 | 20 m | 0.99 | **0.95-0.96** | 0.79-0.81 | 0.61-0.63 | 0.034 | 55 us |
+| 1e-4 | 29 m | 0.99 | **0.95-0.97** | 0.71-0.76 | 0.51-0.57 | 0.03-0.05 | 14-20 us |
+| 1e-5 | 62 m | 0.99 | **0.91-0.96** | 0.28-0.42 | 0.21-0.29 | 0.04-0.08 | 3-20 us |
+
+Shares are of Q. Denser than 1e-2 kg/m^3 the shocked gas lies above the pull's 0.1 kg/m^3 top,
+so those rows are gray only. At 1e-2 the first shocked state (0.12 kg/m^3) sits just above it.
+
+- **More than half of Q radiates once the bags are below about 1e-2 kg/m^3**, or about 10 g/m^3.
+  80% needs about 1e-3 kg/m^3, which is one gram per cubic metre. At 1e-3 that is 12 GJ of light,
+  56% of the impactor's ship-frame kinetic energy (the ceiling is 2/3). An intact bag radiates 9%.
+- **The light is not trapped, because it sits in argon's windows.** The multigroup answer is
+  within 2-8 points of the gray one. More than half of Q leaves below 11.6 eV, where cold argon is
+  clear. Even if the whole cold target absorbs everything else and keeps it, 65-69% leaves at
+  1e-3. Ionizing all 20 kg of target once costs 5.2% of Q, so the hard part should burn through.
+- **It is vacuum ultraviolet, not EUV.** The fireball starts at 6-7 eV and emits at ~3-4 eV. At
+  1e-3 the light is 40% at 6.2-11.6 eV, 19% at 11.6-15.8 eV, and only 4% above 30 eV.
+- **Too thin is worse again.** Below ~1e-4 kg/m^3 the fireball is so thin that it radiates in
+  lines above the 15.76 eV edge, which the cold target then absorbs (0.28-0.42 at 1e-5). The best
+  densities are 3e-4 to 1e-3 kg/m^3.
+- **Bag mass hardly matters at a fixed density.** At 1e-3 the share runs from 0.88-0.89 at
+  0.1 kg to 0.76-0.78 at 1000 kg. Density is the lever, not size.
+
+**A lattice of small bags must be burst, not left intact (hand estimates).** Argon at 10 atm and
+300 K is 16 kg/m^3, so a 2.5 cm bag holds 0.13 g. At a mean 1e-3 kg/m^3 the bags sit 0.5 m apart
+and fill 6e-5 of the volume. A path across the target meets a bag with a probability of the
+target column over one bag's areal density, `rho_mean L / (4/3 rho_bag r)` = 0.034/0.27 = 0.13.
+So 87% of the impactor's gas passes through the gaps. The 13% that hit a bag meet 16 kg/m^3 gas
+and radiate ~9%. The total is about 1% of Q. A lattice of intact elements acts as a continuous
+medium only if each element's areal density is well below the column: sub-millimetre bags at
+10 atm, or a mist. Bursting the bags works instead. A cubic lattice of Gaussian clouds of width
+sigma at spacing d has a density ripple of ±25% at sigma/d = 0.4, ±11% at 0.45 and ±4% at 0.5
+(`argon_bags.lattice_ripple`). Room-temperature argon spreads at about 250 m/s per axis, so a
+0.5 m lattice needs about 0.9 ms of lead. One 20 kg bag needs ~25 ms and arrives densest at its
+core. Two costs come with it. A bag skin is condensed matter that radiates almost nothing here; a
+10 um film is ~20% of the argon's mass on a 2.5 cm bag at 10 atm. The expanding argon will also
+probably condense into ~50 nm clusters (Hagena's jet-scaling, applied loosely), but at 66 km/s
+those are shredded and re-merged within a nanosecond.
+
+**Not usable in the pass-through pusher.** The cloud that radiates is metres to tens of metres
+across. It cannot thread the ship's bore, and the radiation case would have to enclose it. A
+compact projectile that fits the bore needs hundreds of metres of dilute target (`piston`). See
+[`xray_pusher_66kms_handoff.md`](xray_pusher_66kms_handoff.md).
+
+Not modelled beyond the general limits below: the clouds are taken to be uniform; the collision
+is taken to be collisional (ion-ion mean free path ~0.2 m at 1e-3 kg/m^3 against a 13 m cloud,
+marginal by 1e-5); and LTE is assumed, though electron excitation at 1e-3 kg/m^3 would radiate
+the heat in ~0.1 us (a rough coronal estimate, loss rate ~3e-31 W m^3) against a ~1 ms expansion, so emission is not the limit and escape is.
+
 ## Limits
 
 **The piston's heat goes in over the sweep, not at once.** This is the largest unmodelled effect

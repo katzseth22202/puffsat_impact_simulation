@@ -1012,7 +1012,7 @@ walled-nozzle-test:
 ## xray-collision-tops: re-pull the pure argon, iron and carbon TOPS gray means the fireball reads
 ## (network). Pulled one after the other: concurrent TOPS submissions share server session state
 ## and can both come back as the same mixture.
-.PHONY: xray-collision-tops xray-collision xray-collision-test
+.PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1023,10 +1023,19 @@ xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. c" \
 	    --mixname carbonfireball --t-up-kev 3 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
 	    --out data/tables/tops/tops_carbon_fireball_gray.html
+	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
+	    --mixname argongroups --t-up-kev 0.01 --rho-low-gcc 1.0e-9 --rho-up-gcc 1.0e-4 --n-rho 11 \
+	    --n-groups 121 --eg-low-kev 0.001 --eg-high-kev 0.3 \
+	    --out data/tables/tops/tops_argon_groups.html
 
 ## xray-collision: one-zone collision fireballs -> data/results/xray_collision/*.csv
 xray-collision:
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.sweep
+
+## xray-collision-argon-bags: argon gas bags, 1 moving : 2 at rest, at 66 km/s, multigroup TOPS
+## escape -> data/results/xray_collision/argon_bags_k2.csv
+xray-collision-argon-bags:
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.argon_bags
 
 ## xray-collision-test: that study's tests alone
 xray-collision-test:

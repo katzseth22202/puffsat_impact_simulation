@@ -177,3 +177,7 @@ source**.
 
 The 618 km/s case escapes this ceiling because the energy per atom is about 100 times larger
 (5.9 keV per carbon atom against 0.23 keV per argon atom).
+
+The full 66 km/s verdict, with argon bags at 1:2, a multigroup check that the light is not
+trapped, and why a gram-per-cubic-metre cloud cannot be used in the pass-through geometry, is in
+[`xray_pusher_66kms_handoff.md`](xray_pusher_66kms_handoff.md).

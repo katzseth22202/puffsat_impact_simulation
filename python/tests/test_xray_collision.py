@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pytest
 
-from puffsat.xray_collision import eos
+from puffsat.xray_collision import eos, multigroup
 from puffsat.xray_collision.fireball import (
     Kinematics,
     collide,
@@ -107,3 +107,39 @@ def test_piston_puts_all_heat_in_the_target() -> None:
     assert plow.heat == pytest.approx(foam.heat)
     assert plow.kt_start_ev > 1.8 * foam.kt_start_ev
     assert plow.closure == pytest.approx(1.0, abs=1e-4)
+
+
+def test_multigroup_pull_sees_argons_windows() -> None:
+    """Cold argon is clear below its 11.6 eV resonance line and opaque above its 15.76 eV edge."""
+    grp = multigroup.load_tops_groups()
+    assert len(grp.edges_ev) == 121
+    assert grp.edges_ev[0] == pytest.approx(1.0) and grp.edges_ev[-1] == pytest.approx(300.0)
+    _, kp = grp.kappa(multigroup.COLD_KT_EV, 1.0e-3)
+    lower = grp.edges_ev[:-1]
+    assert np.max(kp[(lower >= 2.0) & (lower < 11.0)]) < 0.1  # [m^2/kg]
+    assert np.min(kp[(lower >= 16.0) & (lower < 30.0)]) > 1e4  # ~40 Mb per atom
+
+
+@pytest.mark.parametrize("kt_ev", [0.3, 4.0, 80.0])
+def test_group_fractions_hold_all_of_sigma_t4(kt_ev: float) -> None:
+    edges = multigroup.load_tops_groups().edges_ev
+    assert multigroup.group_fractions(edges, kt_ev).sum() == pytest.approx(1.0, abs=1e-9)
+
+
+def test_multigroup_closes_and_tracks_gray() -> None:
+    """Per-group escape conserves energy, brackets itself, and stays near the gray answer."""
+    rho0, m = 1.0e-3, 1.0
+    planck = multigroup.collide_groups(rho0, m, emission="planck")
+    ross = multigroup.collide_groups(rho0, m, emission="rosseland")
+    gray = collide(ARGON, (3.0 * m / (4.0 * math.pi * rho0)) ** (1 / 3), 2.0, 66.0e3, rho0=rho0)
+    assert planck.closure == pytest.approx(1.0, abs=1e-4)
+    assert ross.f_rad <= planck.f_rad
+    assert planck.f_rad == pytest.approx(gray.f_rad, abs=0.1)
+    bands = (
+        planck.f_below_resonance
+        + planck.f_resonance_to_edge
+        + planck.f_edge_to_euv
+        + planck.f_above_euv
+    )
+    assert bands == pytest.approx(planck.f_rad, rel=1e-9)
+    assert planck.f_below_resonance < planck.f_through_cold_target < planck.f_rad
