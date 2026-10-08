@@ -666,7 +666,7 @@ design scaled by `2^(1/3)`: 212 m^3, ~7.6 m across at the bulge, throat 1.33 m^2
 | fallback wall: maraging band (barrier) + wrap | 68.8 t | same |
 | nozzle extension, area ratio 100 / 300 | 4.9 t (13.0 m exit) / 14.7 t (22.5 m exit) | the ledger's 2.19 t at 8.7 m, scaled by exit area |
 | throat insert, port window, plug feed, membranes | not estimated | |
-| **carried per pulse** | **~115-117 kg** methane, plug included, **+3.5-24 kg pitch** | `near_term` at 106 m^3 x2 (0.28 kg/m^3, ~46 bar at 7000 K); pitch scaled from the 20 m^3 wall heat |
+| **carried per pulse** | **~115-117 kg** methane, plug included, **+3.5-24 kg pitch** | `near_term` at 106 m^3 x2 (~0.55 kg/m^3, ~95 bar at 7000 K); pitch scaled from the 20 m^3 wall heat |
 | rod per pulse | 5 kg, delivered | |
 | net impulse per pulse | 906 / 971 kN s (AR 100 / 300) | `Isp_eff` 788 / 845 s on the carried charge and plug, head-on debit taken |
 
@@ -795,7 +795,7 @@ charged:
       plus 8.8 kg plug. With the §1 frozen-methane plug, so that only the rod is polyethylene, it
       is 115 kg. The pulse energy fixes the total either way.
     - The paper's 20 m^3 chamber needs **~146 kg** for the same 5 kg pulse (144 kg with a methane
-      plug), at ~496 bar. At 0.28 kg/m^3 more of the gas is dissociated and ionized, so each
+      plug), at ~496 bar. At ~0.55 kg/m^3 more of the gas is dissociated and ionized, so each
       kilogram holds 115-120 MJ at 7000 K, against 93 MJ at 3.8 kg/m^3. Both figures are 7000 K.
   - (Earlier analysis.) **Use two chambers on the departing stack.** The departure burn's finite-burn loss is
     +15-18% Δv at 1 Hz, +6-8% at 2 Hz and +2-3% at 4 Hz on a 500-600 t stack. Two chambers at
