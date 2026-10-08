@@ -9,7 +9,7 @@ import pytest
 
 from puffsat.xray_collision import eos
 from puffsat.xray_collision.fireball import Kinematics, collide, planck_above, shocked_state
-from puffsat.xray_collision.materials import ARGON, IRON
+from puffsat.xray_collision.materials import ARGON, CARBON, IRON
 
 
 @pytest.mark.parametrize("k", [1.0, 3.0, 10.0])
@@ -74,3 +74,21 @@ def test_opaque_limit_is_adiabatic() -> None:
     r = collide(IRON, 1.0e-2, 3.0, kappa_scale=1e-12)
     assert r.f_rad < 1e-6
     assert 0.3 * (4.0 * r.m_impactor) * r.v_exp**2 / r.heat == pytest.approx(1.0, abs=0.02)
+
+
+def test_radiation_adds_a_t4() -> None:
+    """With trapped radiation the table carries e += a T^4/rho and p += a T^4/3."""
+    plain = eos.build_table(CARBON)
+    rad = eos.build_table(CARBON, radiation=True)
+    rho, temp = 40.0, 470.0 * eos.EV / eos.K_B
+    u = eos.A_RAD * temp**4
+    assert rad.state(rho, temp)[0] - plain.state(rho, temp)[0] == pytest.approx(u / 3.0, rel=0.02)
+
+
+def test_near_sun_reproduces_the_parents_fireball() -> None:
+    """1 kg + 1 kg carbon foam at 10 kg/m^3 and 618 km/s: kT ~ 470 eV, mostly radiated."""
+    r = collide(CARBON, (3.0 / (4.0 * math.pi * 10.0)) ** (1 / 3), 1.0, 618.0e3, rho0=10.0)
+    assert r.kt_start_ev == pytest.approx(470.0, rel=0.05)
+    assert r.zbar_shock == pytest.approx(6.0, abs=0.05)
+    assert r.f_rad > 0.5
+    assert r.closure == pytest.approx(1.0, abs=1e-4)

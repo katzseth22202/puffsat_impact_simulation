@@ -1009,7 +1009,7 @@ walled-nozzle-test:
 
 # --- X-ray collision study (docs/xray_collision_study.md): the parent's X-ray pusher at 67 km/s ---
 
-## xray-collision-tops: re-pull the pure argon and pure iron TOPS gray means the fireball reads
+## xray-collision-tops: re-pull the pure argon, iron and carbon TOPS gray means the fireball reads
 ## (network). Pulled one after the other: concurrent TOPS submissions share server session state
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-test
@@ -1020,6 +1020,9 @@ xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. fe" \
 	    --mixname ironfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 30 --n-rho 60 \
 	    --out data/tables/tops/tops_iron_fireball_gray.html
+	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. c" \
+	    --mixname carbonfireball --t-up-kev 3 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
+	    --out data/tables/tops/tops_carbon_fireball_gray.html
 
 ## xray-collision: one-zone collision fireballs -> data/results/xray_collision/*.csv
 xray-collision:

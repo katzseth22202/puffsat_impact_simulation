@@ -11,6 +11,10 @@ dropped. With `lowering=True` every I_z is reduced by the ion-sphere amount
 under-ionization ideal Saha gives at condensed density. The lowered energy is charged the same
 way, which is not thermodynamically consistent and is good only as a bracket.
 
+With `radiation=True` the table adds trapped blackbody radiation, e += a T^4 / rho and
+p += a T^4 / 3. That is right for an opaque fireball and wrong for a thin one, whose photons
+leave, so it is a bracket. It matters only for the hot, dilute 618 km/s carbon case.
+
 The table is held in log rho and log T. `temp` inverts e(T) on an interpolated row, and `state`
 interpolates bilinearly (log p, zbar, log kappa).
 """
@@ -33,11 +37,12 @@ AMU = 1.66053906660e-27
 M_E = 9.1093837015e-31
 H_PLANCK = 6.62607015e-34
 E2_4PIEPS0_EV_M = 1.43996448e-9  # e^2 / (4 pi eps0) [eV m]
+A_RAD = 7.565733250e-16  # radiation constant 4 sigma / c [J m^-3 K^-4]
 
 RHO_RANGE = (1.0e-12, 1.0e5)  # [kg/m^3]
-T_RANGE_EV = (0.25, 400.0)
+T_RANGE_EV = (0.25, 5000.0)
 N_RHO = 141
-N_T = 221
+N_T = 301
 N_BISECT = 60
 
 
@@ -137,7 +142,7 @@ class EosTable:
 
 
 @lru_cache(maxsize=8)
-def build_table(mat: Material, lowering: bool = False) -> EosTable:
+def build_table(mat: Material, lowering: bool = False, radiation: bool = False) -> EosTable:
     """Tabulate `mat` on the module grid. TOPS means are held at the pull's edges."""
     rho_grid = np.geomspace(*RHO_RANGE, N_RHO)
     t_grid = np.geomspace(T_RANGE_EV[0], T_RANGE_EV[1], N_T) * EV / K_B
@@ -146,5 +151,9 @@ def build_table(mat: Material, lowering: bool = False) -> EosTable:
     z = np.empty((N_RHO, N_T))
     for i, rho in enumerate(rho_grid):
         p[i], e[i], z[i] = saha(mat, float(rho), t_grid, lowering)
+        if radiation:
+            u_rad = A_RAD * t_grid**4
+            p[i] += u_rad / 3.0
+            e[i] += u_rad / rho
     kr, kp = tops.resample(tops.load_tops_gray(mat.tops_pull), rho_grid, t_grid)
     return EosTable(mat, np.log(rho_grid), np.log(t_grid), np.log(p), e, z, np.log(kr), np.log(kp))

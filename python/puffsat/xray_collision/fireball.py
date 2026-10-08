@@ -35,7 +35,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from puffsat.xray_collision.eos import EV, K_B, EosTable, build_table
+from puffsat.xray_collision.eos import A_RAD, EV, K_B, EosTable, build_table
 from puffsat.xray_collision.materials import Material
 
 SIGMA_SB = 5.670374419e-8
@@ -44,6 +44,8 @@ T_STOP_EV = 0.5  # the TOPS/OPLIB floor; below it argon and iron are neutral and
 STEP_FRACTION = 0.02  # RK4 step as a fraction of min(hydro, radiative) time
 EUV_EV = 30.0
 XRAY_EV = 100.0
+HARD_EV = 1000.0
+V_REL_NEAR_SUN = 618.0e3  # closing speed of the parent's 4 solar radii dive
 
 
 @dataclass(frozen=True)
@@ -125,6 +127,7 @@ class CollisionResult:
     mass_ratio: float  # target / impactor
     v_rel: float  # [m/s]
     lowering: bool
+    radiation: bool  # trapped a T^4 in the EOS
     kappa_scale: float
     rho0: float  # starting density of both bodies [kg/m^3]
     m_impactor: float  # [kg]
@@ -140,7 +143,11 @@ class CollisionResult:
     f_rad: float
     f_euv: float  # photons above EUV_EV
     f_xray: float  # photons above XRAY_EV
+    f_hard: float  # photons above HARD_EV
+    f_xray_ph: float  # photons above XRAY_EV from a photosphere at T_ph (lower bound)
     kt_emit_ev: float  # luminosity-weighted zone kT
+    kt_emit_ph_ev: float  # luminosity-weighted photospheric kT
+    rad_to_matter0: float  # a T^4 / (rho e) at the start: does trapped radiation matter?
     v_exp: float  # final edge speed [m/s]
     closure: float  # (E_rad + E_kin + E_int) / Q, should be 1
     t_end: float  # [s]
@@ -154,16 +161,19 @@ class CollisionResult:
 def _derivs(
     y: tuple[float, ...], table: EosTable, mass: float, kappa_scale: float
 ) -> tuple[tuple[float, ...], float, float, float]:
-    """d/dt of (R, Rdot, E_int, E_rad, E_euv, E_xray, int L kT); also (T, p, hydro time)."""
+    """d/dt of (R, Rdot, E_int, E_rad, E_euv, E_xray, int L kT, E_hard, E_xray_ph, int L kT_ph);
+    also (T, L, hydro time)."""
     r, rdot, e_int = y[0], y[1], y[2]
     rho = mass / (4.0 / 3.0 * math.pi * r**3)
     temp = table.temp(rho, max(e_int, 0.0) / mass)
     p, _, kr, kp = table.state(rho, temp)
     kr *= kappa_scale
     kp *= kappa_scale
-    g = 1.0 / (1.0 + 1.0 / (4.0 / 3.0 * kp * rho * r) + 0.75 * kr * rho * 2.0 * r)
+    thick = 1.0 + 0.75 * kr * rho * 2.0 * r
+    g = 1.0 / (thick + 1.0 / (4.0 / 3.0 * kp * rho * r))
     lum = 4.0 * math.pi * r**2 * SIGMA_SB * temp**4 * g
     kt_ev = K_B * temp / EV
+    kt_ph_ev = kt_ev * thick**-0.25
     d = (
         rdot,
         20.0 * math.pi / 3.0 * r**2 * p / mass,
@@ -172,6 +182,9 @@ def _derivs(
         lum * planck_above(EUV_EV / kt_ev),
         lum * planck_above(XRAY_EV / kt_ev),
         lum * kt_ev,
+        lum * planck_above(HARD_EV / kt_ev),
+        lum * planck_above(XRAY_EV / kt_ph_ev),
+        lum * kt_ph_ev,
     )
     t_hydro = r / max(abs(rdot), math.sqrt(p / rho))
     return d, temp, lum, t_hydro
@@ -184,6 +197,7 @@ def collide(
     v_rel: float = V_REL_ROCKET,
     *,
     lowering: bool = False,
+    radiation: bool = False,
     kappa_scale: float = 1.0,
     rho0: float | None = None,
 ) -> CollisionResult:
@@ -191,8 +205,8 @@ def collide(
     at rest. Integrates the one-zone fireball (RK4) until it cools to T_STOP_EV.
 
     `rho0` overrides the starting density of both bodies (porous foam or spray); the default is
-    the condensed material."""
-    table = build_table(material, lowering)
+    the condensed material. `radiation` adds trapped a T^4 to the EOS."""
+    table = build_table(material, lowering, radiation)
     rho_start = material.rho0 if rho0 is None else rho0
     m_imp = 4.0 / 3.0 * math.pi * impactor_radius**3 * rho_start
     kin = Kinematics(m_imp, mass_ratio * m_imp, v_rel)
@@ -200,7 +214,7 @@ def collide(
     shock = shocked_state(table, 0.5 * v_rel, rho_start)
     r = (3.0 * mass / (4.0 * math.pi * shock.rho)) ** (1.0 / 3.0)
     q = kin.heat
-    y: tuple[float, ...] = (r, 0.0, q, 0.0, 0.0, 0.0, 0.0)
+    y: tuple[float, ...] = (r, 0.0, q, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
     temp0 = table.temp(shock.rho, q / mass)
     p0, z0, kr0, _ = table.state(shock.rho, temp0)
@@ -208,6 +222,7 @@ def collide(
     n_tot = (1.0 + z0) * shock.rho / (material.mass_amu * 1.66053906660e-27)
     flux0 = SIGMA_SB * temp0**4 / (1.0 + 0.75 * tau0)
     race0 = n_tot * K_B * temp0 * math.sqrt(5.0 / 3.0 * p0 / shock.rho) / (2.0 * flux0)
+    rad_to_matter0 = A_RAD * temp0**4 / (q / mass * shock.rho)
 
     t = 0.0
     while True:
@@ -237,6 +252,7 @@ def collide(
         mass_ratio=mass_ratio,
         v_rel=v_rel,
         lowering=lowering,
+        radiation=radiation,
         kappa_scale=kappa_scale,
         rho0=rho_start,
         m_impactor=m_imp,
@@ -252,7 +268,11 @@ def collide(
         f_rad=y[3] / q,
         f_euv=y[4] / q,
         f_xray=y[5] / q,
+        f_hard=y[7] / q,
+        f_xray_ph=y[8] / q,
         kt_emit_ev=y[6] / max(y[3], 1e-300),
+        kt_emit_ph_ev=y[9] / max(y[3], 1e-300),
+        rad_to_matter0=rad_to_matter0,
         v_exp=y[1],
         closure=(y[3] + e_kin + y[2]) / q,
         t_end=t,

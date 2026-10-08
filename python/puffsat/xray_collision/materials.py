@@ -6,7 +6,8 @@ ionization-energy query (physics.nist.gov/cgi-bin/ASD/ie.pl), retrieved 2026-10-
 ladder matches `puffsat.water_plate.spray_eos.IP_AR_EV` (retrieved 2026-10-05).
 
 Opacities are TOPS (LANL OPLIB) gray Rosseland/Planck means for the pure element, pulled over
-rho 1e-9..20-30 g/cc and T 0.5-60 eV (`make xray-collision-tops`).
+rho 1e-9..20-30 g/cc and T 0.5-60 eV for argon and iron, 0.5 eV-3 keV for carbon (the parent's
+618 km/s fireball) (`make xray-collision-tops`).
 """
 
 from __future__ import annotations
@@ -91,4 +92,13 @@ IRON = Material(
     tops_pull=Path("data/tables/tops/tops_iron_fireball_gray.html"),
 )
 
-MATERIALS = {m.name: m for m in (ARGON, IRON)}
+CARBON = Material(
+    name="carbon",
+    mass_amu=12.011,
+    rho0=2200.0,  # graphite; the parent's foam starts are passed as `rho0` overrides
+    ip_ev=(11.2602880, 24.383143, 47.88778, 64.49352, 392.09056, 489.99320779),
+    g_ground=(1, 2, 1, 2, 1, 2, 1),
+    tops_pull=Path("data/tables/tops/tops_carbon_fireball_gray.html"),
+)
+
+MATERIALS = {m.name: m for m in (ARGON, IRON, CARBON)}

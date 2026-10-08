@@ -12,6 +12,11 @@ helping. Both Saha variants, opacity 0.1-10x. Goal: 80% of the heat leaving as l
 
 `porous_k3.csv`: the same 3:1 collision started from foam or spray density rather than condensed
 matter, to find where the 80% line actually is.
+
+`near_sun.csv`: the parent's own pass-through pusher case, a 1 kg carbon projectile on a 1 kg
+carbon target at 618 km/s. It runs over foam densities of 10, 30 and 100 kg/m^3 and solid
+graphite, opacity 0.1-10x, with and without trapped radiation in the EOS. It checks the parent's
+assumed 60% radiated fraction.
 """
 
 from __future__ import annotations
@@ -22,8 +27,8 @@ import math
 from collections.abc import Iterable
 from pathlib import Path
 
-from puffsat.xray_collision.fireball import CollisionResult, collide
-from puffsat.xray_collision.materials import ARGON, IRON, Material
+from puffsat.xray_collision.fireball import V_REL_NEAR_SUN, CollisionResult, collide
+from puffsat.xray_collision.materials import ARGON, CARBON, IRON, Material
 
 OUT_DIR = Path("data/results/xray_collision")
 BALL_MASS = 10.0  # [kg], baseline
@@ -34,10 +39,13 @@ EXTENDED_RADII = (1.0e-4, 1.0e-5, 1.0e-6, 1.0e-7)  # [m]
 POROUS_RHO0 = (100.0, 10.0, 1.0, 0.1, 0.01, 1.0e-3)  # [kg/m^3]
 POROUS_RADII = (1.0e-3, 1.0e-2, 1.0e-1, 1.0)  # [m]
 TARGET_SHARE = 0.8
+NEAR_SUN_MASS = 1.0  # [kg] each, the parent's pass-through projectile and target
+NEAR_SUN_RHO0 = (10.0, 30.0, 100.0, CARBON.rho0)  # [kg/m^3]: the parent's foams and graphite
 
 
-def radius_for_mass(mat: Material, mass: float) -> float:
-    return float((3.0 * mass / (4.0 * math.pi * mat.rho0)) ** (1.0 / 3.0))
+def radius_for_mass(mat: Material, mass: float, rho0: float | None = None) -> float:
+    rho = mat.rho0 if rho0 is None else rho0
+    return float((3.0 * mass / (4.0 * math.pi * rho)) ** (1.0 / 3.0))
 
 
 def write_csv(path: Path, rows: Iterable[CollisionResult]) -> list[CollisionResult]:
@@ -99,6 +107,38 @@ def porous_k3() -> list[CollisionResult]:
     ]
 
 
+def near_sun() -> list[CollisionResult]:
+    """The parent's 618 km/s carbon pass-through collision, k = 1."""
+    return [
+        collide(
+            CARBON,
+            radius_for_mass(CARBON, NEAR_SUN_MASS, rho0),
+            1.0,
+            V_REL_NEAR_SUN,
+            rho0=rho0,
+            kappa_scale=ks,
+            radiation=rad,
+        )
+        for rad in (False, True)
+        for rho0 in NEAR_SUN_RHO0
+        for ks in (0.1, 1.0, 10.0)
+    ]
+
+
+def show_near_sun(rows: Iterable[CollisionResult]) -> None:
+    print(
+        f"  {'a T^4':6} {'rho0':>6} {'kappa':>5} {'R0 cm':>6} {'kT0':>5} {'tau0':>8} "
+        f"{'race0':>8} {'f_rad':>6} {'>100eV':>13} {'>1keV':>6} {'kT_emit':>11}"
+    )
+    for r in rows:
+        print(
+            f"  {'in' if r.radiation else 'out':6} {r.rho0:>6g} {r.kappa_scale:>5g} "
+            f"{100 * r.r0:>6.1f} {r.kt_start_ev:>5.0f} {r.tau0:>8.2e} {r.race0:>8.2e} "
+            f"{r.f_rad:>6.3f} {r.f_xray_ph:>6.3f}-{r.f_xray:<6.3f} {r.f_hard:>6.3f} "
+            f"{r.kt_emit_ph_ev:>5.0f}-{r.kt_emit_ev:<5.0f}"
+        )
+
+
 def reaching(rows: Iterable[CollisionResult]) -> list[CollisionResult]:
     return [r for r in rows if r.f_rad >= TARGET_SHARE]
 
@@ -125,6 +165,10 @@ def main() -> None:
             f"    {r.material} rho0 = {r.rho0:g} kg/m^3, r = {r.impactor_radius:g} m, "
             f"m = {r.m_impactor:.1e} kg: f_rad = {r.f_rad:.2f}, above 100 eV {r.f_xray:.1e}"
         )
+
+    print("\n== near Sun: 1 kg carbon on 1 kg carbon at 618 km/s (the parent's pass-through case)")
+    print("  (>100 eV and kT_emit: photosphere-zone bounds)")
+    show_near_sun(write_csv(OUT_DIR / "near_sun.csv", near_sun()))
 
 
 if __name__ == "__main__":

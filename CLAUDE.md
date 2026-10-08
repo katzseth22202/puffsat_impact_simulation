@@ -49,8 +49,8 @@ Its **argon arm** (tapered 20 m plate, 150 t plate at `k = 8.52`, necklace charg
 and child repos is [`docs/argon_plate_handoff.md`](docs/argon_plate_handoff.md).
 
 The **X-ray collision study** transplants the parent's X-ray pusher to the rocket case, a
-67 km/s ship-frame collision. It asks what share of a collision's heat leaves as light, and at
-what photon energy. Scope and results: [`docs/xray_collision_study.md`](docs/xray_collision_study.md).
+67 km/s ship-frame collision, and checks the parent's own 618 km/s carbon case. It asks what
+share of a collision's heat leaves as light, and at what photon energy. Scope and results: [`docs/xray_collision_study.md`](docs/xray_collision_study.md).
 Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`), outputs are under
 `data/results/xray_collision/`, and targets are `make xray-collision`, `make xray-collision-test`
 and `make xray-collision-tops`.

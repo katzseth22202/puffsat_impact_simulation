@@ -15,7 +15,7 @@ nozzle. Its Python is `python/puffsat/xray_collision/`, its outputs are under
 ## Model
 
 Everything is one-zone, and everything is called through
-`fireball.collide(material, impactor_radius, mass_ratio, v_rel, lowering=, kappa_scale=, rho0=)`.
+`fireball.collide(material, impactor_radius, mass_ratio, v_rel, lowering=, radiation=, kappa_scale=, rho0=)`.
 
 - **Kinematics (ship frame).** An impactor of mass `m` hits a resting target of `k m`. Only the
   reduced-mass energy `Q = (1/2) mu v_rel^2` can become heat, which is `k/(1+k)` of the
@@ -145,6 +145,43 @@ density, if each element's plume merges with its neighbours' before it radiates.
 re-thermalization is the mechanism that would make a lattice work, and this one-zone model cannot
 see it. Collisionality also has to be checked. At 1e-2 kg/m^3 the two streams may interpenetrate
 rather than shock.
+
+## Result 4: the parent's 618 km/s carbon case -- `near_sun.csv`
+
+This is the parent's pass-through pusher as written: a 1 kg carbon-foam projectile meets a 1 kg
+carbon-foam target (k = 1) at 618 km/s. The material is carbon (NIST ladder, TOPS pull to 3 keV).
+The rows bracket trapped radiation in the EOS (`a T^4` in or out) and scale the opacity by 0.1-10.
+The two `>100 eV` and `kT_emit` values are the photosphere and zone bounds.
+
+| foam rho0 | kT0 | tau0 (x1) | f_rad, opacity x0.1 / x1 / x10 | >100 eV (x1) | >1 keV (x1) | kT_emit (x1) |
+|---|---|---|---|---|---|---|
+| 10 kg/m^3 | 390-470 eV | 0.9-1.4 | 0.70 / **0.59-0.61** / 0.45-0.48 | 0.53-0.57 | 0.25-0.28 | 180-280 eV |
+| 30 kg/m^3 | 430-470 eV | 2.9-3.9 | 0.57 / 0.43-0.45 / 0.26-0.29 | 0.39-0.43 | 0.23-0.25 | 180-320 eV |
+| 100 kg/m^3 | 450-470 eV | 13-15 | 0.39 / 0.22-0.23 / 0.07-0.08 | 0.20-0.22 | 0.13-0.14 | 160-355 eV |
+| graphite, 2200 | 490 eV | ~860 | 0.01 / 0.004 / 0.003 | 0.001 | 0.001 | 17-86 eV |
+
+**The parent's assumption holds for its stated design.** At 10 kg/m^3 the model reproduces the
+parent's 470 eV (468 eV) and its assumed 60% radiated (59-61%). More than 90% of that light is
+above 100 eV, and about 45% is above 1 keV. These are soft X-rays, as the parent says. The margin
+is thin, though. 30 kg/m^3 gives 43-45%, 100 kg/m^3 gives 22-23%, and solid graphite gives 0.4%.
+Ten times TOPS's opacity drops even the 10 kg/m^3 case to 45-48%. So "the lightest foam that still
+holds together" is a requirement, not a preference. Trapped radiation (`a T^4` is 14-30% of the
+matter energy at 10 kg/m^3) moves the result by only 1-2 points.
+
+**The opacity is not what the parent guessed, and the mechanism differs.** TOPS gives fully stripped
+carbon at the start state (46 kg/m^3, 468 eV) kR = 0.04 and kP = 0.18 m^2/kg, which is 25-250x below
+the parent's 1-10 m^2/kg bracket. The fireball starts about one optical depth thick. Bremsstrahlung
+from a thin plasma is weak, so the race is closer than the parent's `sigma T^4/(1 + 3/4 tau)`
+suggests. The parent's formula saturates at a full blackbody when thin, and its race of
+0.004-0.009 would imply that nearly everything radiates. Most of the light comes as the fireball
+cools through ~100-300 eV and K-shell recombination switches on. At 200 eV kP = 9 m^2/kg, which is
+where the parent's bracket is right.
+
+**Not checked here.** The shock heats ions first. Electrons are heated by electron-ion equilibration,
+estimated at ~50 ns at 470 eV and 1.4e22 cm^-3, against ~1 us for expansion. That is fast enough
+to keep the radiated share, but electrons running cooler than ions would soften the spectrum.
+Non-LTE emission at these densities and the collisionality of foam on foam at 309 km/s each
+(parent §needle_through_fog) are also open.
 
 ## Limits
 
