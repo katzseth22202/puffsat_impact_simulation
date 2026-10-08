@@ -118,9 +118,21 @@ pores are assumed to collapse fully onto the plasma EOS.
   1e-3 kg/m^2. Thicker, and the light is trapped. Much thinner (argon or iron at 1e-3 kg/m^3 and
   1 mm), and the zone is too dilute to emit before it flies apart.
 
-The bodies that pass hold nanograms to 4 grams each. A kilogram-scale pulse would have to be
-spread as a sheet of about 1e-3 kg/m^2 per pulse, roughly 1e3-1e4 m^2 per kilogram, so that its
-light escapes through the faces.
+The passing bodies in this grid hold 4 ug to 4 g. That is a property of the grid, not a limit.
+What has to stay small is the column, not the mass. With the column held fixed and the cloud made
+larger and thinner, the share only rises:
+
+| column [kg/m^2] | r = 1 cm | 10 cm | 1 m | 10 m | 50 m |
+|---|---|---|---|---|---|
+| 1e-4, argon / iron | 0.82 / 0.91 | 0.94 / 0.98 | 0.98 / 0.99 | 0.99 / 0.98 | 0.99 / 0.98 |
+| 1e-3, argon / iron | 0.45 / 0.58 | 0.74 / 0.84 | 0.97 / 0.95 | 0.99 / 0.99 | 0.99 / 0.99 |
+
+At 1e-3 kg/m^2, a 50 m cloud (2e-5 kg/m^3) holds a 10.5 kg impactor and radiates 99% of its heat.
+The cost is softer light: kT_emit falls from ~5 eV to ~3 eV, and the share above 30 eV from ~15%
+to 3-6%. That is because more of the heat goes into ionization at low density. So the
+requirement is a tenuous cloud, or a sheet of about 1e-3 kg/m^2, not a small piece of foam. Those
+densities sit far below any solid foam (the lightest aerogels are ~0.2-1 kg/m^3). The medium is a
+gas, vapour or dust cloud, or a lattice whose mean density is that low.
 
 **Even then the light is EUV, not X-ray.** Low density moves heat into ionization, so the zone
 starts at only 6-8 eV and emits at kT 4-6 eV (peak photon ~12-17 eV). 10-20% of the heat comes
