@@ -20,7 +20,8 @@ Reproduce:
 | shape | domed port head, r 1.4 m; a bulge to **r 3.0 m** around the plug (z 1.4-2.8 m), opened over 0.5 m and closed by a **3 m taper**; a long 12° cone to the throat. **~106 m^3, ~6 m across** |
 | wall | a **10 mm Cr-Mo shell** (gas-tight boundary, pitch substrate) under a **dry (unbonded) Kevlar 49 wrap**, 72-199 mm by zone. **~25-27 t.** Pitch on the steel; a thin alumina film as defence in depth |
 | rate | **2 Hz per chamber**, throat scaled to the volume (`V/A*` ~134-160 m) |
-| count | two 2.5 kg chambers, or one 5 kg chamber (212 m^3) at the same wall mass |
+| count | **one 5 kg chamber** (decided 2026-10-08): 212 m^3, ~7.6 m across, wall 48.2 t, ~53-63 t with the nozzle extension (§3h) |
+| stack | 500-600 t departing; ~2,000-2,650 pulses, 17-21 min; finite-burn loss +3-5% Δv |
 | cost | ~-7% impulse per rod against 40 m^3 (~-11% against 20 m^3); effective Isp ~flat |
 
 **How the study got there:**
@@ -49,9 +50,11 @@ Reproduce:
 5. **Volume costs chemistry, not steel** (§3f). The steady-load steel is fixed by `p V`, so it
    does not grow with volume; the wall thins. What grows is area: pitch, barrier, inspection.
    Early escape of unthermalized gas costs only ~0.4% (§3g).
-6. **Rate and count** (§3g): 4 Hz is refill-limited, so use 2 Hz per chamber. On a 500-600 t
-   stack the departure burn's finite-burn loss is +6-8% at 2 Hz. Two chambers, or one 5 kg
-   chamber, recover the 4 Hz figure of +2-3%. 10,000 K does not pay; keep 7000 K.
+6. **Rate and count** (§3g, §3h): 4 Hz is refill-limited, so use 2 Hz per chamber.
+   - One 5 kg chamber matches two 2.5 kg chambers on wall mass, with 21% less area and one set
+     of hardware.
+   - On the 500-600 t stack, at net thrust, its finite-burn loss is +3-5% Δv.
+   - 10,000 K does not pay; keep 7000 K.
 7. **The liquid-share spray does not soften the wall shocks** (§3). The drops equilibrate in
    microseconds and pay the gas's toll. Spend the liquid as plug mass.
 8. **The hydrogen chamber at this pulse size is unresolved.** It has not been run with the rod
@@ -602,7 +605,9 @@ Fraction of the charge left when the next rod arrives (methane 7,000 K, `near_te
 - So assuming full thermalization in the volume trade is sound. A bigger chamber gains nothing
   from thermalizing faster; its cost remains the lower-pressure chemistry.
 
-**The pulse rate sets the departure burn's Oberth loss.** A finite burn centred on the 600 km
+**The pulse rate sets the departure burn's Oberth loss.** *(Corrected in §3h: the table below
+uses gross exhaust momentum, ~644 kN s per pulse. The head-on rod debit leaves ~450-490 kN s, so
+the thrust is ~30% lower and the losses higher; one 5 kg chamber at 2 Hz gives +3-5%.)* A finite burn centred on the 600 km
 periapsis of the turnaround ellipse (613,000 km apoapsis), 5.43 km/s, ~644 kN s per pulse,
 constant thrust along the velocity, on the paper's 500-600 t departing stacks:
 
@@ -648,6 +653,42 @@ chamber keeping the 0.5 s it needs to empty and refill.**
 - **Unchecked for the dry wrap: spall of its 10 mm liner.** Its back face rides on an unbonded
   wrap, close to a free surface, and the plug-band spikes (2-4 µs) are about its 3.4 µs round
   trip.
+
+## 3h. The chosen configuration and its masses (decided 2026-10-08)
+
+**Decision:** a 500-600 t departing stack and **one 5 kg chamber** at 2 Hz. It is the r 3.0 m
+design scaled by `2^(1/3)`: 212 m^3, ~7.6 m across at the bulge, throat 1.33 m^2
+(`V/A* = 160 m`).
+
+| item | mass | basis |
+|---|---|---|
+| wall: dry Kevlar 49 over a 10 mm Cr-Mo shell | **48.2 t** (52.9 t on the 0.5 cm history) | `wall_zones --energy 2 --suffix fine`; worst fling 1.91% against 2.4% (1.26x) |
+| fallback wall: maraging band (barrier) + wrap | 68.8 t | same |
+| nozzle extension, area ratio 100 / 300 | 4.9 t (13.0 m exit) / 14.7 t (22.5 m exit) | the ledger's 2.19 t at 8.7 m, scaled by exit area |
+| throat insert, port window, plug feed, membranes | not estimated | |
+| **carried per pulse** | **~117 kg** charge and plug (a 20 kg plug), **+3.5-24 kg pitch** | `near_term` at 106 m^3 x2; pitch scaled from the 20 m^3 wall heat |
+| rod per pulse | 5 kg, delivered | |
+| net impulse per pulse | 906 / 971 kN s (AR 100 / 300) | `Isp_eff` 788 / 845 s on the carried charge and plug, head-on debit taken |
+
+The departure burn, 5.43 km/s at the 600 km periapsis, constant thrust at 2 Hz, finite burn
+charged:
+
+| stack | thrust | burn | extra Δv (finite burn) | consumed | pulses |
+|---|---|---|---|---|---|
+| 500 t | 1.81-1.94 MN | 16-18 min | +167-196 m/s (3.1-3.6%) | 251-291 t | ~2,000-2,200 |
+| 600 t | 1.81-1.94 MN | 19-21 min | +225-262 m/s (4.1-4.8%) | 304-352 t | ~2,400-2,650 |
+
+- **The chamber hardware is ~53-63 t:** wall plus extension, ~10% of the stack. The paper's
+  ledger has a 19 t bonded-overwrap wall and a 2.19 t extension per 2.5 kg chamber.
+- **~2,000-2,650 pulses per departure,** about half the 4,200 the wall was checked for. The
+  fatigue and crack margins grow.
+- **The finite-burn loss is 3-5%, not the 2-3% quoted earlier in §3g.** That figure used gross
+  exhaust momentum (~644 kN s per 2.5 kg pulse). The rod arrives head-on, so the net is
+  ~450-490 kN s per 2.5 kg pulse.
+- **Pitch is the widest uncertainty:** 7-60 t per departure between the low and high
+  wall-heat edges. Its high edge comes from the gas's radiation, which the solved wall heat does
+  not yet resolve.
+- **Area ratio 300 is worth ~5% impulse but needs a ~22 m exit**, against ~13 m at 100.
 
 ## 4. Limits
 
@@ -746,7 +787,10 @@ chamber keeping the 0.5 s it needs to empty and refill.**
   - 4 Hz per chamber is refill-limited: plug placement in ~4,000 K residue, recharge, and the
     throat membrane reseal. Propose **2 Hz per chamber**, with the throat scaled to the volume
     (`V/A*` ~134-160 m).
-  - **Use two chambers on the departing stack.** The departure burn's finite-burn loss is
+  - **Decided: one 5 kg chamber on a 500-600 t stack (§3h).** The masses are there: ~53-63 t of
+    hardware, ~117 kg carried per pulse plus pitch, ~2,000-2,650 pulses, +3-5% finite-burn
+    loss at net thrust.
+  - (Earlier analysis.) **Use two chambers on the departing stack.** The departure burn's finite-burn loss is
     +15-18% Δv at 1 Hz, +6-8% at 2 Hz and +2-3% at 4 Hz on a 500-600 t stack. Two chambers at
     2 Hz recover the 4 Hz figure, and each still has 0.5 s to empty.
   - **One 5 kg chamber matches two 2.5 kg chambers on wall mass** (52.9 against 54.6 t,
@@ -763,7 +807,8 @@ chamber keeping the 0.5 s it needs to empty and refill.**
       Scale from the survivable walls.
   - List the refill sequence at the chosen rate as an open engineering item: plug dwell in the
     residue, mist timing, membrane reseal.
-  - **Reconcile the departing mass per chamber.** 630-780 pulses (159-194 s at 4 Hz) is a
+  - **Reconcile the departing mass per chamber** (resolved here as 500-600 t; the paper's
+    630-780 pulses should become ~2,000-2,650 five-kilogram pulses). 630-780 pulses (159-194 s at 4 Hz) is a
     ~100 t craft, while the growth ledger departs 500-600 t stacks (~4,000-4,300 pulses). The
     finite-burn loss, the chamber count and the fatigue budget all depend on which.
 - **Confirmations the paper can cite.**
