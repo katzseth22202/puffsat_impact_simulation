@@ -189,7 +189,10 @@ Suppose the projectile has to be dense to survive its trip, while the ship's tar
 carbon lattice deployed briefly. `fireball.piston` models a dense 1 kg graphite projectile
 snowplowing `k` kg of a target at mean density `rho0`. In a snowplow each swept kilogram absorbs
 `u^2/2` at the current speed, so **all of the heat Q lands in the light target**. The projectile
-is only compressed by the ram pressure (~4 Mbar at 10 kg/m^3), which this model neglects. Rows
+is only compressed by the ram pressure, which this model neglects. At 10 kg/m^3 that is ~50 Mbar
+at 618 km/s (the Hugoniot; `rho0 v^2` alone is 38 Mbar), falling to ~5 Mbar at 206 km/s. One shock
+at 50 Mbar puts ~0.8 GJ/kg into graphite, under 1% of Q. At that pressure the disk flows like a
+liquid, though, and rim relief runs 10-20 cm inward during the sweep (see Limits). Rows
 marked `both` are the foam-on-foam collision for comparison.
 
 | k | rho0 | foam on foam: f_rad / light per KE | dense into lattice: f_rad / light per KE | column length (lattice) |
@@ -205,7 +208,7 @@ The column length is the target length a 4.8 cm graphite ball must sweep: `k m /
 
 - **A dense projectile helps rather than hurts.** The heat sits in the dilute target alone, which
   runs at 1030 eV instead of 470 eV (k = 1). At 10 kg/m^3 the radiated share rises from 61% to 81%,
-  with 60% of the heat above 1 keV.
+  with 60% of the heat (73% of the light) above 1 keV.
 - **Mean density matters, not surface area.** A lattice behaves as a foam at its mean density once
   the shock merges its struts. Shrinking a 10 kg/m^3 foam fireball from 1 kg to 0.01 kg (more
   surface per mass) only moves 61% to 68%. Going from 10 to 1 kg/m^3 moves it to 86%.
@@ -221,6 +224,20 @@ The column length is the target length a 4.8 cm graphite ball must sweep: `k m /
   sky.
 
 ## Limits
+
+**The piston's heat goes in over the sweep, not at once.** This is the largest unmodelled effect
+in Result 5. The one-zone k = 2 fireball radiates 50% of Q by 10 ns, 61% by 0.1 us and 65% by
+1 us. The dense disk takes ~5 us to sweep its 1.6 m column (`L (1 + k/2) / v`). In reality early
+target mass is shocked at 618 km/s to ~2.2 keV and late mass at 206 km/s to ~160 eV. Each
+parcel's thin cooling time at its Hugoniot state is 0.2-6 ns, so it radiates almost as it is
+shocked, while the ram pressure holds it against the disk. Confinement removes the expansion
+loss, so the radiated share probably rises. The spectrum becomes a sweep-weighted mix of
+parcel temperatures rather than one cooling zone, and the k = 2 optimum may move. Two related
+geometric effects are open. The unswept lattice ahead is optically thick to this light: cold
+carbon absorbs ~200 m^2/kg at 1 keV against a column of up to 16 kg/m^2. Forward light
+therefore preheats the lattice rather than escaping, so escape is sideways past the disk's
+rim. Also, at 5-50 Mbar the 3.6 mm disk flows, and rim relief moves 10-20 cm inward (half its
+radius) during the sweep, so it does not stay a flat rigid plate.
 
 One zone, so there is no cool photosphere and no temperature gradient. For k > 1 the shock decays
 into the target, and the one-zone mean heat stands in for a graded heating. A collision of two balls

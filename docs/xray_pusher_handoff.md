@@ -10,6 +10,15 @@ NIST ionization energies, TOPS (LANL OPLIB) gray opacities for pure carbon, Rank
 starting states, and homologous expansion with a thin/thick luminosity bridge. Expect factor-of-
 order-unity errors in geometry and spectrum, not order-of-magnitude ones.
 
+**Corrections after the parent's review.**
+- The ram pressure on the projectile at 10 kg/m^3 is ~50 Mbar at 618 km/s, falling to ~5 Mbar at
+  206 km/s, not ~4 Mbar (that was the 1 kg/m^3 value). It heats the graphite by under 1% of the
+  heat, so the ledger stands. The disk flows at these pressures (see "Not modelled").
+- Commit 1bc3143's message says "60% of it above 1 keV". It means 60% of the heat (57 of
+  95.5 GJ, dense into 10 kg/m^3 at k = 1), which is 73% of the light.
+- The one-zone model radiates most of the heat within 0.1 us, while the disk takes ~5 us to sweep
+  its column. This time-graded heating is now the first item under "Not modelled".
+
 ## Recommendation
 
 1. **Projectile: dense carbon, flattened.** Use graphite or carbon-carbon rather than foam, so it
@@ -63,7 +72,7 @@ wins for two other reasons.
 2. **A dense projectile puts all the heat into the lattice.** A dense body sweeping a light
    medium is a snowplow. Each swept kilogram absorbs `u^2/2` at the current speed, so the whole
    collision heat lands in the target and almost none in the projectile. The projectile is only
-   compressed by the ~4 Mbar ram pressure. The dilute target alone holds the heat, so it starts at
+   compressed by the ram pressure (~50 Mbar at the start, ~5 Mbar at the end). The dilute target alone holds the heat, so it starts at
    ~1030 eV (k = 1) instead of the 470 eV of foam on foam, which shares the heat with the
    projectile's own mass. Hotter and thinner both mean faster emission.
 
@@ -134,8 +143,22 @@ as a sphere, which slightly understates escape.
 - **Electron-ion equilibration.** The shock heats ions first. It takes an estimated ~50 ns at
   470 eV and 1.4e22 cm^-3, against ~1 us of expansion, so the radiated share should survive.
   Electrons running cooler than ions would soften the spectrum.
-- **The projectile shadows and absorbs part of the light** while the hot layer is pressed against
-  it, and the ram pressure heats the projectile by a few percent of the heat. Neither is included.
+- **Time-graded heating under confinement (the largest open effect).** The one-zone k = 2 fireball
+  radiates 61% of Q within 0.1 us and 65% by 1 us. The disk takes ~5 us to sweep its 1.6 m
+  column. Early target mass is shocked at 618 km/s to ~2.2 keV and late mass at 206 km/s to
+  ~160 eV. Each parcel's thin cooling time is 0.2-6 ns, so it radiates almost as it is shocked,
+  while the ram pressure holds it against the disk. The radiated share probably rises because
+  confinement blocks the expansion loss. The spectrum (the 54 GJ above 1 keV) and the k = 2
+  optimum could shift. The ledger above does not capture this.
+- **Where the light escapes.** The unswept lattice ahead is optically thick to keV photons
+  (cold carbon ~200 m^2/kg at 1 keV, column up to 16 kg/m^2). Forward light preheats it rather
+  than leaving, and the disk blocks the rear, so escape is mainly sideways past the rim. The
+  projectile also absorbs part of the light while the hot layer is pressed against it.
+- **The disk under ram pressure.** The pressure is ~50 Mbar at 618 km/s and ~5 Mbar at 206 km/s.
+  One shock at 50 Mbar puts ~0.8 GJ/kg into graphite, under 1% of the heat, so the energy ledger
+  stands. At these pressures the 3.6 mm disk flows like a liquid, though. Rim relief moves
+  10-20 cm inward during the sweep, half the disk's radius, so it does not stay a flat rigid
+  plate.
 - **Non-LTE emission and two-temperature effects** at these densities.
 - **The disk's thermal and structural survival,** and the lattice's survival when its struts
   shade each other, are hand estimates only.
