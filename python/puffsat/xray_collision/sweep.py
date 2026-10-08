@@ -134,7 +134,7 @@ TARGET_K = (1.0, 2.0, 3.0, 5.0)
 
 
 def near_sun_target() -> list[CollisionResult]:
-    """Foam on foam (`heated` both) and dense projectile into lattice (`heated` target), 618 km/s."""
+    """Foam on foam (`heated` both) vs dense projectile into lattice (`heated` target)."""
     rows = []
     for k in TARGET_K:
         for rho0 in TARGET_RHO0:
