@@ -52,6 +52,13 @@ face-pressure results carry over per unit area except where marked.
 - **The floor slides inside a skirt fixed to the vehicle,** like a piston, so the skirt never takes
   the floor's kick. The skirt and the bowl's steep band carry hoop tension in a carbon wrap (P10).
 - **Maraging steel, tapered, aimed to 10 cm.** The face allowable is 2.5 GPa (P2, P3, P12).
+  - **Maraging 300, not 350** (twice the toughness).
+  - **A sub-micron alumina film** under the pitch keeps the PuffSat's hydrogen out.
+  - **The merge is a structural requirement:** the merged pulse leaves the floor out of
+    tension, while an unmerged pulse kills it in fatigue.
+  - If the film cannot be qualified, A-286 or NASA-HR1 carry the merged pulse, at the cost of
+    fault tolerance (P12).
+  - The skirt's wrap does not delaminate (P10).
 - **A thick ablative film, ~225-300 µm standing, preferably pitch.** A thermal map after each
   pulse shows where it has thinned, and the respray goes only there (P5).
 - **Two designs (P11).** The spray cup flies first at η_jet = 0.6 (0.57 unmixed to 0.67 fully
