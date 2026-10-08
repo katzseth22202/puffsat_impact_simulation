@@ -53,7 +53,9 @@ The **X-ray collision study** transplants the parent's X-ray pusher to the rocke
 share of a collision's heat leaves as light, and at what photon energy. Scope and results: [`docs/xray_collision_study.md`](docs/xray_collision_study.md).
 Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`), outputs are under
 `data/results/xray_collision/`, and targets are `make xray-collision`, `make xray-collision-test`
-and `make xray-collision-tops`.
+and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
+(lattice target, k = 2, per-projectile light and kinetic energy) is
+[`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md).
 
 ## Architecture (settled)
 
