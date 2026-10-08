@@ -1,6 +1,14 @@
 # Walled nozzle: fatigue, spall and overwrap delamination of the autofrettaged chamber wall
 
-Status: analysis note, 2026-10-06. Checks the parent's layered, autofrettaged wall
+Status: analysis note, 2026-10-06. **Superseded for the chamber's design by
+[`walled_nozzle_chamber_blast.md`](walled_nozzle_chamber_blast.md) (§1, §3d, 2026-10-08).**
+- The layered overwrap wall checked here delaminates. The design is now a dry Kevlar wrap over a
+  thin Cr-Mo shell on a bulged chamber.
+- The life requirement is ~4,200 pulses (a 500-600 t stack), not 630-780; the parent's two
+  figures are inconsistent (chamber note §3g).
+- The crack-growth and wave methods here are reused there.
+
+Original status: Checks the parent's layered, autofrettaged wall
 (`sec:carbon_overwrap`, `tab:layered_wall_mass`) for the 20 m^3 near-term chambers of the 2.5 kg
 rod: hydrogen at 5500 K (818 bar) and methane at 7000 K (496 bar).
 

@@ -231,6 +231,18 @@ Sized inside the ledger's 150 t at 12 MN·s, k = 8.52, with carbon hoop wrap at 
   or a labyrinth vented outward, away from the gas bags. Only the floor is sprung (P14).
 - A flared, bell-like wall did no better than a straight skirt, an inward lip did worse, and a
   taller skirt adds ~1%.
+- **The skirt's wrap does not delaminate (solved 2026-10-07; `docs/spray_plate_fatigue_and_spall.md`
+  §2b).** The skirt is a 4 mm maraging liner wrapped in carbon or aramid. The chamber study found
+  that a bonded wrap can peel under a sharp reflected spike, so each skirt row's solved pressure
+  history was run through the same layered wave model:
+  - The skirt carries the merged gas's spreading push, 5.5-9.5 MPa rising over 0.5-1.1 ms.
+  - A stress wave crosses the wrap ~10x faster than that, so little reflects as tension:
+    0.2-4.0 MPa against the 64 MPa resin (≤0.06x).
+  - Even an instantaneous front reflects at most about its own amplitude, ~10 MPa.
+  - The skirt is safe for the merged pulse. A failed merge, not checked, would have to load it
+    ~6-7x harder to reach the resin.
+  - Its liner meets the PuffSat's hydrogen like the face, so it takes the same alumina film
+    (P12).
 - **A bare plate cannot use a tamper instead (solved).** On a flat plate or a d/D 0.10 dish, a
   trailing pearl or a thin stand-off layer lowers the impulse or leaves it unchanged. A bare plate
   loses its impulse to sideways spill, and a tamper pushes the gas back down, so it holds the hot

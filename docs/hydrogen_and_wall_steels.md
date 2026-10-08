@@ -81,6 +81,18 @@ on the ASME CC2938 crack-growth curves, which is what `chamber_fatigue.py` alrea
 3. Either way, the paper's P12 should say maraging is "extreme" in hydrogen, and that the face
    needs a barrier or a different alloy.
 
+**Walled chambers. Superseded 2026-10-08 by `walled_nozzle_chamber_blast.md` §1 and §3d.** The
+design is now a 10 mm Cr-Mo shell under a dry Kevlar wrap on a bulged chamber.
+- Its thin shell sees ≤0.03x spall, so hydrogen barely matters to it. The alumina film stays as
+  defence in depth.
+- Solid Cr-Mo at the plug band cracks on the hydrogen curve within 30-660 pulses.
+- A **maraging 300 band behind the alumina barrier** is the fallback. It is scored on the air
+  curve, so it holds only if the barrier works.
+- The steel under the pitch also meets H2 from the pitch's own pyrolysis, and it runs at
+  ~350-420 K, where embrittlement is strongest.
+
+The original assessment, kept as the record:
+
 **Walled chambers (Cr-Mo, as the paper has it; maraging was never recommended there):**
 1. **Keep the parent's Q&T Cr-Mo held under 950 MPa UTS,** qualified on CC2938. The multilayer
    steel wall of the chamber note is this steel.

@@ -1,6 +1,6 @@
 # Walled nozzle: the blast inside the near-term chamber, and what fixes it
 
-Status: analysis note, 2026-10-07. Follows [`walled_nozzle_chamber_fatigue.md`](walled_nozzle_chamber_fatigue.md),
+Status: analysis note, 2026-10-07; bottom line and paper asks updated 2026-10-08. Follows [`walled_nozzle_chamber_fatigue.md`](walled_nozzle_chamber_fatigue.md),
 which found that a reflected blast spike, not the mean pressure, decides whether the chamber wall
 survives. This note solves that spike. The chamber is the parent's near-term one: the 2.5 kg rod
 at 75 km/s (7.03 GJ) in 20 m^3, methane at 7000 K (496 bar) and hydrogen at 5500 K (818 bar).
@@ -10,51 +10,52 @@ Reproduce:
 - `make walled-nozzle-vessel-blast`: 2-D axisymmetric chamber shapes, `euler2d::vessel`.
 - `PYTHONPATH=python uv run python -m puffsat.walled_nozzle.volume_trade`.
 
-## 1. Bottom line
+## 1. Bottom line (current design, 2026-10-08)
 
-1. **The paper's plug sends a 5-6 GPa hammer into the nozzle end on every pulse.** The 4.4 kg
-   foam plug of `sec:material_chamber_plug` stops the rod but leaves 36% of its energy, 2.5 GJ,
-   as the merged 6.9 kg moving on at 27 km/s. Almost nothing stands in its path: the gas on the
-   axis is ~0.2 kg. In the 2-D chamber it strikes the convergent nose at **5.6-5.9 GPa** and the
-   throat at **~2.8 GPa**. Steel spalls at ~2.9 GPa. The paper's own estimate, "about 0.2 GPa
-   lasting microseconds", counts only the spherical part of the blast.
-2. **A longer, lighter plug removes it.** Take ~10 kg of plug spread over 1.75-2.5 m of the
-   axis: the paper's 4.4 kg plus ~5.6 kg, 8% of the methane charge, as foam or frozen methane.
-   The rod's energy then becomes heat along the axis and no fast remnant survives. The nose
-   drops to 0.4-0.8 GPa, and every wall region sits at 0.4-0.8 GPa at 1 cm cells, about half the
-   point-blast level and roughly uniform. Mass matters less than length: 20 and 40 kg plugs do
-   no better, and short heavy plugs load the port end.
-3. **Shape the chamber like a rocket chamber, curved at both ends.** A 2:1 elliptical (domed)
-   port head and an elliptical convergence give the lowest loads. A flat port face doubles the
-   spike in its corner (2.8 against 1.4 GPa at 1 cm). A straight cone focuses the blast
-   mid-length (1.6-1.8 GPa at 2 cm, against 0.7-0.8 on a cylinder).
-4. **No carbon overwrap survives at 20 m^3.** The spike puts 0.36-0.6 of itself through the
-   wall as tension. The resin holds 64 MPa across the fibres. Even the long-plug loads are about
-   5-10x over that.
-   - More steel ahead of the carbon does not shield it.
-   - A spike longer than a layer's transit passes straight through, so the 5 mm aluminium layer
-     does nothing at these pulse lengths.
-   - Aluminium-alloy and magnesium backings spall earlier than steel.
-   - The working wall at 20 m^3 is steel: multilayer (shrink-fitted) Cr-Mo for methane, about
-     35-47 t, with ~2-3x margin on spall under the long plug.
-5. **A bigger chamber trades Isp for a gentler spike.** The spike falls as 1/V at fixed pulse
-   energy. Holding V/A* (so blowdown stays ~55 ms) and taking the nozzle's freeze debit, for
-   methane:
-   - 60-80 m^3 costs ~4-5% Isp and brings the long-plug spike to ~0.3-0.4 GPa. That is the
-     range for a through-thickness-reinforced or dry Vectran wrap.
-   - ~120-160 m^3 costs ~6-7% Isp and reaches ~0.16-0.21 GPa, the plain overwrap's threshold.
-   - Hydrogen pays about twice the Isp for the same volume, because recombination freezes more
-     at lower pressure.
-6. **The liquid-share spray does not soften the wall shocks.** That is the paper's stated intent
-   for it (`sec:carbon_overwrap`).
-   - Swept-up mist is methane, and so is the gas around it. Both pay the same dissociation toll,
-     with Γ_eff 1.13-1.27.
-   - Drops of 0.5-1 mm shatter and match the gas in ~3 µs, while the front moves ~3 cm.
-   - Inert extra mass at the wall raised the spike 10-20%.
-   - The liquid is better spent as plug mass on the axis.
-7. **Hydrogen at this pulse size is still unresolved.** Its centred-blast spike, ~2.95 GPa, is
-   at steel's spall strength. A heavy axial plug either does not fit as frozen hydrogen or costs
-   too much exhaust speed as polyethylene.
+**The design that survives one departure (~4,200 pulses), methane at 7000 K, 2.5 kg rod:**
+
+| part | choice |
+|---|---|
+| plug | 10 kg of frozen methane in a polyethylene container, a 1.5 m column at 0.8-2.3 m from the port, 3x denser at the back |
+| shape | domed port head, r 1.4 m; a bulge to **r 3.0 m** around the plug (z 1.4-2.8 m), opened over 0.5 m and closed by a **3 m taper**; a long 12° cone to the throat. **~106 m^3, ~6 m across** |
+| wall | a **10 mm Cr-Mo shell** (gas-tight boundary, pitch substrate) under a **dry (unbonded) Kevlar 49 wrap**, 72-199 mm by zone. **~25-27 t.** Pitch on the steel; a thin alumina film as defence in depth |
+| rate | **2 Hz per chamber**, throat scaled to the volume (`V/A*` ~134-160 m) |
+| count | two 2.5 kg chambers, or one 5 kg chamber (212 m^3) at the same wall mass |
+| cost | ~-7% impulse per rod against 40 m^3 (~-11% against 20 m^3); effective Isp ~flat |
+
+**How the study got there:**
+1. **The paper's 4.4 kg plug sends a 5-6 GPa hammer into the nose** (§3), against steel's
+   ~2.9 GPa spall strength.
+2. **With the rod and plug solved as material, every 20 m^3 shape takes 3-6 GPa** where the
+   jet stops (§3c). The peaks rise 15-25% per grid halving.
+   - The earlier deposition models' "long plug fixes it" (§3, §3b) was an artifact of where
+     they put the heat.
+3. **The plug band is a strong line blast,** `p ~ (E/L)/R^2`. It does not depend on the gas
+   density, so no arrangement of charge, mist or membrane-held gas cushions it (§3c). A dense
+   layer at the wall makes it worse.
+   - Only stand-off acts: a wider bulge at the plug, closed gently. A steep wall facing
+     downstream takes the remnant's push.
+   - The long 12° cone keeps the nose and throat under ~1 GPa.
+4. **The wall decides between tension and fling** (§3d). The spike's few kPa s, delivered in
+   microseconds, either reflects as tension in a solid wall or throws an unbonded wall's layers
+   outward.
+   - Solid Cr-Mo cracks in hydrogen within 30-660 pulses.
+   - Multilayer steel shells fling past their 0.56% swing.
+   - Bonded carbon overwrap delaminates everywhere (64 MPa resin).
+   - **The dry wrap passes at r 3.0 m:** its thin shell cancels the spike (≤0.03x spall), and
+     its flung layers reach 1.68% against 2.4% (1.43x). This is confirmed at 0.25 cm.
+   - **Fallback:** a maraging 300 band behind an alumina barrier, at r 2.6 m (~34 t). It is
+     gated on a barrier that is untested under GPa spikes.
+5. **Volume costs chemistry, not steel** (§3f). The steady-load steel is fixed by `p V`, so it
+   does not grow with volume; the wall thins. What grows is area: pitch, barrier, inspection.
+   Early escape of unthermalized gas costs only ~0.4% (§3g).
+6. **Rate and count** (§3g): 4 Hz is refill-limited, so use 2 Hz per chamber. On a 500-600 t
+   stack the departure burn's finite-burn loss is +6-8% at 2 Hz. Two chambers, or one 5 kg
+   chamber, recover the 4 Hz figure of +2-3%. 10,000 K does not pay; keep 7000 K.
+7. **The liquid-share spray does not soften the wall shocks** (§3). The drops equilibrate in
+   microseconds and pay the gas's toll. Spend the liquid as plug mass.
+8. **The hydrogen chamber at this pulse size is unresolved.** It has not been run with the rod
+   and plug as material or with the bulge.
 
 ## 2. The solvers
 
@@ -71,6 +72,9 @@ Reproduce:
   axial momentum, with energy and momentum exact on every grid.
 
 ## 3. Results
+
+*§3 and §3b are the first, deposition-model results, kept as the record. Where §3c onward
+differ (the plug's effect, the shape, the wall), the later sections and §1 stand.*
 
 **Centred blast, 1-D sphere, grid series** (methane, γ 1.2, model units, QSP 70.7 MPa):
 
@@ -381,7 +385,7 @@ Scored as the worst back-face tension in the steel under the solved histories (`
 
 The bulge closes over 2-3 m instead of 0.5 m (steepest wall ~32° or ~23°). It sits on the
 40 m^3 layout, so the volume grows. The throat stayed at 0.298 m^2; it should be rescaled for
-2 Hz (§3e).
+2 Hz (§3g).
 
 | case | volume | cylinder peak | 105 mm steel | 10 mm liner + dry wrap | impulse | hoop D, shell (mono / x8) |
 |---|---|---|---|---|---|---|
@@ -408,7 +412,7 @@ The tension columns are back-face tension as a fraction of the 2.9 GPa spall str
   - a 12° cone to the throat.
   The volume costs ~3% impulse per rod against 40 m^3 (volume trade).
 
-## 3f. Which wall: zone by zone (`wall_zones.py`; added 2026-10-07)
+## 3d. Which wall: zone by zone (`wall_zones.py`; added 2026-10-07)
 
 `python -m puffsat.walled_nozzle.wall_zones [--histories PATH --case LABEL]`.
 - **Hoop:** each zone (head, bulge ramp, plateau, taper, cone) is sized for D = 1.7 at its own
@@ -479,7 +483,7 @@ bending, and lifted dry layers are free rings. So r 2.6 m's miss is real.
   - maraging's hoop swing (assumed).
   - Run a 0.25 cm check of the r 3.0 m shape.
 
-## 3g. One 5 kg chamber or two 2.5 kg chambers (`wall_zones --energy 2`; added 2026-10-07)
+## 3e. One 5 kg chamber or two 2.5 kg chambers (`wall_zones --energy 2`; added 2026-10-07)
 
 Inviscid flow has no length scale. Doubling the pulse and growing every length and time by
 `2^(1/3)` leaves every pressure unchanged, so the solved r 3.0 m history serves the 5 kg rod
@@ -497,12 +501,12 @@ exactly, and the r 2.6 m one likewise. Only the fixed 10 mm liner and the sizing
 - **The fling margin shrinks from 1.4x to 1.2x.** The 10 mm liner does not scale, so the wrap
   carries more of the hoop.
 - **Size:** 212 m^3, ~7.6 m across at the bulge. That fits a 9 m Starship fairing but not
-  smaller ones; ring segments either way (§3d).
+  smaller ones; ring segments either way (§3f).
 - **The trade is redundancy.** Two chambers survive one failure at half thrust; one 5 kg
   chamber does not.
 - At r 2.6 m the 5 kg dry wrap still fails on fling, as the 2.5 kg one does.
 
-## 3d. Volume, manufacture and in-orbit assembly (added 2026-10-07; scaling, not a cost model)
+## 3f. Volume, manufacture and in-orbit assembly (added 2026-10-07; scaling, not a cost model)
 
 **The steady-load steel does not grow with volume.** The charge's energy fixes `p V`
 (`p ≈ (γ-1) E / V`), and a pressure vessel's minimum wall mass is `∝ ρ p V / σ`. So 20, 40
@@ -558,7 +562,7 @@ thinner, `t ∝ p r`:
   shielded from the hot gas. The seal, not the joint's strength, is the likelier weak point,
   and it is a test to list.
 
-## 3e. Pulse rate, emptying, and two chambers (added 2026-10-07; estimates)
+## 3g. Pulse rate, emptying, and two chambers (added 2026-10-07; estimates)
 
 **The chamber must empty before the next rod.** A choked throat passes gas at the sound speed,
 ~3.7 km/s at 7,000 K. So the blowdown e-fold is `τ ≈ V / (0.6 A* a) ≈ 60 ms` at `V/A* = 134 m`.
@@ -619,10 +623,14 @@ chamber keeping the 0.5 s it needs to empty and refill.**
   pulse energy (`p V`), so there is no hidden size penalty.
 - **On the survivable walls:**
   - all steel: multilayer Cr-Mo, ~35-50 t per 2.5 kg chamber at any volume;
-  - dry Kevlar over a 10 mm liner: ~11-20 t at ~80 m^3, sized at D 2.0-2.2.
+  - dry Kevlar over a 10 mm liner: ~11-20 t at ~80 m^3 sized at D 2.0-2.2 (early estimate);
+    solved zone by zone, **~25-27 t at 106 m^3** (§3d).
 - **Second chamber, all steel:** +35-50 t on a 500-600 t stack (7-9%), against ~4-5% of Δv
   saved. About a wash or worse.
-- **Second chamber, dry wrap:** +13-22 t (2-4%), with extension. It pays.
+- **Second chamber, dry wrap:** +~27-29 t with its extension, ~5% of the stack, against the
+  ~4-5% of Δv saved. Roughly a wash; the parent's ledger decides. (An early 80 m^3 estimate of
+  13-22 t said it paid; the solved r 3.0 m wall is heavier.) One 5 kg chamber gets the 4 Hz loss
+  without a second set of hardware (§3e).
 - **One chamber at 5 kg per rod** is the same total wall as two 2.5 kg chambers (`p V` scales
   with energy). Cube-root scaling leaves the hammer, spall and hoop overshoot unchanged. It has
   2^(2/3)/2 = 79% of the wall area of two chambers, so less pitch and wall heat, and one set of
@@ -643,73 +651,81 @@ chamber keeping the 0.5 s it needs to empty and refill.**
 
 ## 4. Limits
 
-- **γ-law gas.** Real-gas equilibrium enters only through Γ_eff and the QSP scaling. A
+- **Gamma-law gas.** Real-gas equilibrium enters only through `Gamma_eff` and the QSP scaling. A
   real-EOS run is owed.
-- **Grid.** 2-D spikes are not grid-converged; the sphere's are. 2-D levels are probably 1.5-2x
-  higher than the 1 cm tables show.
-- **Deposition.** The long-plug model places the hot accreted mass where it was struck. A
-  penetration model (rod erosion and crater flow) would refine where along the axis the heat
-  goes.
-- **Wall response.** The per-station ring in `vessel_blast.py` (thin wall, point blast) overstates
-  the overshoot. `shell_response.py` settles it for the long plug: D 1.63-1.93. It neglects
-  meridional curvature of the head and nose.
-- **Hydrogen.** Not run with a long plug.
-- **Volume trade.** Spikes are scaled as 1/V from the 20 m^3 runs, not re-solved. Nozzle
-  extension mass grows with the exit diameter squared.
+- **Grid.** 0.5 cm peaks rose 15-25% per halving. The chosen shape is checked at 0.25 cm, where
+  the fling held; others are not.
+- **Wall waves are 1-D and elastic.** The spike's footprint would spread in 2-D, so the tensions
+  are upper bounds. The fling chain is a free ring, and liner coupling was shown not to reduce
+  it.
+- **Material inputs assumed:**
+  - the dry wrap's through-thickness stiffness (3 GPa);
+  - Kevlar's 2.4% break, with no knockdown for cycling or fretting;
+  - maraging's hoop swing (1.2 GPa).
+  These are the bench tests of §5.
+- **Not modelled:** the throat insert; ring joints and seals; meridional curvature of head,
+  bulge and nose in the shell; hydrogen uptake through pitch (the CC2938 curve at chamber pressure
+  stands in).
+- **Hydrogen chamber.** Not run with the rod and plug as material.
+- **The departing mass per chamber is inconsistent in the parent** (§3g). The fatigue budget
+  here uses 4,200 pulses (500-600 t).
 
 ## 5. What the paper should change (owed to `Balloon-Pulse-Propulsion`)
 
-- **`sec:material_chamber_plug`, the stand-off paragraph** ("the 0.2 GPa at the wall lasts
-  microseconds ... the shell's response to it has not been checked").
-  - Replace it: the plug as sized leaves 36% of the rod's energy (2.5 GJ) in the merged 6.9 kg
-    at 27 km/s. Solved in 2-D, that strikes the convergent nose at 5.6-5.9 GPa and the throat at
-    ~2.8 GPa on every pulse, about twice steel's ~2.9 GPa spall strength.
-  - The fix: a longer plug of ~10 kg over 1.75-2.5 m of the axis, denser at the back. Make it
-    **frozen methane inside a polyethylene container** rather than polyethylene foam:
+- **`sec:material_chamber_plug`: the plug and the stand-off paragraph** ("the 0.2 GPa at the
+  wall lasts microseconds ... the shell's response to it has not been checked").
+  - Replace it. The 4.4 kg plug leaves 36% of the rod's energy (2.5 GJ) in a merged body at
+    27 km/s, which strikes the nose at 5-6 GPa.
+  - Even a 10 kg plug only moves the problem. The rod stops where the plug is densest, and the
+    wall beside that point takes a line blast of ~2 GPa at 1.4 m radius. The shape and wall
+    below are what fix it.
+  - Make the plug **10 kg of frozen methane inside a polyethylene container**: a 1.5 m column
+    at 0.8-2.3 m from the port, denser at the back, ~6.5 cm in radius at 500 kg/m^3.
     - CH4 carries twice polyethylene's hydrogen per carbon, so in the methane chamber the core
       matches the charge and costs essentially no exhaust speed. A polyethylene plug costs ~0.9%.
     - The container is the skin the paper already sizes to carry the plug's sideways pull as the
-      port window tracks the rod (1.3-5 mm for the 2.5 kg rod). Solid methane alone is weak and
-      would break up.
-    - At solid methane's ~500 kg/m^3, 10 kg over 2.5 m is a column ~5 cm in radius, close to the
-      paper's 5.5 cm plug width.
-    - It must stay below methane's 90.7 K triple point until impact.
-    - In the hydrogen chamber a methane core still raises the mean molecular mass (+8.8% for the
-      paper's plug width, against +11% for polyethylene). It is the lesser cost, not a free one. It turns the rod's
-    energy into heat along the axis, so the nose falls below ~1 GPa and the wall loads become
-    roughly uniform at about half the centred-blast level.
-  - The penetration-depth rule sizes the minimum plug. The plug should be longer than that
-    minimum, so the merged body keeps colliding after the rod is consumed.
-- **`sec:carbon_overwrap` and `tab:layered_wall_mass`.**
-  - At 20 m^3 the reflected blast spike (centred ~36x the quasi-static pressure; ~1-1.5 GPa
-    under the long plug) exceeds the overwrap's through-thickness strength (64 MPa resin) by
-    about 5-20x everywhere. The aluminium layer and more steel do not change that.
-  - The near-term wall should be steel: multilayer shrink-fitted Cr-Mo, about 35-47 t for
-    methane. Otherwise the chamber must grow.
-  - A **dry (unbonded) wrap over a thin steel liner** cannot delaminate. Its flung layers stay at
-    0.8-1.5% hoop strain against 2.1-3.3% to break. At ~80 m^3 it weighs ~11-20 t (Kevlar 49 or
-    dry carbon lighter than Vectran, because sizing is by stiffness). The cost is ~5-9% Isp,
-    including the extra pitch.
-  - A bonded overwrap needs ~120-160 m^3.
-  - Hoop sizing: D = 1.7 holds for steel walls (shell model 1.63-1.66); dry wraps need ~2.0-2.2.
-  - State that the "softens the local shocks" role given to the liquid share does not hold. The
-    drops equilibrate in microseconds and pay the same toll as the gas. The liquid serves better
-    as axial plug mass.
-- **Chamber geometry.**
-  - Draw the chamber as a rocket chamber: a 2:1 elliptical port head and an elliptical
-    convergence, not a sphere or a straight cone. A flat port face doubles the corner spike; a
-    straight cone focuses mid-length.
-  - `fig:rod_port_plug` should show the longer plug.
-- **`sec:steel_chamber_service`, `eq:ramp_dlf`.** The blast's reverberation gives D = 2.0-2.3 in
-  a centred sphere, not 1.7. Size with the solved D, or with the long plug's lower, spread load.
-- **Hydrogen barrier on the chamber steel** (`docs/hydrogen_and_wall_steels.md`). Dissociated
-  methane puts atomic hydrogen on the methane chamber's wall during every pulse, and the pitch is
-  not a designed barrier. Propose a thin dense alumina film on the Cr-Mo, aluminized and
-  oxidized before the final temper, under the pitch, and under the GRCop-84 liner in the hydrogen
-  chamber. Its permeation reduction under pulsed plasma is a test to list. Keep the parent's
-  sub-950 MPa Cr-Mo qualified on CC2938. Maraging is "extreme" in hydrogen and is not proposed
-  for the chambers.
-- **Chamber size, manufacture and assembly (§3d). Please find supporting references.**
+      port window tracks the rod (1.3-5 mm). Solid methane alone is weak and would break up.
+    - It must stay below methane's 90.7 K triple point until impact. At 2 Hz it meets ~4,000 K
+      residue (2.5% of the charge at ~3 bar), so it goes in at the last moment.
+    - In the hydrogen chamber a methane core still raises the mean molecular mass (+8.8% against
+      +11% for polyethylene): the lesser cost, not a free one.
+  - If a heavier plug is ever needed, water is the candidate, not more methane.
+- **Chamber geometry (`fig:rod_port_plug`, the chamber sketch).** Draw:
+  - a domed port head at r 1.4 m;
+  - a **bulge to r 3.0 m around the plug, closed by a ~3 m taper**;
+  - a long 12° cone to the throat;
+  - ~106 m^3, ~6 m across.
+
+  Not a sphere, a flat port face (it doubles the corner spike), a short convergent nose (it
+  takes the remnant), or any steep wall facing downstream.
+  - The bulge works because the band's shock pressure falls as `1/R^2`. The taper keeps the
+    downstream-moving remnant from striking a shoulder.
+- **`sec:carbon_overwrap`, `tab:layered_wall_mass`, `sec:steel_chamber_service`: the wall.**
+  - Replace the bonded overwrap with a **dry (unbonded) Kevlar 49 wrap over a 10 mm Cr-Mo
+    shell**: ~25-27 t, 72-199 mm of wrap by zone, pitch on the steel.
+  - It passes hoop, spall, crack growth and fling for one 4,200-pulse departure. The worst
+    fling is 1.68% against 2.4%, and the shell sees ≤0.03x spall, so hydrogen barely matters
+    to it.
+  - The bonded overwrap delaminates under the reflected spike everywhere: 64 MPa resin against
+    0.1-1 GPa spikes, even in the quiet zones.
+  - Solid Cr-Mo, the paper's steel, cracks in hydrogen at the plug band within 30-660 pulses.
+  - Multilayer shrink-fitted steel flings its outer shells past the swing.
+  - The paper's 19 t (methane) and 130 t (10 kg hydrogen) walls are bonded overwraps; replace
+    them. Wall mass scales about linearly with pulse energy.
+  - **Size the hoop with the solved shell,** zone by zone, not `eq:ramp_dlf`'s D = 1.7. The
+    solved overshoot varies by zone and wall type (§3d).
+  - **Fallback:** a maraging 300 band at the plug behind the alumina barrier, dry wrap
+    elsewhere, at r 2.6 m (78.5 m^3, ~34 t, ~2% more impulse per rod). Its crack-life margin
+    (1.4x) holds only if the barrier works under GPa spikes.
+- **Hydrogen and the steel (`docs/hydrogen_and_wall_steels.md`).**
+  - Atomic hydrogen from dissociated methane, and H2 from the pitch's own pyrolysis, reach the
+    steel every pulse. The steel sits at ~350-420 K, where embrittlement is strongest. The gas's
+    temperature does not protect it.
+  - Put a sub-micron alumina film on the Cr-Mo shell under the pitch, as defence in depth. It is
+    **required** for the maraging fallback.
+  - List the barrier's uptake under pulsed hot dissociated gas as a test.
+  - Keep sub-950 MPa Cr-Mo, qualified on CC2938, for the shell.
+- **Chamber size, manufacture and assembly (§3f). Please find supporting references.**
   - The steady-load steel is ~constant with volume (`p V` fixed by the charge energy). A larger
     chamber trades a thick forging for thin rings plus more surface area. Estimated
     ~1-1.5x vessel cost at 80 m^3 if steel and forging dominate, ~2-3.5x if area costs
@@ -723,9 +739,9 @@ chamber keeping the 0.5 s it needs to empty and refill.**
     3. preloaded circumferential joints under cyclic pressure: hub clamps, bolted flanges,
        interrupted-thread breech closures, and metal seals for hydrogen.
   - State that the chamber can be assembled in orbit from full-hoop rings joined
-    circumferentially. That means preloaded joints placed away from the plug's hammer band,
-    with the hammer-band ring as a replaceable armoured segment. No longitudinal seams.
-- **Pulse rate and chamber count (§3e).**
+    circumferentially, with preloaded joints placed in the quiet zones (the cylinder between head
+    and bulge, and the cone), the bulge as its own segment, and no longitudinal seams.
+- **Pulse rate and chamber count (§3g).**
   - State the chamber's pulse rate. It must empty and refill between rods.
   - 4 Hz per chamber is refill-limited: plug placement in ~4,000 K residue, recharge, and the
     throat membrane reseal. Propose **2 Hz per chamber**, with the throat scaled to the volume
@@ -734,12 +750,13 @@ chamber keeping the 0.5 s it needs to empty and refill.**
     +15-18% Δv at 1 Hz, +6-8% at 2 Hz and +2-3% at 4 Hz on a 500-600 t stack. Two chambers at
     2 Hz recover the 4 Hz figure, and each still has 0.5 s to empty.
   - **One 5 kg chamber matches two 2.5 kg chambers on wall mass** (52.9 against 54.6 t,
-    dry wrap, §3g), with 21% less area and one set of mechanisms. It gives up redundancy and
+    dry wrap, §3e), with 21% less area and one set of mechanisms. It gives up redundancy and
     needs a ~7.6 m diameter. Ask: which does the mission need?
   - Recheck "on the 500-600 t stacks that depart, one chamber is best" with the finite-burn
     loss charged. The ledger does not appear to include it.
     - The answer turns on the wall: a second chamber costs ~35-50 t all steel (about a wash),
-      or ~13-22 t as a dry wrap (it pays).
+      or ~27-29 t as the solved dry wrap with its extension (~5% of the stack, roughly a wash
+      against the 4-5% of Δv saved).
     - One chamber at 5 kg per rod is the alternative: the same total wall, ~21% less wall area,
       no redundancy.
     - The paper's 19 t and 130 t walls are bonded overwraps, which this study finds delaminate.
@@ -749,14 +766,14 @@ chamber keeping the 0.5 s it needs to empty and refill.**
   - **Reconcile the departing mass per chamber.** 630-780 pulses (159-194 s at 4 Hz) is a
     ~100 t craft, while the growth ledger departs 500-600 t stacks (~4,000-4,300 pulses). The
     finite-burn loss, the chamber count and the fatigue budget all depend on which.
-- **Chamber wall (§3f).** Make the near-term methane chamber a **dry Kevlar wrap over a
-  10 mm Cr-Mo liner**, ~27 t, on a bulged rocket shape:
-  - an r 2.6-3.0 m bulge around the plug, closed by a 2-3 m taper;
-  - 78-106 m^3, throat scaled for 2 Hz;
-  - solid or multilayer steel at the plug band fails (hydrogen cracks, or flung shells).
-  - Replace the 19 t bonded-overwrap figure.
-  - Name the fallback: a maraging 300 band behind a thin alumina barrier, wrap elsewhere,
-    at r 2.6 m (~34 t). List the barrier's spike test as its gating item.
+- **Confirmations the paper can cite.**
+  - Unthermalized gas escaping early costs only ~0.4% of the pulse's ideal momentum (§3g), so
+    assuming full thermalization is sound.
+  - A 10,000 K methane chamber gives +11-13% Isp but -13-17% impulse per rod and 1.6-3x the
+    wall heat. Counting pitch it is no better per kilogram; keep 7000 K.
+  - The liquid share does not soften the wall shocks, so state that the "softens the local
+    shocks" role does not hold. The drops equilibrate in microseconds and pay the gas's toll;
+    the liquid serves better as plug mass.
 - **The tests that gate the dry-wrap chamber.** No full-scale article is needed.
   - Fling strain `v / sqrt(E/rho)`, with `v` the impulse per area over the mass per area, does
     not depend on size.
@@ -776,9 +793,12 @@ chamber keeping the 0.5 s it needs to empty and refill.**
     a line-blast source (detonating cord or an exploding wire) standing in for the stopped
     rod, with wall pressure gauges. The 75 km/s rod itself is beyond lab guns (~7-10 km/s), but
     the wall sees only the energy per length and where it is released.
-- **Hydrogen at the 2.5 kg rod.** No wall under ~50 t survives the centred spike (~2.95 GPa, at
-  steel's spall strength). Say so. The levers are a larger chamber (~8-11% Isp at 60-80 m^3) or a
-  smaller rod per pulse.
+- **Hydrogen at the 2.5 kg rod.** Unresolved.
+  - The centred-blast spike (~2.95 GPa) is at steel's spall strength.
+  - The hydrogen chamber has not been run with the rod and plug as material, the bulge or the
+    dry wrap.
+  - Say so. The levers are the same bulge and wrap, a larger chamber, or a smaller rod per
+    pulse.
 
 ## 6. Sources
 
