@@ -33,11 +33,20 @@ N_RHO = "48"
 
 
 def fetch_water_gray(
-    timeout_s: float = 120.0, mixture: str = "2. h 1. o", mixname: str = "water"
+    timeout_s: float = 120.0,
+    mixture: str = "2. h 1. o",
+    mixname: str = "water",
+    t_up_kev: str = T_UP_KEV,
+    rho_low_gcc: str = RHO_LOW_GCC,
+    rho_up_gcc: str = RHO_UP_GCC,
+    n_rho: str = N_RHO,
 ) -> bytes:
     """One two-stage TOPS submission, gray means. Returns HTML.
 
-    `mixture` is TOPS's number-fraction string; the default is water (2 H : 1 O atomic)."""
+    `mixture` is TOPS's number-fraction string; the default is water (2 H : 1 O atomic).
+    `t_up_kev` must be one of the form's listed temperatures. Pull one mixture at a time: TOPS
+    keeps request state per server session, and two concurrent submissions can both come back
+    as whichever mixture reached it last."""
     br = mechanize.Browser()
     br.set_handle_robots(False)  # per-pyTOPSScrape: T-1 permits automated queries
     br.open(TOPS_URL, timeout=timeout_s)
@@ -45,10 +54,10 @@ def fetch_water_gray(
     br.form["mixture"] = mixture
     br.form["mixname"] = mixname
     br.form.find_control(name="tlow", type="select").get(T_LOW_KEV).selected = True
-    br.form.find_control(name="tup", type="select").get(T_UP_KEV).selected = True
-    br.form["rlow"] = RHO_LOW_GCC
-    br.form["rup"] = RHO_UP_GCC
-    br.form["nr"] = N_RHO
+    br.form.find_control(name="tup", type="select").get(t_up_kev).selected = True
+    br.form["rlow"] = rho_low_gcc
+    br.form["rup"] = rho_up_gcc
+    br.form["nr"] = n_rho
     br.form.find_control(name="datype").value = ["gray"]
     br.submit()  # stage 1: request form -> confirmation page
     br.select_form(nr=0)
@@ -68,11 +77,22 @@ def main() -> None:
         default="water",
         help="letters and digits only: TOPS returns HTTP 500 for a name with an underscore",
     )
+    parser.add_argument("--t-up-kev", default=T_UP_KEV, help="a temperature the form lists")
+    parser.add_argument("--rho-low-gcc", default=RHO_LOW_GCC)
+    parser.add_argument("--rho-up-gcc", default=RHO_UP_GCC)
+    parser.add_argument("--n-rho", default=N_RHO)
     args = parser.parse_args()
 
     for attempt in range(1, args.attempts + 1):
         try:
-            html = fetch_water_gray(mixture=args.mixture, mixname=args.mixname)
+            html = fetch_water_gray(
+                mixture=args.mixture,
+                mixname=args.mixname,
+                t_up_kev=args.t_up_kev,
+                rho_low_gcc=args.rho_low_gcc,
+                rho_up_gcc=args.rho_up_gcc,
+                n_rho=args.n_rho,
+            )
             break
         except Exception as exc:  # broad on purpose — the server 500s transiently; retry them all
             print(f"python: TOPS attempt {attempt}/{args.attempts} failed: {exc}", file=sys.stderr)
@@ -82,7 +102,7 @@ def main() -> None:
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_bytes(html)
-    print(f"python: wrote TOPS water gray pull -> {args.out} ({len(html)} bytes)")
+    print(f"python: wrote TOPS {args.mixname} gray pull -> {args.out} ({len(html)} bytes)")
 
 
 if __name__ == "__main__":

@@ -108,6 +108,11 @@ __pycache__/
 !/data/results/water_plate/thermal_kinetics_refined.json
 !/data/results/water_plate/parcel_return.csv
 !/data/results/water_plate/parcel_return.json
+# The X-ray collision study's result tables: a few dozen rows each, cited by
+# docs/xray_collision_study.md.
+!/data/results/xray_collision/
+/data/results/xray_collision/*
+!/data/results/xray_collision/*.csv
 # ...and the raw TOPS/OPLIB opacity pull (ADR-0007 amendment): the citable provenance
 # artifact behind the 69 km/s table; needs a network allow to re-fetch (`make fetch-tops`).
 !/data/tables/
