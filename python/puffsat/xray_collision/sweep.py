@@ -17,6 +17,10 @@ matter, to find where the 80% line actually is.
 carbon target at 618 km/s. It runs over foam densities of 10, 30 and 100 kg/m^3 and solid
 graphite, opacity 0.1-10x, with and without trapped radiation in the EOS. It checks the parent's
 assumed 60% radiated fraction.
+
+`near_sun_target.csv`: a dense 1 kg graphite projectile (it must survive its own trip) into a
+ship-held carbon target that is a foam or lattice at its mean density, compared with foam on foam.
+k = 1, 2, 3, 5. It asks whether a lattice target helps and whether 3:1 pays at 618 km/s.
 """
 
 from __future__ import annotations
@@ -27,7 +31,7 @@ import math
 from collections.abc import Iterable
 from pathlib import Path
 
-from puffsat.xray_collision.fireball import V_REL_NEAR_SUN, CollisionResult, collide
+from puffsat.xray_collision.fireball import V_REL_NEAR_SUN, CollisionResult, collide, piston
 from puffsat.xray_collision.materials import ARGON, CARBON, IRON, Material
 
 OUT_DIR = Path("data/results/xray_collision")
@@ -125,6 +129,42 @@ def near_sun() -> list[CollisionResult]:
     ]
 
 
+TARGET_RHO0 = (1.0, 3.0, 10.0, 30.0, 100.0)  # [kg/m^3], lattice/foam mean densities
+TARGET_K = (1.0, 2.0, 3.0, 5.0)
+
+
+def near_sun_target() -> list[CollisionResult]:
+    """Foam on foam (`heated` both) and dense projectile into lattice (`heated` target), 618 km/s."""
+    rows = []
+    for k in TARGET_K:
+        for rho0 in TARGET_RHO0:
+            rows.append(
+                collide(
+                    CARBON,
+                    radius_for_mass(CARBON, NEAR_SUN_MASS, rho0),
+                    k,
+                    V_REL_NEAR_SUN,
+                    rho0=rho0,
+                )
+            )
+            rows.append(piston(CARBON, NEAR_SUN_MASS, rho0, k))
+    return rows
+
+
+def show_target(rows: Iterable[CollisionResult]) -> None:
+    print(
+        f"  {'heated':6} {'k':>2} {'rho0':>5} {'kT0':>5} {'tau0':>6} {'f_rad':>6} {'>100eV':>6} "
+        f"{'>1keV':>6} {'light/KE':>8} {'GJ/kg tgt':>9}"
+    )
+    for r in rows:
+        per_target = r.f_rad * r.heat / (r.mass_ratio * r.m_impactor) / 1e9
+        print(
+            f"  {r.heated:6} {r.mass_ratio:>2g} {r.rho0:>5g} {r.kt_start_ev:>5.0f} {r.tau0:>6.2f} "
+            f"{r.f_rad:>6.3f} {r.f_xray_ph:>6.3f} {r.f_hard:>6.3f} {r.light_of_ship_ke:>8.3f} "
+            f"{per_target:>9.1f}"
+        )
+
+
 def show_near_sun(rows: Iterable[CollisionResult]) -> None:
     print(
         f"  {'a T^4':6} {'rho0':>6} {'kappa':>5} {'R0 cm':>6} {'kT0':>5} {'tau0':>8} "
@@ -169,6 +209,9 @@ def main() -> None:
     print("\n== near Sun: 1 kg carbon on 1 kg carbon at 618 km/s (the parent's pass-through case)")
     print("  (>100 eV and kT_emit: photosphere-zone bounds)")
     show_near_sun(write_csv(OUT_DIR / "near_sun.csv", near_sun()))
+
+    print("\n== near Sun: dense 1 kg graphite projectile vs foam projectile, ship-held target")
+    show_target(write_csv(OUT_DIR / "near_sun_target.csv", near_sun_target()))
 
 
 if __name__ == "__main__":

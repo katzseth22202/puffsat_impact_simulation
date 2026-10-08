@@ -8,7 +8,13 @@ import numpy as np
 import pytest
 
 from puffsat.xray_collision import eos
-from puffsat.xray_collision.fireball import Kinematics, collide, planck_above, shocked_state
+from puffsat.xray_collision.fireball import (
+    Kinematics,
+    collide,
+    piston,
+    planck_above,
+    shocked_state,
+)
 from puffsat.xray_collision.materials import ARGON, CARBON, IRON
 
 
@@ -92,3 +98,12 @@ def test_near_sun_reproduces_the_parents_fireball() -> None:
     assert r.zbar_shock == pytest.approx(6.0, abs=0.05)
     assert r.f_rad > 0.5
     assert r.closure == pytest.approx(1.0, abs=1e-4)
+
+
+def test_piston_puts_all_heat_in_the_target() -> None:
+    """A snowplow dissipates u^2/2 per swept kg: the target alone carries Q, so it runs hotter."""
+    foam = collide(CARBON, (3.0 / (4.0 * math.pi * 10.0)) ** (1 / 3), 1.0, 618.0e3, rho0=10.0)
+    plow = piston(CARBON, 1.0, 10.0, 1.0)
+    assert plow.heat == pytest.approx(foam.heat)
+    assert plow.kt_start_ev > 1.8 * foam.kt_start_ev
+    assert plow.closure == pytest.approx(1.0, abs=1e-4)

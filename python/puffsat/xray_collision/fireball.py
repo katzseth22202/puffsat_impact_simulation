@@ -35,7 +35,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from puffsat.xray_collision.eos import A_RAD, EV, K_B, EosTable, build_table
+from puffsat.xray_collision.eos import A_RAD, AMU, EV, K_B, EosTable, build_table
 from puffsat.xray_collision.materials import Material
 
 SIGMA_SB = 5.670374419e-8
@@ -151,6 +151,7 @@ class CollisionResult:
     v_exp: float  # final edge speed [m/s]
     closure: float  # (E_rad + E_kin + E_int) / Q, should be 1
     t_end: float  # [s]
+    heated: str = "both"  # "both" bodies (collide) or only the light "target" (piston)
 
     @property
     def light_of_ship_ke(self) -> float:
@@ -190,6 +191,106 @@ def _derivs(
     return d, temp, lum, t_hydro
 
 
+@dataclass(frozen=True)
+class _Fireball:
+    y: tuple[float, ...]
+    t_end: float
+    r0: float
+    temp0: float
+    zbar0: float
+    tau0: float
+    race0: float
+    rad_to_matter0: float
+
+
+def _expand(
+    table: EosTable, mass: float, rho_start: float, heat: float, kappa_scale: float
+) -> _Fireball:
+    """Integrate a one-zone fireball of `mass` holding `heat`, from rest at `rho_start` (RK4)."""
+    r = (3.0 * mass / (4.0 * math.pi * rho_start)) ** (1.0 / 3.0)
+    temp0 = table.temp(rho_start, heat / mass)
+    p0, z0, kr0, _ = table.state(rho_start, temp0)
+    tau0 = kappa_scale * kr0 * rho_start * 2.0 * r
+    n_tot = (1.0 + z0) * rho_start / (table.material.mass_amu * AMU)
+    flux0 = SIGMA_SB * temp0**4 / (1.0 + 0.75 * tau0)
+    race0 = n_tot * K_B * temp0 * math.sqrt(5.0 / 3.0 * p0 / rho_start) / (2.0 * flux0)
+    rad_to_matter0 = A_RAD * temp0**4 / (heat / mass * rho_start)
+
+    y: tuple[float, ...] = (r, 0.0, heat, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    t = 0.0
+    while True:
+        k1, temp, lum, t_hydro = _derivs(y, table, mass, kappa_scale)
+        if temp < T_STOP_EV * EV / K_B or y[2] < 1e-6 * heat:
+            break
+        dt = STEP_FRACTION * min(t_hydro, y[2] / max(lum, 1e-300))
+        k2 = _derivs(
+            tuple(a + 0.5 * dt * b for a, b in zip(y, k1, strict=True)), table, mass, kappa_scale
+        )[0]
+        k3 = _derivs(
+            tuple(a + 0.5 * dt * b for a, b in zip(y, k2, strict=True)), table, mass, kappa_scale
+        )[0]
+        k4 = _derivs(
+            tuple(a + dt * b for a, b in zip(y, k3, strict=True)), table, mass, kappa_scale
+        )[0]
+        y = tuple(
+            a + dt / 6.0 * (b1 + 2.0 * b2 + 2.0 * b3 + b4)
+            for a, b1, b2, b3, b4 in zip(y, k1, k2, k3, k4, strict=True)
+        )
+        t += dt
+    return _Fireball(y, t, r, temp0, z0, tau0, race0, rad_to_matter0)
+
+
+def _result(
+    material: Material,
+    *,
+    heated: str,
+    impactor_radius: float,
+    mass_ratio: float,
+    v_rel: float,
+    lowering: bool,
+    radiation: bool,
+    kappa_scale: float,
+    rho0: float,
+    kin: Kinematics,
+    mass: float,
+    shock: ShockState,
+    fb: _Fireball,
+) -> CollisionResult:
+    y, q = fb.y, kin.heat
+    return CollisionResult(
+        material=material.name,
+        impactor_radius=impactor_radius,
+        mass_ratio=mass_ratio,
+        v_rel=v_rel,
+        lowering=lowering,
+        radiation=radiation,
+        kappa_scale=kappa_scale,
+        rho0=rho0,
+        m_impactor=kin.m_impactor,
+        heat=q,
+        heat_fraction=kin.heat_fraction,
+        rho_shock=shock.rho,
+        kt_shock_ev=K_B * shock.temp / EV,
+        kt_start_ev=K_B * fb.temp0 / EV,
+        zbar_shock=fb.zbar0,
+        r0=fb.r0,
+        tau0=fb.tau0,
+        race0=fb.race0,
+        f_rad=y[3] / q,
+        f_euv=y[4] / q,
+        f_xray=y[5] / q,
+        f_hard=y[7] / q,
+        f_xray_ph=y[8] / q,
+        kt_emit_ev=y[6] / max(y[3], 1e-300),
+        kt_emit_ph_ev=y[9] / max(y[3], 1e-300),
+        rad_to_matter0=fb.rad_to_matter0,
+        v_exp=y[1],
+        closure=(y[3] + 0.3 * mass * y[1] ** 2 + y[2]) / q,
+        t_end=fb.t_end,
+        heated=heated,
+    )
+
+
 def collide(
     material: Material,
     impactor_radius: float,
@@ -210,44 +311,11 @@ def collide(
     rho_start = material.rho0 if rho0 is None else rho0
     m_imp = 4.0 / 3.0 * math.pi * impactor_radius**3 * rho_start
     kin = Kinematics(m_imp, mass_ratio * m_imp, v_rel)
-    mass = kin.m_total
     shock = shocked_state(table, 0.5 * v_rel, rho_start)
-    r = (3.0 * mass / (4.0 * math.pi * shock.rho)) ** (1.0 / 3.0)
-    q = kin.heat
-    y: tuple[float, ...] = (r, 0.0, q, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-
-    temp0 = table.temp(shock.rho, q / mass)
-    p0, z0, kr0, _ = table.state(shock.rho, temp0)
-    tau0 = kappa_scale * kr0 * shock.rho * 2.0 * r
-    n_tot = (1.0 + z0) * shock.rho / (material.mass_amu * 1.66053906660e-27)
-    flux0 = SIGMA_SB * temp0**4 / (1.0 + 0.75 * tau0)
-    race0 = n_tot * K_B * temp0 * math.sqrt(5.0 / 3.0 * p0 / shock.rho) / (2.0 * flux0)
-    rad_to_matter0 = A_RAD * temp0**4 / (q / mass * shock.rho)
-
-    t = 0.0
-    while True:
-        k1, temp, lum, t_hydro = _derivs(y, table, mass, kappa_scale)
-        if temp < T_STOP_EV * EV / K_B or y[2] < 1e-6 * q:
-            break
-        dt = STEP_FRACTION * min(t_hydro, y[2] / max(lum, 1e-300))
-        k2 = _derivs(
-            tuple(a + 0.5 * dt * b for a, b in zip(y, k1, strict=True)), table, mass, kappa_scale
-        )[0]
-        k3 = _derivs(
-            tuple(a + 0.5 * dt * b for a, b in zip(y, k2, strict=True)), table, mass, kappa_scale
-        )[0]
-        k4 = _derivs(
-            tuple(a + dt * b for a, b in zip(y, k3, strict=True)), table, mass, kappa_scale
-        )[0]
-        y = tuple(
-            a + dt / 6.0 * (b1 + 2.0 * b2 + 2.0 * b3 + b4)
-            for a, b1, b2, b3, b4 in zip(y, k1, k2, k3, k4, strict=True)
-        )
-        t += dt
-
-    e_kin = 0.3 * mass * y[1] ** 2
-    return CollisionResult(
-        material=material.name,
+    fb = _expand(table, kin.m_total, shock.rho, kin.heat, kappa_scale)
+    return _result(
+        material,
+        heated="both",
         impactor_radius=impactor_radius,
         mass_ratio=mass_ratio,
         v_rel=v_rel,
@@ -255,25 +323,50 @@ def collide(
         radiation=radiation,
         kappa_scale=kappa_scale,
         rho0=rho_start,
-        m_impactor=m_imp,
-        heat=q,
-        heat_fraction=kin.heat_fraction,
-        rho_shock=shock.rho,
-        kt_shock_ev=K_B * shock.temp / EV,
-        kt_start_ev=K_B * temp0 / EV,
-        zbar_shock=z0,
-        r0=r,
-        tau0=tau0,
-        race0=race0,
-        f_rad=y[3] / q,
-        f_euv=y[4] / q,
-        f_xray=y[5] / q,
-        f_hard=y[7] / q,
-        f_xray_ph=y[8] / q,
-        kt_emit_ev=y[6] / max(y[3], 1e-300),
-        kt_emit_ph_ev=y[9] / max(y[3], 1e-300),
-        rad_to_matter0=rad_to_matter0,
-        v_exp=y[1],
-        closure=(y[3] + e_kin + y[2]) / q,
-        t_end=t,
+        kin=kin,
+        mass=kin.m_total,
+        shock=shock,
+        fb=fb,
+    )
+
+
+def piston(
+    material: Material,
+    projectile_mass: float,
+    target_rho0: float,
+    mass_ratio: float = 1.0,
+    v_rel: float = V_REL_NEAR_SUN,
+    *,
+    lowering: bool = False,
+    radiation: bool = False,
+    kappa_scale: float = 1.0,
+) -> CollisionResult:
+    """A dense projectile (condensed `material`) snowplows `mass_ratio` times its mass of a light
+    target at `target_rho0`, a foam or a lattice at its mean density.
+
+    In a snowplow, sweeping dm at the current speed u dissipates u^2/2 dm into the swept matter, so
+    the whole heat Q lands in the target. The projectile is only compressed by the ram pressure,
+    and that is neglected. The target fireball starts at the Hugoniot density for the effective
+    piston speed sqrt(2 Q / m_target), as one sphere of the target mass. In reality it is a column
+    the projectile's width, heated progressively, so the sphere understates its surface."""
+    table = build_table(material, lowering, radiation)
+    kin = Kinematics(projectile_mass, mass_ratio * projectile_mass, v_rel)
+    m_t = kin.m_target
+    shock = shocked_state(table, math.sqrt(2.0 * kin.heat / m_t), target_rho0)
+    fb = _expand(table, m_t, shock.rho, kin.heat, kappa_scale)
+    r_proj = (3.0 * projectile_mass / (4.0 * math.pi * material.rho0)) ** (1.0 / 3.0)
+    return _result(
+        material,
+        heated="target",
+        impactor_radius=r_proj,
+        mass_ratio=mass_ratio,
+        v_rel=v_rel,
+        lowering=lowering,
+        radiation=radiation,
+        kappa_scale=kappa_scale,
+        rho0=target_rho0,
+        kin=kin,
+        mass=m_t,
+        shock=shock,
+        fb=fb,
     )

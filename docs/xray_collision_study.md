@@ -183,6 +183,43 @@ to keep the radiated share, but electrons running cooler than ions would soften 
 Non-LTE emission at these densities and the collisionality of foam on foam at 309 km/s each
 (parent §needle_through_fog) are also open.
 
+## Result 5: a lattice target and the mass ratio at 618 km/s -- `near_sun_target.csv`
+
+Suppose the projectile has to be dense to survive its trip, while the ship's target can be a
+carbon lattice deployed briefly. `fireball.piston` models a dense 1 kg graphite projectile
+snowplowing `k` kg of a target at mean density `rho0`. In a snowplow each swept kilogram absorbs
+`u^2/2` at the current speed, so **all of the heat Q lands in the light target**. The projectile
+is only compressed by the ram pressure (~4 Mbar at 10 kg/m^3), which this model neglects. Rows
+marked `both` are the foam-on-foam collision for comparison.
+
+| k | rho0 | foam on foam: f_rad / light per KE | dense into lattice: f_rad / light per KE | column length (lattice) |
+|---|---|---|---|---|
+| 1 | 1 | 0.86 / 0.43 | 0.94 / 0.47 | 140 m |
+| 1 | 10 | 0.61 / 0.30 | **0.81 / 0.41** | 14 m |
+| 1 | 100 | 0.23 / 0.12 | 0.62 / 0.31 | 1.4 m |
+| 2 | 10 | 0.55 / 0.37 | 0.71 / 0.47 | 28 m |
+| 3 | 10 | 0.46 / 0.35 | 0.60 / 0.45 | 42 m |
+| 3 | 1 | 0.81 / 0.61 | 0.86 / 0.64 | 420 m |
+
+The column length is the target length a 4.8 cm graphite ball must sweep: `k m / (rho0 pi r^2)`.
+
+- **A dense projectile helps rather than hurts.** The heat sits in the dilute target alone, which
+  runs at 1030 eV instead of 470 eV (k = 1). At 10 kg/m^3 the radiated share rises from 61% to 81%,
+  with 60% of the heat above 1 keV.
+- **Mean density matters, not surface area.** A lattice behaves as a foam at its mean density once
+  the shock merges its struts. Shrinking a 10 kg/m^3 foam fireball from 1 kg to 0.01 kg (more
+  surface per mass) only moves 61% to 68%. Going from 10 to 1 kg/m^3 moves it to 86%.
+- **3:1 trades target mass for light.** Light per joule of projectile kinetic energy peaks near
+  k = 2 (0.47 for the dense-into-10 kg/m^3 case), against 0.41 at k = 1 and 0.45 at k = 3. Light
+  per kilogram of ship-carried target falls from 78 GJ (k = 1) to 45 GJ (k = 2) and 29 GJ (k = 3).
+  Higher k also cools the fireball (470 eV at k = 3) and thickens it. The parent counts the target
+  as spent mass, so k = 1 to 2 is the likely optimum for specific impulse. The pass-through
+  specific-impulse optimizer should decide it. This study does not.
+- **Solar survival (hand estimate).** At 4 solar radii (3.93 MW/m^2), an isolated gray strut that
+  radiates from both sides settles at (S / 2 sigma)^(1/4) ~ 2400 K. Carbon's sublimation is slow
+  there, so a lattice should survive far longer than a second as long as its struts can see cold
+  sky.
+
 ## Limits
 
 One zone, so there is no cool photosphere and no temperature gradient. For k > 1 the shock decays
