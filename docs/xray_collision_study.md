@@ -15,7 +15,7 @@ nozzle. Its Python is `python/puffsat/xray_collision/`, its outputs are under
 ## Model
 
 Everything is one-zone, and everything is called through
-`fireball.collide(material, impactor_radius, mass_ratio, v_rel, lowering=, kappa_scale=)`.
+`fireball.collide(material, impactor_radius, mass_ratio, v_rel, lowering=, kappa_scale=, rho0=)`.
 
 - **Kinematics (ship frame).** An impactor of mass `m` hits a resting target of `k m`. Only the
   reduced-mass energy `Q = (1/2) mu v_rel^2` can become heat, which is `k/(1+k)` of the
@@ -64,8 +64,79 @@ a million optical depths thick, and by the time expansion thins it out it has co
 33.5 km/s gives 5.8 eV per atomic mass unit. Heavier atoms collect more per atom, but they spread
 it over more free electrons, and they are more opaque.
 
+## Result 2: a 3:1 target, condensed balls, radius 0.1 um - 10 cm -- `sweep_k3.csv`
+
+A ship-frame target of three impactor masses turns 75% of the impactor's kinetic energy into heat.
+The other 25% is centre-of-mass motion, which no geometry can recover. The goal was 80% of that
+heat leaving as light. The radii asked for are 1 mm, 1 cm and 10 cm. The sweep runs down to
+0.1 um to see whether shrinking ever helps.
+
+| impactor radius | argon `f_rad` | iron `f_rad` | argon / iron kT_emit |
+|---|---|---|---|
+| 10 cm | 0.55-0.74% | 2e-8 - 4e-7 | 1.0 / 0.8-1.5 eV |
+| 1 cm | 0.47-0.63% | 2e-7 - 4e-6 | 1.1 / 0.8-1.5 eV |
+| 1 mm | 0.30-0.39% | 2e-6 - 3e-5 | 1.2 / 0.8-1.6 eV |
+| 10 um | 0.08-0.11% | 5e-5 - 2e-4 | 3-4 / 4-5 eV |
+| 0.1 um | 0.34-0.57% | 0.07-0.19% | 17-20 / 27-34 eV |
+
+(Ranges span the ideal and lowered EOS at opacity x1. The CSV also holds opacity x0.1 and x10.)
+
+**None of the 84 cases reach 80%. The best is 0.74%.** Shrinking a condensed ball does not let its
+light out, because the limit is not opacity. Even a fully transparent zone can do no better than a
+blackbody, so the race bottoms out at the blackbody ceiling
+
+    t_cool / t_exp  >=  n k T c_s / (2 sigma T^4)
+
+For shocked argon at ~7 t/m^3 and 27 eV this ceiling is ~30-50. At 0.1 um the start race is 50-200,
+already near it. Along an adiabat `n/T^3` grows as `rho^-1`, so expansion only raises the ceiling.
+At 67 km/s the temperature is pinned at 25-50 eV by the energy per atom, so the only free lever is
+the density the heat is deposited at. Argon's ~0.5% shrinks with radius between 10 cm and 10 um
+for a related reason. It is the late transparent glow near 1 eV, and the time available for that
+glow scales with R.
+
+A lattice of condensed elements therefore cannot beat a condensed ball by surface area alone. Each
+element radiates at most at the blackbody ceiling, which is ~30x too slow.
+
+## Result 3: what would reach 80% -- `porous_k3.csv`
+
+The same 3:1 collision, started from foam or spray density `rho0` (ideal Saha, opacity x1). The
+pores are assumed to collapse fully onto the plasma EOS.
+
+| rho0 [kg/m^3] | argon `f_rad`, r = 1 mm / 1 cm / 10 cm / 1 m | iron `f_rad`, same radii |
+|---|---|---|
+| 100 | 0.02 / 0.03 / 0.04 / 0.05 | 0.02 / 0.02 / 0.01 / 0.01 |
+| 1 | 0.21 / 0.20 / 0.20 / 0.20 | 0.30 / 0.22 / 0.16 / 0.12 |
+| 0.1 | 0.54 / 0.45 / 0.39 / 0.36 | 0.70 / 0.58 / 0.43 / 0.32 |
+| 0.01 | 0.78 / **0.82** / 0.74 / 0.63 | 0.79 / **0.91** / **0.84** / 0.68 |
+| 0.001 | 0.75 / **0.88** / **0.94** / **0.97** | 0.61 / **0.96** / **0.98** / **0.95** |
+
+80% needs **both** conditions:
+
+- **A low start density.** About 1e-3 to 1e-2 kg/m^3, which is 1e-6 to 1e-5 of the condensed
+  density and roughly the density of a gas at a few hundred pascals. This drops the race below 1.
+- **An optical depth near one.** The pre-collision column `rho0 r` must be about 1e-4 to
+  1e-3 kg/m^2. Thicker, and the light is trapped. Much thinner (argon or iron at 1e-3 kg/m^3 and
+  1 mm), and the zone is too dilute to emit before it flies apart.
+
+The bodies that pass hold nanograms to 4 grams each. A kilogram-scale pulse would have to be
+spread as a sheet of about 1e-3 kg/m^2 per pulse, roughly 1e3-1e4 m^2 per kilogram, so that its
+light escapes through the faces.
+
+**Even then the light is EUV, not X-ray.** Low density moves heat into ionization, so the zone
+starts at only 6-8 eV and emits at kT 4-6 eV (peak photon ~12-17 eV). 10-20% of the heat comes
+out above 30 eV, and 4e-6 to 2e-4 above 100 eV. At 67 km/s any radiation-driven pusher is an
+EUV pusher. EUV is absorbed in tens of nanometres of almost anything, which suits ablation, but
+the radiation case and channel filler of the parent's design would have to be re-chosen for it.
+
+**Open for the lattice study.** A sheet of condensed elements may behave like foam at its mean
+density, if each element's plume merges with its neighbours' before it radiates. That
+re-thermalization is the mechanism that would make a lattice work, and this one-zone model cannot
+see it. Collisionality also has to be checked. At 1e-2 kg/m^3 the two streams may interpenetrate
+rather than shock.
+
 ## Limits
 
-One zone, so there is no cool photosphere and no temperature gradient. A collision of two balls
+One zone, so there is no cool photosphere and no temperature gradient. For k > 1 the shock decays
+into the target, and the one-zone mean heat stands in for a graded heating. A collision of two balls
 is a pancake, not a sphere. LTE is assumed throughout, including the thin, cold tail. The
 lowered EOS is a bracket, not a model.
