@@ -364,6 +364,36 @@ A short paragraph and the table in `docs/spray_plate_fatigue_and_spall.md` §1 w
       back, ~30 mm of steel away from where hydrogen enters.
     - But at the plate's 400-507 K hydrogen diffuses quickly through martensite. Over thousands
       of pulses that distance is crossed, and maraging tolerates little.
+  - **If the barrier cannot be qualified (added 2026-10-08): a hydrogen-tolerant face, at the
+    cost of fault tolerance.**
+    - A compressed face is limited by its Hugoniot elastic limit, `HEL ≈ Y(1-nu)/(1-2nu) ≈
+      1.75 Y`. Allow ~0.75 HEL, the rule that gives maraging its 2.5 GPa.
+    - Yields are from NASA/TM-2016-218602. The allowables are rule-of-thumb estimates, and these
+      alloys' spall strengths and fatigue curves are not sourced here.
+
+    | face alloy | hydrogen rating | yield | face allowable | area for the 0.89 GPa merged pulse |
+    |---|---|---|---|---|
+    | maraging 300 | extreme (needs barrier) | ~1.9 GPa | 2.5 GPa | 1x |
+    | Inconel 718, 1900 °F treatment | small | 1.08 GPa | ~1.4 GPa | 1x |
+    | NASA-HR1 | negligible | 0.94 GPa | ~1.2 GPa | 1x |
+    | A-286, solution treated (aged A-286 is "severe") | negligible | 0.85 GPa | ~1.1 GPa | 1x |
+    | Nitronic 50 | negligible | 0.59 GPa | ~0.77 GPa | ~1.2x |
+    | 316, annealed | negligible | 0.44 GPa | ~0.58 GPa | ~1.5x |
+
+    - **The merged design pulse fits A-286, NASA-HR1 or 718 (1900 °F) at today's size.** The
+      natural fallback is one of these, not a wider austenitic plate.
+    - **What is lost is fault tolerance.** A failed merge loads the face to 2.5-4.1 GPa. Maraging
+      survives an occasional one at the gentle end; these alloys would need 2-5x the area,
+      which is impractical. With a hydrogen-tolerant face, surviving a failed merge rests
+      almost entirely on **detecting it and stopping the push within a pulse or two**. That
+      makes merge monitoring a primary safety system, not a backup.
+    - **Widening helps only if the momentum is spread.** Peak pressure is about impulse per area
+      over pulse time. A wider plate under the same PuffSat cloud lowers nothing; the cloud and
+      spray must widen with it. Halving the peak takes ~1.4x the diameter, a thinner floor at
+      the same 150 t, and a re-check of bending, springs and the skirt.
+    - **Keep the skirt.** It contains the sideways spill (open plate eta_jet 0.33 against ~0.58
+      contained), and widening reduces the spill only modestly. The skirt liner takes the same
+      face alloy, or the same barrier, as the floor.
 - **Layering, if used, must put the tough grade at the back.** Reflected tension and spall start
   at the back face, so a less-tough backing would put the weakest steel where the tension is. Every
   layer also sees the full ~P in compression, so the backing must clear 2.5 GPa too, which rules
