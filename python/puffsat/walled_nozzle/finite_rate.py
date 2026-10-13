@@ -668,12 +668,14 @@ def required_carbon_rate(
 
 # ---- S26: the cases, the sweep and the tables -------------------------------------------------
 
-#: The ask's nozzles on the bulged chamber, plus the B6 row at A/A* 100: `(label, A*, A/A*)`.
+#: The ask's nozzles on the bulged chamber, plus both throats at A/A* 100 (the parent's ledger
+#: keys `SURVIVABLE_IMPULSE` by A/A* 100 and 300): `(label, A*, A/A*)`.
 BULGED_NOZZLES = (
     ("1.33 m^2, AR 100", 1.33, 100.0),
     ("1.33 m^2, AR 300 (22.5 m exit)", 1.33, 300.0),
     ("2.66 m^2, AR 150 (22.5 m exit)", 2.66, 150.0),
     ("2.66 m^2, AR 300 (31.9 m exit)", 2.66, 300.0),
+    ("2.66 m^2, AR 100 (18.4 m exit)", 2.66, 100.0),
 )
 #: The sphere for calibration: the paper's two near-term throats, at A/A* 300.
 SPHERE_NOZZLES = (
@@ -700,7 +702,7 @@ class Job:
 def jobs() -> list[Job]:
     """Every pulse S26 needs: the main rows, the angle rows and the rate rows."""
     out = []
-    asked = BULGED_NOZZLES[1:]
+    asked = BULGED_NOZZLES[1:4]
     for m in MODELS:
         for label, a, ar in BULGED_NOZZLES:
             out.append(Job("bulged", label, m, a, ar, 15.0, 1.0))
@@ -888,7 +890,7 @@ def report(
                   f"{p.peak.hydrogen_free_exit:.3f} |")  # fmt: skip
     print("\n## Sensitivity: wall angle and rate (thrust ratio to shifting; bond returned)")
     print("| nozzle | model | 10 deg | 15 deg | 20 deg | k/3.16 | k x3.16 |")
-    for label, _, _ in BULGED_NOZZLES[1:]:
+    for label, _, _ in BULGED_NOZZLES[1:4]:
         for m in MODELS:
             cells = []
             for ang, sc in ((10.0, 1.0), (15.0, 1.0), (20.0, 1.0), (15.0, 0.3162), (15.0, 3.1623)):

@@ -17,7 +17,7 @@ Reproduce with `make walled-nozzle-throat-kinetics` (~10 min, 8 cores). Outputs 
 | **3. Sphere** | It lands nearer equilibrium (0.6% thrust lost against 1.5%), so density is the cause. The effect is about 25 times smaller than the factor of 40 in recombination time suggested. |
 | **4. Wall angle** | A straight 15° cone from the throat. 10° buys 0.1-0.4% of thrust for 52% more nozzle length. **It does not earn a row.** A rate wrong by half a decade moves the result 2-3 times as much. |
 | **Carbon** | No rate exists, so carbon stays bracketed. The equilibrium carbon store is half released by A/A* ~2.5. Keeping up there needs a three-body coefficient of ~5e-47 m^6/s, **2.1 decades below** the one measurement (Slack's C + C + Ar). The carbon-frozen floor therefore needs carbon about 100 times slower than anything measured. |
-| **Wider throat** | Kinetics do not oppose it. At A/A* 300 the 2.66 m^2 throat is +0.3% (941 against 938). Option (a), A/A* 150 on the 22.5 m exit, loses 3.5% to the shorter expansion, not to chemistry. |
+| **Wider throat** | Kinetics do not oppose it: +0.2-0.3% against 1.33 m^2 at the same area ratio. On 2.66 m^2 the ledger's two rows are **885 kN s at A/A* 100** (18.4 m exit) and **941 at A/A* 300**, against 868 / 899 sent on 2026-10-12. Option (a), A/A* 150 on the 22.5 m exit, loses 3.5% to the shorter expansion, not to chemistry. |
 
 ## 2. Method in brief
 
@@ -43,6 +43,7 @@ charge. "Frozen" means carbon frozen at the peak and the particle count frozen a
 | **1.33 m^2, AR 300** (22.5 m) | **0.530** | **0.525** | 0.478 | **0.459** | 0.289 |
 | **(a) 2.66 m^2, AR 150** (22.5 m) | 0.499 | 0.497 | 0.452 | 0.443 | 0.289 |
 | **(b) 2.66 m^2, AR 300** (31.9 m) | 0.530 | 0.526 | 0.478 | 0.461 | 0.289 |
+| 2.66 m^2, AR 100 (18.4 m) | 0.480 | 0.479 | 0.435 | 0.430 | 0.289 |
 
 | nozzle | bond returned: eq / exch. / FC / frozen | H freeze, thrust lost: exch. / FC | net impulse [kN s]: eq / exch. / FC / frozen | B6 Bray |
 |---|---|---|---|---|
@@ -50,11 +51,13 @@ charge. "Frozen" means carbon frozen at the peak and the particle count frozen a
 | **1.33 m^2, AR 300** | 0.51 / 0.44 / 0.31 / 0.06 | 1.5% / 3.5% | 958 / **938** / 845 / 605 | 892 |
 | **(a) 2.66 m^2, AR 150** | 0.47 / 0.44 / 0.32 / 0.06 | 0.8% / 2.2% | 919 / **908** / 827 / 600 | 880 |
 | **(b) 2.66 m^2, AR 300** | 0.51 / 0.45 / 0.32 / 0.06 | 1.3% / 3.2% | 958 / **941** / 849 / 605 | 898 |
+| 2.66 m^2, AR 100 | 0.45 / 0.43 / 0.31 / 0.06 | 0.6% / 1.7% | 893 / **885** / 810 / 597 | 867 |
 
 - **Carbon matters more than hydrogen's rate.** Freezing carbon costs 0.05 of `eta` at equilibrium hydrogen. The hydrogen rate then costs 0.005 (exchange) or 0.02 (frozen carbon).
 - **Why B6's Bray figure was so pessimistic.** Bray freezes H at the first station with `Da < 1` (A/A* 39 on the 1.33 m^2 throat) and allows no recombination after it. The finite-rate gas keeps recombining past that point. With exchange carbon its exit `n_H^2/n_H2` is still ~9x the equilibrium value, but most of the store is back.
 - **Frozen-carbon H freezes earlier** (A/A* 24-28 against 39-47). Carbon frozen as free atoms cannot take up hydrogen, so more H stays free to strand.
 - **(a) against (b).** (a) loses the least to chemistry, but at A/A* 150 it expands less: 908 against 941.
+- **The gain over B6 is uneven between the ledger's rows:** +17 kN s (+2%) at A/A* 100 and +42 kN s (+5%) at A/A* 300. The longer nozzle had more H store to strand under Bray, so it has more to give back. In the parent's ledger this removes A/A* 100's 0.29 yr lead (`throat_kinetics_handoff.md`).
 - **Wall heat is not in these rows.** B6's bracket (2-12% of impulse at 212 m^3) still applies on top. The doubled throat empties sooner and loses less (B6: 840 against 789 at the high edge).
 
 ## 4. Ask 3: the sphere as calibration (A/A* 300)
@@ -111,6 +114,7 @@ free atoms (C + H), and third bodies are all neutral heavies.
 | 1.33 m^2, AR 300 | A/A* 2.6 | 4,936 K | 0.60 / 0.31 / 0.01 | 5.1e-47 | 6.1e-45 | 2.1 decades |
 | (a) 2.66 m^2, AR 150 | A/A* 2.5 | 4,948 K | 0.60 / 0.31 / 0.02 | 3.5e-47 | 6.1e-45 | 2.2 |
 | (b) 2.66 m^2, AR 300 | A/A* 2.6 | 4,936 K | 0.60 / 0.31 / 0.01 | 3.6e-47 | 6.1e-45 | 2.2 |
+| 2.66 m^2, AR 100 | A/A* 2.5 | 4,962 K | 0.60 / 0.31 / 0.03 | 3.3e-47 | 6.1e-45 | 2.3 |
 | sphere 0.198 m^2 | A/A* 2.4 | 5,182 K | 0.27 / 0.14 / 0.00 | 5.0e-48 | 5.7e-45 | 3.1 |
 
 - **Carbon releases its store just past the throat**, at A/A* ~2.5 where the gas is still dense. Keeping up there takes a coefficient ~100x below both Slack's measurement and `H + H + M` at the same station (8.3e-45).
