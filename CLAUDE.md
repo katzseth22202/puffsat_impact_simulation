@@ -134,6 +134,12 @@ answered in [`docs/walled_nozzle_hydrocode_asks.md`](docs/walled_nozzle_hydrocod
 ([ADR-0056](docs/adr/0056-hydrocode-asks-blowdown-clock-and-fixed-charge.md): the cycle's clock is
 the real-gas 0-D blowdown, since the 2-D vessel's wall leaks mass over tens of milliseconds).
 The summary owed to that repo is [`docs/hydrocode_asks_handoff.md`](docs/hydrocode_asks_handoff.md).
+The paper repo's S26 (finite-rate recombination through the bulged chamber's nozzles, carbon
+bracketed between frozen and free exchange) is answered in
+[`docs/walled_nozzle_throat_kinetics.md`](docs/walled_nozzle_throat_kinetics.md)
+([ADR-0057](docs/adr/0057-finite-rate-nozzle-particle-count-and-carbon-bracket.md); target
+`walled-nozzle-throat-kinetics`, module `finite_rate.py`); its handoff is
+[`docs/throat_kinetics_handoff.md`](docs/throat_kinetics_handoff.md).
 Targets: `walled-nozzle-blowdown`, `-cycle`, `-zone-loads`, `-cushion`, `-blowdown-2d`. Its Python is
 `python/puffsat/walled_nozzle/` plus the top-level `python/puffsat/eos_methane.py`, and its
 outputs are under `data/results/walled_nozzle/`.
@@ -151,6 +157,7 @@ make walled-nozzle-chamber-fatigue # autofrettaged Cr-Mo shell: crack growth und
 make walled-nozzle-wall-waves # spall and overwrap delamination under a reflected blast spike
 make walled-nozzle-chamber-blast # the rod's blast in a 1-D spherical chamber (euler2d::sphere)
 make walled-nozzle-vessel-blast  # the blast in 2-D rocket-shaped chambers: shape, deposition, long plug
+make walled-nozzle-throat-kinetics # S26: finite-rate H + H + M through the nozzles, carbon bracketed
 make walled-nozzle-test       # that study's tests alone
 ```
 

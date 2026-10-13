@@ -22,6 +22,9 @@ fill 1 t/s per 5 kg of rod, lock 20 ms) are assumptions.
    fails the wrap, and it already cycles at 2-3 Hz. It does not reach 4 Hz.
 4. **Correct `tab:one_chamber`:** 906 / 971 kN s become **861 / 892 kN s** once the 1% gate and
    the H + H + M nozzle freeze are charged (868 / 899 on the doubled throat).
+   **Superseded 2026-10-13 by S26** ([`throat_kinetics_handoff.md`](throat_kinetics_handoff.md)):
+   the sudden freeze tripled the hydrogen loss; the finite-rate figures are 883 / 938 kN s
+   (941 on the doubled throat at A/A* 300).
 5. **The throat film is a real cost.** It traps a hot residue that heats the next charge, and it
    weighs kilograms per shot, not grams.
 

@@ -848,6 +848,57 @@ def species_from_log(
     return _densities(np.array([ln_n_c, ln_n_h, ln_n_e]), _constants(temp, thermo))
 
 
+def _scaled_constants(temp: float, thermo: str, ln_phi: float) -> _EqConstants:
+    """Every constant times `phi^(dnu)`, `dnu` being the particles its reaction makes."""
+    c = _constants(temp, thermo)
+    return _EqConstants(
+        ln_kh=c.ln_kh + ln_phi,
+        ln_kc=tuple(k + ln_phi for k in c.ln_kc),
+        ln_k_mol=tuple(
+            k + (m.n_c + m.n_h - 1) * ln_phi for m, k in zip(MOLECULES, c.ln_k_mol, strict=True)
+        ),
+    )
+
+
+def constrained_composition(
+    rho: float, temp: float, feed: Feed, ln_phi: float, guess: Vec | None = None
+) -> tuple[Composition, Vec]:
+    """Equilibrium at `(rho, T)` with the particle count held off its equilibrium value.
+
+    Rate-controlled constrained equilibrium (Keck) with one constraint, the total particle count.
+    Minimising the free energy at a fixed count adds one multiplier, and it enters every mass
+    action law as `K -> K phi^(dnu)`: a molecule of `a` atoms is penalised by `phi^(a - 1)` and an
+    ionisation by `phi^(-1)`. `phi = 1` is ordinary equilibrium; `phi > 1` holds more particles,
+    which is what a gas does when its three-body recombination lags.
+
+    Returns the composition and its master log-densities, to warm-start the next call.
+    """
+    c = _scaled_constants(temp, feed.thermo, ln_phi)
+    n_f = rho / feed.formula_mass
+    if guess is not None:
+        x, res = _newton_polish(guess, c, n_f, feed.hc_ratio)
+        if res < 1e-8:
+            return _densities(x, c), x
+    ln_nf = math.log(n_f)
+    ln_r = math.log(feed.hc_ratio)
+    inits = (
+        _off_stoichiometric_init(ln_nf, c, feed.hc_ratio),
+        _cold_init(ln_nf, c, ln_r),
+        _pyrolysis_init(ln_nf, c, ln_r),
+        _hot_init(ln_nf, c, ln_r),
+    )
+    for init in inits:
+        x, res = _newton_polish(init, c, n_f, feed.hc_ratio)
+        if res < 1e-8:
+            return _densities(x, c), x
+    raise RuntimeError(f"constrained solve did not converge at T={temp} K, ln phi={ln_phi}")
+
+
+def bond_energy_in(comp: Composition, rho: float, feed: Feed = METHANE) -> float:
+    """Chemical energy locked in broken feed bonds [J/kg] for a given composition."""
+    return _bond_energy_held(comp, rho / feed.formula_mass, feed) / rho
+
+
 def composition(rho: float, temp: float, feed: Feed = METHANE) -> Composition:
     """Equilibrium composition at `(rho [kg/m^3], temp [K])` for a feed (default: methane)."""
     n_f = rho / feed.formula_mass  # carbon nuclei per m^3; the feed's H:C is conserved

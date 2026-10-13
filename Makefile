@@ -1020,13 +1020,19 @@ walled-nozzle-cushion:
 walled-nozzle-blowdown-2d:
 	cargo run --release -p sweep -- --vessel-blowdown --coarse --quick
 
-.PHONY: walled-nozzle-blowdown walled-nozzle-cycle walled-nozzle-zone-loads walled-nozzle-cushion walled-nozzle-blowdown-2d
+## walled-nozzle-throat-kinetics: S26 -- finite-rate H + H + M through the bulged chamber's three
+## nozzles and the sphere, carbon bracketed, 10/15/20 deg and +/- half a decade (ADR-0057, ~10 min)
+walled-nozzle-throat-kinetics:
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.finite_rate
+
+.PHONY: walled-nozzle-blowdown walled-nozzle-cycle walled-nozzle-zone-loads walled-nozzle-cushion walled-nozzle-blowdown-2d walled-nozzle-throat-kinetics
 
 ## walled-nozzle-test: this study's tests alone
 walled-nozzle-test:
 	uv run pytest python/tests/test_eos_methane.py python/tests/test_walled_nozzle_chamber.py \
 	                python/tests/test_walled_nozzle_hydrogen.py \
 	                python/tests/test_walled_nozzle_freeze.py \
+	                python/tests/test_walled_nozzle_finite_rate.py \
 	                python/tests/test_walled_nozzle_propellants.py \
 	                python/tests/test_walled_nozzle_surface.py \
 	                python/tests/test_walled_nozzle_wall.py \

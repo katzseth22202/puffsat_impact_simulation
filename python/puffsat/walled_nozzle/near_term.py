@@ -303,11 +303,17 @@ class FrozenCarbon(Branch):
         self._h_free_per_kg = feed.hc_ratio / feed.formula_mass - bound_h
         self._i_h2 = mols.index(eos_methane.H2)
 
-    def state(self, rho: float, temp: float) -> tuple[eos_methane.Composition, float]:
-        """Frozen carbon at this density, equilibrium hydrogen at this temperature."""
+    def state(
+        self, rho: float, temp: float, ln_phi: float = 0.0
+    ) -> tuple[eos_methane.Composition, float]:
+        """Frozen carbon at this density, equilibrium hydrogen at this temperature.
+
+        `ln_phi` holds the H pool off equilibrium, `n_H^2 / n_H2 = K phi`
+        (`eos_methane.constrained_composition`): the finite-rate nozzle's one free variable.
+        """
         n_free = self._h_free_per_kg * rho
         q = self._charge_per_kg * rho
-        ln_k2 = eos_methane.ln_k_molecule_thermo(eos_methane.H2, temp, self.feed.thermo)
+        ln_k2 = eos_methane.ln_k_molecule_thermo(eos_methane.H2, temp, self.feed.thermo) + ln_phi
         k_h = math.exp(min(ln_k_saha(IP_H, 1.0, G_H, temp), 700.0))  # n_H+ n_e / n_H
 
         n_e = max(q, math.sqrt(k_h * n_free), 1e-300)
