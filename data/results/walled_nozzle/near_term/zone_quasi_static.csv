@@ -1,0 +1,201 @@
+case,zone,time_ms_5kg,p_over_qsp
+CH4 212 m^3 bulged,head,0.00,0.0363
+CH4 212 m^3 bulged,head,1.26,0.7092
+CH4 212 m^3 bulged,head,2.52,0.4523
+CH4 212 m^3 bulged,head,3.78,1.0767
+CH4 212 m^3 bulged,head,5.04,1.0048
+CH4 212 m^3 bulged,head,6.30,0.9118
+CH4 212 m^3 bulged,head,7.56,0.9632
+CH4 212 m^3 bulged,head,8.82,0.8358
+CH4 212 m^3 bulged,head,10.08,0.8113
+CH4 212 m^3 bulged,head,11.34,0.7819
+CH4 212 m^3 bulged,bulge ramp,0.00,0.0363
+CH4 212 m^3 bulged,bulge ramp,1.26,0.8058
+CH4 212 m^3 bulged,bulge ramp,2.52,0.7870
+CH4 212 m^3 bulged,bulge ramp,3.78,0.7342
+CH4 212 m^3 bulged,bulge ramp,5.04,0.7467
+CH4 212 m^3 bulged,bulge ramp,6.30,0.8128
+CH4 212 m^3 bulged,bulge ramp,7.56,0.7997
+CH4 212 m^3 bulged,bulge ramp,8.82,0.8162
+CH4 212 m^3 bulged,bulge ramp,10.08,0.8011
+CH4 212 m^3 bulged,bulge ramp,11.34,0.7969
+CH4 212 m^3 bulged,bulge plateau,0.00,0.0363
+CH4 212 m^3 bulged,bulge plateau,1.26,1.3620
+CH4 212 m^3 bulged,bulge plateau,2.52,0.7788
+CH4 212 m^3 bulged,bulge plateau,3.78,0.8387
+CH4 212 m^3 bulged,bulge plateau,5.04,0.7665
+CH4 212 m^3 bulged,bulge plateau,6.30,0.7059
+CH4 212 m^3 bulged,bulge plateau,7.56,0.8369
+CH4 212 m^3 bulged,bulge plateau,8.82,0.8184
+CH4 212 m^3 bulged,bulge plateau,10.08,0.7785
+CH4 212 m^3 bulged,bulge plateau,11.34,0.7686
+CH4 212 m^3 bulged,taper,0.00,0.0363
+CH4 212 m^3 bulged,taper,1.26,0.7788
+CH4 212 m^3 bulged,taper,2.52,0.8837
+CH4 212 m^3 bulged,taper,3.78,1.0270
+CH4 212 m^3 bulged,taper,5.04,0.8247
+CH4 212 m^3 bulged,taper,6.30,0.7374
+CH4 212 m^3 bulged,taper,7.56,0.8537
+CH4 212 m^3 bulged,taper,8.82,0.8138
+CH4 212 m^3 bulged,taper,10.08,0.7409
+CH4 212 m^3 bulged,taper,11.34,0.7443
+CH4 212 m^3 bulged,cone,0.00,0.0363
+CH4 212 m^3 bulged,cone,1.26,2.4293
+CH4 212 m^3 bulged,cone,2.52,0.9309
+CH4 212 m^3 bulged,cone,3.78,0.5455
+CH4 212 m^3 bulged,cone,5.04,0.8587
+CH4 212 m^3 bulged,cone,6.30,1.0597
+CH4 212 m^3 bulged,cone,7.56,0.7261
+CH4 212 m^3 bulged,cone,8.82,0.7326
+CH4 212 m^3 bulged,cone,10.08,1.0263
+CH4 212 m^3 bulged,cone,11.34,0.8366
+"CH4 212 m^3 bulged, 0.25 cm",head,0.00,0.0363
+"CH4 212 m^3 bulged, 0.25 cm",head,1.26,0.7092
+"CH4 212 m^3 bulged, 0.25 cm",head,2.52,0.4523
+"CH4 212 m^3 bulged, 0.25 cm",head,3.78,1.0767
+"CH4 212 m^3 bulged, 0.25 cm",head,5.04,1.0048
+"CH4 212 m^3 bulged, 0.25 cm",head,6.30,0.9118
+"CH4 212 m^3 bulged, 0.25 cm",head,7.56,0.9632
+"CH4 212 m^3 bulged, 0.25 cm",head,8.82,0.8358
+"CH4 212 m^3 bulged, 0.25 cm",head,10.08,0.8113
+"CH4 212 m^3 bulged, 0.25 cm",head,11.34,0.7819
+"CH4 212 m^3 bulged, 0.25 cm",bulge ramp,0.00,0.0363
+"CH4 212 m^3 bulged, 0.25 cm",bulge ramp,1.26,0.8058
+"CH4 212 m^3 bulged, 0.25 cm",bulge ramp,2.52,0.7870
+"CH4 212 m^3 bulged, 0.25 cm",bulge ramp,3.78,0.7342
+"CH4 212 m^3 bulged, 0.25 cm",bulge ramp,5.04,0.7467
+"CH4 212 m^3 bulged, 0.25 cm",bulge ramp,6.30,0.8128
+"CH4 212 m^3 bulged, 0.25 cm",bulge ramp,7.56,0.7997
+"CH4 212 m^3 bulged, 0.25 cm",bulge ramp,8.82,0.8162
+"CH4 212 m^3 bulged, 0.25 cm",bulge ramp,10.08,0.8011
+"CH4 212 m^3 bulged, 0.25 cm",bulge ramp,11.34,0.7969
+"CH4 212 m^3 bulged, 0.25 cm",bulge plateau,0.00,0.0363
+"CH4 212 m^3 bulged, 0.25 cm",bulge plateau,1.26,1.3620
+"CH4 212 m^3 bulged, 0.25 cm",bulge plateau,2.52,0.7788
+"CH4 212 m^3 bulged, 0.25 cm",bulge plateau,3.78,0.8387
+"CH4 212 m^3 bulged, 0.25 cm",bulge plateau,5.04,0.7665
+"CH4 212 m^3 bulged, 0.25 cm",bulge plateau,6.30,0.7059
+"CH4 212 m^3 bulged, 0.25 cm",bulge plateau,7.56,0.8369
+"CH4 212 m^3 bulged, 0.25 cm",bulge plateau,8.82,0.8184
+"CH4 212 m^3 bulged, 0.25 cm",bulge plateau,10.08,0.7785
+"CH4 212 m^3 bulged, 0.25 cm",bulge plateau,11.34,0.7686
+"CH4 212 m^3 bulged, 0.25 cm",taper,0.00,0.0363
+"CH4 212 m^3 bulged, 0.25 cm",taper,1.26,0.7788
+"CH4 212 m^3 bulged, 0.25 cm",taper,2.52,0.8837
+"CH4 212 m^3 bulged, 0.25 cm",taper,3.78,1.0270
+"CH4 212 m^3 bulged, 0.25 cm",taper,5.04,0.8247
+"CH4 212 m^3 bulged, 0.25 cm",taper,6.30,0.7374
+"CH4 212 m^3 bulged, 0.25 cm",taper,7.56,0.8537
+"CH4 212 m^3 bulged, 0.25 cm",taper,8.82,0.8138
+"CH4 212 m^3 bulged, 0.25 cm",taper,10.08,0.7409
+"CH4 212 m^3 bulged, 0.25 cm",taper,11.34,0.7443
+"CH4 212 m^3 bulged, 0.25 cm",cone,0.00,0.0363
+"CH4 212 m^3 bulged, 0.25 cm",cone,1.26,2.4293
+"CH4 212 m^3 bulged, 0.25 cm",cone,2.52,0.9309
+"CH4 212 m^3 bulged, 0.25 cm",cone,3.78,0.5455
+"CH4 212 m^3 bulged, 0.25 cm",cone,5.04,0.8587
+"CH4 212 m^3 bulged, 0.25 cm",cone,6.30,1.0597
+"CH4 212 m^3 bulged, 0.25 cm",cone,7.56,0.7261
+"CH4 212 m^3 bulged, 0.25 cm",cone,8.82,0.7326
+"CH4 212 m^3 bulged, 0.25 cm",cone,10.08,1.0263
+"CH4 212 m^3 bulged, 0.25 cm",cone,11.34,0.8366
+CH4 106 m^3 unbulged,head,0.00,0.0185
+CH4 106 m^3 unbulged,head,1.26,0.5424
+CH4 106 m^3 unbulged,head,2.52,0.9670
+CH4 106 m^3 unbulged,head,3.78,1.0222
+CH4 106 m^3 unbulged,head,5.04,0.9193
+CH4 106 m^3 unbulged,head,6.30,0.6156
+CH4 106 m^3 unbulged,head,7.56,0.7179
+CH4 106 m^3 unbulged,head,8.82,0.7825
+CH4 106 m^3 unbulged,head,10.08,0.6503
+CH4 106 m^3 unbulged,head,11.34,0.5879
+CH4 106 m^3 unbulged,bulge ramp,0.00,0.0185
+CH4 106 m^3 unbulged,bulge ramp,1.26,0.4054
+CH4 106 m^3 unbulged,bulge ramp,2.52,0.6671
+CH4 106 m^3 unbulged,bulge ramp,3.78,0.9493
+CH4 106 m^3 unbulged,bulge ramp,5.04,0.8751
+CH4 106 m^3 unbulged,bulge ramp,6.30,0.6198
+CH4 106 m^3 unbulged,bulge ramp,7.56,0.6021
+CH4 106 m^3 unbulged,bulge ramp,8.82,0.8661
+CH4 106 m^3 unbulged,bulge ramp,10.08,0.7180
+CH4 106 m^3 unbulged,bulge ramp,11.34,0.6092
+CH4 106 m^3 unbulged,bulge plateau,0.00,0.0185
+CH4 106 m^3 unbulged,bulge plateau,1.26,0.5059
+CH4 106 m^3 unbulged,bulge plateau,2.52,0.6736
+CH4 106 m^3 unbulged,bulge plateau,3.78,0.9378
+CH4 106 m^3 unbulged,bulge plateau,5.04,0.8614
+CH4 106 m^3 unbulged,bulge plateau,6.30,0.5932
+CH4 106 m^3 unbulged,bulge plateau,7.56,0.5773
+CH4 106 m^3 unbulged,bulge plateau,8.82,0.8238
+CH4 106 m^3 unbulged,bulge plateau,10.08,0.7265
+CH4 106 m^3 unbulged,bulge plateau,11.34,0.6094
+CH4 106 m^3 unbulged,taper,0.00,0.0185
+CH4 106 m^3 unbulged,taper,1.26,0.7704
+CH4 106 m^3 unbulged,taper,2.52,0.5546
+CH4 106 m^3 unbulged,taper,3.78,0.9362
+CH4 106 m^3 unbulged,taper,5.04,0.8321
+CH4 106 m^3 unbulged,taper,6.30,0.6538
+CH4 106 m^3 unbulged,taper,7.56,0.6425
+CH4 106 m^3 unbulged,taper,8.82,0.7780
+CH4 106 m^3 unbulged,taper,10.08,0.6810
+CH4 106 m^3 unbulged,taper,11.34,0.5740
+CH4 106 m^3 unbulged,cone,0.00,0.0185
+CH4 106 m^3 unbulged,cone,1.26,1.3619
+CH4 106 m^3 unbulged,cone,2.52,1.2296
+CH4 106 m^3 unbulged,cone,3.78,0.5802
+CH4 106 m^3 unbulged,cone,5.04,0.4970
+CH4 106 m^3 unbulged,cone,6.30,0.9987
+CH4 106 m^3 unbulged,cone,7.56,0.7469
+CH4 106 m^3 unbulged,cone,8.82,0.5585
+CH4 106 m^3 unbulged,cone,10.08,0.6896
+CH4 106 m^3 unbulged,cone,11.34,0.7790
+CH4 53 m^3 unbulged,head,0.00,0.0093
+CH4 53 m^3 unbulged,head,1.26,0.4854
+CH4 53 m^3 unbulged,head,2.52,0.7569
+CH4 53 m^3 unbulged,head,3.78,0.9435
+CH4 53 m^3 unbulged,head,5.04,0.6331
+CH4 53 m^3 unbulged,head,6.30,0.8169
+CH4 53 m^3 unbulged,head,7.56,0.6421
+CH4 53 m^3 unbulged,head,8.82,0.7403
+CH4 53 m^3 unbulged,head,10.08,0.6721
+CH4 53 m^3 unbulged,head,11.34,0.7054
+CH4 53 m^3 unbulged,bulge ramp,0.00,0.0093
+CH4 53 m^3 unbulged,bulge ramp,1.26,0.4198
+CH4 53 m^3 unbulged,bulge ramp,2.52,0.8098
+CH4 53 m^3 unbulged,bulge ramp,3.78,0.8342
+CH4 53 m^3 unbulged,bulge ramp,5.04,0.5953
+CH4 53 m^3 unbulged,bulge ramp,6.30,0.7944
+CH4 53 m^3 unbulged,bulge ramp,7.56,0.6103
+CH4 53 m^3 unbulged,bulge ramp,8.82,0.6862
+CH4 53 m^3 unbulged,bulge ramp,10.08,0.6636
+CH4 53 m^3 unbulged,bulge ramp,11.34,0.6902
+CH4 53 m^3 unbulged,bulge plateau,0.00,0.0093
+CH4 53 m^3 unbulged,bulge plateau,1.26,0.6488
+CH4 53 m^3 unbulged,bulge plateau,2.52,0.9184
+CH4 53 m^3 unbulged,bulge plateau,3.78,0.6875
+CH4 53 m^3 unbulged,bulge plateau,5.04,0.7094
+CH4 53 m^3 unbulged,bulge plateau,6.30,0.7510
+CH4 53 m^3 unbulged,bulge plateau,7.56,0.6872
+CH4 53 m^3 unbulged,bulge plateau,8.82,0.7286
+CH4 53 m^3 unbulged,bulge plateau,10.08,0.6573
+CH4 53 m^3 unbulged,bulge plateau,11.34,0.6957
+CH4 53 m^3 unbulged,taper,0.00,0.0093
+CH4 53 m^3 unbulged,taper,1.26,1.1124
+CH4 53 m^3 unbulged,taper,2.52,0.7680
+CH4 53 m^3 unbulged,taper,3.78,0.6446
+CH4 53 m^3 unbulged,taper,5.04,0.7558
+CH4 53 m^3 unbulged,taper,6.30,0.6723
+CH4 53 m^3 unbulged,taper,7.56,0.7287
+CH4 53 m^3 unbulged,taper,8.82,0.6860
+CH4 53 m^3 unbulged,taper,10.08,0.7138
+CH4 53 m^3 unbulged,taper,11.34,0.6597
+CH4 53 m^3 unbulged,cone,0.00,0.0093
+CH4 53 m^3 unbulged,cone,1.26,2.3060
+CH4 53 m^3 unbulged,cone,2.52,0.4700
+CH4 53 m^3 unbulged,cone,3.78,0.7135
+CH4 53 m^3 unbulged,cone,5.04,0.9985
+CH4 53 m^3 unbulged,cone,6.30,0.6222
+CH4 53 m^3 unbulged,cone,7.56,0.8109
+CH4 53 m^3 unbulged,cone,8.82,0.6180
+CH4 53 m^3 unbulged,cone,10.08,0.7544
+CH4 53 m^3 unbulged,cone,11.34,0.6293

@@ -147,9 +147,14 @@ class History:
     volume: float
     energy: float = 1.0
     """Pulse energy relative to the 2.5 kg rod."""
+    qsp_real: float = math.nan
+    """The real quasi-static pressure [Pa] when it is not the 7000 K chamber's `1/V` law, e.g. a
+    fixed charge in a smaller chamber (`zone_loads`). NaN: use the law."""
 
     @property
     def qsp(self) -> float:
+        if math.isfinite(self.qsp_real):
+            return self.qsp_real
         return REAL_QSP_20 * 20.0 / self.volume * self.energy
 
     @property
@@ -163,11 +168,19 @@ class History:
         unchanged."""
         k = energy ** (1.0 / 3.0)
         return History(
-            self.z * k, self.r * k, self.time * k, self.pressure, self.volume * energy, energy
+            self.z * k,
+            self.r * k,
+            self.time * k,
+            self.pressure,
+            self.volume * energy,
+            energy,
+            self.qsp_real,
         )
 
 
-def load_history(path: Path = HISTORIES, case: str = CASE) -> History:
+def load_history(path: Path = HISTORIES, case: str = CASE, volume: float = math.nan) -> History:
+    """`case`'s wall history from a `vessel-blast` JSONL file. `volume` [m^3] stands in for
+    records written before the sweep recorded `volume_m3`."""
     for line in path.open():
         rec = json.loads(line)
         if rec["deposition"] != case:
@@ -179,7 +192,7 @@ def load_history(path: Path = HISTORIES, case: str = CASE) -> History:
         scale = REAL_QSP_20 / MODEL_QSP
         p = np.asarray(rec["pressure_pa"], dtype=np.float64)[:, keep] * scale
         t = np.asarray(rec["time_s"], dtype=np.float64)
-        return History(z[keep], r[keep], t, p, float(rec["volume_m3"]))
+        return History(z[keep], r[keep], t, p, float(rec.get("volume_m3", volume)))
     raise ValueError(f"{case!r} not in {path}")
 
 
@@ -412,8 +425,8 @@ def fling(kind: str, t: float, h: History, zone: str) -> tuple[float, float]:
     return res.peak_wrap_strain, allow
 
 
-def evaluate(wall: Wall, h: History) -> list[ZoneResult]:
-    t, strain, zone_ix, static = size_hoop(wall, h)
+def evaluate(wall: Wall, h: History, iterations: int = 6) -> list[ZoneResult]:
+    t, strain, zone_ix, static = size_hoop(wall, h, iterations)
     _, radius, _ = _meridian(h)
     names = [name for name, _, _ in ZONES]
     out = []

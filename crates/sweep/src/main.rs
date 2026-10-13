@@ -2726,15 +2726,20 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let path;
     if args
         .iter()
-        .any(|a| a == "--shape-40c-fine" || a == "--efficiency-r3")
+        .any(|a| a == "--shape-40c-fine" || a == "--efficiency-r3" || a == "--efficiency-wide")
     {
         // The r 3.0 m bulge, the chosen dry-wrap chamber. `--shape-40c-fine`: its 0.25 cm
         // convergence over the same 1.2 ms. `--efficiency-r3`: 5 ms at 0.5 cm with the throat
         // resized for 2 Hz (V/A* = 160 m), recording the energy the early outflow carries.
+        // `--efficiency-wide`: the same with V/A* = 55 m, i.e. a 0.5 kg chamber (cube-root
+        // scaled) keeping the 2.5 kg chamber's 0.66 m^2 throat, over 10 ms.
         use euler2d::vessel::Bulge;
         let fine = args.iter().any(|a| a == "--shape-40c-fine");
+        let wide = args.iter().any(|a| a == "--efficiency-wide");
         path = if fine {
             "data/results/walled_nozzle/near_term/vessel_blast_shape_40c_fine.jsonl"
+        } else if wide {
+            "data/results/walled_nozzle/near_term/vessel_blast_efficiency_wide.jsonl"
         } else {
             "data/results/walled_nozzle/near_term/vessel_blast_efficiency_r3.jsonl"
         };
@@ -2748,6 +2753,8 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         };
         let r_t = if fine {
             (40.0 / (VESSEL_VOLUME / 0.149) / std::f64::consts::PI).sqrt()
+        } else if wide {
+            (106.0 / 55.0 / std::f64::consts::PI).sqrt()
         } else {
             (106.0 / 160.0 / std::f64::consts::PI).sqrt()
         };
@@ -2760,6 +2767,12 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 0.0025,
                 1.2e-3,
                 "bulge r 3.0 m z 1.4-2.8, 3 m taper, plug 1.5 m",
+            )
+        } else if wide {
+            (
+                0.005,
+                10.0e-3,
+                "bulge r 3.0 m, wide throat (V/A* 55 m), 10 ms",
             )
         } else {
             (0.005, 5.0e-3, "bulge r 3.0 m, throat for 2 Hz, 5 ms")
@@ -3139,6 +3152,141 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             let fill = (gases[0].0, gases[0].1 - (10.0 - 4.4));
             cases.push(case(domed.0, domed.1, fill, 1.2, 0.01, 2.0e-3, label, segs));
         }
+    } else if args
+        .iter()
+        .any(|a| a == "--compact" || a == "--compact-hydrogen")
+    {
+        // Faster blowdown from the r 3.0 m bulge (blowdown time goes as V/A*): trim the volume
+        // that does not stand the wall off from the plug, and widen the throat. Each trim alone,
+        // then all together. 2.5 kg rod, the 5 kg chamber's 0.838 m^2 throat unless doubled.
+        use euler2d::vessel::{Bulge, Vessel};
+        // `--compact-hydrogen`: the hydrogen charge in the throat-x2 and all-trims shapes, whose
+        // shorter, steeper cones meet the remnant that hydrogen lets through.
+        let hydrogen = args.iter().any(|a| a == "--compact-hydrogen");
+        path = if hydrogen {
+            "data/results/walled_nozzle/near_term/vessel_blast_compact_hydrogen.jsonl"
+        } else {
+            "data/results/walled_nozzle/near_term/vessel_blast_compact.jsonl"
+        };
+        let fill = if hydrogen {
+            (gases[1].0, gases[1].1 - (10.0 - 4.4))
+        } else {
+            (gases[0].0, gases[0].1 - (10.0 - 4.4))
+        };
+        let r_t0 = (ASKS_THROAT_AREA_25 / std::f64::consts::PI).sqrt();
+        let cone0 = (1.4 - r_t0) / 12.0_f64.to_radians().tan();
+        let base_zc = vessel_sized(1.4, Some(cone0), 0.0, 0.7, 40.0, r_t0).z_c;
+        let make = |dz_c: f64, cone_deg: f64, taper: f64, throat_area: f64| {
+            let r_t = (throat_area / std::f64::consts::PI).sqrt();
+            let z_c = base_zc + dz_c;
+            Vessel {
+                r_c: 1.4,
+                z_c,
+                z_hi: z_c + (1.4 - r_t) / cone_deg.to_radians().tan(),
+                r_t,
+                curve: 0.0,
+                h_head: 0.7,
+                r_port: VESSEL_PORT_R,
+                bulge: Bulge {
+                    dr: 1.6,
+                    z0: 1.4,
+                    z1: 2.8,
+                    ramp: 0.5,
+                    ramp_out: taper,
+                },
+            }
+        };
+        let a = ASKS_THROAT_AREA_25;
+        for (label, v) in [
+            ("compact: 2 m taper", make(0.0, 12.0, 2.0, a)),
+            ("compact: cylinder 1.5 m shorter", make(-1.5, 12.0, 3.0, a)),
+            ("compact: 30 deg cone", make(0.0, 30.0, 3.0, a)),
+            ("compact: throat x2", make(0.0, 12.0, 3.0, 2.0 * a)),
+            (
+                "compact: all (2 m taper, cylinder -1.5 m, 20 deg cone, throat x2)",
+                make(-1.5, 20.0, 2.0, 2.0 * a),
+            ),
+        ] {
+            if hydrogen && !(label.contains("throat x2") || label.starts_with("compact: all")) {
+                continue;
+            }
+            let mut segs = vec![rod_segment()];
+            segs.extend(plug_column(0.8, 1.5, 10.0, 500.0, true));
+            cases.push(case(
+                "compact bulge",
+                v,
+                fill,
+                1.2,
+                0.005,
+                1.2e-3,
+                label,
+                segs,
+            ));
+        }
+    } else if args
+        .iter()
+        .any(|a| a == "--asks-unbulged" || a == "--asks-hydrogen")
+    {
+        // Hydrocode asks 2026-10-12 (aim_is_all_you_need), B3 and B5, solved on the 2.5 kg rod and
+        // read at 5 kg by cube-root scaling (volume x2, lengths and times x2^(1/3)).
+        // `--asks-unbulged`: the 5 kg chamber's 106 and 53 m^3 without the bulge, i.e. the r 1.4 m
+        //   domed long 12-degree cone at 53 and 26.5 m^3, on the 5 kg chamber's 1.33 m^2 throat
+        //   (0.838 m^2 here). Same rod, 10 kg plug and charge as the r 3.0 m bulge.
+        // `--asks-hydrogen`: the r 3.0 m bulge filled with the hydrogen chamber's charge. Real
+        //   hydrogen's Gamma_eff is 1.19-1.23 over 20-106 m^3, so gamma 1.2 holds for it too;
+        //   the run tests that the line blast does not depend on the gas density.
+        use euler2d::vessel::Bulge;
+        let hydrogen = args.iter().any(|a| a == "--asks-hydrogen");
+        path = if hydrogen {
+            "data/results/walled_nozzle/near_term/vessel_blast_asks_hydrogen.jsonl"
+        } else {
+            "data/results/walled_nozzle/near_term/vessel_blast_asks_unbulged.jsonl"
+        };
+        let r_t = (ASKS_THROAT_AREA_25 / std::f64::consts::PI).sqrt();
+        let cone_len = (1.4 - r_t) / 12.0_f64.to_radians().tan();
+        let plug_and_rod = || {
+            let mut segs = vec![rod_segment()];
+            segs.extend(plug_column(0.8, 1.5, 10.0, 500.0, true));
+            segs
+        };
+        if hydrogen {
+            let fill = (gases[1].0, gases[1].1 - (10.0 - 4.4));
+            let v = vessel_sized(1.4, Some(cone_len), 0.0, 0.7, 40.0, r_t).with_bulge(Bulge {
+                dr: 1.6,
+                z0: 1.4,
+                z1: 2.8,
+                ramp: 0.5,
+                ramp_out: 3.0,
+            });
+            cases.push(case(
+                "shape r 3.0 m bulge",
+                v,
+                fill,
+                1.2,
+                0.005,
+                1.2e-3,
+                "hydrogen, bulge r 3.0 m z 1.4-2.8, 3 m taper, plug 1.5 m",
+                plug_and_rod(),
+            ));
+        } else {
+            let fill = (gases[0].0, gases[0].1 - (10.0 - 4.4));
+            for (volume, label) in [
+                (53.0, "unbulged 53 m^3 (106 at 5 kg), plug 0.8-2.3 m"),
+                (26.5, "unbulged 26.5 m^3 (53 at 5 kg), plug 0.8-2.3 m"),
+            ] {
+                let v = vessel_sized(1.4, Some(cone_len), 0.0, 0.7, volume, r_t);
+                cases.push(case(
+                    "unbulged long cone",
+                    v,
+                    fill,
+                    1.2,
+                    0.005,
+                    1.2e-3,
+                    label,
+                    plug_and_rod(),
+                ));
+            }
+        }
     } else if args.iter().any(|a| a == "--rod-plug") {
         // The rod and plug as material: no deposition model. 10 kg plugs of frozen methane in a
         // polyethylene container (~500 kg/m^3), and the paper's 4.4 kg foam plug as reference.
@@ -3411,6 +3559,313 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         println!(
             "rust: {:>27} {:>22} {:>15} g={:.1} cell={:.3} -> peak={:.2e} Pa",
             r.shape, r.deposition, r.chamber, r.gamma, r.cell_m, peak
+        );
+    })
+}
+
+// ---- Walled nozzle: the whole blowdown in 2-D (hydrocode asks 2026-10-12, B1) ---------------
+//
+// The parent's blowdown clock is the quasi-steady 0-D formula: a uniform chamber emptying
+// through a choked throat with discharge coefficient one. Here the whole blowdown is solved in
+// the 2-D chamber, from a thermalized pulse to fill pressure, on the same gamma-law gas. The
+// ratio of the two clocks is the flow's own correction (non-uniform start, sloshing, the real
+// discharge of a 12-degree cone), which `walled_nozzle.blowdown` applies to its real-gas 0-D
+// clock. 2.5 kg rod, read at 5 kg by cube-root scaling.
+
+/// The 5 kg chamber's 1.33 m^2 throat at the 2.5 kg rod: `1.33 / 2^(2/3)` [m^2].
+const ASKS_THROAT_AREA_25: f64 = 0.8378;
+const BLOWDOWN_SAMPLE: f64 = 0.25e-3;
+const BLOWDOWN_WALL_SAMPLE: f64 = 1.0e-3;
+const RESULT_PATH_VESSEL_BLOWDOWN: &str =
+    "data/results/walled_nozzle/near_term/vessel_blowdown.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct VesselBlowdownRecord {
+    case: String,
+    chamber: String,
+    gamma: f64,
+    cell_m: f64,
+    volume_m3: f64,
+    throat_area_m2: f64,
+    /// Fluid mass [kg] and total energy [J] inside the chamber at t = 0.
+    mass0_kg: f64,
+    energy0_j: f64,
+    time_s: Vec<f64>,
+    mass_kg: Vec<f64>,
+    energy_j: Vec<f64>,
+    /// Volume-mean pressure [Pa].
+    mean_pressure_pa: Vec<f64>,
+    /// Mass [kg] and stagnation enthalpy [J] out through the throat plane so far. Their sum with
+    /// what is inside measures how well the immersed wall conserves.
+    #[serde(default)]
+    throat_out_kg: Vec<f64>,
+    #[serde(default)]
+    throat_out_j: Vec<f64>,
+    station_z: Vec<f64>,
+    station_r: Vec<f64>,
+    wall_time_s: Vec<f64>,
+    /// `wall_pressure_pa[sample][station]`, sampled (not the bin maximum).
+    wall_pressure_pa: Vec<Vec<f64>>,
+}
+
+#[derive(Debug, Clone)]
+struct BlowdownCase {
+    case: &'static str,
+    chamber: &'static str,
+    vessel: euler2d::vessel::Vessel,
+    charge_kg: f64,
+    gamma: f64,
+    cell: f64,
+    t_end: f64,
+    /// Where the pulse is released, as heat with the rod and plug's mass.
+    seg: DepositSeg,
+}
+
+#[allow(clippy::too_many_lines)]
+fn vessel_blowdown_one(c: &BlowdownCase) -> VesselBlowdownRecord {
+    use euler2d::kernel::{Bc, Grid2D};
+    use euler2d::state::Prim;
+    let (vessel, cell, gamma) = (c.vessel, c.cell, c.gamma);
+    // SAFE: chamber lengths and the cell size are positive and small, so the counts fit a usize.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let (nz, nr) = (
+        (vessel.z_hi / cell).ceil() as usize,
+        (vessel.r_max() / cell).ceil() as usize + 3,
+    );
+    let mut g = Grid2D::new(nz, nr, cell, cell, gamma);
+    g.set_axisymmetric(true);
+    g.bc_zlo = Bc::Reflect;
+    // Outflow-only: a transmissive edge feeds back any cell with reversed flow at the throat lip,
+    // which over hundreds of milliseconds filled the chamber instead of emptying it.
+    g.bc_zhi = Bc::Outflow;
+    g.bc_rlo = Bc::Reflect;
+    g.bc_rhi = Bc::Reflect;
+    g.set_vessel(Some(vessel));
+    g.set_parallel(true);
+    let centre = |iz: usize, ir: usize| ((iz as f64 + 0.5) * cell, (ir as f64 + 0.5) * cell);
+    let fluid: Vec<(usize, usize)> = (0..nz)
+        .flat_map(|iz| (0..nr).map(move |ir| (iz, ir)))
+        .filter(|&(iz, ir)| {
+            let (z, r) = centre(iz, ir);
+            !vessel.is_solid(z, r)
+        })
+        .collect();
+    let v_fluid: f64 = fluid.iter().map(|&(_, ir)| g.cell_volume(ir)).sum();
+    let v_seg: f64 = fluid
+        .iter()
+        .filter(|&&(iz, ir)| {
+            let (z, r) = centre(iz, ir);
+            c.seg.contains(z, r)
+        })
+        .map(|&(_, ir)| g.cell_volume(ir))
+        .sum();
+    let base = c.charge_kg / v_fluid;
+    g.init(|iz, ir| {
+        let (z, r) = centre(iz, ir);
+        let (mut rho, mut heat) = (base, 0.0);
+        if c.seg.contains(z, r) {
+            rho += c.seg.mass / v_seg;
+            heat = c.seg.heat / v_seg;
+        }
+        Prim::new(rho, 0.0, 0.0, BLAST_FILL_PA + (gamma - 1.0) * heat)
+    });
+    let totals = |g: &Grid2D| -> (f64, f64, f64) {
+        let (mut m, mut e, mut pv) = (0.0, 0.0, 0.0);
+        for &(iz, ir) in &fluid {
+            let v = g.cell_volume(ir);
+            let u = g.cons(iz, ir);
+            m += u.rho * v;
+            e += u.e_tot * v;
+            pv += g.prim(iz, ir).p * v;
+        }
+        (m, e, pv / v_fluid)
+    };
+    let stations = g.vessel_wall_pressures();
+    let keep: Vec<usize> = (0..stations.len()).step_by(2).collect();
+    let (m0, e0, p0) = totals(&g);
+    let (mut time_s, mut mass_kg, mut energy_j, mut mean_p) =
+        (vec![0.0], vec![m0], vec![e0], vec![p0]);
+    let (mut out_kg, mut out_j) = (vec![0.0], vec![0.0]);
+    let (mut throat_mass, mut throat_energy) = (0.0, 0.0);
+    let r_t = vessel.r_wall(vessel.z_hi);
+    let (mut wall_t, mut wall_p) = (Vec::new(), Vec::new());
+    let (mut t, mut next, mut next_wall) = (0.0, BLOWDOWN_SAMPLE, 0.0);
+    while t < c.t_end {
+        let dt = g.stable_dt().min(c.t_end - t).min(next - t).max(1e-12);
+        g.step(dt);
+        t += dt;
+        // Outflow through the throat plane (the last row inside the throat radius).
+        for ir in 0..nr {
+            let r = (ir as f64 + 0.5) * cell;
+            if r >= r_t {
+                break;
+            }
+            let w = g.prim(nz - 1, ir);
+            if w.uz > 0.0 {
+                let dm = w.rho * w.uz * 2.0 * std::f64::consts::PI * r * cell * dt;
+                throat_mass += dm;
+                throat_energy +=
+                    dm * (gamma / (gamma - 1.0) * w.p / w.rho + 0.5 * (w.uz * w.uz + w.ur * w.ur));
+            }
+        }
+        if t >= next - 1e-12 {
+            let (m, e, p) = totals(&g);
+            time_s.push(t);
+            mass_kg.push(m);
+            energy_j.push(e);
+            mean_p.push(p);
+            out_kg.push(throat_mass);
+            out_j.push(throat_energy);
+            next += BLOWDOWN_SAMPLE;
+        }
+        if t >= next_wall - 1e-12 {
+            let walls = g.vessel_wall_pressures();
+            wall_t.push(t);
+            wall_p.push(keep.iter().map(|&k| walls[k].2).collect());
+            next_wall += BLOWDOWN_WALL_SAMPLE;
+        }
+    }
+    VesselBlowdownRecord {
+        case: c.case.to_string(),
+        chamber: c.chamber.to_string(),
+        gamma,
+        cell_m: cell,
+        volume_m3: vessel.volume(),
+        throat_area_m2: std::f64::consts::PI * vessel.r_t * vessel.r_t,
+        mass0_kg: m0,
+        energy0_j: e0,
+        time_s,
+        mass_kg,
+        energy_j,
+        mean_pressure_pa: mean_p,
+        throat_out_kg: out_kg,
+        throat_out_j: out_j,
+        station_z: keep.iter().map(|&k| stations[k].0).collect(),
+        station_r: keep.iter().map(|&k| stations[k].1).collect(),
+        wall_time_s: wall_t,
+        wall_pressure_pa: wall_p,
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+fn cmd_vessel_blowdown(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    use euler2d::vessel::Bulge;
+    // `--quick`: a fifth of each run, to a separate file (a check of the throat edge).
+    let quick = args.iter().any(|a| a == "--quick");
+    let path = if quick {
+        "data/results/walled_nozzle/near_term/vessel_blowdown_quick.jsonl"
+    } else {
+        RESULT_PATH_VESSEL_BLOWDOWN
+    };
+    let cell = if args.iter().any(|a| a == "--coarse") {
+        0.04
+    } else {
+        0.02
+    };
+    let r_t = (ASKS_THROAT_AREA_25 / std::f64::consts::PI).sqrt();
+    let cone_len = (1.4 - r_t) / 12.0_f64.to_radians().tan();
+    let methane = 68.763 - (10.0 - 4.4);
+    // The pulse thermalized along the plug: the rod's energy as heat, with the rod and plug's
+    // 12.5 kg, over the plug's 0.8-2.3 m and 10 cm radius.
+    let column = DepositSeg {
+        z0: 0.8,
+        z1: 2.3,
+        radius: 0.10,
+        inner: 0.0,
+        heat: BLAST_ENERGY,
+        mass: 12.5,
+        uz: 0.0,
+    };
+    let bulged = vessel_sized(1.4, Some(cone_len), 0.0, 0.7, 40.0, r_t).with_bulge(Bulge {
+        dr: 1.6,
+        z0: 1.4,
+        z1: 2.8,
+        ramp: 0.5,
+        ramp_out: 3.0,
+    });
+    let unbulged = |v: f64| vessel_sized(1.4, Some(cone_len), 0.0, 0.7, v, r_t);
+    // The parent's 20 m^3 hydrogen sphere on its 0.198 m^2 throat: a domed head and an
+    // elliptical nose, each one radius deep, so the contour is a circle closing on the throat.
+    let r_s = (3.0 * 20.0 / (4.0 * std::f64::consts::PI)).cbrt();
+    let sphere = euler2d::vessel::Vessel {
+        r_c: r_s,
+        z_c: r_s,
+        z_hi: 2.0 * r_s,
+        r_t: (0.198 / std::f64::consts::PI).sqrt(),
+        curve: 1.0,
+        h_head: r_s,
+        r_port: VESSEL_PORT_R,
+        bulge: Bulge::NONE,
+    };
+    let mut cases = vec![
+        BlowdownCase {
+            case: "bulge r 3.0 m, 106 m^3 (212 at 5 kg)",
+            chamber: "methane 7000 K",
+            vessel: bulged,
+            charge_kg: methane,
+            gamma: 1.2,
+            cell,
+            t_end: 0.30,
+            seg: column,
+        },
+        BlowdownCase {
+            case: "unbulged 53 m^3 (106 at 5 kg)",
+            chamber: "methane 7000 K",
+            vessel: unbulged(53.0),
+            charge_kg: methane,
+            gamma: 1.2,
+            cell,
+            t_end: 0.16,
+            seg: column,
+        },
+        BlowdownCase {
+            case: "unbulged 26.5 m^3 (53 at 5 kg)",
+            chamber: "methane 7000 K",
+            vessel: unbulged(26.5),
+            charge_kg: methane,
+            gamma: 1.2,
+            cell,
+            t_end: 0.09,
+            seg: column,
+        },
+    ];
+    cases.push(BlowdownCase {
+        case: "hydrogen sphere 20 m^3",
+        chamber: "hydrogen 5500 K",
+        vessel: sphere,
+        charge_kg: 59.913,
+        gamma: 1.22,
+        cell,
+        t_end: 0.15,
+        seg: DepositSeg {
+            z0: r_s,
+            z1: r_s,
+            radius: BLAST_DEPOSIT_RADIUS,
+            inner: 0.0,
+            heat: BLAST_ENERGY,
+            mass: BLAST_ROD_PLUG_KG,
+            uz: 0.0,
+        },
+    });
+    if quick {
+        for c in &mut cases {
+            c.t_end *= 0.2;
+        }
+    }
+    let rows = par_map_with_progress("vessel-blowdown", &cases, vessel_blowdown_one);
+    if let Some(dir) = Path::new(path).parent() {
+        fs::create_dir_all(dir)?;
+    }
+    emit_scenario(path, "vessel-blowdown", &rows, |r| {
+        let left = r.mass_kg.last().copied().unwrap_or(0.0) / r.mass0_kg;
+        println!(
+            "rust: {:>38} V={:.1} m^3 A*={:.3} m^2 cell={:.3} -> {:.1}% of the mass left at {:.0} ms",
+            r.case,
+            r.volume_m3,
+            r.throat_area_m2,
+            r.cell_m,
+            100.0 * left,
+            1e3 * r.time_s.last().copied().unwrap_or(0.0)
         );
     })
 }
@@ -6224,6 +6679,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--spray-film", cmd_spray_film),
     ("--spray-2d-cup", cmd_spray_2d_cup),
     ("--spray-2d-standoff", cmd_spray_2d_standoff),
+    ("--vessel-blowdown", cmd_vessel_blowdown),
     ("--vessel-blast", cmd_vessel_blast),
     ("--chamber-blast", cmd_chamber_blast),
     ("--spray-face-history", cmd_spray_face_history),

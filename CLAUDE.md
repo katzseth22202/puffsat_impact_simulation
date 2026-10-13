@@ -127,7 +127,14 @@ with chemical ablation and blowing coupled in (`make walled-nozzle-wall-layers-h
 overwrap delamination of the autofrettaged wall are in
 [`docs/walled_nozzle_chamber_fatigue.md`](docs/walled_nozzle_chamber_fatigue.md); the solved blast
 inside the chamber (plug, shape, wall, volume trade) is in
-[`docs/walled_nozzle_chamber_blast.md`](docs/walled_nozzle_chamber_blast.md). Its Python is
+[`docs/walled_nozzle_chamber_blast.md`](docs/walled_nozzle_chamber_blast.md). The parent calcs
+repo's hydrocode asks of 2026-10-12 (blowdown clock, the 2 Hz cycle and its films, zone wall loads
+of bulged against unbulged chambers, a gas-cushioned wall, hydrogen, impulse against volume) are
+answered in [`docs/walled_nozzle_hydrocode_asks.md`](docs/walled_nozzle_hydrocode_asks.md)
+([ADR-0056](docs/adr/0056-hydrocode-asks-blowdown-clock-and-fixed-charge.md): the cycle's clock is
+the real-gas 0-D blowdown, since the 2-D vessel's wall leaks mass over tens of milliseconds).
+The summary owed to that repo is [`docs/hydrocode_asks_handoff.md`](docs/hydrocode_asks_handoff.md).
+Targets: `walled-nozzle-blowdown`, `-cycle`, `-zone-loads`, `-cushion`, `-blowdown-2d`. Its Python is
 `python/puffsat/walled_nozzle/` plus the top-level `python/puffsat/eos_methane.py`, and its
 outputs are under `data/results/walled_nozzle/`.
 

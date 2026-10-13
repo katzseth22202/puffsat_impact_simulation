@@ -29,6 +29,11 @@ pub enum Bc {
     /// Periodic: the ghost cells wrap to the opposite end (used by the smooth order-of-accuracy
     /// test).
     Periodic,
+    /// Outflow only: transmissive while the boundary cell's gas leaves, reflecting while it
+    /// returns, so gas leaves and is never drawn in. The open throat of a
+    /// chamber discharging to vacuum: a cell with reversed flow at the throat lip would otherwise
+    /// pull gas in from outside.
+    Outflow,
 }
 
 /// Which axis a 1D sweep runs along — fixes which momentum component is "normal".
@@ -751,6 +756,11 @@ fn fill_ghosts(p: &mut [DirCons], n: usize, bc_lo: Bc, bc_hi: Bc) {
             p[1] = p[n + 1];
             p[0] = p[n];
         }
+        Bc::Outflow => {
+            let g = outgoing(p[2], -1.0);
+            p[1] = g;
+            p[0] = g;
+        }
     }
     match bc_hi {
         Bc::Reflect => {
@@ -765,7 +775,21 @@ fn fill_ghosts(p: &mut [DirCons], n: usize, bc_lo: Bc, bc_hi: Bc) {
             p[n + 2] = p[2];
             p[n + 3] = p[3];
         }
+        Bc::Outflow => {
+            let g = outgoing(p[n + 1], 1.0);
+            p[n + 2] = g;
+            p[n + 3] = g;
+        }
     }
+}
+
+/// The ghost of an outflow edge whose outward direction is `sign` (+1 at the high end, -1 at the
+/// low end): the boundary cell itself while it moves out, its mirror while it moves in. The edge
+/// is then transmissive to leaving gas and a wall to returning gas, whose symmetric Riemann
+/// problem carries no mass. (A ghost merely brought to rest would still be a reservoir at the
+/// cell's pressure, and would expand into the rarefaction behind gas moving inward.)
+fn outgoing(c: DirCons, sign: f64) -> DirCons {
+    if c.mn * sign >= 0.0 { c } else { reflect(c) }
 }
 
 /// Fastest signal speed reachable from a cell stencil: `max(|u_n|, |u_t|) + 2c/(γ−1)` maximized
@@ -889,6 +913,60 @@ mod tests {
                 assert!((w.rho - 1.3).abs() < 1e-13);
                 assert!((w.p - 2.0).abs() < 1e-13);
                 assert!(w.uz.abs() < 1e-13 && w.ur.abs() < 1e-13);
+            }
+        }
+    }
+
+    /// An outflow-only edge lets gas leave and never draws it in: gas at rest moving *towards* the
+    /// interior from that edge gains no mass, where a transmissive edge would feed it.
+    #[test]
+    fn outflow_edge_never_draws_mass_in() {
+        let mass = |g: &Grid2D| -> f64 {
+            (0..g.nz())
+                .flat_map(|iz| (0..g.nr()).map(move |ir| (iz, ir)))
+                .map(|(iz, ir)| g.prim(iz, ir).rho)
+                .sum()
+        };
+        let run = |bc: Bc| {
+            let mut g = Grid2D::new(40, 4, 0.1, 0.1, GAMMA);
+            g.bc_zlo = Bc::Reflect;
+            g.bc_zhi = bc;
+            g.bc_rlo = Bc::Reflect;
+            g.bc_rhi = Bc::Reflect;
+            // Uniform gas drifting away from the z-hi edge, towards the closed end.
+            g.init(|_, _| Prim::new(1.0, -0.3, 0.0, 1.0));
+            let m0 = mass(&g);
+            g.run_to(0.5);
+            mass(&g) / m0
+        };
+        // Inflow 0.3 x 0.5 into a box 4 long: ~3.75% more mass through a transmissive edge.
+        assert!(
+            run(Bc::Transmissive) > 1.02,
+            "the transmissive edge should feed this flow"
+        );
+        assert!(
+            run(Bc::Outflow) <= 1.0 + 1e-12,
+            "the outflow edge drew mass in"
+        );
+    }
+
+    /// The outflow edge is exactly the transmissive one while the gas leaves.
+    #[test]
+    fn outflow_edge_matches_transmissive_for_leaving_gas() {
+        let run = |bc: Bc| {
+            let mut g = Grid2D::new(30, 4, 0.1, 0.1, GAMMA);
+            g.bc_zlo = Bc::Reflect;
+            g.bc_zhi = bc;
+            g.bc_rlo = Bc::Reflect;
+            g.bc_rhi = Bc::Reflect;
+            g.init(|iz, _| Prim::new(1.0, 2.0, 0.0, if iz < 10 { 3.0 } else { 1.0 }));
+            g.run_to(0.2);
+            g
+        };
+        let (a, b) = (run(Bc::Transmissive), run(Bc::Outflow));
+        for iz in 0..a.nz() {
+            for ir in 0..a.nr() {
+                assert!(a.cons(iz, ir) == b.cons(iz, ir));
             }
         }
     }

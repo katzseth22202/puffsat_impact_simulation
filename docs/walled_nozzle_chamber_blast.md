@@ -58,7 +58,9 @@ Reproduce:
 7. **The liquid-share spray does not soften the wall shocks** (§3). The drops equilibrate in
    microseconds and pay the gas's toll. Spend the liquid as plug mass.
 8. **The hydrogen chamber at this pulse size is unresolved.** It has not been run with the rod
-   and plug as material or with the bulge.
+   and plug as material or with the bulge. *(Solved 2026-10-12: the r 3.0 m bulge and dry wrap
+   survive hydrogen at 37 t, fling margin 1.09x, at 6-8% impulse per rod and 2-3 Hz;
+   [`walled_nozzle_hydrocode_asks.md`](walled_nozzle_hydrocode_asks.md) §6.)*
 
 ## 2. The solvers
 
@@ -690,6 +692,54 @@ charged:
   not yet resolve.
 - **Area ratio 300 is worth ~5% impulse but needs a ~22 m exit**, against ~13 m at 100.
 
+## 3i. A 0.5 kg rod: a smaller chamber, the same nozzle (added 2026-10-08)
+
+**Size and wall** (`wall_zones --energy 0.2 --suffix fine`). Cube-root scaling: lengths and times
+x0.585, pressures unchanged.
+
+| | 5 kg | 2.5 kg | 0.5 kg |
+|---|---|---|---|
+| volume | 212 m^3 | 106 m^3 | 21 m^3 |
+| bulge radius / across | 3.8 m / 7.6 m | 3.0 m / 6 m | 1.75 m / 3.5 m |
+| dry wrap over the 10 mm liner | 48.2 t | 24.9 t | **5.5 t, passes** |
+| worst fling (allow 2.4%) | 1.91% | 1.68% | 1.21% (2.0x) |
+| carried per pulse | ~115 kg | ~58 kg | ~11.5 kg |
+
+- The wall is 5.5 t, not 5.0, because the 10 mm liner does not scale. The same liner carries
+  more of the hoop, so the fling margin grows. The maraging fallback passes at 7.2-8.2 t.
+- The worst hydrogen crack life is ~18,000 pulses, in the cone liner. That is enough for a ~100 t
+  stack (~4,000-4,400 pulses), not for 500-800 t (20,000-35,000).
+
+**Blowdown time depends on how the throat is sized.** `τ ≈ V / (0.6 A* a)`, with `a` fixed by
+the chamber temperature and `V ∝ m_rod`:
+
+| throat | τ ∝ | 0.5 kg against 2.5 kg | thrust ∝ |
+|---|---|---|---|
+| scaled with the chamber (`A* ∝ m^(2/3)`) | `m^(1/3)` | ~72 -> ~42 ms, ~3.4 Hz | `m^(2/3)`, 0.34x |
+| the 2.5 kg chamber's 0.66 m^2 | `m` | ~14 ms, ~10 Hz | ~1x |
+| fixed `V/A*` | constant | 72 ms | `m`, 0.2x at 2 Hz |
+
+**The wide throat costs no impulse** (`--efficiency-wide`: the r 3.0 m chamber at `V/A* = 55 m`,
+the same flow as the 0.5 kg chamber on a 0.66 m^2 throat; 10 ms at 0.5 cm).
+
+| throat | out in the window | uniformity | against fully thermalized |
+|---|---|---|---|
+| `V/A*` 160 m, 5 ms | 7.2% of mass, 11.2% of energy | 0.956 | 0.9956 |
+| `V/A*` 55 m, 10 ms | 26.8% of mass, 25.1% of energy | 0.969 | 0.9957 |
+
+- The unthermalized gas exists only for the first few sound-crossing times. A wider throat drains
+  faster but does not lengthen that window. The wall peak falls, 1.31 -> 1.19 GPa.
+- **Keep the large throat and nozzle.** At the 2.5 kg throat the nozzle's residence time, and so
+  its recombination, is that of the 2.5 kg chamber. A geometrically scaled 0.5 kg nozzle is 0.585x
+  as long and freezes earlier.
+- **So a 0.5 kg chamber at ~10 Hz matches a 2.5 kg chamber at 2 Hz in thrust and Isp.** It costs
+  5x the wall cycles, a ~50 ms refill (plug, ~11.5 kg of gas, membrane) and roughly 3x the
+  time-averaged wall heat per area, since the wall is almost always hot.
+- On the parent's 800 t stack, 0.5 kg rods need several chambers: five at 10 Hz (~6.5 t each)
+  give one 5 kg chamber's thrust and split the cycles to ~7,000 each. One 5 kg chamber at 2 Hz on
+  800 t burns ~26-28 min; its finite-burn loss is estimated at +6-9% Δv, not computed.
+- Gamma-law gas; the nozzle chemistry and `eta_net` are not recomputed for the wide throat.
+
 ## 4. Limits
 
 - **Gamma-law gas.** Real-gas equilibrium enters only through `Gamma_eff` and the QSP scaling. A
@@ -851,6 +901,9 @@ charged:
     dry wrap.
   - Say so. The levers are the same bulge and wrap, a larger chamber, or a smaller rod per
     pulse.
+  - *Update 2026-10-12:* the bulge and wrap work (37 t, fling 1.09x), at 6-8% impulse per rod and
+    2-3 Hz on a 0.75-1.0 m^2 throat. A smaller rod alone does not
+    ([`walled_nozzle_hydrocode_asks.md`](walled_nozzle_hydrocode_asks.md) §6).
 
 ## 6. Sources
 

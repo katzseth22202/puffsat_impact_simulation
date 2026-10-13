@@ -993,6 +993,35 @@ walled-nozzle-vessel-blast:
 
 .PHONY: walled-nozzle-chamber-fatigue walled-nozzle-wall-waves walled-nozzle-chamber-blast walled-nozzle-vessel-blast
 
+# --- Hydrocode asks 2026-10-12 (aim_is_all_you_need): docs/walled_nozzle_hydrocode_asks.md ---
+
+## walled-nozzle-blowdown: B1 + B6 -- the real-gas 0-D blowdown with wall heat, the residue, the
+## impulse per pulse at 212 / 106 / 53 m^3 (5 kg) and the hydrogen sphere (~5 min)
+walled-nozzle-blowdown:
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.blowdown
+
+## walled-nozzle-cycle: B2 + B5's rate -- seal time, trapped residue, mixed charge, films, period
+walled-nozzle-cycle:
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.cycle
+
+## walled-nozzle-zone-loads: B3 + B5 -- the unbulged 106 / 53 m^3 and hydrogen-filled bulge as 2-D
+## rod-and-plug solves (0.5 cm, ~20-30 min each), then the per-zone spike, QSP and hoop overshoot
+walled-nozzle-zone-loads:
+	cargo run --release -p sweep -- --vessel-blast --asks-unbulged
+	cargo run --release -p sweep -- --vessel-blast --asks-hydrogen
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.zone_loads
+
+## walled-nozzle-cushion: B4 -- tiles on a gas cushion under the solved zone histories
+walled-nozzle-cushion:
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.cushion
+
+## walled-nozzle-blowdown-2d: the 2-D whole-blowdown check (4 cm, a fifth of each run); it measures
+## the early outflow and the immersed wall's mass leak, which bars it from the whole blowdown
+walled-nozzle-blowdown-2d:
+	cargo run --release -p sweep -- --vessel-blowdown --coarse --quick
+
+.PHONY: walled-nozzle-blowdown walled-nozzle-cycle walled-nozzle-zone-loads walled-nozzle-cushion walled-nozzle-blowdown-2d
+
 ## walled-nozzle-test: this study's tests alone
 walled-nozzle-test:
 	uv run pytest python/tests/test_eos_methane.py python/tests/test_walled_nozzle_chamber.py \
@@ -1005,7 +1034,8 @@ walled-nozzle-test:
 	                python/tests/test_walled_nozzle_wall_layers.py \
 	                python/tests/test_walled_nozzle_chamber_fatigue.py \
 	                python/tests/test_walled_nozzle_dry_wrap.py \
-	                python/tests/test_walled_nozzle_shell_response.py
+	                python/tests/test_walled_nozzle_shell_response.py \
+	                python/tests/test_walled_nozzle_cycle.py
 
 # --- X-ray collision study (docs/xray_collision_study.md): the parent's X-ray pusher at 67 km/s ---
 
