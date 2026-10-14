@@ -3223,6 +3223,46 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 segs,
             ));
         }
+    } else if args.iter().any(|a| a == "--hot-hydrogen") {
+        // Hydrocode asks 2026-10-14 (aim_is_all_you_need), H3: the r 3.0 m bulge with the hotter,
+        // lighter hydrogen charges that hold 7000 K and 10 000 K on the 2.5 kg rod
+        // (`hot_hydrogen.chamber`: 24.13 and 18.68 kg). Real Gamma_eff is 1.19 / 1.23, so gamma
+        // 1.2 holds. The question is the cone: with less gas to stop it, the remnant hits harder.
+        use euler2d::vessel::Bulge;
+        path = "data/results/walled_nozzle/near_term/vessel_blast_hot_hydrogen.jsonl";
+        let r_t = (ASKS_THROAT_AREA_25 / std::f64::consts::PI).sqrt();
+        let cone_len = (1.4 - r_t) / 12.0_f64.to_radians().tan();
+        for (gas, label) in [
+            (
+                ("hydrogen 7000 K", 24.13),
+                "hydrogen 7000 K, bulge r 3.0 m z 1.4-2.8, 3 m taper, plug 1.5 m",
+            ),
+            (
+                ("hydrogen 10000 K", 18.68),
+                "hydrogen 10000 K, bulge r 3.0 m z 1.4-2.8, 3 m taper, plug 1.5 m",
+            ),
+        ] {
+            let v = vessel_sized(1.4, Some(cone_len), 0.0, 0.7, 40.0, r_t).with_bulge(Bulge {
+                dr: 1.6,
+                z0: 1.4,
+                z1: 2.8,
+                ramp: 0.5,
+                ramp_out: 3.0,
+            });
+            let mut segs = vec![rod_segment()];
+            segs.extend(plug_column(0.8, 1.5, 10.0, 500.0, true));
+            let fill = (gas.0, gas.1 - (10.0 - 4.4));
+            cases.push(case(
+                "shape r 3.0 m bulge",
+                v,
+                fill,
+                1.2,
+                0.005,
+                1.2e-3,
+                label,
+                segs,
+            ));
+        }
     } else if args
         .iter()
         .any(|a| a == "--asks-unbulged" || a == "--asks-hydrogen")

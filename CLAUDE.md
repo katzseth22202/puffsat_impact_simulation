@@ -140,6 +140,13 @@ bracketed between frozen and free exchange) is answered in
 ([ADR-0057](docs/adr/0057-finite-rate-nozzle-particle-count-and-carbon-bracket.md); target
 `walled-nozzle-throat-kinetics`, module `finite_rate.py`); its handoff is
 [`docs/throat_kinetics_handoff.md`](docs/throat_kinetics_handoff.md).
+The calcs repo's hot-hydrogen asks of 2026-10-14 (H1-H5: the bulged hydrogen chamber held at
+7000 K or 10 000 K on a lighter charge) are answered in
+[`docs/walled_nozzle_hot_hydrogen.md`](docs/walled_nozzle_hot_hydrogen.md)
+([ADR-0058](docs/adr/0058-hot-hydrogen-thick-gas-and-lighter-fills.md): the hot gas is optically
+thick, so its wall sees `sigma T^4`, and the impact is re-solved in 2-D for each lighter fill;
+target `walled-nozzle-hot-hydrogen`, module `hot_hydrogen.py`); its handoff is
+[`docs/hot_hydrogen_handoff.md`](docs/hot_hydrogen_handoff.md).
 Targets: `walled-nozzle-blowdown`, `-cycle`, `-zone-loads`, `-cushion`, `-blowdown-2d`. Its Python is
 `python/puffsat/walled_nozzle/` plus the top-level `python/puffsat/eos_methane.py`, and its
 outputs are under `data/results/walled_nozzle/`.

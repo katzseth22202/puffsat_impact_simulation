@@ -436,11 +436,15 @@ class Row:
     wall_share: float
 
 
+#: A wall heat flux `q(branch, rho, T, p)` [W/m^2]: `HeatModel`, or any law of the same shape.
+HeatFlux = Callable[[nt.Branch, float, float, float], float]
+
+
 def integrate(
     spec: Spec,
     sol: nt.ChamberSolution,
     br: nt.Branch,
-    heat: HeatModel,
+    heat: HeatFlux,
     cal: tuple[Vec, Vec],
     discharge: float = 1.0,
     floor: float = 1.0e-3,

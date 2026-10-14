@@ -190,19 +190,24 @@ class ChamberSolution:
 
 
 def solve_charge(
-    pairing: Pairing, thermo: str = "janaf", volume: float = VOLUME, tol: float = 1e-11
+    pairing: Pairing,
+    thermo: str = "janaf",
+    volume: float = VOLUME,
+    tol: float = 1e-11,
+    energy: float = PULSE_ENERGY,
 ) -> ChamberSolution:
     """The charge that puts the chamber at `pairing.temp` when the rod's energy is shared.
 
     Damped fixed point on the total mass, as `chamber.solve_chamber`; the feed is rebuilt each
-    step because the H:C ratio moves with the charge.
+    step because the H:C ratio moves with the charge. `energy` is the pulse's [J]: the 2.5 kg
+    rod's at 75 km/s unless the closing speed is varied.
     """
     polyethylene = ROD_MASS + PLUG_MASS
     total = pairing.paper_charge + polyethylene
     for _ in range(300):
         feed = feed_for(pairing, total - polyethylene, thermo)
         u = eos_methane.pressure_energy(total / volume, pairing.temp, feed)[1]
-        new = PULSE_ENERGY / u
+        new = energy / u
         if abs(new - total) < tol * total:
             total = new
             break
@@ -1035,14 +1040,19 @@ def liner_heat_capacities(sol: ChamberSolution) -> tuple[float, float]:
 
 
 def bartz_liner(
-    sol: ChamberSolution, tab: Isentrope, throat_area: float, wall_temp: float
+    sol: ChamberSolution,
+    tab: Isentrope,
+    throat_area: float,
+    wall_temp: float,
+    area_ratio: float | None = None,
 ) -> tuple[float, float]:
     """`(low, high)` Bartz flux [W/m^2] on the chamber liner at the peak state.
 
     Same correlation and station convention as `wall.bartz_flux`'s liner (`A/A*` of the bore),
     with the bracket spread to its corners: frozen `c_p` at `Pr = 0.8` and the large cross-section
     for the low edge, equilibrium `c_p` at `Pr = 0.5` and the small cross-section for the high
-    edge. `c*` is the real-gas `p0 / flux*` rather than a `gamma = 1.2` coefficient.
+    edge. `c*` is the real-gas `p0 / flux*` rather than a `gamma = 1.2` coefficient. `area_ratio`
+    moves the station (1 is the throat); by default it is the bore's.
     """
     temp = sol.pairing.temp
     ex = nozzle_exit(tab, 0, 2.0)
@@ -1052,7 +1062,8 @@ def bartz_liner(
     mean_mass = sol.rho / comp.n_total
     cp_fr, cp_eq = liner_heat_capacities(sol)
     d_star = 2.0 * math.sqrt(throat_area / math.pi)
-    area_ratio = math.pi * sol.radius**2 / throat_area
+    if area_ratio is None:
+        area_ratio = math.pi * sol.radius**2 / throat_area
     sigma = 1.0 / (0.5 * (wall_temp / temp) + 0.5) ** 0.68
 
     def flux(cp: float, prandtl: float, cross: float) -> float:

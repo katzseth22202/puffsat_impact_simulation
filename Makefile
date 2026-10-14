@@ -1025,7 +1025,24 @@ walled-nozzle-blowdown-2d:
 walled-nozzle-throat-kinetics:
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.finite_rate
 
-.PHONY: walled-nozzle-blowdown walled-nozzle-cycle walled-nozzle-zone-loads walled-nozzle-cushion walled-nozzle-blowdown-2d walled-nozzle-throat-kinetics
+## walled-nozzle-hot-hydrogen-tops: re-pull the TOPS gray means of the 7000 / 10 000 K charges'
+## H:C mixtures (network; one after the other, as TOPS shares session state)
+walled-nozzle-hot-hydrogen-tops:
+	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "50.6 h 1. c" \
+	  --mixname hc7000 --out data/tables/tops/tops_hydrogen_7000_gray.html \
+	  --rho-low-gcc 1.0e-7 --rho-up-gcc 1.0e-2 --n-rho 40
+	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "39.7 h 1. c" \
+	  --mixname hc10000 --out data/tables/tops/tops_hydrogen_10000_gray.html \
+	  --rho-low-gcc 1.0e-7 --rho-up-gcc 1.0e-2 --n-rho 40
+
+## walled-nozzle-hot-hydrogen: asks H1-H5 of 2026-10-14 -- the bulged hydrogen chamber held at
+## 5500-10 000 K: peak state, finite-rate AR 300 impulse, thick-gas wall heat, cycle, sweet spot,
+## and the dry wrap under the lighter fills (2-D rod and plug, 0.5 cm, ~1 h; then ~15 min)
+walled-nozzle-hot-hydrogen:
+	cargo run --release -p sweep -- --vessel-blast --hot-hydrogen
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.hot_hydrogen
+
+.PHONY: walled-nozzle-blowdown walled-nozzle-cycle walled-nozzle-zone-loads walled-nozzle-cushion walled-nozzle-blowdown-2d walled-nozzle-throat-kinetics walled-nozzle-hot-hydrogen walled-nozzle-hot-hydrogen-tops
 
 ## walled-nozzle-test: this study's tests alone
 walled-nozzle-test:
@@ -1041,7 +1058,8 @@ walled-nozzle-test:
 	                python/tests/test_walled_nozzle_chamber_fatigue.py \
 	                python/tests/test_walled_nozzle_dry_wrap.py \
 	                python/tests/test_walled_nozzle_shell_response.py \
-	                python/tests/test_walled_nozzle_cycle.py
+	                python/tests/test_walled_nozzle_cycle.py \
+	                python/tests/test_walled_nozzle_hot_hydrogen.py
 
 # --- X-ray collision study (docs/xray_collision_study.md): the parent's X-ray pusher at 67 km/s ---
 
