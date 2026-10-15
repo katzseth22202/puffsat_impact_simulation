@@ -1071,7 +1071,7 @@ walled-nozzle-test:
 ## xray-collision-tops: re-pull the pure argon, iron and carbon TOPS gray means the fireball reads
 ## (network). Pulled one after the other: concurrent TOPS submissions share server session state
 ## and can both come back as the same mixture.
-.PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-test
+.PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1098,6 +1098,11 @@ xray-collision:
 ## escape -> data/results/xray_collision/argon_bags_k2.csv
 xray-collision-argon-bags:
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.argon_bags
+
+## xray-collision-anvil: 10 kg foam stopped on a dense anvil in a radiation case at 400 km/s, and its
+## filler/propellant thrust ledger -> data/results/xray_collision/anvil_{sweep,ledger}.csv
+xray-collision-anvil:
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.anvil
 
 ## xray-collision-test: that study's tests alone
 xray-collision-test:

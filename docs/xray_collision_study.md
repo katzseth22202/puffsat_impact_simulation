@@ -339,6 +339,114 @@ The limits of Result 5 carry over. At 1 kg/m^3 the sweep is longer still: ~80 us
 40 cm disk and ~1.5 ms behind the ball. So the time-graded heating described under Limits
 matters more here, not less.
 
+## Result 8: a light foam stopped on a dense anvil, and its thrust ledger -- `anvil_sweep.csv`, `anvil_ledger.csv`
+
+`make xray-collision-anvil` (`anvil.py`). This reverses Result 5's density contrast. A **light**
+projectile, 10 kg of carbon foam at 10 kg/m^3, arrives at 400 km/s and stops on a **dense**
+ship-held **anvil**. The anvil sits at the far end of a radiation case, which sends the light into
+the parent's channel filler and propellant plate. The settled design:
+
+- **Projectile.** A Parker Solar Probe-style sandwich: a foam cylinder 1 m across and 1.3 m long,
+  so it threads the bore, with C-C sheets of 0.5 mm or less on the **sunward side only** (~1.8 kg)
+  and **no front cap**. The 10 kg includes the sheets.
+- **Anvil.** 50 kg (k = 5) of graphite, 2.9 cm thick, with a thin high-Z liner (tungsten or lead)
+  for albedo. It is expended and leaves astern at 67 km/s.
+- **Case and plate.** The case re-emits into the channel filler. The filler blows off astern and
+  drives the propellant plate onto the pusher plate at no more than 150 km/s.
+
+**The collision is Result 5 in another frame.** A dense anvil swept by light foam is the same
+collision as a dense projectile sweeping a light target, so `fireball.piston` is reused with the
+roles swapped. The whole heat `Q = (1/2) mu v^2` lands in the light partner. Here that is the
+foam, which stagnates on the anvil's face at ~700 eV. Shares below are of the projectile's
+800 GJ (80 GJ/kg).
+
+| anvil | heat share | kT0 | light, foam at 10 kg/m^3 (opacity 0.1-10x) | light, 1 kg/m^3 | above 1 keV (10 kg/m^3) | RT burn-through, graphite / iron |
+|---|---|---|---|---|---|---|
+| 20 kg | 0.67 | 534 eV | 0.42 | 0.57 | 0.22 | 1.6 / 0.8 us |
+| 40 kg | 0.80 | 661 eV | 0.55 (0.62-0.48) | 0.71 | 0.34 | 3.1 / 1.7 us |
+| **50 kg** | **0.83** | **692 eV** | **0.59 (0.65-0.51)** | **0.74** | **0.37** | **3.9 / 2.1 us** |
+| 100 kg | 0.91 | 764 eV | 0.66 (0.73-0.59) | 0.82 | 0.44 | 7.8 / 4.1 us |
+
+- **Dense mass in the projectile is dead weight.** A C-C sheet that strikes the anvil is a
+  dense-on-dense collision, and it stays opaque (Result 4: solid graphite radiates 0.4%). With
+  1.8 kg of sheets the design's light share falls from 0.59 to **0.50**. A front cap would also
+  hit the liner with a ~1 Gbar spike (about `rho u^2`) before the foam arrives, so it is omitted.
+- **The anvil must outlast the pulse.** The foam pushes on the anvil at about `1.5 rho0 v^2`
+  (24 Mbar) for its whole arrival, 3.2 us (2.6 us for the 8.2 kg of foam inside the sheets). A light
+  plasma pushing a heavy plate is Rayleigh-Taylor unstable. Bubbles eat in as `h ~ 0.05 g t^2`,
+  so at a fixed areal mass the burn-through time goes as `sqrt(thickness)`. The anvil should
+  therefore be **thick and low-density**. A 50 kg graphite anvil holds for 3.9 us, but the same
+  mass of iron fails at 2.1 us. This classical mixing-layer rule is good to about a factor of 2.
+- **The anvil's material does not change the foam's light.** The heat is in the carbon foam. The
+  anvil sets the case's albedo through its liner, which favours high Z: tungsten, lead or gold
+  rather than iron. Spaced "blanket" foils do not work. At a ~250 eV drive each foil turns to
+  plasma within nanoseconds, and a case re-emits from a thick high-Z wall.
+
+**The case.** In a steady cavity the filler's share is `A_f / (A_f + (1 - alpha) A_wall + A_hole)`
+(`case_delivery`). Two geometric facts bear on it. First, the drive lasts microseconds, not
+nanoseconds, and a wall's loss fraction falls with drive time at a fixed temperature, so a high
+albedo is plausible. It is not computed here. Second, the 1 m projectile needs a 1 m entry hole
+through the filler. The arriving foam's own cold tail plugs that hole while it is still arriving
+(cold carbon is ~200 m^2/kg at 1 keV against its 13 kg/m^2 column). Light emitted after the tail
+has passed through the hole leaves toward the ship. Both are open. The ledger takes the parent's 80% delivery as its
+reference and also shows 50% and 65%.
+
+### Thrust and energy efficiency (per kg of projectile)
+
+The parent's plate stage (§`pass_through_pusher`, eq. `pulse_split`) uses the same optimizer as
+the parent's table. `best_split` reproduces `tab:pass_through_isp` to within 0.2% (tested). The fixed
+spent mass is the anvil (5 kg/kg) plus case walls and liner. The ship's impulse is `J = c p` in
+terms of the propellant plate's momentum `p`. The parent takes `c = 0.8`, with no bounce credit.
+If the propellant rebounds from the plate, `c = 2f`, where `f` is this repository's fudge factor:
+`c = 1.6` at `f = 0.8`. That `f` was measured at 3-16 km/s and has not been tested at the
+~100 km/s used here.
+
+Case delivery 80%, impingement cap 150 km/s, walls and liner 1.5 kg/kg (which fills the parent's
+6.5 kg/kg case budget):
+
+| | no bounce (c = 0.8) | c = 1.2 | rebound, f = 0.8 (c = 1.6) |
+|---|---|---|---|
+| light | 40.2 GJ (50% of KE) | same | same |
+| into filler and propellant motion | 32.2 GJ (40%) | same | same |
+| propellant plate toward the pusher | 3.3 kg at 99 km/s, 16.1 GJ (20%) | same | same |
+| filler blow-off astern | 3.3 kg | same | same |
+| impulse on the ship | 259 kN s | 389 kN s | 518 kN s |
+| impulse / projectile momentum (400 kN s) | 0.65 | 0.97 | 1.30 |
+| spent mass | 13.0 kg | 13.0 kg | 13.0 kg |
+| **specific impulse** | **2030 s** | **3050 s** | **4060 s** |
+| jet efficiency `(1/2) M_spent v_e^2 / KE` | 3.2% | 7.3% | 13% |
+
+With 65% and 50% case delivery, the no-bounce Isp is 1830 s and 1610 s. The cap never binds, because
+the propellant arrives at 79-99 km/s.
+
+- **Against the parent's bar of 2650 s, this design clears only with a rebound.** Without one it
+  gives 2030 s. With the parent's 618 km/s design at a 5 kg case (2930 s, 14 kg spent) it shares
+  the same impulse-to-projectile-momentum ratio, 0.65. It needs no lattice target and runs at
+  400 km/s instead of 618.
+- **Energy efficiency is low by construction.** The projectile arrives at 400 km/s. The spent mass
+  leaves at an effective 20 km/s. The 67 km/s anvil and the blow-off astern carry momentum the
+  ship does not want. About 3% of the projectile's kinetic energy ends up as useful
+  exhaust-equivalent energy (13% with a full rebound). The parent's 618 km/s design gets 3.0% by
+  the same measure.
+- **A lighter anvil buys Isp.** With walls held at 1.5 kg/kg and no bounce, Isp is 2400 s at
+  20 kg, 2150 s at 40 kg, 2030 s at 50 kg and 1610 s at 100 kg. The extra light from a heavier
+  anvil does not pay for its spent mass. Rayleigh-Taylor survival sets the floor: a 40 kg graphite
+  anvil (3.1 us) still covers the 2.6 us pulse of the sheeted foam, and 30 kg (2.4 us) does not.
+- **Which side should be heavy?** Eq. `pulse_split` is symmetric in the two masses. At a fixed
+  total, equal masses give the most momentum. With 6.5 kg/kg already spent on the anvil and case,
+  the optimum is **equal filler and propellant**. A light forward layer and a heavy backward one
+  (1.6 + 4.9 kg) lose 13% of the impulse. They also send the propellant at 172 km/s, over the
+  cap. Adding heavy backward mass instead (3.3 + 9.8 kg) raises the impulse 23% but lowers Isp
+  18%. Materials matter for other reasons. The backward layer is the filler's blow-off, and it
+  must be low Z to absorb the light, because high Z re-emits it (that is the case wall's job). The
+  forward layer is free in mass. A hydrogen-rich propellant such as polyethylene radiates least
+  where it stagnates on the plate, and that is what any rebound depends on.
+
+Open: the case-wall mass needed to hold a ~5 Mbar fireball for microseconds (a rough
+inertial-tamping estimate is ~20 kg/m^2, or ~100 kg, against the 15 kg the budget leaves); the
+case albedo and the entry hole; the rebound at ~100 km/s; sheet survival through a ~10 solar
+radii dive; and the time-graded stagnation, which the one-zone model replaces with an average.
+
 ## Limits
 
 **The piston's heat goes in over the sweep, not at once.** This is the largest unmodelled effect

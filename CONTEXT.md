@@ -343,3 +343,29 @@ _Avoid_: "twin", "quasi nozzle"
 A plate whose areal mass follows the delivered impulse profile, so every element receives the
 same velocity kick and the plate does not bend during the pulse.
 _Avoid_: "taper" alone (the **pulse shape** already has an *edge taper*)
+
+## Language — X-ray collision study
+
+**Target**:
+The dilute ship-held mass (a foam or lattice at its mean density) that a dense projectile
+snowplows. The heat lands in it, because the light partner of a collision takes the heat.
+_Avoid_: "mass carried by the rocket" (it also covers the anvil and the case)
+
+**Anvil**:
+A dense ship-held mass, much heavier than the projectile, that a light (foam) projectile is
+stopped against. Here the heat lands in the projectile, which stagnates on the anvil's face. The
+anvil is expended, carries the projectile's momentum astern, and forms part of the radiation case.
+_Avoid_: "target" (the opposite density contrast); "plate" (it is not the pusher plate)
+
+**Radiation case**:
+The enclosure around the collision whose walls absorb its light and re-emit it, so the light leaves
+through the pusher plate rather than being lost. Its figure of merit is its wall **albedo**, the
+re-emitted share of the light falling on it.
+_Avoid_: "blanket" (implies spaced insulating foils, which do not survive the drive)
+
+**Channel filler**:
+The low-density, low atomic number fill inside the radiation case, between the collision and the
+pusher plate, that absorbs the case's light. Its heated surface blows off, and the reaction
+thrusts it at the plate (Orion's scheme; the parent's pass-through pusher). The light never
+strikes the pusher plate itself.
+_Avoid_: "propellant" alone (the parent also has a separate propellant plate beyond the filler)

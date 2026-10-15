@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pytest
 
-from puffsat.xray_collision import eos, multigroup
+from puffsat.xray_collision import anvil, eos, multigroup
 from puffsat.xray_collision.fireball import (
     Kinematics,
     collide,
@@ -163,3 +163,40 @@ def test_multigroup_closes_and_tracks_gray() -> None:
     )
     assert bands == pytest.approx(planck.f_rad, rel=1e-9)
     assert planck.f_below_resonance < planck.f_through_cold_target < planck.f_rad
+
+
+def test_anvil_split_reproduces_the_parents_pass_through_table() -> None:
+    """templateArxiv.tex tab:pass_through_isp: 71% of 127.3 GJ radiated, 80% delivered, the plate
+    catching 80% of the forward momentum, a 2 kg target plus the case as fixed spent mass."""
+    energy = 0.8 * 0.71 * 127.3e9
+    for case, cap, isp, spent in (
+        (0.0, 150e3, 5040, 5.6),
+        (5.0, 150e3, 2930, 14.0),
+        (10.0, 150e3, 2240, 24.0),
+        (0.0, 100e3, 4330, 7.4),
+    ):
+        s = anvil.best_split(energy, 2.0 + case, cap, 0.8)
+        assert s.isp == pytest.approx(isp, rel=0.003)
+        assert s.spent == pytest.approx(spent, abs=0.06)
+        assert s.u_forward <= cap * (1 + 1e-9)
+
+
+def test_pulse_split_is_symmetric_and_best_split_equally() -> None:
+    """eq. pulse_split: swapping the masses changes nothing; at a fixed total, equal is best."""
+    assert anvil.pulse_split(1e9, 1.0, 3.0) == pytest.approx(anvil.pulse_split(1e9, 3.0, 1.0))
+    assert anvil.pulse_split(1e9, 2.0, 2.0) > anvil.pulse_split(1e9, 1.0, 3.0)
+
+
+def test_foam_on_anvil_is_the_flipped_snowplow() -> None:
+    """Heat is the reduced-mass share k/(1+k) of the projectile KE with k = anvil/foam, and the
+    light share counts dead sheet mass against the projectile."""
+    bare = anvil.foam_on_anvil(50.0)
+    assert bare.heat_share == pytest.approx(50.0 / 60.0, rel=1e-9)
+    sheeted = anvil.foam_on_anvil(50.0, sheet_mass=1.8)
+    assert sheeted.light_share < bare.light_share
+    assert bare.rt_graphite > bare.pulse_time > bare.rt_iron
+
+
+def test_case_delivery_limits() -> None:
+    assert anvil.case_delivery(1.0, 1.0, 5.0, 0.0) == pytest.approx(1.0)
+    assert anvil.case_delivery(0.0, 1.0, 3.0, 0.0) == pytest.approx(0.25)
