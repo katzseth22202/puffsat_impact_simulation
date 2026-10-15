@@ -6939,6 +6939,7 @@ fn mix_case(
                     gap: 2.0 * dr,
                     ambient: CHARGE_AMBIENT,
                     hole_radius: CHARGE_HOLE_R,
+                    toward_plate: false,
                 },
             ),
             u_rms,
@@ -7024,6 +7025,229 @@ fn cmd_charge_mix(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             r.peak_radius,
             r.peak_time,
             r.exit_mass_share,
+            r.exit_direction,
+            r.exit_uniformity,
+            r.ambient_mass_share,
+            r.steps,
+        );
+    })
+}
+
+// X-ray collision study, Result 11: the Earth-departure overtake pusher. An impactor arriving at
+// 100 km/s from behind meets a polyethylene charge held a few metres off the plate, and the merged
+// mass drifts *onto* the plate at v/(1+k), so there is no bore. Three geometries: the point fireball
+// (drift toward the plate, `drift/u_rms = -1/sqrt(k)` whatever the closing speed), the real compact
+// collision as its check, and a planar one where a wide impactor meets a wide thin sheet.
+
+const RESULT_PATH_OVERTAKE: &str = "data/results/xray_collision/overtake_2d.jsonl";
+const OVERTAKE_K: [f64; 5] = [5.0, 10.0, 15.0, 20.0, 40.0];
+/// Compact charge: the impactor is ~10 kg here (16 times less energy per kg than at 400 km/s), so
+/// a 0.25 m radius charge of solid polyethylene is `k x 10 kg / (950 x 0.196 m^2)` long.
+const OVERTAKE_COMPACT_LENGTH_PER_K: f64 = 10.0 / (950.0 * 0.196);
+/// Planar sheets: radius [m] and centre height above the flat floor [m].
+const OVERTAKE_SHEETS: [(f64, f64); 2] = [(4.0, 2.0), (7.0, 2.0)];
+const OVERTAKE_SHEET_THICKNESS: f64 = 0.2;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct OvertakeRecord {
+    case: String,
+    /// `point`, `compact` or `sheet`.
+    kind: String,
+    k: f64,
+    d_over_d: f64,
+    skirt: f64,
+    height: f64,
+    sheet_radius: f64,
+    /// Plate impulse per `m v` (impactor mass and closing speed), lossless gamma gas.
+    impulse_per_mv: f64,
+    /// The same per `M u_rms`, the merged mass's eventual expansion momentum.
+    impulse_per_mu: f64,
+    /// Peak local pressure per `m v^2 / m^3`.
+    peak_per_mv2: f64,
+    exit_direction: f64,
+    exit_uniformity: f64,
+    ambient_mass_share: f64,
+    confined_ratio: f64,
+    steps: usize,
+    dr: f64,
+}
+
+/// One overtake run: `(plate, kind, sheet (radius, height), k)`.
+type OvertakeCaseSpec = ((&'static str, f64, f64, f64), u8, (f64, f64), f64);
+
+/// `(label, d/D, skirt, height: NaN focus, < 0 multiple of the focus, > 0 metres)`.
+const OVERTAKE_PLATES: [(&str, f64, f64, f64); 3] = [
+    ("parent bowl at focus", 0.30, 0.0, f64::NAN),
+    ("paraboloid 0.50 at 1.5 F", 0.50, 0.0, -1.5),
+    ("flat + skirt 4 m, 2.7 m off", 0.0, 4.0, 2.7),
+];
+
+fn overtake_cfg(d_over_d: f64, skirt: f64, reach: f64, dr: f64) -> SlugConfig {
+    let depth = d_over_d * 2.0 * CHARGE_PLATE_R;
+    let top = 4.0 * dr + depth.max(reach) + skirt + 3.0;
+    let mut nz = 0usize;
+    while (nz as f64) * dr < top {
+        nz += 1;
+    }
+    let mut nr = 0usize;
+    while (nr as f64) * dr < CHARGE_PLATE_R + 2.0 {
+        nr += 1;
+    }
+    let shape = if skirt > 0.0 {
+        PlateShape::Cup {
+            d_over_d,
+            skirt_height: skirt,
+            flare: 0.0,
+            thickness: 4.0 * dr,
+        }
+    } else {
+        PlateShape::Dish { d_over_d }
+    };
+    SlugConfig {
+        gamma: SPRAY_2D_GAMMA,
+        mach: SPRAY_2D_MACH,
+        r_foot: MIX_RADIUS,
+        length: MIX_RADIUS,
+        r_plate: CHARGE_PLATE_R,
+        r_max: nr as f64 * dr,
+        z_max: nz as f64 * dr,
+        nr,
+        nz,
+        confined: false,
+        shape,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    }
+}
+
+/// One overtake case: `kind` 0 point fireball, 1 compact charge, 2 planar sheet of `sheet` radius.
+fn overtake_case(
+    (label, d_over_d, skirt, height): (&str, f64, f64, f64),
+    kind: u8,
+    sheet: (f64, f64),
+    k: f64,
+    dr: f64,
+    confined_ratio: f64,
+) -> OvertakeRecord {
+    let focus = if d_over_d > 0.0 {
+        CHARGE_PLATE_R / (8.0 * d_over_d)
+    } else {
+        f64::NAN
+    };
+    let h = if kind == 2 {
+        sheet.1
+    } else if height.is_nan() {
+        focus
+    } else if height < 0.0 {
+        -height * focus
+    } else {
+        height
+    };
+    // The merged mass's u_rms in units of the closing speed: sqrt(2Q/M) with Q = k/(1+k) m v^2/2.
+    let u_rms = k.sqrt() / (1.0 + k);
+    let (r, per_mv) = match kind {
+        0 => {
+            let cfg = overtake_cfg(d_over_d, skirt, h + CHARGE_BALL_R, dr);
+            let r = run_fireball_bounce(
+                &cfg,
+                PointFireball {
+                    height: h,
+                    radius: CHARGE_BALL_R,
+                    drift: -1.0 / k.sqrt(),
+                    ambient: CHARGE_AMBIENT,
+                    hole_radius: 0.0,
+                },
+            );
+            // Per M u_rms -> per m v.
+            (r, (1.0 + k) * u_rms)
+        }
+        _ => {
+            let (radius, length) = if kind == 1 {
+                (MIX_RADIUS, k * OVERTAKE_COMPACT_LENGTH_PER_K)
+            } else {
+                (sheet.0, OVERTAKE_SHEET_THICKNESS)
+            };
+            let cfg = overtake_cfg(d_over_d, skirt, h + 0.5 * length + 6.0 * dr, dr);
+            let r = run_disk_charge_bounce(
+                &cfg,
+                DiskCharge {
+                    radius,
+                    height: h,
+                    charge_length: length,
+                    k,
+                    disk_thickness: 4.0 * dr,
+                    gap: 2.0 * dr,
+                    ambient: CHARGE_AMBIENT,
+                    hole_radius: 0.0,
+                    toward_plate: true,
+                },
+            );
+            // Per merged mass, in the closing speed -> per m v.
+            (r, 1.0 + k)
+        }
+    };
+    OvertakeRecord {
+        case: label.to_string(),
+        kind: ["point", "compact", "sheet"][kind as usize].to_string(),
+        k,
+        d_over_d,
+        skirt,
+        height: h,
+        sheet_radius: if kind == 2 { sheet.0 } else { 0.0 },
+        impulse_per_mv: r.wall_impulse * per_mv,
+        impulse_per_mu: r.wall_impulse * per_mv / ((1.0 + k) * u_rms),
+        peak_per_mv2: r.peak_local_pressure
+            * if kind == 0 {
+                (1.0 + k) * u_rms * u_rms
+            } else {
+                1.0 + k
+            },
+        exit_direction: r.exit_direction,
+        exit_uniformity: r.exit_uniformity,
+        ambient_mass_share: r.ambient_mass_share,
+        confined_ratio,
+        steps: r.steps,
+        dr,
+    }
+}
+
+/// `--overtake-2d [coarse]`: the point fireball on three plates at k = 5-40, the compact charge on
+/// the parent bowl at k = 10 and 20, and two planar sheets in the skirted flat plate at k = 10
+/// and 20. `coarse` doubles the cell (`overtake_2d_coarse.jsonl`).
+fn cmd_overtake_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let coarse = args.iter().any(|a| a == "coarse");
+    let dr = if coarse { 2.0 * CHARGE_DR } else { CHARGE_DR };
+    let confined = charge_confined_ratio();
+    let mut cases: Vec<OvertakeCaseSpec> = Vec::new();
+    for &plate in &OVERTAKE_PLATES {
+        for &k in &OVERTAKE_K {
+            cases.push((plate, 0, (0.0, 0.0), k));
+        }
+    }
+    for &k in &[10.0, 20.0] {
+        cases.push((OVERTAKE_PLATES[0], 1, (0.0, 0.0), k));
+        for &sheet in &OVERTAKE_SHEETS {
+            cases.push((OVERTAKE_PLATES[2], 2, sheet, k));
+        }
+    }
+    let rows = par_map_with_progress("overtake", &cases, |&(plate, kind, sheet, k)| {
+        overtake_case(plate, kind, sheet, k, dr, confined)
+    });
+    let path = if coarse {
+        RESULT_PATH_OVERTAKE.replace(".jsonl", "_coarse.jsonl")
+    } else {
+        RESULT_PATH_OVERTAKE.to_string()
+    };
+    emit_scenario(&path, "overtake", &rows, |r| {
+        println!(
+            "rust: {:<28} {:<7} R {:>3.0} k {:>3.0} | J/mv {:6.3} J/Mu {:.3} peak/mv2 {:.3e} dir {:.3} unif {:.3} amb {:.1e} steps {}",
+            r.case,
+            r.kind,
+            r.sheet_radius,
+            r.k,
+            r.impulse_per_mv,
+            r.impulse_per_mu,
+            r.peak_per_mv2,
             r.exit_direction,
             r.exit_uniformity,
             r.ambient_mass_share,
@@ -7446,6 +7670,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--charge-2d", cmd_charge_2d),
     ("--charge-mix", cmd_charge_mix),
     ("--collar-ablation", cmd_collar_ablation),
+    ("--overtake-2d", cmd_overtake_2d),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),
     ("--geometry-wide", cmd_geometry_wide),

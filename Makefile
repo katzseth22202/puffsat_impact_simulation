@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1159,6 +1159,14 @@ xray-collision-collar: data/tables/ch2.json
 	cargo run --release -p sweep -- --charge-mix 100 collar coarse
 	cargo run --release -p sweep -- --collar-ablation
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.collar
+
+## xray-collision-overtake: Result 11, the Earth-departure overtake pusher -- a 100 km/s impactor
+## onto a charge held off the plate (point, compact, planar sheet; two grids), then the k for an
+## 11 km/s boost -> data/results/xray_collision/overtake_ledger.csv
+xray-collision-overtake: data/tables/ch2.json
+	cargo run --release -p sweep -- --overtake-2d
+	cargo run --release -p sweep -- --overtake-2d coarse
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.overtake
 
 ## xray-collision-test: that study's tests alone
 xray-collision-test:

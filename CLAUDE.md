@@ -55,8 +55,8 @@ Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`),
 `data/results/xray_collision/`, and targets are `make xray-collision`, `make xray-collision-test`,
 `make xray-collision-argon-bags`, `make xray-collision-anvil`, `make xray-collision-ch2-table`,
 `make xray-collision-rebound`, `make xray-collision-charge-2d`, `make xray-collision-charge`,
-`make xray-collision-charge-mix`, `make xray-collision-freeze`, `make xray-collision-collar`
-and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
+`make xray-collision-charge-mix`, `make xray-collision-freeze`, `make xray-collision-collar`,
+`make xray-collision-overtake` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
 (lattice target, k = 2, per-projectile light and kinetic energy) is
 [`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md). The 66 km/s verdict (argon clouds
 radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the Sun dive) is
@@ -64,7 +64,9 @@ radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the 
 stopped on a dense graphite anvil; computed rebound and entry hole; 2740-3300 s) is
 [`docs/xray_pusher_400kms_handoff.md`](docs/xray_pusher_400kms_handoff.md). The simpler charge pusher (a disk into cheap polyethylene,
 no radiation case; the parent's bowl gives a mass ratio of 2-2.9) is
-[`docs/charge_pusher_handoff.md`](docs/charge_pusher_handoff.md).
+[`docs/charge_pusher_handoff.md`](docs/charge_pusher_handoff.md). The Earth-departure overtake pusher (a
+100 km/s impactor onto a charge held off the plate; k = 10-12 for an 11 km/s boost at a mass ratio
+of 1.5) is [`docs/overtake_pusher_handoff.md`](docs/overtake_pusher_handoff.md).
 
 ## Architecture (settled)
 

@@ -84,16 +84,20 @@ class ChargeFireball:
     tau0: float
     f_rad: float
     u_rms: float  # [m/s], from the heat left after radiation
-    drift: float  # [m/s], w = v/(1+k), away from the plate
+    drift: float  # [m/s], w = v/(1+k): away from the plate (Result 10), onto it (Result 11)
 
 
 def charge_fireball(
-    k: float, charge_rho0: float = 950.0, table: EosTable | None = None
+    k: float,
+    charge_rho0: float = 950.0,
+    table: EosTable | None = None,
+    v_rel: float = V_REL,
 ) -> ChargeFireball:
-    """One-zone fireball of a 1 kg projectile in k kg of near-solid polyethylene."""
+    """One-zone fireball of a 1 kg projectile closing at `v_rel` on k kg of near-solid
+    polyethylene."""
     tab = table or ch2_table()
     m, big = 1.0, k
-    q = 0.5 * m * big / (m + big) * V_REL**2
+    q = 0.5 * m * big / (m + big) * v_rel**2
     # Shocked solid polyethylene (~4x 950 kg/m^3) lies above the CH2 table's 1284 kg/m^3 ceiling,
     # so the fireball starts at the ceiling, already a little expanded. It radiates nothing either
     # way (it is ~1e6 optical depths thick), so u_rms does not depend on this choice.
@@ -108,7 +112,7 @@ def charge_fireball(
         tau0=fire.tau0,
         f_rad=rad / q,
         u_rms=math.sqrt(2.0 * (q - rad) / (m + big)),
-        drift=V_REL / (1.0 + k),
+        drift=v_rel / (1.0 + k),
     )
 
 

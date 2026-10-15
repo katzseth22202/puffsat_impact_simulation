@@ -75,10 +75,13 @@ class FreezeResult:
     velocity_loss_worst: float  # ions frozen as found, plus every bond
 
 
-def freeze(k: float, table: EosTable, plate_distance: float = 4.17) -> FreezeResult:
-    """Expand the k fireball (1 kg projectile) and race both stores against it."""
+def freeze(
+    k: float, table: EosTable, plate_distance: float = 4.17, v_rel: float = charge.V_REL
+) -> FreezeResult:
+    """Expand the k fireball (1 kg projectile closing at `v_rel`) and race both stores
+    against it."""
     m = 1.0 + k
-    heat = 0.5 * k / (1.0 + k) * charge.V_REL**2  # J per kg of projectile
+    heat = 0.5 * k / (1.0 + k) * v_rel**2  # J per kg of projectile
     e = heat / m
     rho = float(np.exp(table.ln_rho[-1]))
     r = (3.0 * m / (4.0 * math.pi * rho)) ** (1.0 / 3.0)

@@ -41,7 +41,14 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
      by impulse, its collar is ~1-1.5 t of extra structure on a 100 t ship, out to ~3.5 m. Its
      erosion, 0.2-11 t over the boost, leaves as reaction mass, faster than the charge's own
      exhaust at the floor. The mass ratio stays under 3 even at the ceiling.
-5. **Without a nozzle, a plate recovers less directed energy per joule.** In jet-efficiency terms
+5. **The same charge launches the ship from Earth** (Result 11, ADR-0061). A 100 km/s impactor
+   overtaking a polyethylene charge held off the plate gives an 11 km/s departure at a mass ratio
+   of 1.5 with k ≈ 10-12.
+   - **Coupling:** with the merged mass drifting onto the plate it is better than at 400 km/s.
+   - **Planar sheets:** a wide impactor sheet against a wide charge sheet changes the impulse
+     little, but spreads the load. The plate then takes ~11 kg per pulse instead of ~2-6 kg.
+   - **Cost:** the impactor is ~$70-100 per kg of propellant.
+6. **Without a nozzle, a plate recovers less directed energy per joule.** In jet-efficiency terms
    it gets 0.4-0.6, against the 0.8-1 the parent assumes for a magnetic nozzle. With cheap reaction
    mass that is enough: the projectile bill, not Isp, is the figure of merit.
 
@@ -881,6 +888,96 @@ The ledger for a 100 t final mass (production grid; jet-only coarse-grid values 
 Not modelled here: mechanical erosion (spall and crushing; a bonded, backed collar has no free
 rear face to spall), the collar's own heat soak between pulses, the jet's true resolved peak, and
 the wall flow's erosion of the rest of the plate.
+
+## Result 11: the Earth-departure overtake pusher -- `overtake_ledger.csv`
+
+`make xray-collision-overtake` (`overtake.py`, `sweep --overtake-2d`, ADR-0061). This is the
+departure wave at Earth. An impactor arriving at **100 km/s from behind** the departing ship meets
+a polyethylene charge held a few metres off the plate. The boost is **11 km/s** to a high
+apoapsis. The target is a propellant fraction of 1/3 (mass ratio 1.5), which needs `v_e` of at
+least 27.1 km/s.
+
+**What changes from Result 10.**
+- **No bore.** The merged mass drifts *onto* the plate at `v/(1+k)`. The impactor's own momentum
+  is delivered as well as the expansion's, `J ≈ m v (1 + η √(1+k))`.
+- **The ratio is still scale-free.** `drift/u_rms = 1/√k` at any closing speed, so the 2-D runs
+  carry over. 100 km/s enters only through the one-zone fireball, the rebound swap
+  (`e_eff` 0.67-0.77 at the 20-45 km/s arrival speed) and the bond toll.
+- **The fireball is dark again.** It is ~10^6-10^7 optical depths thick and radiates ~1e-7 of its
+  heat.
+- **The chemistry is kinder.** Ionization (11-18% of the heat) recombines completely. The gas then
+  cools below 2500 K before the plate, and H2 re-forms with Damköhler numbers of 3e2-9e5, two to
+  six decades of margin on the H + H + H rate. Only carbon's share of the bonds is in doubt. It
+  is bracketed between condensed (no toll) and atomic, a velocity loss of 3% at k = 5, 6% at
+  k = 10 and 12% at k = 20.
+
+Three geometries were run on two grids (0.05 m and 0.1 m cells):
+- **Point fireball**, k = 5-40, on the parent bowl, the δ/D 0.5 paraboloid at 1.5 F, and a flat
+  plate with a 4 m skirt (charge 2.7 m off).
+- **Compact disk-into-charge collision**, the point fireball's check.
+- **Planar collision**: a wide impactor meeting a wide polyethylene sheet of the same radius
+  (4 m or 7 m) 2 m in front of the flat skirted plate.
+
+| plate | geometry | k | `J/(m v)` | `η` | mass ratio (carbon atomic) | max impactor per pulse (400 MPa) |
+|---|---|---|---|---|---|---|
+| parent bowl | point | 5 / 10 / 20 / 40 | 2.53 / 3.05 / 3.82 / 4.93 | 0.62 at k 10 | 1.27 / **1.49** / 1.94 / 3.23 | 4-10 kg |
+| paraboloid 1.5 F | point | 5 / 10 / 20 / 40 | 2.81 / 3.45 / 4.38 / 5.72 | 0.74 at k 10 | 1.24 / **1.42** / 1.79 / 2.76 | 3-6 kg |
+| flat + 4 m skirt | point | 10 / 20 | 3.04 / 3.79 | 0.61 | 1.49 / 1.97 | ~2 kg |
+| parent bowl | compact | 10 / 20 | 3.01 / 3.67 | 0.60 | 1.50 / 2.00 | 2.4 / 6.2 kg |
+| flat + 4 m skirt | 4 m sheet | 10 / 20 | 3.13 / 3.96 | 0.64 | 1.48 / 1.91 | 3.5 / 3.9 kg |
+| flat + 4 m skirt | 7 m sheet | 10 / 20 | 3.21 / 4.07 | 0.67 | 1.46 / 1.86 | 10.6 / 12.1 kg |
+
+`η = (J/mv - 1)/√(1+k)` is the share of the expansion's ideal momentum the plate keeps.
+
+**Mass ratio 1.5 needs k ≈ 10-12** (power-law fit over the point rows; the first value has carbon
+left atomic, the second has the bonds returned):
+- parent bowl: k ≈ 10.3-11.6;
+- deep paraboloid at 1.5 F: k ≈ 12.0-14.1;
+- flat + skirt: k ≈ 10.1-11.4.
+
+The impactor bill is then 0.042-0.049 kg per kg of final mass. At $1000/kg that is $42-49 per kg
+of final mass, or $1000/k ≈ $70-100 per kg of propellant. k = 40 would cost $25/kg of propellant,
+but its mass ratio is 2.1-3.3: at 122 MJ/kg the gas is too cool, and its bonds are too large a
+share of its heat.
+
+- **The overtake couples better than the departing case.** `η` is 0.60-0.74 here, against
+  0.40-0.55 when Result 10's fireball drifted away from the plate.
+- **Planar coupling barely helps the impulse.** A 7 m sheet gives 3-6% more than a compact charge
+  on the same plate: its exhaust leaves straighter (direction factor 0.92 against 0.81), but with
+  a wider spread of speeds.
+- **Planar coupling greatly helps the plate's loading.** The peak scales with the impactor's mass
+  per area, so a sheet takes ~0.07 kg/m^2 at 400 MPa whatever its radius. That is ~11 kg on a 7 m
+  sheet against ~2 kg as a compact charge on the same flat plate.
+- **The compact collision matches the point fireball** to 1-4% on impulse. It peaks ~2.5 times
+  higher.
+- **The grid study is conservative.** The finer grid gives 2-4% more impulse for the point
+  fireball and 5-8% more for the sheets. The compact and sheet peaks rise on refinement, as at
+  400 km/s, so their per-pulse limits are upper values; ~0.05 kg/m^2 is the safer sheet figure.
+
+**The impactor sheet.** At 100 km/s the impactor carries ~5 GJ/kg, a thousand times any binding
+energy, so its material does not matter to the coupling.
+- **Thickness:** 0.05-0.07 kg/m^2 is ~35-45 µm of carbon fibre or ~35-50 µm of polyimide or
+  Kevlar. The ship's polyethylene sheet at k = 10 is then ~0.5-0.75 mm thick.
+- **Survival from 0.5 to 1 AU:** a black sheet facing the Sun runs at ~470 K at 0.5 AU and
+  ~330 K at 1 AU.
+  - Polyimide film is proven as a solar sail (IKAROS, spin-deployed, 7.5 µm) and good to
+    ~400 °C.
+  - Carbon fibre is fine, but its epoxy matrix is not; it needs a dry or polyimide matrix.
+  - Kevlar needs a UV-blocking coating.
+- **The sheet is a solar sail.** At 0.5 AU it accelerates at ~0.3-0.5 mm/s^2. Over a week's coast
+  that is thousands of km. It is predictable only with a controlled attitude, so the sheet spins
+  to stay flat, flies face-on to its direction of travel (so the push mostly shifts its arrival
+  time), and carries guidance for late correction.
+- **Tolerances are loose.** A 10 cm sag or a 1° tilt across 7 m spreads the arrival by ~1 µs,
+  against a ~100 µs pulse.
+
+Open:
+- The effective-gamma gas. Polyethylene's real EOS through dissociation, and the soot that carbon
+  may condense into, are not followed in 2-D; the toll is bracketed instead.
+- The sheet-on-sheet collision's peak (under-resolved), and how a non-ideal sheet behaves: sag,
+  holes, a spin-flattened cone.
+- The plate's own ablation at 20-45 km/s, and the charge sheet's deployment and survival on the
+  ship.
 
 ## Limits
 

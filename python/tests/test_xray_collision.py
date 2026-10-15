@@ -281,3 +281,27 @@ def test_bore_collar_ledger() -> None:
         assert float(r["eroded_per_final_best"]) < float(r["eroded_per_final_worst"])
         # The rings tile the plate, so the innermost one carries several times the mean.
         assert float(r["ring0_impulse"]) > 5.0 * float(r["plate_mean_impulse"])
+
+
+def test_overtake_pusher_ledger() -> None:
+    """Result 11: with the merged mass drifting onto the plate, k ~ 10 meets a 1/3 propellant
+    fraction for the 11 km/s departure on every plate, k = 40 does not, and the finer grid only
+    raises the impulse."""
+    import csv
+
+    from puffsat.xray_collision import overtake
+
+    with overtake.OUT.open() as fh:
+        rows = list(csv.DictReader(fh))
+    x1 = {(r["case"], r["kind"], r["sheet_radius"], r["k"]): r for r in rows if r["grid"] == "x1"}
+    coarse = {
+        (r["case"], r["kind"], r["sheet_radius"], r["k"]): r for r in rows if r["grid"] == "x0.5"
+    }
+    for key, r in x1.items():
+        if r["kind"] == "point" and float(r["k"]) == 10.0:
+            assert float(r["mass_ratio_carbon_frozen"]) < 1.5
+        if float(r["k"]) == 40.0:
+            assert float(r["mass_ratio"]) > 2.0
+        assert float(coarse[key]["impulse_per_mv"]) <= float(r["impulse_per_mv"])
+        # The impactor's own momentum is delivered, plus the expansion's.
+        assert float(r["impulse_per_mv"]) > 2.0

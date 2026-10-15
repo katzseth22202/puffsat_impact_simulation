@@ -876,7 +876,8 @@ pub fn run_fireball_bounce(cfg: &SlugConfig, fb: PointFireball) -> FireballBounc
 
 /// The real collision behind a [`PointFireball`] (X-ray study, Result 10 mixing check): a disk
 /// that has just threaded the bore, moving away from the plate at speed 1, about to strike a
-/// cylindrical polyethylene charge of `k` times its mass. Both are γ-law gas; only masses, areal
+/// cylindrical polyethylene charge of `k` times its mass. With `toward_plate` it is Result 11's
+/// overtake instead: the disk arrives from beyond the charge, heading for the plate. Both are γ-law gas; only masses, areal
 /// densities and the closing speed matter to the snowplow, so the disk is a resolvable slab of its
 /// true areal density. Impulse is per unit **merged** mass; the caller reads it against that
 /// mass's eventual `u_rms = sqrt(2 Q / M)`, as for the point fireball.
@@ -898,6 +899,10 @@ pub struct DiskCharge {
     pub ambient: f64,
     /// Open bore radius at the vertex.
     pub hole_radius: f64,
+    /// The overtake case (X-ray study, Result 11): the disk arrives from beyond the charge,
+    /// moving *toward* the plate, so the merged mass drifts onto it. `false` is Result 10's disk
+    /// that has come through the bore and strikes the charge's plate-side face.
+    pub toward_plate: bool,
 }
 
 /// Run a [`DiskCharge`] collision onto the dished or cupped plate of `cfg`.
@@ -920,8 +925,13 @@ pub fn run_disk_charge_bounce(cfg: &SlugConfig, dc: DiskCharge) -> FireballBounc
     let z_vertex = profile.z_surface(0.0);
     let charge_lo = z_vertex + dc.height - 0.5 * dc.charge_length;
     let charge_hi = charge_lo + dc.charge_length;
-    let disk_hi = charge_lo - dc.gap;
-    let disk_lo = disk_hi - dc.disk_thickness;
+    let (disk_lo, disk_hi, disk_speed) = if dc.toward_plate {
+        let lo = charge_hi + dc.gap;
+        (lo, lo + dc.disk_thickness, -1.0)
+    } else {
+        let hi = charge_lo - dc.gap;
+        (hi - dc.disk_thickness, hi, 1.0)
+    };
     let region = |iz: usize, ir: usize| -> u8 {
         let z = (iz as f64 + 0.5) * dz;
         let r = (ir as f64 + 0.5) * dr;
@@ -954,7 +964,7 @@ pub fn run_disk_charge_bounce(cfg: &SlugConfig, dc: DiskCharge) -> FireballBounc
     let p_cold = rho_disk / (cfg.gamma * cfg.mach * cfg.mach);
     let rho_amb = dc.ambient * rho_charge;
     g.init(|iz, ir| match region(iz, ir) {
-        1 => Prim::new(rho_disk, 1.0, 0.0, p_cold),
+        1 => Prim::new(rho_disk, disk_speed, 0.0, p_cold),
         2 => Prim::new(rho_charge, 0.0, 0.0, p_cold * rho_charge / rho_disk),
         _ => Prim::new(rho_amb, 0.0, 0.0, p_cold * 1.0e-6),
     });
