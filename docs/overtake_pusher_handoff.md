@@ -51,6 +51,17 @@ is dark, ionization recombines, and H2 re-forms before the plate; only carbon's 
   the perfect-plate ceiling (k ≈ 13-15) against 80% (k ≈ 12-14). It costs ~5 t more plate.
   Skirts add nothing. The remaining loss is the spread of exit speeds, not their direction.
 
+## The breeding cycle (ADR-0062, `mission_breeding.csv`)
+
+The Earth wave is the released mass of Sun ships, so the two stages form one loop. Per kg of
+100 km/s impactor, ~24 kg departs at 11 km/s. A Sun ship at mass ratio 2 returns half its
+departing mass as the next wave's impactor.
+- **Growth:** the impactor grows **~12x per generation**. That is ~10x if the Sun ship's plate
+  (0.16 of its final mass) can't be released, and ~14x if the carbon condenses to soot.
+- **Payload:** ~90% of each departure is payload.
+- **Cost:** the expensive Sun-wave projectile costs **~$1 per kg of payload departure**.
+- **Orbit mass:** each departing kg needs ~1.64 kg already in Earth orbit.
+
 ## Suggested text for the parent
 
 > The departure wave uses the same cheap charge. Each impactor overtakes the ship at 100 km/s and

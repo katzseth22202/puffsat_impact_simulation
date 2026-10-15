@@ -371,8 +371,29 @@ works by column density, so it is compact, not a cloud of foam balls. In this st
 mass over projectile mass. It is the same quantity as the target's `k`, and neither is the tamper
 study's slug ratio nor the spray plate's injection ratio. It is the head-on, pass-through kin of the
 spray plate's **Plug**: the same column-density body, but its fireball drifts *away* from the plate.
+In the **Earth wave**'s overtake the impactor arrives from beyond the charge instead, and the
+fireball drifts *onto* the plate; the charge is still held off the plate, never on it.
 _Avoid_: "plug" for this one (the spray plate's tethered body, drifting toward its plate); "foam
 balls" for the intended state
+
+**Sun wave**:
+The expensive, guided projectiles that meet a **Sun ship** head-on at periapsis (~400 km/s closing)
+and boost it onto a 100 km/s Earth crossing. They redirect mass rather than supply it.
+_Avoid_: "growth wave" or "nozzle wave" (the calcs repo's Jupiter-return waves, which have no Sun
+stage)
+
+**Sun ship**:
+A ship sent out on the Earth wave, falling from Jupiter's distance to periapsis, boosted there by
+the Sun wave. Its whole remaining mass, released as sheets, becomes the next Earth wave.
+
+**Earth wave**:
+The 100 km/s impactors, a Sun ship's released mass, that overtake ships departing Earth and push
+them through the departure burn.
+_Avoid_: "departure rods" (the calcs repo's head-on rods)
+
+**Breeding factor (`G`)**:
+Earth-wave impactor mass returned one generation later per kg of Earth-wave impactor spent.
+_Avoid_: "growth" alone (the calcs repo's cycle growth, which counts all mass sent onward)
 
 **Channel filler**:
 The low-density, low atomic number fill inside the radiation case, between the collision and the

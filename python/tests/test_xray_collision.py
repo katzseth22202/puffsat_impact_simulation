@@ -333,3 +333,22 @@ def test_impactor_sheet_budget_closed_forms() -> None:
     assert b.sail_accel_half_au[1] == pytest.approx(2.0 * b.sail_accel_half_au[0])
     assert b.spread_tilt < 0.05 * overtake.PULSE_TIME
     assert b.coast_drift[0] > 1.0e7  # tens of thousands of km: tracking is required
+
+
+def test_breeding_cycle() -> None:
+    """ADR-0062: each kg of 100 km/s Earth impactor sends ~24 kg off at 11 km/s, a Sun ship at
+    mass ratio 2 returns half its departing mass as the next wave's impactor, so the impactor grows
+    ~12x a generation (~10x if the Sun ship's plate is dead mass), and the expensive Sun-wave
+    impactor costs about a dollar per kg of payload departure."""
+    from puffsat.xray_collision import mission
+
+    ideal = mission.breeding_cycle(frozen=True, dead_fraction=0.0)
+    assert ideal.departing_per_impactor == pytest.approx(2.0 * ideal.k_earth)
+    assert ideal.growth == pytest.approx(ideal.k_earth)  # k_E / ((MR_E - 1) MR_S) at 1.5 and 2
+    assert 11.0 < ideal.growth < 13.0
+    plate = mission.plate_dead_fraction()
+    assert plate == pytest.approx(0.16, abs=0.01)
+    dead = mission.breeding_cycle(frozen=True, dead_fraction=plate)
+    assert dead.growth == pytest.approx(ideal.growth * (1.0 - plate))
+    assert dead.sun_impactor_cost_per_payload < 2.0
+    assert 1.5 < dead.orbit_mass_per_payload < 1.8

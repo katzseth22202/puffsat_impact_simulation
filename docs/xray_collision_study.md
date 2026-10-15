@@ -48,6 +48,9 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
    - **Planar sheets:** a wide impactor sheet against a wide charge sheet changes the impulse
      little, but spreads the load. The plate then takes ~11 kg per pulse instead of ~2-6 kg.
    - **Cost:** the impactor is ~$70-100 per kg of propellant.
+   - **The two stages close a loop** (ADR-0062). The Sun wave redirects Sun ships whose whole
+     remaining mass becomes the Earth wave. The impactor grows ~10-14x a generation, and the
+     expensive projectile costs ~$1 per kg of payload departure.
 6. **Without a nozzle, a plate recovers less directed energy per joule.** In jet-efficiency terms
    it gets 0.4-0.6, against the 0.8-1 the parent assumes for a magnetic nozzle. With cheap reaction
    mass that is enough: the projectile bill, not Isp, is the figure of merit.

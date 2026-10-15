@@ -17,8 +17,24 @@ Two tables back decisions taken after Result 10, so that none rests on arithmeti
   (`charge.finite_arc_mass_ratio`, ~1%). The projectile bill is `(MR - 1)/k` per kg of final mass,
   and its cost per kg of propellant is `PROJECTILE_COST / k`.
 
+- **The breeding cycle** (`mission_breeding.csv`). The Sun wave's expensive impactor only
+  redirects a Sun ship, and that ship's *whole* remaining mass becomes the next Earth wave's
+  100 km/s impactors. Per kg of Earth impactor, the departure (Result 11: mass ratio 1.5 at
+  `k_E`, from `overtake_ledger.csv`) sends off `D = k_E/(MR_E - 1)` kg. A Sun ship of departing mass
+  `S` returns `S (1 - f_dead)/MR_S` kg of impactor, so one kg back needs `S = MR_S/(1 - f_dead)`.
+  - The growth per generation is `G = D/S`.
+  - The share of departures left for payload is `1 - 1/G`.
+  - The expensive Sun-wave impactor per kg of payload departure is
+    `S (1 - 1/MR_S)/k_S / (D - S)`.
+  - The mass that must already be in Earth orbit per kg of payload departure is
+    `D MR_E / (D - S)`.
+
+  `f_dead` is the Sun ship's mass that cannot be released as impactor. It is bracketed between 0
+  and its plate: the δ/D 0.5 paraboloid's floor at 30 kg/m^2 on a 100 t final mass.
+
 The decisions they back: the 400 km/s stage at mass ratio 2 (Seth, 2026-10-15), at $1000/kg of
-projectile, and Parker's 9.86 R_sun rather than 4 R_sun as the baseline periapsis.
+projectile; Parker's 9.86 R_sun rather than 4 R_sun as the baseline periapsis; and the Sun wave as
+the redirector of mass that becomes the Earth wave's impactors.
 """
 
 from __future__ import annotations
@@ -134,6 +150,73 @@ def k_for_mass_ratio(
     )
 
 
+#: Result 11's recommended departure plate, and the Sun-stage plate it shares.
+EARTH_PLATE = "paraboloid 0.50 at 1.5 F"
+SUN_PLATE = "paraboloid 0.50 at 1.5 focus"
+MR_EARTH = 1.5
+MR_SUN = 2.0
+FINAL_MASS = 100.0e3  # [kg], the handoffs' nominal final mass, for the plate's dead share
+OUT_BREEDING = charge.OUT_DIR / "mission_breeding.csv"
+
+
+def earth_k(frozen: bool) -> float:
+    """Result 11's k for `MR_EARTH` on `EARTH_PLATE` from the committed `overtake_ledger.csv`
+    (point fireball, production grid): carbon left atomic if `frozen`, else bonds returned."""
+    rows = []
+    with (charge.OUT_DIR / "overtake_ledger.csv").open() as fh:
+        for r in csv.DictReader(fh):
+            if r["case"] == EARTH_PLATE and r["kind"] == "point" and r["grid"] == "x1":
+                rows.append((float(r["k"]), float(r["v_e_carbon_frozen" if frozen else "v_e"])))
+    slope, icept = np.polyfit(np.log([k for k, _ in rows]), np.log([v for _, v in rows]), 1)
+    need = DV_EARTH / math.log(MR_EARTH)
+    return float(math.exp((math.log(need) - icept) / slope))
+
+
+DV_EARTH = 11.0e3  # [m/s], Result 11's departure
+
+
+@dataclass(frozen=True)
+class Breeding:
+    bonds: str  # "carbon atomic" or "bonds returned" (the Earth stage's bracket)
+    dead_fraction: float
+    k_earth: float
+    k_sun: float
+    departing_per_impactor: float  # D [kg per kg of Earth impactor]
+    sun_ship_per_impactor: float  # S [kg departing per kg of impactor it returns]
+    growth: float  # G = D / S
+    payload_share: float  # 1 - 1/G of each departure
+    sun_impactor_per_payload: float  # [kg per kg of payload departure]
+    sun_impactor_cost_per_payload: float  # [$ per kg of payload departure]
+    orbit_mass_per_payload: float  # [kg in Earth orbit per kg of payload departure]
+
+
+def breeding_cycle(frozen: bool, dead_fraction: float) -> Breeding:
+    k_e = earth_k(frozen)
+    k_s = k_for_mass_ratio(SUN_PLATE, MR_SUN).k
+    d = k_e / (MR_EARTH - 1.0)
+    s = MR_SUN / (1.0 - dead_fraction)
+    sun = s * (1.0 - 1.0 / MR_SUN) / k_s / (d - s)
+    return Breeding(
+        bonds="carbon atomic" if frozen else "bonds returned",
+        dead_fraction=dead_fraction,
+        k_earth=k_e,
+        k_sun=k_s,
+        departing_per_impactor=d,
+        sun_ship_per_impactor=s,
+        growth=d / s,
+        payload_share=1.0 - s / d,
+        sun_impactor_per_payload=sun,
+        sun_impactor_cost_per_payload=PROJECTILE_COST * sun,
+        orbit_mass_per_payload=d * MR_EARTH / (d - s),
+    )
+
+
+def plate_dead_fraction() -> float:
+    """The Sun ship's δ/D 0.5 paraboloid floor at `charge.SURVIVAL_AREAL`, as a share of
+    `FINAL_MASS`: the mass that cannot be released as impactor if the plate is kept whole."""
+    return charge.SURVIVAL_AREAL * charge.plate_area(0.50, 0.0) / FINAL_MASS
+
+
 def _write(path: Path, rows: list[dict[str, object]]) -> None:
     with path.open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=list(rows[0]))
@@ -160,10 +243,27 @@ def main() -> None:
             f"v_e {c.v_e_needed / 1e3:5.1f} km/s -> k {c.k:6.1f}, "
             f"{c.projectile_per_final:.3f} kg/kg final, ${c.cost_per_kg_propellant:5.0f}/kg{flag}"
         )
+    breed = [
+        breeding_cycle(frozen, dead)
+        for frozen in (True, False)
+        for dead in (0.0, plate_dead_fraction())
+    ]
+    for b in breed:
+        print(
+            f"  breeding ({b.bonds}, dead {b.dead_fraction:.2f}): k_E {b.k_earth:4.1f}, k_S"
+            f" {b.k_sun:4.1f} | {b.departing_per_impactor:4.1f} kg departs per kg impactor,"
+            f" G {b.growth:4.1f}, payload {b.payload_share:.0%} | Sun impactor"
+            f" {1e3 * b.sun_impactor_per_payload:.2f} g (${b.sun_impactor_cost_per_payload:.2f})"
+            f" and {b.orbit_mass_per_payload:.2f} kg in orbit per kg of payload departing"
+        )
     OUT_PERIAPSIS.parent.mkdir(parents=True, exist_ok=True)
+    _write(OUT_BREEDING, [asdict(b) for b in breed])
     _write(OUT_PERIAPSIS, [asdict(p) for p in per])
     _write(OUT_K, [asdict(c) for c in ks])
-    print(f"python: wrote {len(per)} rows -> {OUT_PERIAPSIS}, {len(ks)} rows -> {OUT_K}")
+    print(
+        f"python: wrote {len(per)} rows -> {OUT_PERIAPSIS}, {len(ks)} rows -> {OUT_K},"
+        f" {len(breed)} rows -> {OUT_BREEDING}"
+    )
 
 
 if __name__ == "__main__":
