@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1137,6 +1137,17 @@ xray-collision-charge-2d:
 ## table -> data/results/xray_collision/charge_ledger.csv
 xray-collision-charge: data/tables/ch2.json
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.charge
+
+## xray-collision-charge-mix: the real disk-into-charge collision onto the plate (solid and foam
+## charges) against the point fireball, with the departing gas's direction and speed moments
+xray-collision-charge-mix:
+	cargo run --release -p sweep -- --charge-mix
+	cargo run --release -p sweep -- --charge-mix 100
+
+## xray-collision-freeze: ionization and bond freeze-out in the charge fireball on its way to the
+## plate -> data/results/xray_collision/charge_freeze.csv
+xray-collision-freeze: data/tables/ch2.json
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.freeze
 
 ## xray-collision-test: that study's tests alone
 xray-collision-test:

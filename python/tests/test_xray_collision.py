@@ -243,3 +243,19 @@ def test_jupiter_fall_boost_and_opaque_charge() -> None:
     assert fire.drift == pytest.approx(400e3 / 31.0)
     assert charge.plate_area(0.0, 0.0) == pytest.approx(math.pi * 100.0)
     assert charge.plate_area(0.30, 4.0) > charge.plate_area(0.30, 0.0)
+
+
+def test_charge_fireball_recombines_but_keeps_its_bonds() -> None:
+    """The dense charge fireball keeps its ionization in equilibrium all the way to the plate
+    (Damkohler numbers far above 1), but arrives too hot for H2: the bond toll is paid in full."""
+    from puffsat.xray_collision import charge, freeze
+
+    tab = charge.ch2_table()
+    f30 = freeze.freeze(30.0, tab)
+    assert 0.15 < f30.ion_share_start < 0.25
+    assert f30.ion_share_frozen < 0.01
+    assert f30.da_ion_min > 1e3
+    assert f30.kt_plate_ev > 0.5  # hotter than any H2 window
+    f100 = freeze.freeze(100.0, tab)
+    assert f100.velocity_loss_bonds_all_frozen > 3.0 * f30.velocity_loss_bonds_all_frozen
+    assert f100.velocity_loss_bonds_all_frozen < 0.1
