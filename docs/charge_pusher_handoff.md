@@ -88,17 +88,28 @@ For §`pass_through_pusher`, a closing paragraph or an alternative subsection:
 > projectiles are the expensive part of the architecture, and here they are 1-3% of the final
 > mass, because the cheap charge, not the projectile, is the reaction mass.
 
+## Checked since (Result 10, ADR-0060)
+
+- **Freeze-out.** Ionization (~18% of the heat) recombines before the plate at every k, and leaves
+  ~0.03% frozen. Polyethylene's bonds do not re-form before the plate, because the gas is still
+  0.4-1.4 eV there. They cost 1.6% of exhaust velocity at k = 30 and 5.4% at k = 100, charged in
+  full.
+- **Mixing.** The real disk-into-charge collision, in 2-D, gives -4% to +25% *more* plate impulse
+  than the uniform fireball for a solid charge, so the ledger above is conservative. A 30 kg/m^3
+  foam charge loses 15-39% as a line source, so the charge must be solid.
+- **Uneven exit speeds.** Without a nozzle the exhaust's direction factor is 0.70-0.89 and its
+  speed uniformity 0.64-0.83. In jet-efficiency terms that is 0.4-0.6 against a magnetic
+  nozzle's assumed 0.8-1. The plate impulse already includes this, since it comes from the wall
+  pressure of the full 2-D flow.
+
 ## Not modelled; open for the parent to flag
 
-- **Freeze-out.** At the start ~18% of the fireball's energy is in ionization. If recombination
-  froze at once, that would cost ~10% of the exhaust velocity. Polyethylene's bonds, if none
-  re-formed, cost at most 5.5% at k = 100. The solid-density start argues for fast recombination,
-  but neither is computed.
-- **Plate ablation and survival.** The plate is rigid and inert. At 40-85 km/s the `v/4` rule
-  asks it to absorb 10-21 kJ per N s. Peak pressure is a resolution-limited upper value.
-- **The charge's start.** It starts as a uniform hot sphere at rest in its own frame. The
-  snowplow's hot core and its early X-rays are not followed. Inside a solid charge they should be
-  reabsorbed within microseconds.
-- **The open bore** costs 0.1-0.5% of the impulse in 2-D. The energy flux it sends toward the
-  ship is not yet reported.
+- **The bore collar.** The real collision throws a narrow back-splash jet down the axis. It lands
+  just outside the bore (r 0.26-0.56 m) early in the pulse, at 5-20 GPa per kg of projectile on
+  the production grid and 2-7 GPa on a grid twice as coarse. It is under-resolved, so the true
+  value is at least this. The ring out to ~0.6-1 m needs a sacrificial or ablative collar, or a
+  charge shaped to tamp its own splash. Elsewhere the plate sees ~0.1-0.3 GPa per kg.
+- **The bore's flux toward the ship:** about five times the point fireball's share, not yet
+  reported as energy.
+- **Plate ablation** at 40-85 km/s: the `v/4` rule gives 10-21 kJ per N s.
 - **The charge's thermal survival** in the ship's shadow until it is set out.

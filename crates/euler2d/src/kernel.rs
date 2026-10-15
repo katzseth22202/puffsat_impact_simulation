@@ -257,6 +257,40 @@ impl Grid2D {
         }
     }
 
+    /// [`Self::max_plate_pressure`] over the surface columns at `r >= r_min` only: the plate's own
+    /// peak, with an open bore of radius `r_min` (whose gas streams on toward the ship) excluded.
+    #[must_use]
+    pub fn max_plate_pressure_beyond(&self, r_min: f64) -> f64 {
+        let Some(profile) = self.plate_profile else {
+            return self.max_plate_pressure();
+        };
+        (0..self.nr)
+            .filter(|&ir| self.r_center(ir) >= r_min && profile.covers(self.r_center(ir)))
+            .flat_map(|ir| {
+                (1..self.nz)
+                    .filter(move |&iz| !self.is_solid(iz, ir) && self.is_solid(iz - 1, ir))
+                    .map(move |iz| self.prim(iz, ir).p)
+            })
+            .fold(0.0_f64, f64::max)
+    }
+
+    /// Where [`Self::max_plate_pressure_beyond`] peaks: `(p, r)` of the highest surface cell at
+    /// `r >= r_min`.
+    #[must_use]
+    pub fn max_plate_pressure_beyond_at(&self, r_min: f64) -> (f64, f64) {
+        let Some(profile) = self.plate_profile else {
+            return (self.max_plate_pressure(), 0.0);
+        };
+        (0..self.nr)
+            .filter(|&ir| self.r_center(ir) >= r_min && profile.covers(self.r_center(ir)))
+            .flat_map(|ir| {
+                (1..self.nz)
+                    .filter(move |&iz| !self.is_solid(iz, ir) && self.is_solid(iz - 1, ir))
+                    .map(move |iz| (self.prim(iz, ir).p, self.r_center(ir)))
+            })
+            .fold((0.0_f64, 0.0_f64), |a, b| if b.0 > a.0 { b } else { a })
+    }
+
     /// Gas pressure on the dish floor's risers (ADR-0055, Q63): one `(z, r, p)` per cell row
     /// between the floor's axis height and its rim. In each row the first solid cell outward from
     /// the axis is the floor, `r` is that cell's inner face, and the fluid cell just inside carries
@@ -360,6 +394,18 @@ impl Grid2D {
     #[must_use]
     pub fn nr(&self) -> usize {
         self.nr
+    }
+
+    /// Axial cell size.
+    #[must_use]
+    pub fn dz(&self) -> f64 {
+        self.dz
+    }
+
+    /// Radial cell size.
+    #[must_use]
+    pub fn dr(&self) -> f64 {
+        self.dr
     }
 
     /// The effective-γ this grid was built with (ADR-0008).

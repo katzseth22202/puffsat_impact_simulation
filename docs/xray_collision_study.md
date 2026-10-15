@@ -9,8 +9,38 @@ as light before expansion turns it into bulk motion, and at what photon energy.
 
 This study is separate from `f(v)`, the tamper study, the water and argon plates, and the walled
 nozzle. Its Python is `python/puffsat/xray_collision/`, its outputs are under
-`data/results/xray_collision/`, and its targets are `make xray-collision`,
-`make xray-collision-test` and `make xray-collision-tops`.
+`data/results/xray_collision/`. Its targets are `make xray-collision`, `make xray-collision-test`,
+`make xray-collision-tops`, `-argon-bags`, `-anvil`, `-ch2-table`, `-rebound`, `-charge-2d`,
+`-charge`, `-charge-mix` and `-freeze`. The study grew past its title. Results 7-10 ask what
+pushes a ship at a Parker-like periapsis (400 km/s closing).
+
+## Conclusions
+
+1. **At rocket speeds (66-67 km/s) a collision is not an X-ray source** (Results 1-3, 6). Dense
+   matter at a few tens of eV stays opaque until it has cooled to ~1 eV. Light carries most of the
+   heat only from gas spread to ~1 g/m^3, and a cloud that thin cannot thread the bore.
+2. **At 618 km/s the parent's X-ray pusher works** (Results 4-5). A dense disk into a ~10 kg/m^3
+   carbon lattice radiates 47% of the projectile's energy as soft X-rays. The light partner of a
+   collision takes the heat, and that rule recurs throughout.
+3. **At 400 km/s the X-ray route survives only with the density contrast reversed** (Results 7-9,
+   ADR-0059). A light foam projectile stops on a dense graphite anvil inside the case. Iron does
+   not beat carbon, and a z-pinch adds lossy stages. The design clears the parent's 2650 s bar
+   only because the polyethylene propellant rebounds from the plate (`e_eff` 0.63-0.72, computed),
+   and its case-wall mass is unresolved.
+4. **The simplest near-Sun pusher has no X-rays and no case** (Result 10, ADR-0060).
+   - **Design:** a graphite disk threads the bore and stops in a compact charge of near-solid
+     polyethylene, 20-100 times its mass. The fireball is too dense to radiate, so all of its heat
+     becomes expansion onto the plate.
+   - **Mission:** on the parent's own 20 m bowl, a Jupiter fall boosted at 9.86 R_sun crosses
+     Earth's orbit at 100 km/s with a mass ratio of 2.0-2.9. A δ/D 0.5 paraboloid lowers that to
+     1.7-2.3.
+   - **Cost:** projectiles come to 1-3% of the final mass.
+   - **Checks:** ionization recombines and polyethylene's bonds cost 1.6-5.4% of velocity. A solid
+     charge mixes well enough, and foam does not.
+   - **The one hazard** is a back-splash jet of several GPa onto the ring around the bore.
+5. **Without a nozzle, a plate recovers less directed energy per joule.** In jet-efficiency terms
+   it gets 0.4-0.6, against the 0.8-1 the parent assumes for a magnetic nozzle. With cheap reaction
+   mass that is enough: the projectile bill, not Isp, is the figure of merit.
 
 ## Model
 
@@ -679,8 +709,79 @@ heliocentric integration). Values are for a 1 kg projectile on the production gr
   A graphite disk 1 mm thick that fits the 0.5 m bore weighs 0.43 kg (2.3 mm makes 1 kg). It
   needs only ~2.2k kg/m^2 of charge column to stop.
 
+### Checks: freeze-out, mixing, the exit flow and the back-splash
+
+**Freeze-out (`make xray-collision-freeze`, `freeze.py`).** The fireball's expansion was followed
+on the CH2 table from solid density to the plate. Its ionization store was relaxed toward Saha
+equilibrium at `recombination.py`'s three-body plus radiative rates, and H2 re-formation was raced
+with `rates.H_ATOMIC_H`.
+
+| k | ionization at start | still frozen at the plate | slowest race (Da) | gas at the plate | bond toll on velocity |
+|---|---|---|---|---|---|
+| 20 | 18.9% | 0.03% | 2e5 | 1.36 eV | 1.1% |
+| 30 | 19.3% | 0.03% | 2e5 | 1.21 eV | 1.6% |
+| 60 | 17.9% | 0.01% | 1e4 | 0.77 eV | 3.3% |
+| 100 | 17.6% | ~0% | 1.5 | 0.43 eV | 5.4% |
+
+- **Ionization is not a loss at any k.** The fireball starts at solid density, where ions recombine
+  far faster than it expands. At k = 100 the race nears freezing (Da 1.5), but by then almost
+  nothing is left to freeze.
+- **The bonds are paid in full.** The gas reaches the plate at 0.4-1.4 eV, too hot for H2, and
+  stagnation reheats it. No bond re-forms while the gas can still push, so the "bonds frozen"
+  Isp in `charge_ledger.csv` is the one to quote.
+
+**Mixing (`make xray-collision-charge-mix`).** The point fireball assumed that the disk's energy
+is shared through the charge. The test runs the real collision in 2-D. A 0.5 m disk moving away
+from the plate strikes a charge of its own footprint: near-solid (0.16 m at k = 30, 0.54 m at
+k = 100, on a grid twice as fine) or 30 kg/m^3 foam (5.1 m). Capture is per `M u_rms` throughout.
+
+| plate | k | point fireball | disk into solid charge (2x coarser grid) | disk into foam charge |
+|---|---|---|---|---|
+| parent bowl | 30 | 0.439 | **0.473** (0.422) | 0.267 |
+| δ/D 0.5 at 1.5 F | 30 | 0.567 | **0.580** (0.553) | 0.481 |
+| parent bowl | 100 | 0.512 | **0.642** (0.588) | -- |
+| δ/D 0.5 at 1.5 F | 100 | 0.641 | **0.761** (0.730) | -- |
+
+- **A solid charge mixes well enough.** The real collision gives as much impulse as the uniform
+  fireball or more: -4% to +25%, and more at k = 100 and on the finer grid. The snowplow puts its
+  hottest, first-swept mass on the plate's side, and that mass leaves toward the plate. Result
+  10's capture is conservative.
+- **Foam does not mix well.** A 5 m column is a line source. It loses 15-39% of the impulse, and
+  its exhaust is the least uniform of all (below).
+
+**The exit flow: no nozzle, so uneven speeds.** The plate impulse comes from integrating the wall
+pressure of the full 2-D flow, so gas leaving at uneven speeds and angles is already in every
+number above. Separately, the gas's mass, momentum and speed moments are tallied as it crosses
+the domain's outer faces. Nothing is lost (exit mass 1.00):
+- the **direction factor** `P_z / Σ m|u|` is 1 if all gas leaves along the axis;
+- the **speed uniformity** `(Σ m|u|)^2 / (M Σ m u^2)` is 1 if it all leaves at one speed;
+- their product, `dir^2 x unif`, is what a nozzle designer would call jet efficiency.
+
+| exhaust, k = 30 | direction | uniformity | dir^2 x unif |
+|---|---|---|---|
+| point fireball, bowl / paraboloid | 0.70 / 0.87 | 0.83 / 0.83 | 0.41 / 0.62 |
+| disk into solid, bowl / paraboloid | 0.76 / 0.89 | 0.65 / 0.64 | 0.37 / 0.51 |
+| disk into foam, bowl / paraboloid | 0.61 / 0.91 | 0.45 / 0.44 | 0.17 / 0.36 |
+
+An ideal nozzle would have 1 and 1. The parent assumes 0.8-1 for its magnetic nozzle. A plate
+recovers less directed energy per joule than that. It still meets the mission (Result 10) because
+the charge, not the projectile, supplies the reaction mass. The deep paraboloid is the most
+nozzle-like of the plates.
+
+**The back-splash jet.** The real collision throws a narrow, early jet of the first-shocked
+charge back along the axis. Its impulse is small (0.3-0.5% falls inside the 0.25 m bore, about
+five times the point fireball's), but its pressure is not. Just outside the bore, at r 0.26-0.56 m
+and within the first ~5% of the pulse, the plate's peak pressure per kilogram of projectile is
+5-12 GPa at k = 30 and ~18-20 GPa at k = 100 on the production grid. On a grid twice as coarse
+it is 2.1-7.1 GPa, so the jet is under-resolved and the true peak is at least this. The point
+fireball's peaks are 137-301 MPa. **The ring around the bore, out to ~0.6-1 m, therefore needs a
+sacrificial or ablative collar.** Possible alternatives are a charge shaped to tamp its own
+splash, or a greater standoff. The rest of the plate sees the point fireball's loads.
+
 Open:
-- Ionization and bond freeze-out in the expanding fireball (`recombination.py`-style kinetics).
+- The collar. Its size, its ablation per pulse and its mass are not computed, and the jet's true
+  peak needs a resolved, material-strength calculation.
+- The energy the bore passes toward the ship (now ~5x the point fireball's share).
 - The charge as a uniform equilibrated sphere. The snowplow's hot core and its early X-rays are
   not followed.
 - The rigid, non-ablating plate. At ~70 km/s the `v/4` rule asks it to absorb ~18 kJ per N s.

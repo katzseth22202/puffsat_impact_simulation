@@ -32,9 +32,10 @@ use std::io::Write as _;
 use std::path::Path;
 
 use euler2d::bounce::{
-    PlateShape, PointFireball, SlugConfig, SprayCloud, TrailingPearl, eta_capture, init_spray_grid,
-    run_fireball_bounce, run_slug_bounce, run_spray_bounce, run_spray_bounce_with_ambient,
-    run_spray_bounce_with_pearl, run_spray_bounce_with_skirt_history, taper_sigma_stats,
+    DiskCharge, PlateShape, PointFireball, SlugConfig, SprayCloud, TrailingPearl, eta_capture,
+    init_spray_grid, run_disk_charge_bounce, run_fireball_bounce, run_slug_bounce,
+    run_spray_bounce, run_spray_bounce_with_ambient, run_spray_bounce_with_pearl,
+    run_spray_bounce_with_skirt_history, taper_sigma_stats,
 };
 use hydro1d::conduction::Solid;
 use hydro1d::eos::{Eos as _, TableEos};
@@ -6648,10 +6649,7 @@ fn charge_confined_ratio() -> f64 {
 }
 
 fn charge_case(
-    label: &str,
-    d_over_d: f64,
-    skirt: f64,
-    height: f64,
+    (label, d_over_d, skirt, height): (&str, f64, f64, f64),
     k: f64,
     drift: f64,
     refine: usize,
@@ -6763,7 +6761,7 @@ fn cmd_charge_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         .map(|(_, &c)| c)
         .collect();
     let rows = par_map_with_progress("charge-2d", &picked, |&(label, dd, skirt, h)| {
-        charge_case(label, dd, skirt, h, k, drift, refine, confined)
+        charge_case((label, dd, skirt, h), k, drift, refine, confined)
     });
     let path = if only.is_none() && refine == 1 && (k - 30.0).abs() < 1e-9 {
         RESULT_PATH_CHARGE_2D.to_string()
@@ -6783,6 +6781,215 @@ fn cmd_charge_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             r.nr,
             r.nz,
             r.confined_ratio,
+        );
+    })
+}
+
+// X-ray collision study, Result 10 checks: does the disk's energy actually spread through the charge
+// (the point fireball's assumption), and how evenly does the gas leave without a nozzle? A 1 kg,
+// 0.5 m disk at speed 1 strikes a k = 30 charge, near-solid (0.16 m) or foam (5.1 m), and the
+// merged fireball meets the plate. Impulse and pressure are read against the merged mass's
+// u_rms = sqrt(2Q/M), as the point fireball's are.
+
+const RESULT_PATH_CHARGE_MIX: &str = "data/results/xray_collision/charge_mix.jsonl";
+const MIX_K: f64 = 30.0;
+const MIX_RADIUS: f64 = 0.25;
+const MIX_SOLID_LENGTH: f64 = 0.16; // 30 kg of 950 kg/m^3 polyethylene over 0.196 m^2
+const MIX_FOAM_LENGTH: f64 = 5.1; // 30 kg of 30 kg/m^3 foam
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct ChargeMixRecord {
+    case: String,
+    k: f64,
+    d_over_d: f64,
+    height: f64,
+    /// Plate impulse per `M u_rms`, the whole plate, and the bore's part.
+    wall_impulse: f64,
+    hole_impulse: f64,
+    /// Peak local pressure per `M u_rms^2 / m^3`.
+    peak_local_pressure: f64,
+    /// The same outside the 0.25 m bore (the plate itself), and its radius [m] and time
+    /// (in units of the plate's focal distance over `u_rms`).
+    peak_pressure_outside_bore: f64,
+    peak_radius: f64,
+    peak_time: f64,
+    exit_mass_share: f64,
+    exit_direction: f64,
+    exit_uniformity: f64,
+    ambient_mass_share: f64,
+    steps: usize,
+    dr: f64,
+}
+
+/// `(label, d/D, height multiple of the focus, charge: 0 point fireball, 1 solid, 2 foam)`.
+const MIX_CASES: [(&str, f64, f64, u8); 6] = [
+    ("bowl 0.30 at focus: point fireball", 0.30, 1.0, 0),
+    ("bowl 0.30 at focus: disk into solid charge", 0.30, 1.0, 1),
+    ("bowl 0.30 at focus: disk into foam charge", 0.30, 1.0, 2),
+    ("paraboloid 0.50 at 1.5 F: point fireball", 0.50, 1.5, 0),
+    (
+        "paraboloid 0.50 at 1.5 F: disk into solid charge",
+        0.50,
+        1.5,
+        1,
+    ),
+    (
+        "paraboloid 0.50 at 1.5 F: disk into foam charge",
+        0.50,
+        1.5,
+        2,
+    ),
+];
+
+fn mix_case(
+    label: &str,
+    d_over_d: f64,
+    focus_multiple: f64,
+    kind: u8,
+    k: f64,
+    coarse: bool,
+) -> ChargeMixRecord {
+    let h = focus_multiple * CHARGE_PLATE_R / (8.0 * d_over_d);
+    let dr = if kind == 1 && !coarse {
+        CHARGE_DR / 2.0
+    } else {
+        CHARGE_DR
+    };
+    let depth = d_over_d * 2.0 * CHARGE_PLATE_R;
+    let reach = if kind == 2 {
+        h + 0.5 * MIX_FOAM_LENGTH
+    } else {
+        h + CHARGE_BALL_R
+    };
+    let top = 4.0 * dr + depth.max(reach) + 3.0;
+    let mut nz = 0usize;
+    while (nz as f64) * dr < top {
+        nz += 1;
+    }
+    let mut nr = 0usize;
+    while (nr as f64) * dr < CHARGE_PLATE_R + 2.0 {
+        nr += 1;
+    }
+    let cfg = SlugConfig {
+        gamma: SPRAY_2D_GAMMA,
+        mach: SPRAY_2D_MACH,
+        r_foot: MIX_RADIUS,
+        length: MIX_RADIUS,
+        r_plate: CHARGE_PLATE_R,
+        r_max: nr as f64 * dr,
+        z_max: nz as f64 * dr,
+        nr,
+        nz,
+        confined: false,
+        shape: PlateShape::Dish { d_over_d },
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    };
+    // The merged mass's u_rms in the disk's units (disk mass 1, speed 1, charge k).
+    let u_rms = (k / (1.0 + k) / (1.0 + k)).sqrt();
+    let (r, scale) = if kind == 0 {
+        let drift = CHARGE_DRIFT
+            .iter()
+            .find(|(kk, _)| (kk - k).abs() < 1e-9)
+            .map_or(0.183, |&(_, d)| d);
+        (
+            run_fireball_bounce(
+                &cfg,
+                PointFireball {
+                    height: h,
+                    radius: CHARGE_BALL_R,
+                    drift,
+                    ambient: CHARGE_AMBIENT,
+                    hole_radius: CHARGE_HOLE_R,
+                },
+            ),
+            1.0,
+        )
+    } else {
+        let length = if kind == 1 {
+            MIX_SOLID_LENGTH
+        } else {
+            MIX_FOAM_LENGTH
+        };
+        (
+            run_disk_charge_bounce(
+                &cfg,
+                DiskCharge {
+                    radius: MIX_RADIUS,
+                    height: h,
+                    charge_length: length,
+                    k,
+                    disk_thickness: 4.0 * dr,
+                    gap: 2.0 * dr,
+                    ambient: CHARGE_AMBIENT,
+                    hole_radius: CHARGE_HOLE_R,
+                },
+            ),
+            u_rms,
+        )
+    };
+    ChargeMixRecord {
+        case: label.to_string(),
+        k,
+        d_over_d,
+        height: h,
+        wall_impulse: r.wall_impulse / scale,
+        hole_impulse: r.hole_impulse / scale,
+        peak_local_pressure: r.peak_local_pressure / (scale * scale),
+        peak_pressure_outside_bore: r.peak_pressure_outside_bore / (scale * scale),
+        peak_radius: r.peak_radius,
+        peak_time: r.peak_time * scale / h,
+        exit_mass_share: r.exit_mass_share,
+        exit_direction: r.exit_direction,
+        exit_uniformity: r.exit_uniformity,
+        ambient_mass_share: r.ambient_mass_share,
+        steps: r.steps,
+        dr,
+    }
+}
+
+/// `--charge-mix` runs k = 30 (all six cases); `--charge-mix 100` runs k = 100 without the foam,
+/// whose 17 m column would be a line source, into `charge_mix_k100.jsonl`.
+fn cmd_charge_mix(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let k: f64 = args
+        .iter()
+        .skip_while(|a| *a != "--charge-mix")
+        .nth(1)
+        .and_then(|a| a.parse().ok())
+        .unwrap_or(MIX_K);
+    let coarse = args.iter().any(|a| a == "coarse");
+    let cases: Vec<(&str, f64, f64, u8)> = MIX_CASES
+        .iter()
+        .filter(|c| (k - MIX_K).abs() < 1e-9 || c.3 != 2)
+        .filter(|c| !coarse || c.3 == 1)
+        .copied()
+        .collect();
+    let rows = par_map_with_progress("charge-mix", &cases, |&(label, dd, fm, kind)| {
+        mix_case(label, dd, fm, kind, k, coarse)
+    });
+    let path = if coarse {
+        format!("data/results/xray_collision/charge_mix_k{k:.0}_coarse.jsonl")
+    } else if (k - MIX_K).abs() < 1e-9 {
+        RESULT_PATH_CHARGE_MIX.to_string()
+    } else {
+        format!("data/results/xray_collision/charge_mix_k{k:.0}.jsonl")
+    };
+    emit_scenario(&path, "charge-mix", &rows, |r| {
+        println!(
+            "rust: {:<48} k {:.0} J {:.4} hole {:.4} peak {:.3e} (plate {:.3e} at r {:.2} t {:.2}) exit m {:.2} dir {:.3} unif {:.3} amb {:.1e} steps {}",
+            r.case,
+            r.k,
+            r.wall_impulse,
+            r.hole_impulse,
+            r.peak_local_pressure,
+            r.peak_pressure_outside_bore,
+            r.peak_radius,
+            r.peak_time,
+            r.exit_mass_share,
+            r.exit_direction,
+            r.exit_uniformity,
+            r.ambient_mass_share,
+            r.steps,
         );
     })
 }
@@ -7031,6 +7238,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--heavyplate", cmd_heavyplate),
     ("--propellant-rebound", cmd_propellant_rebound),
     ("--charge-2d", cmd_charge_2d),
+    ("--charge-mix", cmd_charge_mix),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),
     ("--geometry-wide", cmd_geometry_wide),

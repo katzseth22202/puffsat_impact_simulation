@@ -489,11 +489,16 @@ fn run_bounce(g: Grid2D, nz: usize) -> Bounce2D {
 }
 
 /// [`run_bounce`] calling `observe(grid, t)` at the start and after every step.
-fn run_bounce_observed(
+fn run_bounce_observed(g: Grid2D, nz: usize, observe: impl FnMut(&Grid2D, f64)) -> Bounce2D {
+    run_bounce_observed_final(g, nz, observe).0
+}
+
+/// [`run_bounce_observed`], also handing back the grid as it stood when the integration stopped.
+fn run_bounce_observed_final(
     mut g: Grid2D,
     nz: usize,
     mut observe: impl FnMut(&Grid2D, f64),
-) -> Bounce2D {
+) -> (Bounce2D, Grid2D) {
     let incident_momentum = g.axial_momentum().abs();
     let mut t = 0.0;
     observe(&g, t);
@@ -536,13 +541,16 @@ fn run_bounce_observed(
         force_old = force_new;
     }
 
-    Bounce2D {
-        wall_impulse,
-        incident_momentum,
-        peak_force: peak,
-        peak_local_pressure: peak_local,
-        steps,
-    }
+    (
+        Bounce2D {
+            wall_impulse,
+            incident_momentum,
+            peak_force: peak,
+            peak_local_pressure: peak_local,
+            steps,
+        },
+        g,
+    )
 }
 
 /// A point-source fireball for the X-ray collision study's charge (Result 10): a projectile has
@@ -580,6 +588,121 @@ pub struct FireballBounce {
     /// The ambient's mass as a share of the fireball's.
     pub ambient_mass_share: f64,
     pub steps: usize,
+    /// Peak local pressure on the plate outside the open bore, same units.
+    pub peak_pressure_outside_bore: f64,
+    /// Where and when that peak came: its radius [m] and time (in the run's units).
+    pub peak_radius: f64,
+    pub peak_time: f64,
+    /// Gas accounted for at the end (out through the outer faces plus still on the grid), as a
+    /// share of the fireball's; short of 1 by what went down the bore or out the bottom.
+    pub exit_mass_share: f64,
+    /// Direction factor of that gas, `P_z / Σ m|u|`: 1 if every parcel leaves along the axis.
+    pub exit_direction: f64,
+    /// Speed-uniformity factor, `(Σ m|u|)^2 / (M Σ m u^2)`: 1 if every parcel has one speed.
+    pub exit_uniformity: f64,
+}
+
+/// Mass, axial momentum, `Σ m|u|` and `Σ m u^2` carried out through the far-`z` and outer-`r`
+/// faces in `dt` (`2π` dropped), from the outermost cells' states.
+fn outflow_moments(g: &Grid2D, dt: f64) -> (f64, f64, f64, f64) {
+    let (nz, nr) = (g.nz(), g.nr());
+    let (dz, dr) = (g.dz(), g.dr());
+    let (mut m, mut pz, mut ms, mut mu2) = (0.0, 0.0, 0.0, 0.0);
+    let mut add = |w: crate::state::Prim, un: f64, area: f64| {
+        if un > 0.0 {
+            let dm = w.rho * un * area * dt;
+            let speed = w.uz.hypot(w.ur);
+            m += dm;
+            pz += dm * w.uz;
+            ms += dm * speed;
+            mu2 += dm * speed * speed;
+        }
+    };
+    for ir in 0..nr {
+        let w = g.prim(nz - 1, ir);
+        add(w, w.uz, (ir as f64 + 0.5) * dr * dr);
+    }
+    for iz in 0..nz {
+        if g.is_solid(iz, nr - 1) {
+            continue;
+        }
+        let w = g.prim(iz, nr - 1);
+        add(w, w.ur, nr as f64 * dr * dz);
+    }
+    (m, pz, ms, mu2)
+}
+
+/// Mass, axial momentum, `Σ m|u|` and `Σ m u^2` of the fluid on the grid (`2π` dropped).
+fn exit_moments(g: &Grid2D) -> (f64, f64, f64, f64) {
+    let two_pi = 2.0 * std::f64::consts::PI;
+    let (mut m, mut pz, mut ms, mut mu2) = (0.0, 0.0, 0.0, 0.0);
+    for iz in 0..g.nz() {
+        for ir in 0..g.nr() {
+            if g.is_solid(iz, ir) {
+                continue;
+            }
+            let w = g.prim(iz, ir);
+            let dm = w.rho * g.cell_volume(ir) / two_pi;
+            let speed = w.uz.hypot(w.ur);
+            m += dm;
+            pz += dm * w.uz;
+            ms += dm * speed;
+            mu2 += dm * speed * speed;
+        }
+    }
+    (m, pz, ms, mu2)
+}
+
+/// Integrate an initialized fireball grid onto its plate: the impulse, the bore's share, the peak
+/// pressure and the departing gas's moments. Mass and impulse are per unit fireball mass.
+fn run_fireball_grid(
+    g: Grid2D,
+    nz: usize,
+    hole_radius: f64,
+    fireball_mass: f64,
+    ambient_mass_share: f64,
+) -> FireballBounce {
+    let two_pi = 2.0 * std::f64::consts::PI;
+    let mut hole_impulse = 0.0;
+    let mut hole_old = 0.0;
+    let mut t_old = 0.0;
+    let mut peak_outside = 0.0_f64;
+    let mut peak_at = (0.0, 0.0);
+    let mut out = (0.0, 0.0, 0.0, 0.0);
+    let (r, g) = run_bounce_observed_final(g, nz, |grid, t| {
+        let hole_new = grid.plate_force_within(hole_radius);
+        hole_impulse += 0.5 * (t - t_old) * (hole_old + hole_new);
+        hole_old = hole_new;
+        let (p_out, r_out) = grid.max_plate_pressure_beyond_at(hole_radius);
+        if p_out > peak_outside {
+            peak_outside = p_out;
+            peak_at = (r_out, t);
+        }
+        let f = outflow_moments(grid, t - t_old);
+        out = (out.0 + f.0, out.1 + f.1, out.2 + f.2, out.3 + f.3);
+        t_old = t;
+    });
+    let grid_moments = exit_moments(&g);
+    let (m, pz, ms, mu2) = (
+        out.0 + grid_moments.0,
+        out.1 + grid_moments.1,
+        out.2 + grid_moments.2,
+        out.3 + grid_moments.3,
+    );
+    FireballBounce {
+        wall_impulse: r.wall_impulse / fireball_mass,
+        hole_impulse: hole_impulse / fireball_mass,
+        peak_force: r.peak_force / fireball_mass,
+        peak_local_pressure: r.peak_local_pressure / two_pi / fireball_mass,
+        ambient_mass_share,
+        steps: r.steps,
+        peak_pressure_outside_bore: peak_outside / two_pi / fireball_mass,
+        peak_radius: peak_at.0,
+        peak_time: peak_at.1,
+        exit_mass_share: m / fireball_mass,
+        exit_direction: if ms > 0.0 { pz / ms } else { 0.0 },
+        exit_uniformity: if mu2 > 0.0 { ms * ms / (m * mu2) } else { 0.0 },
+    }
 }
 
 /// Run a [`PointFireball`] onto the dished or cupped plate of `cfg` (`cfg.shape` must be a
@@ -632,23 +755,107 @@ pub fn run_fireball_bounce(cfg: &SlugConfig, fb: PointFireball) -> FireballBounc
         }
     });
 
-    let mut hole_impulse = 0.0;
-    let mut hole_old = 0.0;
-    let mut t_old = 0.0;
-    let r = run_bounce_observed(g, cfg.nz, |grid, t| {
-        let hole_new = grid.plate_force_within(fb.hole_radius);
-        hole_impulse += 0.5 * (t - t_old) * (hole_old + hole_new);
-        hole_old = hole_new;
-        t_old = t;
-    });
-    FireballBounce {
-        wall_impulse: r.wall_impulse,
-        hole_impulse,
-        peak_force: r.peak_force,
-        peak_local_pressure: r.peak_local_pressure / two_pi,
-        ambient_mass_share: rho_amb * (v_domain - v_ball),
-        steps: r.steps,
+    run_fireball_grid(
+        g,
+        cfg.nz,
+        fb.hole_radius,
+        1.0,
+        rho_amb * (v_domain - v_ball),
+    )
+}
+
+/// The real collision behind a [`PointFireball`] (X-ray study, Result 10 mixing check): a disk
+/// that has just threaded the bore, moving away from the plate at speed 1, about to strike a
+/// cylindrical polyethylene charge of `k` times its mass. Both are γ-law gas; only masses, areal
+/// densities and the closing speed matter to the snowplow, so the disk is a resolvable slab of its
+/// true areal density. Impulse is per unit **merged** mass; the caller reads it against that
+/// mass's eventual `u_rms = sqrt(2 Q / M)`, as for the point fireball.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DiskCharge {
+    /// Disk and charge radius (they share the bore's footprint).
+    pub radius: f64,
+    /// Height of the charge's centre above the plate's vertex.
+    pub height: f64,
+    /// Charge length along the axis (solid polyethylene is short, foam long).
+    pub charge_length: f64,
+    /// Charge-to-disk mass ratio `k`.
+    pub k: f64,
+    /// The disk slab's thickness on the grid (several cells).
+    pub disk_thickness: f64,
+    /// Gap between the disk and the charge at the start.
+    pub gap: f64,
+    /// Ambient density as a fraction of the charge's.
+    pub ambient: f64,
+    /// Open bore radius at the vertex.
+    pub hole_radius: f64,
+}
+
+/// Run a [`DiskCharge`] collision onto the dished or cupped plate of `cfg`.
+///
+/// # Panics
+///
+/// If `cfg.shape` is the grid-aligned flat plate, which has no immersed profile.
+#[must_use]
+pub fn run_disk_charge_bounce(cfg: &SlugConfig, dc: DiskCharge) -> FireballBounce {
+    let dz = cfg.z_max / cfg.nz as f64;
+    let dr = cfg.r_max / cfg.nr as f64;
+    let mut g = Grid2D::new(cfg.nz, cfg.nr, dz, dr, cfg.gamma);
+    g.set_axisymmetric(true);
+    g.bc_rlo = Bc::Reflect;
+    g.bc_rhi = Bc::Transmissive;
+    g.bc_zhi = Bc::Transmissive;
+    g.bc_zlo = Bc::Transmissive;
+    let profile = immersed_profile(cfg).expect("a dished or cupped plate");
+    g.set_plate_profile(Some(profile));
+    let z_vertex = profile.z_surface(0.0);
+    let charge_lo = z_vertex + dc.height - 0.5 * dc.charge_length;
+    let charge_hi = charge_lo + dc.charge_length;
+    let disk_hi = charge_lo - dc.gap;
+    let disk_lo = disk_hi - dc.disk_thickness;
+    let region = |iz: usize, ir: usize| -> u8 {
+        let z = (iz as f64 + 0.5) * dz;
+        let r = (ir as f64 + 0.5) * dr;
+        if r >= dc.radius {
+            0
+        } else if z >= charge_lo && z < charge_hi {
+            2
+        } else if z >= disk_lo && z < disk_hi {
+            1
+        } else {
+            0
+        }
+    };
+    let two_pi = 2.0 * std::f64::consts::PI;
+    let (mut v_disk, mut v_charge, mut v_domain) = (0.0, 0.0, 0.0);
+    for iz in 0..cfg.nz {
+        for ir in 0..cfg.nr {
+            let v = g.cell_volume(ir) / two_pi;
+            v_domain += v;
+            match region(iz, ir) {
+                1 => v_disk += v,
+                2 => v_charge += v,
+                _ => {}
+            }
+        }
     }
+    // Disk mass 1 at speed 1, charge mass k at rest, both cold.
+    let rho_disk = 1.0 / v_disk;
+    let rho_charge = dc.k / v_charge;
+    let p_cold = rho_disk / (cfg.gamma * cfg.mach * cfg.mach);
+    let rho_amb = dc.ambient * rho_charge;
+    g.init(|iz, ir| match region(iz, ir) {
+        1 => Prim::new(rho_disk, 1.0, 0.0, p_cold),
+        2 => Prim::new(rho_charge, 0.0, 0.0, p_cold * rho_charge / rho_disk),
+        _ => Prim::new(rho_amb, 0.0, 0.0, p_cold * 1.0e-6),
+    });
+    let merged = 1.0 + dc.k;
+    run_fireball_grid(
+        g,
+        cfg.nz,
+        dc.hole_radius,
+        merged,
+        rho_amb * (v_domain - v_disk - v_charge) / merged,
+    )
 }
 
 #[cfg(test)]
