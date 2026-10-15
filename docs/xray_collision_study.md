@@ -37,7 +37,10 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
    - **Cost:** projectiles come to 1-3% of the final mass.
    - **Checks:** ionization recombines and polyethylene's bonds cost 1.6-5.4% of velocity. A solid
      charge mixes well enough, and foam does not.
-   - **The one hazard** is a back-splash jet of several GPa onto the ring around the bore.
+   - **The one hazard** is a back-splash jet of several GPa onto the ring around the bore. Sized
+     by impulse, its collar is ~1-1.5 t of extra structure on a 100 t ship, out to ~3.5 m. Its
+     erosion, 0.2-11 t over the boost, leaves as reaction mass, faster than the charge's own
+     exhaust at the floor. The mass ratio stays under 3 even at the ceiling.
 5. **Without a nozzle, a plate recovers less directed energy per joule.** In jet-efficiency terms
    it gets 0.4-0.6, against the 0.8-1 the parent assumes for a magnetic nozzle. With cheap reaction
    mass that is enough: the projectile bill, not Isp, is the figure of merit.
@@ -779,14 +782,105 @@ sacrificial or ablative collar.** Possible alternatives are a charge shaped to t
 splash, or a greater standoff. The rest of the plate sees the point fireball's loads.
 
 Open:
-- The collar. Its size, its ablation per pulse and its mass are not computed, and the jet's true
-  peak needs a resolved, material-strength calculation.
+- The collar's mass and erosion are now priced (next section). The jet's true peak still needs a
+  resolved, material-strength calculation.
 - The energy the bore passes toward the ship (now ~5x the point fireball's share).
 - The charge as a uniform equilibrated sphere. The snowplow's hot core and its early X-rays are
   not followed.
 - The rigid, non-ablating plate. At ~70 km/s the `v/4` rule asks it to absorb ~18 kJ per N s.
 - Peak-pressure convergence.
 - The charge's thermal survival in the ship's shadow.
+
+### The bore collar: its mass, its erosion, and its vapour as propellant -- `collar_ledger.csv`
+
+`make xray-collision-collar` (`collar.py`; `sweep --charge-mix K collar` and `--collar-ablation`).
+The disk-into-charge runs above were repeated at k = 30 and 100, on both plates and two grids,
+with the plate cut into six rings from the bore's edge to the rim (0.25-0.6, 0.6-1, 1-2, 2-3.5,
+3.5-6 and 6-10 m). Each ring records its impulse, the gas arriving on it head-on (column, speed,
+energy) and its peak pressure. The rings tile the plate: their impulses add up to the plate's,
+less the bore's, to four figures.
+
+**The load is broad, not a needle.** The impulse per area on the inner ring is 8-10 times the
+plate's mean. It is still ~5 times the mean at 1-2 m and ~3 times at 2-3.5 m, and it falls to the
+mean near 6 m. The point fireball the ledger used is itself centre-heavy, 2-3 times the mean
+inside 3.5 m, because the vertex is the nearest and squarest-on part of the bowl. The jet roughly
+doubles that again inside 2 m.
+
+**Sizing by impulse, not by peak.** The pulse lasts microseconds, far shorter than any structural
+response, so the ring is damaged by its impulse (the impulsive branch of a pressure-impulse
+diagram), not by its 1-20 GPa peak. The collar is sized to be *impulse-matched*. Its areal mass is
+the plate's 30 kg/m^2 scaled by the ring's impulse over a reference, so it takes the same velocity
+kick per pulse as that reference. Two references bracket it:
+- **Against the point fireball on the same ring:** this charges the jet's increment alone, for a
+  plate already built to the smooth load the ledger used.
+- **Against the plate's mean:** this assumes no structural spreading, and also charges the smooth
+  fireball's own centre-heavy load.
+
+All the impulses scale with the disk's mass, so neither collar mass does.
+
+Impulse converges where peak pressure does not. On the coarse grid the inner rings' impulse
+changes by 10-60%, while their peak changes up to six times.
+
+**Erosion and thrust.** Each ring with a real arriving column (r < 2-3.5 m, at least 1e-4 kg/m^2
+per kg of disk) is re-run as the study's 1-D radiation-hydrodynamic bounce on the CH2 table:
+- once against a rigid wall;
+- once against graphite that boils off at `q_wall / Q*` and is injected into the gas (the f(v)
+  study's Rung E, ADR-0014).
+
+The 1-D slug carries the ring's arriving column and speed. Its density is set to give the ring's
+2-D peak. Further out the rings are loaded by gas sliding along the wall, not arriving on it, so
+their erosion is the plate-wide ablation item.
+
+`Q*` is bracketed between graphite's sublimation (59 MJ/kg) and a third of it. The f(v) study's
+vapour curtain is switched off, because it creates energy here. It was calibrated for ablated
+mass well below the cloud's, and the inner ring boils off ~10 times its arriving column. Each row
+is checked: `(J - p_in)^2 / 2M` must not exceed the slug's kinetic energy.
+
+The 1-D slug arrives cold, but in 2-D the jet carries 3-36 times its kinetic energy as enthalpy.
+The erosion is therefore bracketed:
+- **Floor:** the cold slug at 59 MJ/kg.
+- **Ceiling:** 20 MJ/kg, scaled up by that enthalpy ratio.
+
+**The vapour is credited with only its own push.** That is the 1-D slug's extra impulse per area.
+Most of a ring's 2-D impulse is pressure from gas already stagnated against the wall. Scaling it
+by the 1-D gain gives the vapour an impossible exhaust speed (~0.6-2.7 Mm/s).
+
+The ledger for a 100 t final mass (production grid; jet-only coarse-grid values in brackets):
+
+| plate, k | collar, jet only | collar, vs the mean | eroded over the boost, floor-ceiling | vapour's own `v_e` (floor) | impulse added | mass ratio: ledger -> floor / ceiling |
+|---|---|---|---|---|---|---|
+| bowl, 30 | +1.07 t (0.74) | +3.4 t to 6 m | 0.44-11.0 t | 45 km/s | 0.7% | 2.032 -> 2.029 / 2.170 |
+| paraboloid 1.5 F, 30 | +0.85 t (0.44) | +3.7 t | 0.16-8.8 t | 61 km/s | 0.4% | 1.731 -> 1.730 / 1.845 |
+| bowl, 100 | +1.20 t (0.86) | +3.3 t | 0.47-6.8 t | 56 km/s | 0.7% | 2.860 -> 2.846 / 2.930 |
+| paraboloid 1.5 F, 100 | +0.92 t (0.76) | +3.8 t | 0.49-6.0 t | 72 km/s | 1.1% | 2.316 -> 2.302 / 2.363 |
+
+- **The collar is ~1 t of extra structure for the jet**, centre-heavy out to ~3.5 m at
+  100-120 kg/m^2 on the inner rings. That is about 1% of a 100 t ship, and it scales with no
+  disk size. It rises on refinement (0.4-0.9 t coarse), so ~1-1.5 t is the honest figure. The
+  conservative bound, which also grades the plate for the smooth fireball's centre load, is
+  **+3.3-3.8 t** out to 6 m. This is dry mass: it costs payload, not mass ratio. Of that, 2.0-3.1 t
+  is the smooth fireball's own load, which the parent's uniform 30 kg/m^2 plate does not grade
+  for. **The plate should be graded, with the jet as a modest addition.**
+- **Erosion is a consumable, concentrated on the inner ring.**
+  - The floor eats 0.2-0.5 t over the boost. The inner ring then loses up to 420 kg/m^2 at k = 30
+    on the bowl (23 cm of graphite), and 20-65 kg/m^2 per ring at k = 100.
+  - The ceiling is 6-11 t. That is 4.8 m of graphite on the k = 30 bowl's inner ring, which no
+    fixed collar holds. At k = 100 it is ~1 t/m^2 (0.55 m).
+  - So at k = 30 the inner ring must be a renewable, fed sleeve unless the floor holds. At
+    k = 100 the jet arrives slower and denser (47-60 km/s, not 140-185 km/s), radiates far less
+    (1% of its kinetic energy against 23-32%), and a thick fixed ring suffices.
+- **The eroded collar does become reaction mass, and good reaction mass.** At the floor its vapour
+  leaves at 45-72 km/s. That is faster than the charge's own 20-29 km/s exhaust, because it is
+  heated by the hottest gas on the plate. So charging it as propellant *lowers* the mass ratio
+  slightly (by 0.001-0.014). It adds 0.4-1.1% to the pulse's impulse.
+  - At the ceiling, the extra erosion is credited with no extra push, which is conservative. It is
+    then mostly dead weight leaving at 0-11 km/s. The mass ratio rises by 0.05-0.14, to at most
+    2.93 (k = 100, bowl).
+  - Under 3 in every case.
+
+Not modelled here: mechanical erosion (spall and crushing; a bonded, backed collar has no free
+rear face to spall), the collar's own heat soak between pulses, the jet's true resolved peak, and
+the wall flow's erosion of the rest of the plate.
 
 ## Limits
 

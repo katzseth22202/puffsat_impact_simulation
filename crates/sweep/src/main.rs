@@ -6819,6 +6819,22 @@ struct ChargeMixRecord {
     ambient_mass_share: f64,
     steps: usize,
     dr: f64,
+    /// The bore collar's rings, per kg of disk with the disk's closing speed as the unit (impulse
+    /// per m^2 in kg/m^2 x speed, mass in kg/m^2, energy in kg/m^2 x speed^2, pressure in
+    /// kg/m^3 x speed^2). Empty on the rows written before the collar tally.
+    #[serde(default)]
+    bands: Vec<CollarBand>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct CollarBand {
+    r_lo: f64,
+    r_hi: f64,
+    impulse: f64,
+    mass_in: f64,
+    speed_in: f64,
+    energy_in: f64,
+    peak_pressure: f64,
 }
 
 /// `(label, d/D, height multiple of the focus, charge: 0 point fireball, 1 solid, 2 foam)`.
@@ -6945,11 +6961,29 @@ fn mix_case(
         ambient_mass_share: r.ambient_mass_share,
         steps: r.steps,
         dr,
+        bands: {
+            // Per kg of disk, in the disk's speed: the run's mass unit is the merged 1 + k disks,
+            // and the point fireball's speed unit is its u_rms (the disk run's is the disk's).
+            let (m, v) = (1.0 + k, if kind == 0 { u_rms } else { 1.0 });
+            r.bands
+                .iter()
+                .map(|b| CollarBand {
+                    r_lo: b.r_lo,
+                    r_hi: b.r_hi,
+                    impulse: b.impulse * m * v,
+                    mass_in: b.mass_in * m,
+                    speed_in: b.speed_in * v,
+                    energy_in: b.energy_in * m * v * v,
+                    peak_pressure: b.peak_pressure * m * v * v,
+                })
+                .collect()
+        },
     }
 }
 
 /// `--charge-mix` runs k = 30 (all six cases); `--charge-mix 100` runs k = 100 without the foam,
-/// whose 17 m column would be a line source, into `charge_mix_k100.jsonl`.
+/// whose 17 m column would be a line source, into `charge_mix_k100.jsonl`. `collar` drops the foam
+/// and writes `charge_collar_k{K}.jsonl`, whose rows carry the bore collar's ring loads.
 fn cmd_charge_mix(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let k: f64 = args
         .iter()
@@ -6958,16 +6992,20 @@ fn cmd_charge_mix(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|a| a.parse().ok())
         .unwrap_or(MIX_K);
     let coarse = args.iter().any(|a| a == "coarse");
+    let collar = args.iter().any(|a| a == "collar");
     let cases: Vec<(&str, f64, f64, u8)> = MIX_CASES
         .iter()
-        .filter(|c| (k - MIX_K).abs() < 1e-9 || c.3 != 2)
+        .filter(|c| ((k - MIX_K).abs() < 1e-9 && !collar) || c.3 != 2)
         .filter(|c| !coarse || c.3 == 1)
         .copied()
         .collect();
     let rows = par_map_with_progress("charge-mix", &cases, |&(label, dd, fm, kind)| {
         mix_case(label, dd, fm, kind, k, coarse)
     });
-    let path = if coarse {
+    let path = if collar {
+        let grid = if coarse { "_coarse" } else { "" };
+        format!("data/results/xray_collision/charge_collar_k{k:.0}{grid}.jsonl")
+    } else if coarse {
         format!("data/results/xray_collision/charge_mix_k{k:.0}_coarse.jsonl")
     } else if (k - MIX_K).abs() < 1e-9 {
         RESULT_PATH_CHARGE_MIX.to_string()
@@ -6990,6 +7028,174 @@ fn cmd_charge_mix(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             r.exit_uniformity,
             r.ambient_mass_share,
             r.steps,
+        );
+    })
+}
+
+// X-ray collision study, Result 10: the bore collar. The 2-D disk-into-charge runs
+// (`--charge-mix K collar`) tally what lands on each ring around the bore: a column, a speed, a
+// peak pressure. Each ring is re-run here as the study's 1-D radiation-hydrodynamic bounce on the
+// CH2 table (the f(v) study's 2-D/1-D split), against a rigid wall and against a graphite wall
+// that ablates at `q_wall / Q*` (Rung E). The rigid run is the floor; the ablating run gives the
+// collar's erosion per pulse and the impulse its vapour adds.
+
+const RESULT_PATH_COLLAR: &str = "data/results/xray_collision/collar_ablation.jsonl";
+/// The disk's closing speed [m/s] and mass [kg]: the 2-D rows are per kg of disk in this speed.
+const COLLAR_V_CLOSE: f64 = 400_000.0;
+/// Graphite's heat of ablation [J/kg]: sublimation to monatomic vapour, 711.2 kJ/mol
+/// (`walled_nozzle.wall.GRAPHITE_ABLATION`), and a third of it for a wall that sheds hot clusters.
+const COLLAR_Q_STAR: [f64; 2] = [59.2e6, 20.0e6];
+/// Vapour curtain opacity [m^2/kg]: off (bare wall) only. The f(v) study's calibrated 200 was set
+/// for ablated mass well below the cloud's; on the collar's inner ring graphite boils off at ~10
+/// times the arriving column, and the shielded runs then leave with more energy than the slug
+/// brought (`(J - p_in)^2 / 2M > KE`), so that arm is out of its range here.
+const COLLAR_KAPPA_VAPOR: [f64; 1] = [0.0];
+/// A cold slug's stagnation pressure on a wall is about `1.2 rho v^2` (gamma ~ 1.4), so the
+/// 1-D slug's density is set to give the ring's 2-D peak pressure.
+const COLLAR_STAGNATION: f64 = 1.2;
+/// Rings whose arriving column [kg/m^2 per kg of disk] is below this are loaded by gas sliding
+/// along the wall, not arriving on it, which a 1-D slug cannot stand for (beyond ~2 m).
+const COLLAR_MIN_COLUMN: f64 = 1.0e-4;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct CollarAblationRecord {
+    source: String,
+    case: String,
+    k: f64,
+    r_lo: f64,
+    r_hi: f64,
+    /// The ring's arriving flow for a 1 kg disk: speed [m/s], column [kg/m^2], peak [Pa], impulse
+    /// [Pa s] and energy fluence [J/m^2] from 2-D.
+    v: f64,
+    column: f64,
+    peak_pressure_2d: f64,
+    impulse_2d: f64,
+    energy_2d: f64,
+    /// The 1-D slug standing in for it.
+    rho: f64,
+    length: f64,
+    q_star: f64,
+    kappa_vapor: f64,
+    e_eff_rigid: f64,
+    e_eff_ablating: f64,
+    /// Ablated graphite per pulse [kg/m^2], and the energy it took [J/m^2].
+    ablated_mass: f64,
+    loss_ablation: f64,
+    /// Radiation reaching the wall in the rigid run, as a share of the slug's kinetic energy.
+    rigid_wall_radiation: f64,
+    impulse_rigid: f64,
+    impulse_ablating: f64,
+    peak_wall_pressure: f64,
+}
+
+fn collar_case(
+    source: &str,
+    row: &ChargeMixRecord,
+    band: &CollarBand,
+    table: &Table,
+) -> Vec<CollarAblationRecord> {
+    let v = band.speed_in * COLLAR_V_CLOSE;
+    let column = band.mass_in;
+    let peak = band.peak_pressure * COLLAR_V_CLOSE * COLLAR_V_CLOSE;
+    let rho = peak / (COLLAR_STAGNATION * v * v);
+    let length = column / rho;
+    let cfg = Config {
+        v,
+        length,
+        ..Config::production()
+    };
+    let slug = || {
+        Tube::slug_si(
+            cfg.gas_cells,
+            rho,
+            cfg.v,
+            cfg.length,
+            cfg.t0,
+            TableEos::new(table.clone()),
+            Viscosity::VON_NEUMANN_RICHTMYER,
+        )
+    };
+    let rigid = CoupledBounce::new(slug(), None, cfg.consts, cfg.limiter).run();
+    let ke = 0.5 * column * v * v;
+    let mut rows = Vec::new();
+    for &q_star in &COLLAR_Q_STAR {
+        for &kappa in &COLLAR_KAPPA_VAPOR {
+            let ablation = Ablation::new(q_star, cfg.t0).with_vapor_opacity(kappa);
+            let abl = AblatingBounce::new(slug(), None, cfg.consts, cfg.limiter, ablation).run();
+            rows.push(CollarAblationRecord {
+                source: source.to_string(),
+                case: row.case.clone(),
+                k: row.k,
+                r_lo: band.r_lo,
+                r_hi: band.r_hi,
+                v,
+                column,
+                peak_pressure_2d: peak,
+                impulse_2d: band.impulse * COLLAR_V_CLOSE,
+                energy_2d: band.energy_in * COLLAR_V_CLOSE * COLLAR_V_CLOSE,
+                rho,
+                length,
+                q_star,
+                kappa_vapor: kappa,
+                e_eff_rigid: rigid.bounce.e_eff,
+                e_eff_ablating: abl.bounce.e_eff,
+                ablated_mass: abl.ablated_mass,
+                loss_ablation: abl.loss_ablation,
+                rigid_wall_radiation: rigid.loss_radiative_wall / ke.max(f64::MIN_POSITIVE),
+                impulse_rigid: rigid.bounce.wall_impulse,
+                impulse_ablating: abl.bounce.wall_impulse,
+                peak_wall_pressure: abl.bounce.peak_wall_pressure,
+            });
+        }
+    }
+    rows
+}
+
+/// `--collar-ablation`: every ring of the solid-charge rows of `charge_collar_k{30,100}.jsonl`,
+/// re-run in 1-D.
+fn cmd_collar_ablation(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let table = Table::load(TABLE_PATH_CH2)?;
+    let mut cases: Vec<(String, ChargeMixRecord, CollarBand)> = Vec::new();
+    for source in ["charge_collar_k30.jsonl", "charge_collar_k100.jsonl"] {
+        let text = fs::read_to_string(format!("data/results/xray_collision/{source}"))?;
+        for line in text.lines().filter(|l| !l.trim().is_empty()) {
+            let row: ChargeMixRecord = serde_json::from_str(line)?;
+            if !row.case.contains("solid charge") {
+                continue;
+            }
+            for band in row
+                .bands
+                .iter()
+                .filter(|b| b.mass_in > COLLAR_MIN_COLUMN && b.speed_in > 0.0)
+            {
+                cases.push((source.to_string(), row.clone(), band.clone()));
+            }
+        }
+    }
+    let rows: Vec<CollarAblationRecord> =
+        par_map_with_progress("collar", &cases, |(src, row, band)| {
+            collar_case(src, row, band, &table)
+        })
+        .into_iter()
+        .flatten()
+        .collect();
+    emit_scenario(RESULT_PATH_COLLAR, "collar", &rows, |r| {
+        println!(
+            "rust: k {:>3.0} {:<48} r {:.2}-{:.2} v {:>6.0} col {:.2e} rho {:.2e} L {:.2e} Q* {:.0e} kv {:>3.0} | e {:.3} -> {:.3} abl {:.2e} kg/m2 rad {:.3}",
+            r.k,
+            r.case,
+            r.r_lo,
+            r.r_hi,
+            r.v,
+            r.column,
+            r.rho,
+            r.length,
+            r.q_star,
+            r.kappa_vapor,
+            r.e_eff_rigid,
+            r.e_eff_ablating,
+            r.ablated_mass,
+            r.rigid_wall_radiation,
         );
     })
 }
@@ -7239,6 +7445,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--propellant-rebound", cmd_propellant_rebound),
     ("--charge-2d", cmd_charge_2d),
     ("--charge-mix", cmd_charge_mix),
+    ("--collar-ablation", cmd_collar_ablation),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),
     ("--geometry-wide", cmd_geometry_wide),

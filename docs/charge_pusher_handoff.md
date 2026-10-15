@@ -102,13 +102,27 @@ For §`pass_through_pusher`, a closing paragraph or an alternative subsection:
   nozzle's assumed 0.8-1. The plate impulse already includes this, since it comes from the wall
   pressure of the full 2-D flow.
 
+- **The bore collar** (`collar_ledger.csv`, `make xray-collision-collar`).
+  - **The jet.** The real collision throws a narrow back-splash jet down the axis, peaking just
+    outside the bore at 5-20 GPa per kg of projectile (not converged). The pulse is microseconds
+    long, so the plate is damaged by its impulse, which does converge. That impulse is 8-10 times
+    the plate's mean on the inner ring, ~5 times at 1-2 m, ~3 times at 2-3.5 m, and back to the
+    mean near 6 m.
+  - **Structure.** Matching the jet's increment, the collar is **~1-1.5 t of extra structure on a
+    100 t ship**, at 100-120 kg/m^2 on the inner rings, out to ~3.5 m. It is dry mass, and it does
+    not scale with the disk. The conservative bound, which also grades the plate for the smooth
+    fireball's own centre-heavy load, is +3.3-3.8 t out to 6 m. **Grade the plate**; the parent's
+    uniform 30 kg/m^2 does not.
+  - **Erosion.** The collar is eaten by the jet's radiation: 0.2-0.5 t over the boost at the floor
+    and 6-11 t at a hot-jet ceiling, mostly on the inner ring. At k = 30 the ceiling is metres of
+    graphite there, so that ring must be a fed, renewable sleeve. At k = 100 the jet arrives
+    slower and denser, radiates little, and ~0.5 m of graphite covers even the ceiling.
+  - **The eroded collar is reaction mass.** Its vapour leaves at 45-72 km/s, faster than the
+    charge's own exhaust, so it lowers the mass ratio slightly. At the ceiling, the extra erosion
+    is counted as dead weight. The mass ratio then rises to at most 2.93 (k = 100, parent bowl).
+
 ## Not modelled; open for the parent to flag
 
-- **The bore collar.** The real collision throws a narrow back-splash jet down the axis. It lands
-  just outside the bore (r 0.26-0.56 m) early in the pulse, at 5-20 GPa per kg of projectile on
-  the production grid and 2-7 GPa on a grid twice as coarse. It is under-resolved, so the true
-  value is at least this. The ring out to ~0.6-1 m needs a sacrificial or ablative collar, or a
-  charge shaped to tamp its own splash. Elsewhere the plate sees ~0.1-0.3 GPa per kg.
 - **The bore's flux toward the ship:** about five times the point fireball's share, not yet
   reported as energy.
 - **Plate ablation** at 40-85 km/s: the `v/4` rule gives 10-21 kJ per N s.

@@ -600,6 +600,87 @@ pub struct FireballBounce {
     pub exit_direction: f64,
     /// Speed-uniformity factor, `(Σ m|u|)^2 / (M Σ m u^2)`: 1 if every parcel has one speed.
     pub exit_uniformity: f64,
+    /// What lands on the rings of [`COLLAR_BANDS`] (the bore collar's footprint).
+    pub bands: [BandLoad; N_BANDS],
+}
+
+/// Number of radial bands in [`COLLAR_BANDS`].
+pub const N_BANDS: usize = 6;
+
+/// Radial bands `[r_lo, r_hi)` [m] tallied for the bore collar, beginning at the bore's edge and
+/// running out over the 20 m plate, so the collar's edge is where a ring's load meets the plate's.
+pub const COLLAR_BANDS: [(f64, f64); N_BANDS] = [
+    (0.0, 0.6),
+    (0.6, 1.0),
+    (1.0, 2.0),
+    (2.0, 3.5),
+    (3.5, 6.0),
+    (6.0, 10.0),
+];
+
+/// The load a ring of the plate takes over a pulse, per unit ring area and per unit (physical, `2π`
+/// restored) fireball mass.
+/// The arriving flow is read [`SAMPLE_CELLS`] cells above the surface, so the wall's own stagnated
+/// layer does not hide it; only gas moving toward the plate counts.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct BandLoad {
+    /// Inner and outer radius [m] (the inner one raised to the bore's edge).
+    pub r_lo: f64,
+    pub r_hi: f64,
+    /// Axial impulse on the ring per area.
+    pub impulse: f64,
+    /// Mass arriving per area, and its momentum-weighted speed `Σ m u_n^2 / Σ m u_n`.
+    pub mass_in: f64,
+    pub speed_in: f64,
+    /// Total energy (kinetic plus enthalpy) carried in per area.
+    pub energy_in: f64,
+    /// Peak surface pressure on the ring.
+    pub peak_pressure: f64,
+}
+
+/// Cells above the plate's surface where a band's arriving flow is read.
+const SAMPLE_CELLS: usize = 3;
+
+/// The surface fluid cell of column `ir` (the first fluid cell above a solid one), if any.
+fn surface_cell(g: &Grid2D, ir: usize) -> Option<usize> {
+    (1..g.nz()).find(|&iz| !g.is_solid(iz, ir) && g.is_solid(iz - 1, ir))
+}
+
+/// One step's contribution to each band's arriving mass, momentum and energy (`2π` dropped), and
+/// its current peak surface pressure.
+fn band_step(
+    g: &Grid2D,
+    bands: &[(f64, f64); N_BANDS],
+    dt: f64,
+) -> [(f64, f64, f64, f64); N_BANDS] {
+    let dr = g.dr();
+    let gamma = g.gamma();
+    let mut out = [(0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64); N_BANDS];
+    for ir in 0..g.nr() {
+        let r = (ir as f64 + 0.5) * dr;
+        let Some(b) = bands.iter().position(|&(lo, hi)| r >= lo && r < hi) else {
+            continue;
+        };
+        let Some(iz_s) = surface_cell(g, ir) else {
+            continue;
+        };
+        out[b].3 = out[b].3.max(g.prim(iz_s, ir).p);
+        let iz = iz_s + SAMPLE_CELLS;
+        if iz >= g.nz() || g.is_solid(iz, ir) {
+            continue;
+        }
+        let w = g.prim(iz, ir);
+        let un = -w.uz;
+        if un > 0.0 {
+            let area = r * dr;
+            let dm = w.rho * un * area * dt;
+            let h = 0.5 * w.rho * (w.uz * w.uz + w.ur * w.ur) + gamma / (gamma - 1.0) * w.p;
+            out[b].0 += dm;
+            out[b].1 += dm * un;
+            out[b].2 += h * un * area * dt;
+        }
+    }
+    out
 }
 
 /// Mass, axial momentum, `Σ m|u|` and `Σ m u^2` carried out through the far-`z` and outer-`r`
@@ -669,7 +750,22 @@ fn run_fireball_grid(
     let mut peak_outside = 0.0_f64;
     let mut peak_at = (0.0, 0.0);
     let mut out = (0.0, 0.0, 0.0, 0.0);
+    let bands = COLLAR_BANDS.map(|(lo, hi)| (lo.max(hole_radius), hi));
+    let mut band_force_old = [0.0; N_BANDS];
+    let mut band_impulse = [0.0; N_BANDS];
+    let mut band_flow = [(0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64); N_BANDS];
     let (r, g) = run_bounce_observed_final(g, nz, |grid, t| {
+        let dt = t - t_old;
+        let step = band_step(grid, &bands, dt);
+        for (b, &(lo, hi)) in bands.iter().enumerate() {
+            let f = grid.plate_force_within(hi) - grid.plate_force_within(lo);
+            band_impulse[b] += 0.5 * dt * (band_force_old[b] + f);
+            band_force_old[b] = f;
+            band_flow[b].0 += step[b].0;
+            band_flow[b].1 += step[b].1;
+            band_flow[b].2 += step[b].2;
+            band_flow[b].3 = band_flow[b].3.max(step[b].3);
+        }
         let hole_new = grid.plate_force_within(hole_radius);
         hole_impulse += 0.5 * (t - t_old) * (hole_old + hole_new);
         hole_old = hole_new;
@@ -702,6 +798,20 @@ fn run_fireball_grid(
         exit_mass_share: m / fireball_mass,
         exit_direction: if ms > 0.0 { pz / ms } else { 0.0 },
         exit_uniformity: if mu2 > 0.0 { ms * ms / (m * mu2) } else { 0.0 },
+        bands: std::array::from_fn(|b| {
+            let (lo, hi) = bands[b];
+            let area = 0.5 * (hi * hi - lo * lo);
+            let (dm, dp, de, pk) = band_flow[b];
+            BandLoad {
+                r_lo: lo,
+                r_hi: hi,
+                impulse: band_impulse[b] / area / (two_pi * fireball_mass),
+                mass_in: dm / area / (two_pi * fireball_mass),
+                speed_in: if dm > 0.0 { dp / dm } else { 0.0 },
+                energy_in: de / area / (two_pi * fireball_mass),
+                peak_pressure: pk / (two_pi * fireball_mass),
+            }
+        }),
     }
 }
 

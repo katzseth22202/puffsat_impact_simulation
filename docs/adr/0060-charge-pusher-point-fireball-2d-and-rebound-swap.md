@@ -45,3 +45,21 @@ modelling choices could each move the answer by tens of percent, and some are no
   splash is the alternative to study.
 - Shocked solid polyethylene lies above the CH2 table's 1284 kg/m^3 ceiling. The one-zone start
   is held there, which only understates the fireball's opacity.
+
+## Amendment (2026-10-15): the collar is sized by impulse, and its erosion is charged as propellant
+
+`collar.py`, `collar_ledger.csv`; the study's "bore collar" section.
+
+- **The collar is sized by impulse, not peak pressure.** The back-splash lasts microseconds, so
+  the ring is damaged by its impulse, and impulse converges on refinement where the peak does not.
+  The collar's areal mass is impulse-matched: the plate's 30 kg/m^2 scaled by the ring's impulse
+  over a reference. The jet's increment (reference: the point fireball on the same ring) gives
+  ~1-1.5 t. Grading for the smooth load as well (reference: the plate's mean) gives 3.3-3.8 t.
+- **Erosion is charged as propellant, and credited with only its own push.** That push is the 1-D
+  ablating slug's extra impulse per area. It is not the 1-D gain applied to the ring's 2-D impulse,
+  which is mostly pressure from stagnated gas and would give the vapour an impossible exhaust
+  speed. The f(v) study's vapour curtain is off here: it makes energy when the ablated mass
+  exceeds the arriving column.
+- **Consequence.** At the floor the vapour is better reaction mass than the charge (45-72 against
+  20-29 km/s). At the hot-jet ceiling the mass ratio rises to at most 2.93. The open structural
+  item is now the inner ring at k = 30, which may have to be a fed sleeve, and grading the plate.

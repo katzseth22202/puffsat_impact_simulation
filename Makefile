@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1148,6 +1148,17 @@ xray-collision-charge-mix:
 ## plate -> data/results/xray_collision/charge_freeze.csv
 xray-collision-freeze: data/tables/ch2.json
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.freeze
+
+## xray-collision-collar: the bore collar -- the back-splash's ring loads in 2-D (k = 30, 100, two
+## grids), each ring re-run as a 1-D ablating graphite bounce, then the collar's mass, erosion and
+## the impulse its vapour adds -> data/results/xray_collision/collar_ledger.csv
+xray-collision-collar: data/tables/ch2.json
+	cargo run --release -p sweep -- --charge-mix 30 collar
+	cargo run --release -p sweep -- --charge-mix 100 collar
+	cargo run --release -p sweep -- --charge-mix 30 collar coarse
+	cargo run --release -p sweep -- --charge-mix 100 collar coarse
+	cargo run --release -p sweep -- --collar-ablation
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.collar
 
 ## xray-collision-test: that study's tests alone
 xray-collision-test:

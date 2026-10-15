@@ -259,3 +259,25 @@ def test_charge_fireball_recombines_but_keeps_its_bonds() -> None:
     f100 = freeze.freeze(100.0, tab)
     assert f100.velocity_loss_bonds_all_frozen > 3.0 * f30.velocity_loss_bonds_all_frozen
     assert f100.velocity_loss_bonds_all_frozen < 0.1
+
+
+def test_bore_collar_ledger() -> None:
+    """The committed collar ledger: the jet's own structural increment is a fraction of a percent
+    to ~1% of a 100 t ship, the eroded collar leaves faster than the charge's exhaust when only
+    the arriving column heats it, and even the hot-jet erosion ceiling keeps the mass ratio
+    under 3."""
+    import csv
+
+    from puffsat.xray_collision import collar
+
+    with collar.OUT.open() as fh:
+        rows = [r for r in csv.DictReader(fh) if r["grid"] == "x1"]
+    assert len(rows) == 4
+    for r in rows:
+        assert 0.0 < float(r["jet_extra"]) < float(r["collar_extra"])
+        assert float(r["collar_extra"]) < 0.05 * collar.FINAL_MASS
+        assert float(r["mass_ratio_with_collar_best"]) <= float(r["mass_ratio"])
+        assert float(r["mass_ratio_with_collar_worst"]) < 3.0
+        assert float(r["eroded_per_final_best"]) < float(r["eroded_per_final_worst"])
+        # The rings tile the plate, so the innermost one carries several times the mean.
+        assert float(r["ring0_impulse"]) > 5.0 * float(r["plate_mean_impulse"])
