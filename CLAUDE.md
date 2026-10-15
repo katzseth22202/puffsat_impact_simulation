@@ -147,7 +147,7 @@ The calcs repo's hot-hydrogen asks of 2026-10-14 (H1-H5: the bulged hydrogen cha
 thick, so its wall sees `sigma T^4`, and the impact is re-solved in 2-D for each lighter fill;
 target `walled-nozzle-hot-hydrogen`, module `hot_hydrogen.py`); its handoff is
 [`docs/hot_hydrogen_handoff.md`](docs/hot_hydrogen_handoff.md).
-Targets: `walled-nozzle-blowdown`, `-cycle`, `-zone-loads`, `-cushion`, `-blowdown-2d`. Its Python is
+Targets: `walled-nozzle-blowdown`, `-cycle`, `-zone-loads`, `-hoop-fatigue`, `-cushion`, `-blowdown-2d`. Its Python is
 `python/puffsat/walled_nozzle/` plus the top-level `python/puffsat/eos_methane.py`, and its
 outputs are under `data/results/walled_nozzle/`.
 

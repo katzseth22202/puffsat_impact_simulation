@@ -116,6 +116,12 @@ model gas (the charge less the 10 kg model plug's 5.6 kg excess, as the 59.9 kg 
 
 (peak pressure, worst-station flung strain)
 
+**Revised 2026-10-15:** these wraps are sized for strain only. Sized also so that the liner's
+hoop-swing crack lasts 4,200 pulses on the hydrogen curve
+([`walled_nozzle_hydrocode_asks.md`](walled_nozzle_hydrocode_asks.md) §9a), they are **43.8 t**
+today, **34.2 t** at 7000 K (fling 1.73%) and 41.4 t at 10 000 K (still failing on fling,
+3.38%). The ranking does not change.
+
 - **7000 K has more margin than today** (2.4/1.77 = 1.36x against 1.09x) on a wrap 7 t lighter,
   sized to a lower QSP. The lighter fill weakens the reflections that load the bulge ramp and
   taper.

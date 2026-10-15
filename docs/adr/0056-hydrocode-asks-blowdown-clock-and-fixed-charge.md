@@ -66,3 +66,15 @@ size is not binding. The wall check passes: solved in 2-D with the rod and plug,
 changes (`walled_nozzle_hydrocode_asks.md` §9).
 The hydrogen chamber keeps its 0.84 m^2 throat: doubled, its dry wrap fails at the taper (2.69%
 flung strain against 2.4%), and its cold residue already lets it cycle at ~2.4 Hz.
+
+## Amendment, 2026-10-15: the wrap is sized for the liner's hoop swing too
+
+The wall-zone score sized the dry wrap for strain only and never grew a crack in the 10 mm Cr-Mo
+liner. Each pulse swings it from its autofrettage rest (-0.75 Y) up by `E * strain`. `wall_zones`
+now integrates the shell through 50 ms of ring-down and rainflow-counts the liner's hoop stress.
+It grows a 1 mm surface crack by Paris on the CC2938 hydrogen curve, and stiffens any zone whose
+crack fails before 4,200 pulses. Every strain-sized wrap failed that test (621-1,340 pulses).
+Sized for both, the hydrogen chamber's wrap is **43.8 t** (was 37.0) and the chosen methane
+chamber's (throat x2) is **55.2 t** (was 46.2). The methane increment is owed only if hydrogen
+reaches its bore: on the air curve its liners already pass. Flung strain improves slightly
+(hydrogen 2.20% -> 2.16%). `walled_nozzle_hydrocode_asks.md` §9a.

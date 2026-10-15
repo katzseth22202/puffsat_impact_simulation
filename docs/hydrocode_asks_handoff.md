@@ -27,6 +27,11 @@ fill 1 t/s per 5 kg of rod, lock 20 ms) are assumptions.
    (941 on the doubled throat at A/A* 300).
 5. **The throat film is a real cost.** It traps a hot residue that heats the next charge, and it
    weighs kilograms per shot, not grams.
+6. **The dry wraps are heavier once the liner's hoop swing is scored (2026-10-15).** Each pulse
+   swings the 10 mm Cr-Mo liner up from its -0.75 Y rest, and on the hydrogen crack curve the
+   strain-sized wraps failed in 600-1,300 pulses. Sized for 4,200: **hydrogen 43.8 t** (was 37.0),
+   **methane throat x2 55.2 t** (was 46.2; owed only if hydrogen reaches its bore, since on air it
+   passes already). Fling margins are unchanged or slightly better.
 
 ## B1: the blowdown clock
 
@@ -117,7 +122,9 @@ and 278-336 ms).
 **The r 3.0 m bulge holds hydrogen, on a thinner margin than methane.**
 
 - **2.5 kg rod, 106 m^3, 0.84 m^2 throat:** dry wrap **37.0 t, passes** at 2.20% fling against
-  2.4% (methane: 1.94%).
+  2.4% (methane: 1.94%). **Revised 2026-10-15: 43.8 t** (2.16% fling), so that the liner's
+  hoop-swing crack lasts 4,200 pulses on the hydrogen curve.
+  Its 0.25 cm grid check is still running.
 - **A new hit on the cone,** 1.19 GPa (methane 0.15-0.67): with less gas to stop it, the blast
   remnant carries on into the cone.
 - **Impulse per rod (60 kg charge):** 624 / 658 kN s (AR 100 / 300) against the 20 m^3 sphere's

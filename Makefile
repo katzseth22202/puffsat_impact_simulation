@@ -1011,6 +1011,11 @@ walled-nozzle-zone-loads:
 	cargo run --release -p sweep -- --vessel-blast --asks-hydrogen
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.zone_loads
 
+## walled-nozzle-hoop-fatigue: the dry wrap of the chosen chambers sized for strain, then until the
+## liner's hoop-swing crack lasts 4,200 pulses on the hydrogen curve (both grids)
+walled-nozzle-hoop-fatigue:
+	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.zone_loads --hoop-fatigue
+
 ## walled-nozzle-cushion: B4 -- tiles on a gas cushion under the solved zone histories
 walled-nozzle-cushion:
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.cushion
@@ -1042,7 +1047,7 @@ walled-nozzle-hot-hydrogen:
 	cargo run --release -p sweep -- --vessel-blast --hot-hydrogen
 	PYTHONPATH=python uv run python -m puffsat.walled_nozzle.hot_hydrogen
 
-.PHONY: walled-nozzle-blowdown walled-nozzle-cycle walled-nozzle-zone-loads walled-nozzle-cushion walled-nozzle-blowdown-2d walled-nozzle-throat-kinetics walled-nozzle-hot-hydrogen walled-nozzle-hot-hydrogen-tops
+.PHONY: walled-nozzle-blowdown walled-nozzle-cycle walled-nozzle-zone-loads walled-nozzle-hoop-fatigue walled-nozzle-cushion walled-nozzle-blowdown-2d walled-nozzle-throat-kinetics walled-nozzle-hot-hydrogen walled-nozzle-hot-hydrogen-tops
 
 ## walled-nozzle-test: this study's tests alone
 walled-nozzle-test:

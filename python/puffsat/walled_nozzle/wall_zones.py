@@ -41,6 +41,20 @@ R = 0, on the air curve and on the ASME CC2938 hydrogen curve at the quasi-stati
 fails at `K = 45` MPa m^0.5 (the parent's hydrogen floor) or at half the layer's thickness. The
 requirement is ~4,200 pulses: one departure of a 500-600 t stack at 5.43 km/s.
 
+# Hoop-swing cracks
+
+The autofrettaged steel (the wrap zones' 10 mm liner, or the steel wall) rests at
+`-E swing / 2` (-0.75 Y for Cr-Mo) and swings up with the hoop strain every pulse. The coupled
+shell is run on past the solved history for `RING_DOWN` under the held quasi-static pressure, so
+the wall rings down at its own damping; the pulse then ends at rest (the blowdown is slow next to
+the ring). The stress history at each zone's hardest-hit nodes is rainflow-counted, and a
+semicircular surface crack (`K = 0.713 sigma sqrt(pi a)`) grows from `HOOP_CRACK_START` until
+`K_max` reaches the steel's failure `K` or the crack reaches 80% of the layer. This is
+`chamber_fatigue.py`'s breathing-mode method on the solved, connected wall. Every zone is
+thickened until it lasts `REQUIRED_PULSES` on the hydrogen curve (the air curve for maraging,
+behind its barrier). Strain sizing alone puts the steel at +0.75 Y every pulse, where Cr-Mo
+cracks in hydrogen within a few hundred pulses.
+
 # Fling
 
 An unbonded wall cannot spall, because it separates instead (the momentum trap), and the
@@ -134,6 +148,13 @@ BAND = ("bulge ramp", "bulge plateau", "taper")
 SPALL_STATIONS = 6
 SPIKE_WINDOW = (30e-6, 100e-6)
 """The wave model runs from this long before each station's peak to this long after [s]."""
+HOOP_CRACK_START = 1.0e-3
+"""Initial depth of the hoop-swing surface crack [m], as `chamber_fatigue`'s headline case."""
+RING_DOWN = 50e-3
+"""How long the shell rings on under the held quasi-static pressure after the history [s]."""
+HOOP_NODES = 3
+"""Hardest-hit nodes per zone (by peak hoop strain) scored for hoop-swing cracks."""
+FATIGUE_ITERATIONS = 30
 
 
 @dataclass(frozen=True)
@@ -268,13 +289,18 @@ class ZoneResult:
     fling_allow_pct: float
     swing_pct: float
     needs_barrier: bool  # scored on the air curve: only valid behind a working barrier
+    hoop_peak_mpa: float  # the steel's peak hoop stress, from its autofrettage rest
+    hoop_pulses_h2: float  # hoop-swing surface crack, hydrogen curve (0 if not qualified)
+    hoop_pulses_air: float
 
     @property
     def passes(self) -> bool:
         cracks = self.pulses_air if self.needs_barrier else self.pulses_h2
+        hoop = self.hoop_pulses_air if self.needs_barrier else self.hoop_pulses_h2
         return (
             self.peak_strain_pct <= self.swing_pct * 1.001
             and cracks >= REQUIRED_PULSES
+            and hoop >= REQUIRED_PULSES
             and self.fling_strain_pct <= self.fling_allow_pct
         )
 
@@ -287,10 +313,17 @@ def _meridian(h: History) -> tuple[NDArray[np.float64], NDArray[np.float64], NDA
 
 
 def size_hoop(
-    wall: Wall, h: History, iterations: int = 6
-) -> tuple[dict[str, float], NDArray[np.float64], NDArray[np.int64], NDArray[np.float64]]:
-    """Zone thicknesses after the hoop iteration, with each node's peak strain, zone index and
-    static strain."""
+    wall: Wall, h: History, iterations: int = 6, fatigue: bool = True
+) -> tuple[
+    dict[str, float],
+    NDArray[np.float64],
+    NDArray[np.int64],
+    NDArray[np.float64],
+    dict[str, HoopLife],
+]:
+    """Zone thicknesses after the hoop iteration, with each node's peak strain, zone index,
+    static strain and each zone's hoop-swing crack life. With `fatigue`, zones are then thickened
+    until their crack life reaches `REQUIRED_PULSES`."""
     s, radius, z = _meridian(h)
     s_st = np.r_[0.0, np.cumsum(np.hypot(np.diff(h.z), np.diff(h.r)))]
     field = np.array([np.interp(s, s_st, row) for row in h.pressure])
@@ -334,7 +367,37 @@ def size_hoop(
                     t[name] = target / steel_of(wall.kinds[name]).modulus
         if not grown:
             break
-    return t, strain, zone_ix, static
+    t_ring = field.shape[0] * dt + RING_DOWN
+    p_bar = h.qsp / 1e5
+    for _ in range(FATIGUE_ITERATIONS):
+        hoop, bend, mass = (np.zeros(s.size) for _ in range(3))
+        for k, name in enumerate(names):
+            sec = _section(wall.kinds[name], t[name])
+            hoop[zone_ix == k], bend[zone_ix == k], mass[zone_ix == k] = sec
+        strain, _, history = sr.respond_history(hoop, bend, mass, s, radius, field, dt, t_ring)
+        static = h.qsp * radius / hoop
+        lives = hoop_lives(wall.kinds, t, zone_ix, strain, history, p_bar)
+        short = {
+            name: n
+            for name, life in lives.items()
+            if (
+                n := life.pulses_h2
+                if steel_of(wall.kinds[name]).hydrogen_qualified
+                else life.pulses_air
+            )
+            < REQUIRED_PULSES
+        }
+        if not fatigue or not short:
+            break
+        for name, n in short.items():
+            factor = 1.12 if n < 0.25 * REQUIRED_PULSES else 1.04
+            kind = wall.kinds[name]
+            target = _section(kind, t[name])[0] * factor
+            if kind == "wrap":
+                t[name] = (target - dw.STEEL_E * LINER) / dw.KEVLAR.hoop_modulus
+            else:
+                t[name] = target / steel_of(kind).modulus
+    return t, strain, zone_ix, static, lives
 
 
 def _stack(kind: str, t: float) -> ww.Stack:
@@ -371,6 +434,95 @@ def crack_pulses(
         dk = 2.0 / math.pi * sigma * math.sqrt(math.pi * a0)
         n += (a1 - a0) / rate(dk, 0.0, p_bar)
     return n
+
+
+def rest_stress(kind: str) -> float:
+    """The autofrettaged steel's stress at zero pressure [Pa]: `-E swing / 2`."""
+    mat = steel_of(kind)
+    swing = dw.SWING if kind == "wrap" else mat.swing
+    return -0.5 * mat.modulus * swing
+
+
+def hoop_layer(kind: str, t: float) -> float:
+    """Thickness [m] of the steel layer a hoop-swing crack runs through."""
+    return {"steel": t, "maraging": t, "multilayer": t / SHELLS, "wrap": LINER}[kind]
+
+
+def hoop_crack_pulses(
+    stress_pa: NDArray[np.float64],
+    layer_t: float,
+    rate: Callable[[float, float, float], float],
+    p_bar: float,
+    k_fail: float = K_FAIL,
+    a0: float = HOOP_CRACK_START,
+) -> float:
+    """Pulses for a surface crack to fail under one pulse's hoop stress history, repeated.
+
+    The history is rainflow-counted. Each tensile cycle grows the crack by `rate(dK, R)` with
+    `dK = K(hi) (1 - R)`, `R = max(lo, 0) / hi`. Failure is `K(peak) = k_fail` or 80% of the
+    layer; the growth is integrated in depth, not stepped pulse by pulse."""
+    tensile = [
+        (lo, hi, c) for lo, hi, c in cf.rainflow(stress_pa) if hi > 0.0 and max(lo, 0.0) < hi
+    ]
+    if not tensile:
+        return math.inf
+    peak = max(hi for _, hi, _ in tensile)
+    a_k = (k_fail / (0.713 * peak / 1e6)) ** 2 / math.pi
+    a_c = min(a_k, 0.8 * layer_t)
+    if a_c <= a0:
+        return 0.0
+    n = 0.0
+    for a_lo, a_hi in pairwise(np.geomspace(a0, a_c, 300)):
+        growth = 0.0
+        for lo, hi, count in tensile:
+            r = max(lo, 0.0) / hi
+            growth += count * rate(cf.surface_k(hi, float(a_lo)) * (1.0 - r), r, p_bar)
+        n += (a_hi - a_lo) / growth
+    return n
+
+
+@dataclass(frozen=True)
+class HoopLife:
+    peak_mpa: float
+    pulses_h2: float
+    pulses_air: float
+
+
+def hoop_lives(
+    kinds: dict[str, str],
+    t: dict[str, float],
+    zone_ix: NDArray[np.int64],
+    peak: NDArray[np.float64],
+    strain: NDArray[np.float64],
+    p_bar: float,
+) -> dict[str, HoopLife]:
+    """Each zone's worst hoop-swing crack life over its `HOOP_NODES` hardest-hit nodes."""
+    names = [name for name, _, _ in ZONES]
+    out = {}
+    for k, name in enumerate(names):
+        idx = np.flatnonzero(zone_ix == k)
+        if idx.size == 0:
+            continue
+        kind = kinds[name]
+        mat = steel_of(kind)
+        rest = rest_stress(kind)
+        layer = hoop_layer(kind, t[name])
+        worst = HoopLife(-math.inf, math.inf, math.inf)
+        for j in idx[np.argsort(peak[idx])[::-1][:HOOP_NODES]]:
+            stress = np.r_[rest, rest + mat.modulus * strain[:, j], rest]
+            h2 = (
+                hoop_crack_pulses(stress, layer, cf.rate_hydrogen, p_bar, mat.k_fail)
+                if mat.hydrogen_qualified
+                else 0.0
+            )
+            air = hoop_crack_pulses(stress, layer, cf.rate_air, p_bar, mat.k_fail)
+            worst = HoopLife(
+                max(worst.peak_mpa, float(stress.max()) / 1e6),
+                min(worst.pulses_h2, h2),
+                min(worst.pulses_air, air),
+            )
+        out[name] = worst
+    return out
 
 
 def spall(kind: str, t: float, h: History, zone: str) -> tuple[float, float]:
@@ -425,8 +577,8 @@ def fling(kind: str, t: float, h: History, zone: str) -> tuple[float, float]:
     return res.peak_wrap_strain, allow
 
 
-def evaluate(wall: Wall, h: History, iterations: int = 6) -> list[ZoneResult]:
-    t, strain, zone_ix, static = size_hoop(wall, h, iterations)
+def evaluate(wall: Wall, h: History, iterations: int = 6, fatigue: bool = True) -> list[ZoneResult]:
+    t, strain, zone_ix, static, lives = size_hoop(wall, h, iterations, fatigue)
     _, radius, _ = _meridian(h)
     names = [name for name, _, _ in ZONES]
     out = []
@@ -463,6 +615,9 @@ def evaluate(wall: Wall, h: History, iterations: int = 6) -> list[ZoneResult]:
                 fling_allow_pct=allow * 100,
                 swing_pct=swing * 100,
                 needs_barrier=not mat.hydrogen_qualified,
+                hoop_peak_mpa=lives[name].peak_mpa,
+                hoop_pulses_h2=lives[name].pulses_h2,
+                hoop_pulses_air=lives[name].pulses_air,
             )
         )
     return out
@@ -475,6 +630,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--case", default=CASE)
     parser.add_argument("--energy", type=float, default=1.0, help="pulse energy / 2.5 kg rod's")
     parser.add_argument("--suffix", default="", help="appended to the output name, e.g. fine")
+    parser.add_argument(
+        "--no-hoop-fatigue",
+        action="store_true",
+        help="size for strain only, as before 2026-10-15 (hoop-swing cracks scored, not sized)",
+    )
     args = parser.parse_args(argv)
     h = load_history(args.histories, args.case)
     if args.energy != 1.0:
@@ -483,14 +643,15 @@ def main(argv: list[str] | None = None) -> None:
     print(f"chosen chamber {h.volume:.1f} m^3, QSP {h.qsp / 1e6:.1f} MPa, swing {dw.SWING:.4%}")
     rows = []
     for wall in walls():
-        res = evaluate(wall, h)
+        res = evaluate(wall, h, fatigue=not args.no_hoop_fatigue)
         rows.extend(res)
         total = sum(r.tonnes for r in res)
         ok = all(r.passes for r in res)
         print(f"\n{wall.name}: {total:.1f} t, {'passes' if ok else 'FAILS'}")
         print(
             f"  {'zone':14s} {'kind':10s} {'r m':>5} {'t mm':>6} {'tonnes':>6} {'strain%':>7} "
-            f"{'D':>5} {'x spall':>7} {'N air':>9} {'N H2':>9} {'fling%':>7} {'allow':>6}"
+            f"{'D':>5} {'x spall':>7} {'N air':>9} {'N H2':>9} {'fling%':>7} {'allow':>6} "
+            f"{'hoop MPa':>8} {'hoop H2':>9} {'hoop air':>9}"
         )
         for r in res:
             print(
@@ -498,13 +659,16 @@ def main(argv: list[str] | None = None) -> None:
                 f"{r.tonnes:6.1f} {r.peak_strain_pct:7.3f} {r.overshoot:5.2f} "
                 f"{r.tension_over_spall:7.2f} {min(r.pulses_air, 9.99e8):9.3g} "
                 f"{min(r.pulses_h2, 9.99e8):9.3g} {r.fling_strain_pct:7.2f} "
-                f"{min(r.fling_allow_pct, 99.0):6.2f}"
+                f"{min(r.fling_allow_pct, 99.0):6.2f} {r.hoop_peak_mpa:8.0f} "
+                f"{min(r.hoop_pulses_h2, 9.99e8):9.3g} {min(r.hoop_pulses_air, 9.99e8):9.3g}"
             )
     tag = args.case.split(",")[0].replace(" ", "_")
     if args.energy != 1.0:
         tag += f"_energy{args.energy:g}"
     if args.suffix:
         tag += f"_{args.suffix}"
+    if args.no_hoop_fatigue:
+        tag += "_strain_only"
     output = OUTPUT.with_name(f"wall_zones_{tag}.csv")
     output.parent.mkdir(parents=True, exist_ok=True)
     fields = list(ZoneResult.__dataclass_fields__)

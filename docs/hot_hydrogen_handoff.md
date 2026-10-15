@@ -27,7 +27,8 @@ Handoff to `aim_is_all_you_need`, answering its `docs/hydrocode_asks_2026-10-14_
 3. **The impact rules out 10 000 K on today's bulge.**
    - The 18.7 kg fill flings the wrap to 3.48% in the taper and hits the cone at 2.24 GPa.
    - The 24.1 kg (7000 K) fill passes at 1.77%, more margin than today's 2.20%, on a 29.8 t wrap
-     (today 37.0 t).
+     (today 37.0 t). **Revised 2026-10-15:** sized for the liner's hoop swing too, 34.2 t against
+     today's 43.8 t ([`walled_nozzle_hydrocode_asks.md`](walled_nozzle_hydrocode_asks.md) §9a).
 4. **The wall heat is the open problem at 7000 K.** The gas is optically thick, so the wall takes
    3-5% of each pulse, mostly as radiation. That is 1.0-1.5x what the hydrogen can carry away as
    regen coolant (today 0.04-0.6x). The copper face rises 383 K per pulse.
@@ -70,7 +71,8 @@ Intermediate temperatures, same convention (wall not solved in 2-D):
 - The mixed charge stays at ≤290 K everywhere, so a polymer film seals behind the hotter residue.
 - The throat film per shot is 0.39 kg of aramid at 7000 K, against 0.56 kg today.
 
-**Wall, if you carry it:** dry wrap 29.8 t at 7000 K, against 37.0 t. Tanks per kg of hydrogen are
+**Wall, if you carry it:** dry wrap 29.8 t at 7000 K, against 37.0 t (34.2 against 43.8 t once
+the liner's hoop-swing crack is scored, 2026-10-15). Tanks per kg of hydrogen are
 unchanged. The extension is unchanged (same throat and area ratio).
 
 ## H3: the wall heat (per pulse)

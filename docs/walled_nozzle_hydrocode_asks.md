@@ -438,6 +438,55 @@ depends only on energy per volume):
   wider throat (0.764 -> 0.784 at 1.0 m^2) is not worth a failing wrap. The doubling is a methane
   decision.
 
+## 9a. The liner's hoop swing (2026-10-15)
+
+Until now the wall-zone score sized the dry wrap for strain only: flung hoop strain under 2.4%,
+the liner under yield, the bending and the spall. **It never grew a crack in the 10 mm Cr-Mo liner
+under the hoop swing each pulse puts on it.** The chamber-fatigue note found that swing fatal for
+a bare shell (82-482 pulses on the CC2938 hydrogen curve). Wrapped, the liner rests at -0.75 Y of
+autofrettage compression, and each pulse swings it up to `rest + E * strain`. At the strain-sized
+wrap that is +470 to +563 MPa, close to the full +0.75 Y.
+
+`wall_zones` now scores it (`size_hoop`, `hoop_lives`):
+
+- The coupled shell is integrated to the end of the field plus 50 ms of ring-down
+  (`shell_response.respond_history`, 40 samples a breathing period).
+- The liner's stress history at the three worst nodes of each zone is rainflow-counted.
+- A 1 mm surface crack is grown by Paris over every tensile cycle, with the mean stress in
+  `(1 - R)`, to the lesser of `K = 45 MPa m^0.5` and 80% of the liner.
+- Any zone short of 4,200 pulses on the hydrogen curve gets a stiffer wrap, and the shell is
+  re-solved, until every zone passes. A material not qualified for hydrogen (maraging) scores
+  zero there.
+
+Results (all dry wrap, `make walled-nozzle-hoop-fatigue`, `zone_hoop_fatigue.csv`):
+
+| chamber | sized for strain | liner peak | H2 life | sized for the swing too | liner peak | H2 life | worst fling |
+|---|---|---|---|---|---|---|---|
+| **H2 106 m^3 bulged** (2.5 kg) | 37.0 t | +471 to +563 MPa | 621-1,340 | **43.8 t** | +313 to +348 | 4,370-6,450 | 2.16% (taper) |
+| CH4 212 m^3 bulged | 52.4 t | +299 to +563 | 622-8,010 | 60.5 t | +217 to +349 | 4,310-43,300 | 1.92% (taper) |
+| CH4 212 m^3, 0.25 cm | 47.7 t | +268 to +563 | 621-13,400 | 54.9 t | +185 to +344 | 4,520-112,000 | 1.86% (taper) |
+| **CH4 throat x2** (chosen) | 46.2 t | +511 to +563 | 603-864 | **55.2 t** | +319 to +349 | 4,310-6,040 | 1.74% (plateau) |
+
+- **Every strain-sized wrap failed the hydrogen curve,** by 3-7x, in the zones where the liner
+  swung to near +0.75 Y. Thicker wrap shares the hoop load, so the swing falls to ~+330 MPa.
+- **The price is +6.8 t for hydrogen (+18%) and +9.0 t for the chosen methane chamber (+19%).**
+  It is smaller than the ~17 t first estimated from 1-10 full-amplitude rings a pulse: in the
+  solved history the first swing dominates the damage, and the later rings are small.
+- **On air, methane's strain-sized liners already last 7,300-65,000 pulses.** Its +9 t is owed
+  only if hydrogen from the cracked gas reaches the liner's bore, which is the conservative
+  reading (the chamber-fatigue note treats methane on CC2938 as its bound). An austenitic or
+  barrier-coated bore would remove it. Hydrogen's +6.8 t is not optional.
+- **The fling does not get worse:** a stiffer wrap moves less, so fling falls slightly
+  (2.20% -> 2.16%). The margin against 2.4% is still thin.
+- **The sizing is to the requirement, not past it:** the worst zone lands at 4,300-4,500 pulses
+  by construction, with no factor on life.
+
+**The hydrogen grid check (0.25 cm) is pending.** The solve is wired up
+(`sweep --vessel-blast --asks-hydrogen-fine`, scored as the case "H2 106 m^3 bulged (2.5 kg),
+0.25 cm" by `make walled-nozzle-hoop-fatigue`), but had not finished at this commit. Methane's
+0.25 cm wrap came out lighter than its 0.5 cm one (54.9 against 60.5 t). Hydrogen's thinner fling
+margin means its check matters more.
+
 ## 10. Limits
 
 - **Gamma-law 2-D solves.** Real gas enters through the QSP scaling only (as in the chamber-blast

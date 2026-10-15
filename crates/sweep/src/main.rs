@@ -3265,7 +3265,7 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
     } else if args
         .iter()
-        .any(|a| a == "--asks-unbulged" || a == "--asks-hydrogen")
+        .any(|a| a == "--asks-unbulged" || a == "--asks-hydrogen" || a == "--asks-hydrogen-fine")
     {
         // Hydrocode asks 2026-10-12 (aim_is_all_you_need), B3 and B5, solved on the 2.5 kg rod and
         // read at 5 kg by cube-root scaling (volume x2, lengths and times x2^(1/3)).
@@ -3275,9 +3275,13 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         // `--asks-hydrogen`: the r 3.0 m bulge filled with the hydrogen chamber's charge. Real
         //   hydrogen's Gamma_eff is 1.19-1.23 over 20-106 m^3, so gamma 1.2 holds for it too;
         //   the run tests that the line blast does not depend on the gas density.
+        // `--asks-hydrogen-fine`: the same hydrogen bulge at 0.25 cm, its grid check.
         use euler2d::vessel::Bulge;
-        let hydrogen = args.iter().any(|a| a == "--asks-hydrogen");
-        path = if hydrogen {
+        let fine = args.iter().any(|a| a == "--asks-hydrogen-fine");
+        let hydrogen = fine || args.iter().any(|a| a == "--asks-hydrogen");
+        path = if fine {
+            "data/results/walled_nozzle/near_term/vessel_blast_asks_hydrogen_fine.jsonl"
+        } else if hydrogen {
             "data/results/walled_nozzle/near_term/vessel_blast_asks_hydrogen.jsonl"
         } else {
             "data/results/walled_nozzle/near_term/vessel_blast_asks_unbulged.jsonl"
@@ -3303,7 +3307,7 @@ fn cmd_vessel_blast(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 v,
                 fill,
                 1.2,
-                0.005,
+                if fine { 0.0025 } else { 0.005 },
                 1.2e-3,
                 "hydrogen, bulge r 3.0 m z 1.4-2.8, 3 m taper, plug 1.5 m",
                 plug_and_rod(),

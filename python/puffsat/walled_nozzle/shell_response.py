@@ -162,6 +162,39 @@ def respond_profile(
     the uniform fourth-difference stencil exactly when `D` is constant. Damping is
     `2 zeta omega_max m`, as before.
     """
+    peak, _, _ = respond_history(
+        hoop_stiffness,
+        bending_stiffness,
+        areal_mass,
+        s,
+        radius,
+        field,
+        dt_field,
+        t_end,
+        bending,
+        samples_per_period=0,
+    )
+    return peak
+
+
+def respond_history(
+    hoop_stiffness: NDArray[np.float64],
+    bending_stiffness: NDArray[np.float64],
+    areal_mass: NDArray[np.float64],
+    s: NDArray[np.float64],
+    radius: NDArray[np.float64],
+    field: NDArray[np.float64],
+    dt_field: float,
+    t_end: float,
+    bending: bool = True,
+    samples_per_period: int = 40,
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    """`respond_profile`, also returning the hoop strain history at every node.
+
+    Returns `(peak [node], time [sample], strain [sample, node])`, sampled `samples_per_period`
+    times per period of the stiffest node (none when 0). Past the end of `field` the load is held
+    at its tail, so a long `t_end` lets the wall ring down under the quasi-static pressure.
+    """
     n = s.size
     ds = float(s[1] - s[0])
     k = hoop_stiffness / radius**2
@@ -179,6 +212,13 @@ def respond_profile(
     tail = field[-max(1, field.shape[0] // 10) :].mean(axis=0)
     peak = np.zeros(n)
     steps = int(t_end / dt)
+    every = (
+        max(1, int(2.0 * math.pi / omega / samples_per_period / dt))
+        if samples_per_period
+        else steps + 1
+    )
+    times: list[float] = []
+    record: list[NDArray[np.float64]] = []
     for step in range(steps):
         t = step * dt
         x = t / dt_field
@@ -195,7 +235,11 @@ def respond_profile(
         w += dt * v
         w[0] = w[-1] = 0.0
         np.maximum(peak, w / radius, out=peak)
-    return peak
+        if step % every == 0:
+            times.append(t + dt)
+            record.append(w / radius)
+    strain = np.array(record) if record else np.zeros((0, n))
+    return peak, np.array(times, dtype=np.float64), strain
 
 
 @dataclass(frozen=True)

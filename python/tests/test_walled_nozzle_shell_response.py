@@ -79,3 +79,27 @@ def test_a_uniform_zoned_wall_matches_the_uniform_model() -> None:
         0.04,
     )
     assert float(zoned.max()) == sr.respond(STEEL, S, R, _uniform(hist), 1e-3, 0.04)
+
+
+def test_a_step_rings_about_its_static_strain_and_the_history_keeps_the_peak() -> None:
+    """A sudden uniform step on free rings: the peak is ~2x static (light damping), the history
+    oscillates about the static strain `p R / sum(E t)`, and its peak is `respond_profile`'s."""
+    p = 5e6
+    hist = np.full(4, p)
+    n = S.size
+    args = (
+        np.full(n, STEEL.hoop_stiffness),
+        np.zeros(n),
+        np.full(n, STEEL.areal_mass),
+        S,
+        R,
+        _uniform(hist),
+        1e-3,
+        0.04,
+    )
+    peak, t, strain = sr.respond_history(*args, bending=False)
+    static = p * 1.5 / STEEL.hoop_stiffness
+    assert np.array_equal(peak, sr.respond_profile(*args, bending=False))
+    assert float(strain.max()) == pytest.approx(float(peak.max()))
+    assert float(peak[n // 2]) == pytest.approx(2.0 * static, rel=0.05)
+    assert float(strain[t > 0.02, n // 2].mean()) == pytest.approx(static, rel=0.05)

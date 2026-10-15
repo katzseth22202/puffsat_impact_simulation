@@ -16,6 +16,10 @@ the cylinder and cone at the same z):
   past that the real-gas 0-D decay (`blowdown`);
 - **hoop overshoot `D`:** `wall_zones.evaluate`, the coupled shell under the whole history, with
   each zone's wall sized to fit (dry wrap; all steel), and the wall's mass.
+
+`--hoop-fatigue` instead scores the dry wrap of the design chambers twice: sized for strain
+only, and sized until the liner's hoop-swing crack lasts `wall_zones.REQUIRED_PULSES` on the
+hydrogen curve (`wall_zones` "Hoop-swing cracks"), on both grids where both are solved.
 """
 
 from __future__ import annotations
@@ -36,6 +40,15 @@ from puffsat.walled_nozzle import wall_zones as wz
 
 DIR = nt.OUTPUT_DIR
 OUTPUT = DIR / "zone_loads.csv"
+HOOP_OUTPUT = DIR / "zone_hoop_fatigue.csv"
+HOOP_CASES = (
+    "H2 106 m^3 bulged (2.5 kg)",
+    "H2 106 m^3 bulged (2.5 kg), 0.25 cm",
+    "CH4 212 m^3 bulged",
+    "CH4 212 m^3 bulged, 0.25 cm",
+    "CH4 compact: throat x2",
+)
+"""The chosen chambers: hydrogen and methane, with their grid checks and methane's 2.66 m^2."""
 QS_OUTPUT = DIR / "zone_quasi_static.csv"
 ENERGY = 2.0
 """The 5 kg rod over the 2.5 kg rod the histories were solved with."""
@@ -111,6 +124,14 @@ def cases() -> list[Case]:
         Case(
             "H2 106 m^3 bulged (2.5 kg)",
             DIR / "vessel_blast_asks_hydrogen.jsonl",
+            "hydrogen, bulge r 3.0 m z 1.4-2.8, 3 m taper, plug 1.5 m",
+            106.0,
+            bd.hydrogen_specs()[1],
+            energy=1.0,
+        ),
+        Case(
+            "H2 106 m^3 bulged (2.5 kg), 0.25 cm",
+            DIR / "vessel_blast_asks_hydrogen_fine.jsonl",
             "hydrogen, bulge r 3.0 m z 1.4-2.8, 3 m taper, plug 1.5 m",
             106.0,
             bd.hydrogen_specs()[1],
@@ -288,7 +309,77 @@ def write(rows: Sequence[ZoneLoad], qs: Sequence[tuple[str, str, float, float]])
             w.writerow([c, zone, f"{1e3 * t:.2f}", f"{ratio:.4f}"])
 
 
+@dataclass(frozen=True)
+class HoopRow:
+    case: str
+    sizing: str  # "strain" or "hoop fatigue"
+    zone: str
+    wrap_mm: float
+    tonnes: float
+    fling_pct: float
+    hoop_peak_mpa: float
+    hoop_pulses_h2: float
+    hoop_pulses_air: float
+    passes: bool
+
+
+def hoop_fatigue() -> list[HoopRow]:
+    """The dry wrap of each `HOOP_CASES` chamber, sized for strain and for hoop-swing cracks."""
+    wrap = next(w for w in wz.walls() if w.name == "all dry wrap")
+    rows = []
+    for case in (c for c in cases() if c.name in HOOP_CASES):
+        if not case.path.exists():
+            print(f"{case.name}: {case.path} not solved yet, skipped")
+            continue
+        h = history(case)
+        for fatigue in (False, True):
+            res = wz.evaluate(wrap, h, iterations=12, fatigue=fatigue)
+            ok = all(r.passes for r in res)
+            sizing = "hoop fatigue" if fatigue else "strain"
+            print(
+                f"\n{case.name}, sized for {sizing}: {sum(r.tonnes for r in res):.1f} t, "
+                f"{'passes' if ok else 'FAILS'}"
+            )
+            for r in res:
+                print(
+                    f"  {r.zone:14s} {r.thickness_mm:5.0f} mm {r.tonnes:5.1f} t "
+                    f"fling {r.fling_strain_pct:5.2f}%  liner {r.hoop_peak_mpa:+5.0f} MPa  "
+                    f"H2 {min(r.hoop_pulses_h2, 9.99e8):9.3g}  "
+                    f"air {min(r.hoop_pulses_air, 9.99e8):9.3g}"
+                )
+                rows.append(
+                    HoopRow(
+                        case.name,
+                        sizing,
+                        r.zone,
+                        r.thickness_mm,
+                        r.tonnes,
+                        r.fling_strain_pct,
+                        r.hoop_peak_mpa,
+                        r.hoop_pulses_h2,
+                        r.hoop_pulses_air,
+                        ok,
+                    )
+                )
+    DIR.mkdir(parents=True, exist_ok=True)
+    fields = list(HoopRow.__dataclass_fields__)
+    with HOOP_OUTPUT.open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(fields)
+        for row in rows:
+            w.writerow([getattr(row, f) for f in fields])
+    print(f"\nwrote {len(rows)} rows -> {HOOP_OUTPUT}")
+    return rows
+
+
 def main(argv: list[str] | None = None) -> None:
+    if argv is None:
+        import sys
+
+        argv = sys.argv[1:]
+    if "--hoop-fatigue" in argv:
+        hoop_fatigue()
+        return
     rows: list[ZoneLoad] = []
     qs: list[tuple[str, str, float, float]] = []
     for case in cases():
