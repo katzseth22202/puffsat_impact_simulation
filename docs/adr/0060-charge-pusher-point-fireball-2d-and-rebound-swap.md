@@ -63,3 +63,16 @@ modelling choices could each move the answer by tens of percent, and some are no
 - **Consequence.** At the floor the vapour is better reaction mass than the charge (45-72 against
   20-29 km/s). At the hot-jet ceiling the mass ratio rises to at most 2.93. The open structural
   item is now the inner ring at k = 30, which may have to be a fed sleeve, and grading the plate.
+
+## Amendment (2026-10-15): mass ratio 2 at $1000/kg, from Parker's periapsis
+
+`mission.py`; `mission_k.csv`, `mission_periapsis.csv`.
+
+- **Seth lowered the target from mass ratio 3 to 2.** The objective is unchanged: projectile kg per
+  kg of final mass. At mass ratio 2 the highest k is ~24 on the parent bowl, ~40 with a 4 m skirt
+  and ~52 on the δ/D 0.5 paraboloid at 1.5 F. The deep paraboloid is therefore the recommended
+  plate: the same projectile bill (0.019 kg/kg) as the unchanged bowl at mass ratio 3.
+- **Projectiles are priced at $1000/kg**, so ~$19 per kg of propellant on that plate.
+- **The baseline periapsis stays at 9.86 R_sun**, the one Parker Solar Probe has flown. 4 R_sun
+  saves a third of the boost but multiplies the sunlight six times. It is kept as the route to a
+  150 km/s crossing, not used here.

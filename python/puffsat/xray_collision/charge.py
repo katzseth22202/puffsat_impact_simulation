@@ -51,10 +51,13 @@ PE_BONDS = (2.0 * 4.3 + 3.6) * 1.602176634e-19 / (14.027 * 1.66053906660e-27)  #
 ARC_HOURS = 10.0  # nominal burn arc for the finite-arc mass ratio
 
 
-def boost_dv(aphelion: float = APHELION, periapsis: float = PERIAPSIS) -> float:
-    """Impulsive periapsis boost turning a fall from `aphelion` into a 100 km/s Earth crossing."""
+def boost_dv(
+    aphelion: float = APHELION, periapsis: float = PERIAPSIS, crossing: float = EARTH_CROSSING
+) -> float:
+    """Impulsive periapsis boost turning a fall from `aphelion` into an Earth crossing at
+    `crossing` (100 km/s by default)."""
     v_p = math.sqrt(2.0 * GM_SUN * aphelion / (periapsis * (aphelion + periapsis)))
-    need = math.sqrt(EARTH_CROSSING**2 + 2.0 * GM_SUN * (1.0 / periapsis - 1.0 / AU))
+    need = math.sqrt(crossing**2 + 2.0 * GM_SUN * (1.0 / periapsis - 1.0 / AU))
     return need - v_p
 
 

@@ -33,7 +33,23 @@ the plate, with the plume pressure-coupled across it, and asked whether k = 40 w
 
 - The impactor costs $1000/k per kg of propellant, ~$70-100, against ~$20 at the 400 km/s stage,
   because 100 km/s brings 16 times less energy per kg of impactor.
-- The impactor sheet is ~35-50 µm of polyimide or carbon fibre. It is a solar sail, so it needs
-  spin, attitude control and late guidance.
+- The impactor sheet is polyimide (Kapton, Seth's choice), ~35-55 µm. It is a solar sail that
+  drifts 30,000-100,000 km on its coast, so it needs spin, attitude control, tracking and late
+  correction (`overtake.sheet_budget`).
 - Open: polyethylene's real EOS and soot in 2-D, the sheet collision's resolved peak, plate
   ablation at 20-45 km/s, and the charge sheet's deployment.
+
+## Amendment (2026-10-15): confinement runs, and code behind every quoted number
+
+- **Confinement closes the direction loss but not the speed spread.** On the δ/D 0.5 paraboloid
+  skirts add nothing. A δ/D 0.75 paraboloid with the charge at 2 F reaches 84% of the perfect
+  plate's `m v (1 + √(1+k))`, giving k ≈ 13-15 against 12-14. It is not adopted: it adds ~5 t of
+  plate to save ~0.3 t of impactor per 100 t ship. The recommendation stays the δ/D 0.5
+  paraboloid at k ≈ 12.
+- **The sheet arithmetic is now code** (`overtake.sheet_budget`, `overtake_sheet.csv`). Writing it
+  out corrected the hand estimates:
+  - the coast drift is 30,000-100,000 km, not thousands;
+  - the tilt spread is 2.4 µs, not ~1 µs;
+  - the sail acceleration is 0.23-0.73 mm/s^2.
+
+  Seth chose polyimide (Kapton) for the sheet.

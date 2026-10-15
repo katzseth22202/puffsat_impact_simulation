@@ -7072,6 +7072,19 @@ struct OvertakeRecord {
     dr: f64,
 }
 
+/// Result 11's confinement follow-up: deeper bowls and skirts for the point fireball, and the
+/// planar sheet inside the δ/D 0.5 paraboloid, where the bowl can turn the sheet's flow.
+const OVERTAKE_CONFINED: [(&str, f64, f64, f64); 4] = [
+    ("paraboloid 0.50 at 1.5 F + 4 m skirt", 0.50, 4.0, -1.5),
+    ("paraboloid 0.50 at 1.5 F + 8 m skirt", 0.50, 8.0, -1.5),
+    ("paraboloid 0.75 at 1.5 F", 0.75, 0.0, -1.5),
+    ("paraboloid 0.75 at 2 F", 0.75, 0.0, -2.0),
+];
+/// Sheets inside the δ/D 0.5 paraboloid: radius [m] and height above the vertex [m]. The bowl's
+/// radius at those heights is 6.1 m and 7.1 m.
+const OVERTAKE_BOWL_SHEETS: [(f64, f64); 2] = [(4.0, 3.75), (5.5, 5.0)];
+const OVERTAKE_CONFINED_K: [f64; 3] = [10.0, 15.0, 20.0];
+
 /// One overtake run: `(plate, kind, sheet (radius, height), k)`.
 type OvertakeCaseSpec = ((&'static str, f64, f64, f64), u8, (f64, f64), f64);
 
@@ -7211,20 +7224,32 @@ fn overtake_case(
     }
 }
 
-/// `--overtake-2d [coarse]`: the point fireball on three plates at k = 5-40, the compact charge on
-/// the parent bowl at k = 10 and 20, and two planar sheets in the skirted flat plate at k = 10
-/// and 20. `coarse` doubles the cell (`overtake_2d_coarse.jsonl`).
+/// `--overtake-2d [confine] [coarse]`: the point fireball on three plates at k = 5-40, the compact
+/// charge on the parent bowl at k = 10 and 20, and two planar sheets in the skirted flat plate at
+/// k = 10 and 20. `confine` runs the follow-up instead (deeper bowls, skirts, sheets inside the
+/// paraboloid; `overtake_2d_confine.jsonl`). `coarse` doubles the cell.
 fn cmd_overtake_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let coarse = args.iter().any(|a| a == "coarse");
+    let confine = args.iter().any(|a| a == "confine");
     let dr = if coarse { 2.0 * CHARGE_DR } else { CHARGE_DR };
     let confined = charge_confined_ratio();
     let mut cases: Vec<OvertakeCaseSpec> = Vec::new();
-    for &plate in &OVERTAKE_PLATES {
+    if confine {
+        for &k in &OVERTAKE_CONFINED_K {
+            for &plate in &OVERTAKE_CONFINED {
+                cases.push((plate, 0, (0.0, 0.0), k));
+            }
+            for &sheet in &OVERTAKE_BOWL_SHEETS {
+                cases.push((OVERTAKE_PLATES[1], 2, sheet, k));
+            }
+        }
+    }
+    for &plate in OVERTAKE_PLATES.iter().filter(|_| !confine) {
         for &k in &OVERTAKE_K {
             cases.push((plate, 0, (0.0, 0.0), k));
         }
     }
-    for &k in &[10.0, 20.0] {
+    for &k in [10.0, 20.0].iter().filter(|_| !confine) {
         cases.push((OVERTAKE_PLATES[0], 1, (0.0, 0.0), k));
         for &sheet in &OVERTAKE_SHEETS {
             cases.push((OVERTAKE_PLATES[2], 2, sheet, k));
@@ -7233,11 +7258,9 @@ fn cmd_overtake_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let rows = par_map_with_progress("overtake", &cases, |&(plate, kind, sheet, k)| {
         overtake_case(plate, kind, sheet, k, dr, confined)
     });
-    let path = if coarse {
-        RESULT_PATH_OVERTAKE.replace(".jsonl", "_coarse.jsonl")
-    } else {
-        RESULT_PATH_OVERTAKE.to_string()
-    };
+    let stem = if confine { "_confine" } else { "" };
+    let grid = if coarse { "_coarse" } else { "" };
+    let path = RESULT_PATH_OVERTAKE.replace(".jsonl", &format!("{stem}{grid}.jsonl"));
     emit_scenario(&path, "overtake", &rows, |r| {
         println!(
             "rust: {:<28} {:<7} R {:>3.0} k {:>3.0} | J/mv {:6.3} J/Mu {:.3} peak/mv2 {:.3e} dir {:.3} unif {:.3} amb {:.1e} steps {}",

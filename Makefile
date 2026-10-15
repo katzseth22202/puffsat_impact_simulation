@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-mission xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1166,7 +1166,14 @@ xray-collision-collar: data/tables/ch2.json
 xray-collision-overtake: data/tables/ch2.json
 	cargo run --release -p sweep -- --overtake-2d
 	cargo run --release -p sweep -- --overtake-2d coarse
+	cargo run --release -p sweep -- --overtake-2d confine
+	cargo run --release -p sweep -- --overtake-2d confine coarse
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.overtake
+
+## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on
+## each plate -> data/results/xray_collision/mission_periapsis.csv, mission_k.csv
+xray-collision-mission:
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.mission
 
 ## xray-collision-test: that study's tests alone
 xray-collision-test:

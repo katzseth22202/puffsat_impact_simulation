@@ -870,9 +870,10 @@ The ledger for a 100 t final mass (production grid; jet-only coarse-grid values 
   for. **The plate should be graded, with the jet as a modest addition.**
 - **Erosion is a consumable, concentrated on the inner ring.**
   - The floor eats 0.2-0.5 t over the boost. The inner ring then loses up to 420 kg/m^2 at k = 30
-    on the bowl (23 cm of graphite), and 20-65 kg/m^2 per ring at k = 100.
-  - The ceiling is 6-11 t. That is 4.8 m of graphite on the k = 30 bowl's inner ring, which no
-    fixed collar holds. At k = 100 it is ~1 t/m^2 (0.55 m).
+    on the bowl (19 cm of 2200 kg/m^3 graphite), and 20-65 kg/m^2 per ring at k = 100.
+  - The ceiling is 6-11 t. That is 3.9 m of graphite on the k = 30 bowl's inner ring (3.0 m on the
+    paraboloid), which no fixed collar holds. At k = 100 it is ~1 t/m^2 (0.45 m). The depths are
+    `collar_ledger.csv`'s `max_depth_*`.
   - So at k = 30 the inner ring must be a renewable, fed sleeve unless the floor holds. At
     k = 100 the jet arrives slower and denser (47-60 km/s, not 140-185 km/s), radiates far less
     (1% of its kinetic energy against 23-32%), and a thick fixed ring suffices.
@@ -923,7 +924,7 @@ Three geometries were run on two grids (0.05 m and 0.1 m cells):
 | parent bowl | point | 5 / 10 / 20 / 40 | 2.53 / 3.05 / 3.82 / 4.93 | 0.62 at k 10 | 1.27 / **1.49** / 1.94 / 3.23 | 4-10 kg |
 | paraboloid 1.5 F | point | 5 / 10 / 20 / 40 | 2.81 / 3.45 / 4.38 / 5.72 | 0.74 at k 10 | 1.24 / **1.42** / 1.79 / 2.76 | 3-6 kg |
 | flat + 4 m skirt | point | 10 / 20 | 3.04 / 3.79 | 0.61 | 1.49 / 1.97 | ~2 kg |
-| parent bowl | compact | 10 / 20 | 3.01 / 3.67 | 0.60 | 1.50 / 2.00 | 2.4 / 6.2 kg |
+| parent bowl | compact | 10 / 20 | 3.01 / 3.67 | 0.61 | 1.50 / 2.00 | 2.4 / 6.2 kg |
 | flat + 4 m skirt | 4 m sheet | 10 / 20 | 3.13 / 3.96 | 0.64 | 1.48 / 1.91 | 3.5 / 3.9 kg |
 | flat + 4 m skirt | 7 m sheet | 10 / 20 | 3.21 / 4.07 | 0.67 | 1.46 / 1.86 | 10.6 / 12.1 kg |
 
@@ -940,7 +941,7 @@ of final mass, or $1000/k ≈ $70-100 per kg of propellant. k = 40 would cost $2
 but its mass ratio is 2.1-3.3: at 122 MJ/kg the gas is too cool, and its bonds are too large a
 share of its heat.
 
-- **The overtake couples better than the departing case.** `η` is 0.60-0.74 here, against
+- **The overtake couples better than the departing case.** `η` is 0.61-0.74 here, against
   0.40-0.55 when Result 10's fireball drifted away from the plate.
 - **Planar coupling barely helps the impulse.** A 7 m sheet gives 3-6% more than a compact charge
   on the same plate: its exhaust leaves straighter (direction factor 0.92 against 0.81), but with
@@ -954,22 +955,56 @@ share of its heat.
   fireball and 5-8% more for the sheets. The compact and sheet peaks rise on refinement, as at
   400 km/s, so their per-pulse limits are upper values; ~0.05 kg/m^2 is the safer sheet figure.
 
-**The impactor sheet.** At 100 km/s the impactor carries ~5 GJ/kg, a thousand times any binding
-energy, so its material does not matter to the coupling.
-- **Thickness:** 0.05-0.07 kg/m^2 is ~35-45 µm of carbon fibre or ~35-50 µm of polyimide or
-  Kevlar. The ship's polyethylene sheet at k = 10 is then ~0.5-0.75 mm thick.
-- **Survival from 0.5 to 1 AU:** a black sheet facing the Sun runs at ~470 K at 0.5 AU and
-  ~330 K at 1 AU.
-  - Polyimide film is proven as a solar sail (IKAROS, spin-deployed, 7.5 µm) and good to
-    ~400 °C.
-  - Carbon fibre is fine, but its epoxy matrix is not; it needs a dry or polyimide matrix.
+**Confinement follow-up** (`sweep --overtake-2d confine`, `overtake_2d_confine.jsonl`). A perfect
+plate, with every parcel leaving along the axis at one speed, would get `J = m v (1 + √(1+k))`.
+That ceiling alone caps mass ratio 1.5 at k ≈ 21. The runs get 68-80% of it (column
+`ceiling_share`). To find how much of the gap confinement can close, these were added at
+k = 10, 15 and 20:
+- skirts of 4 m and 8 m on the δ/D 0.5 paraboloid;
+- a deeper δ/D 0.75 paraboloid, with the charge at 1.5 F and 2 F;
+- 4 m and 5.5 m sheets inside the δ/D 0.5 paraboloid.
+
+| plate (k = 10) | ceiling share | direction | uniformity | k for mass ratio 1.5 | impactor per pulse |
+|---|---|---|---|---|---|
+| δ/D 0.5 paraboloid, 1.5 F | 80% | 0.90 | 0.83 | 12.0-14.1 | ~4 kg |
+| + 4 m or 8 m skirt | 80% | 0.96-0.97 | 0.76-0.78 | 12.2-13.9 | ~4 kg |
+| δ/D 0.75 paraboloid, 2 F | **84%** | 0.96 | 0.83 | **13.0-14.9** | 3.5-4.5 kg |
+| δ/D 0.75 paraboloid, 1.5 F | 84% | 0.96 | 0.81 | 13.0-14.9 | ~1.3 kg |
+| 4-5.5 m sheet inside the δ/D 0.5 paraboloid | 78% | 0.90-0.91 | 0.68-0.70 | 11.6-13.2 | ~2.4 kg |
+
+- **Direction is solved; speed spread is the rest.** Deep bowls and skirts send the exhaust out at
+  a direction factor of 0.96. What remains is the spread of exit speeds (uniformity ~0.8), which
+  confinement does not touch. Skirts straighten the flow but widen the spread, so the impulse is
+  unchanged. A sheet in the bowl is slightly worse than a compact charge.
+- **The deeper bowl gains ~1 in k but costs plate.** δ/D 0.75 has 712 m^2 of plate against 533 m^2,
+  ~5 t more at 30 kg/m^2. It saves ~0.003 kg of impactor per kg of final mass, ~0.3 t on a 100 t
+  ship. **The δ/D 0.5 paraboloid at 1.5 F, k ≈ 12, stays the recommendation.** Its charge at 2 F
+  rather than 1.5 F matters for the deeper bowl: the impulse is the same, with three times the
+  impactor per pulse.
+- **The next lever is the speed spread**, for instance a layered charge whose hot face pushes its
+  cold bulk like a piston. It is not modelled.
+- **The grid study holds.** The finer grid gives 1.5-6% more impulse than the coarse one for every
+  case.
+
+**The impactor sheet** (`overtake_sheet.csv`, `overtake.sheet_budget`). At 100 km/s the impactor
+carries ~5 GJ/kg, a thousand times any binding energy, so its material does not matter to the
+coupling. Seth chose polyimide (Kapton).
+- **Mass per area:** the sheets' peak gives 0.069-0.079 kg/m^2 at 400 MPa on the production grid
+  (column `max_areal`). It is an upper value, since the peak rises on refinement; 0.05 kg/m^2 is
+  the safer figure. That is 35-55 µm of polyimide or Kevlar, or 31-49 µm of carbon-fibre laminate.
+  The ship's polyethylene sheet at k = 10 is ~0.5-0.8 mm thick.
+- **Survival from 0.5 to 1 AU:** a black sheet facing the Sun and radiating from both faces runs
+  at 468 K at 0.5 AU and 331 K at 1 AU.
+  - Polyimide is proven as a solar sail (IKAROS, spin-deployed, 7.5 µm) and good to ~400 °C.
+  - Carbon fibre needs a dry or polyimide matrix, not epoxy.
   - Kevlar needs a UV-blocking coating.
-- **The sheet is a solar sail.** At 0.5 AU it accelerates at ~0.3-0.5 mm/s^2. Over a week's coast
-  that is thousands of km. It is predictable only with a controlled attitude, so the sheet spins
-  to stay flat, flies face-on to its direction of travel (so the push mostly shifts its arrival
-  time), and carries guidance for late correction.
-- **Tolerances are loose.** A 10 cm sag or a 1° tilt across 7 m spreads the arrival by ~1 µs,
-  against a ~100 µs pulse.
+- **The sheet is a solar sail.** At 0.5 AU it accelerates at 0.23-0.73 mm/s^2, from absorbing to
+  perfectly reflecting. Over an 8.7-day coast from 0.5 to 1 AU (at an assumed 100 km/s outward)
+  that is **30,000-100,000 km of drift**. It is predictable only with a known attitude, so the
+  sheet spins to stay flat, flies face-on to its direction of travel (so the push mostly shifts
+  its arrival time), and is tracked and corrected late.
+- **Tolerances are loose.** A 10 cm sag spreads the arrival by 1.0 µs, and a 1° tilt across 7 m by
+  2.4 µs, against a ~100 µs pulse.
 
 Open:
 - The effective-gamma gas. Polyethylene's real EOS through dissociation, and the soot that carbon

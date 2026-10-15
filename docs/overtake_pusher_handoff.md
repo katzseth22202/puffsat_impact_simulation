@@ -35,14 +35,21 @@ is dark, ionization recombines, and H2 re-forms before the plate; only carbon's 
 - **Cost:** the impactor is 0.042-0.049 kg per kg of final mass. At $1000/kg that is ~$45 per kg of
   final mass, or $70-100 per kg of propellant.
 - **The planar sheet buys loading, not impulse.** The peak scales with the impactor's mass per area,
-  so the plate takes ~0.05-0.07 kg/m^2 of impactor at 400 MPa: ~35-50 µm of polyimide or carbon
-  fibre. The ship's charge sheet is ~0.5-0.75 mm of polyethylene.
-- **The sheet must last from 0.5 to 1 AU**, at ~470 K face-on at 0.5 AU.
-  - Polyimide film (IKAROS-proven) is the first choice. Carbon fibre also works, in a polyimide or
-    dry matrix. Kevlar only with a UV coating.
-  - It is a solar sail (~0.3-0.5 mm/s^2 at 0.5 AU), so it needs spin for flatness, a controlled
-    attitude and late guidance. Arrival tolerances are loose: ~1 µs of spread against a ~100 µs
-    pulse.
+  so the plate takes 0.05-0.07 kg/m^2 of impactor at 400 MPa. In polyimide (Kapton, Seth's choice)
+  that is 35-55 µm. The ship's charge sheet is ~0.5-0.8 mm of polyethylene.
+- **The sheet must last from 0.5 to 1 AU**, at 468 K face-on at 0.5 AU.
+  - Polyimide film (IKAROS-proven) is the choice. Carbon fibre also works, in a polyimide or dry
+    matrix; Kevlar only with a UV coating.
+  - It is a solar sail: 0.23-0.73 mm/s^2 at 0.5 AU, and 30,000-100,000 km of drift over the
+    ~9-day coast. It needs spin for flatness, a controlled attitude, tracking and late
+    correction.
+  - Arrival tolerances are loose: a 10 cm sag or a 1° tilt spreads the arrival by 1-2.4 µs,
+    against a ~100 µs pulse.
+- All of these numbers are `overtake_sheet.csv`, from `overtake.sheet_budget`.
+
+- **Deeper confinement buys little.** A δ/D 0.75 paraboloid with the charge at 2 F reaches 84% of
+  the perfect-plate ceiling (k ≈ 13-15) against 80% (k ≈ 12-14). It costs ~5 t more plate.
+  Skirts add nothing. The remaining loss is the spread of exit speeds, not their direction.
 
 ## Suggested text for the parent
 

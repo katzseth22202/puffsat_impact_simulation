@@ -305,3 +305,31 @@ def test_overtake_pusher_ledger() -> None:
         assert float(coarse[key]["impulse_per_mv"]) <= float(r["impulse_per_mv"])
         # The impactor's own momentum is delivered, plus the expansion's.
         assert float(r["impulse_per_mv"]) > 2.0
+
+
+def test_mission_basis_mass_ratio_two() -> None:
+    """The recorded mission basis (ADR-0060 amendment): mass ratio 2 at 100 km/s is met at
+    k ~ 24 / 40 / 52 on the bowl / skirted bowl / deep paraboloid, inside the simulated range, and
+    a deeper periapsis lowers the boost while multiplying the sunlight as 1/r^2."""
+    from puffsat.xray_collision import mission
+
+    ks = [mission.k_for_mass_ratio(p, 2.0).k for p in mission.PLATES]
+    assert ks == pytest.approx([24.3, 40.4, 51.7], abs=1.0)
+    assert all(mission.k_for_mass_ratio(p, 2.0).in_simulated_range for p in mission.PLATES)
+    parker, deep = mission.periapsis(9.86), mission.periapsis(4.0)
+    assert parker.dv_100 == pytest.approx(20.76e3, rel=0.01)
+    assert deep.dv_100 < 0.7 * parker.dv_100
+    assert deep.suns / parker.suns == pytest.approx((9.86 / 4.0) ** 2)
+
+
+def test_impactor_sheet_budget_closed_forms() -> None:
+    """The sheet arithmetic quoted in Result 11 follows from its closed forms."""
+    from puffsat.xray_collision import overtake
+
+    b = overtake.sheet_budget(0.05)
+    assert b.thickness["polyimide (Kapton)"] == pytest.approx(0.05 / 1420.0)
+    # Two-face radiative balance: T scales as r^(-1/2).
+    assert b.temp_half_au / b.temp_one_au == pytest.approx(2.0**0.5)
+    assert b.sail_accel_half_au[1] == pytest.approx(2.0 * b.sail_accel_half_au[0])
+    assert b.spread_tilt < 0.05 * overtake.PULSE_TIME
+    assert b.coast_drift[0] > 1.0e7  # tens of thousands of km: tracking is required

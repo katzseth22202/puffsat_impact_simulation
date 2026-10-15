@@ -26,6 +26,26 @@ k = 100**. A deeper, δ/D 0.5 paraboloid lowers this to 1.7-2.3. The projectile 
 **0.013-0.034 kg of projectile per kilogram of final mass**, because the cheap charge, not the
 projectile, is the reaction mass.
 
+## Mission basis (Seth, 2026-10-15) -- `mission_k.csv`, `mission_periapsis.csv`
+
+`make xray-collision-mission` (`mission.py`).
+- **Target: mass ratio 2** (propellant half the starting mass) for the 100 km/s crossing,
+  replacing the earlier 3. With every bond charged and the 10 h arc, it is met at:
+  - **k ≈ 24** on the parent bowl;
+  - **k ≈ 40** with a 4 m skirt;
+  - **k ≈ 52** on the δ/D 0.5 paraboloid at 1.5 F.
+
+  The projectile bill is then 0.041, 0.025 and 0.019 kg per kg of final mass. All three are
+  inside the simulated k = 20-100. Mass ratio 3 would allow k ≈ 100-190, extrapolated beyond
+  k = 100 for the last two.
+- **Projectiles cost $1000/kg** in mass production, against ~$1/kg for polyethylene. On the
+  paraboloid at k ≈ 52 that is **~$19 per kg of propellant**.
+- **Periapsis stays at Parker's 9.86 R_sun**, which has flown.
+  - At 4 R_sun the boost to 100 km/s falls from 20.8 to 13.6 km/s, but the sunlight is 2890 suns
+    against 476. A black flat plate there runs at ~2890 K against ~1840 K.
+  - 150 km/s would need 47.9 km/s from 9.86 R_sun, and k well below the simulated range. At 4 R_sun
+    it needs 32.5 km/s, and the closing speed rises to ~620 km/s. That is the upgrade path.
+
 ## The design
 
 | element | choice |

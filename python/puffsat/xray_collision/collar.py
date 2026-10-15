@@ -44,12 +44,14 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from puffsat.walled_nozzle import wall
 from puffsat.xray_collision import charge
 
 OUT = charge.OUT_DIR / "collar_ledger.csv"
 LEDGER = charge.OUT_DIR / "charge_ledger.csv"
 ABLATION = charge.OUT_DIR / "collar_ablation.jsonl"
 FINAL_MASS = 100.0e3  # [kg], the handoff's nominal final mass
+GRAPHITE_DENSITY = wall.GRAPHITE_DENSITY  # [kg/m^3], to turn eroded mass into depth
 #: The 2-D case label's plate, to the charge ledger's.
 PLATES = {
     "bowl 0.30 at focus": "paraboloid 0.30 at focus (parent bowl)",
@@ -100,6 +102,8 @@ class Collar:
     eroded_per_final_best: float  # [kg per kg of final mass] over the boost
     eroded_per_final_worst: float
     disks_per_final: float  # [kg of disk per kg of final mass], the ledger's projectile bill
+    max_depth_best: float  # [m] of graphite eroded from the worst ring over the boost (FINAL_MASS)
+    max_depth_worst: float
     added_share_best: float  # of the pulse's impulse
     added_share_worst: float
     collar_v_e_best: float  # [m/s] the eroded mass's own exhaust speed
@@ -171,6 +175,13 @@ def collar(
     )
     r_in, r_out = float(solid_bands[0]["r_lo"]), float(solid_bands[-1]["r_hi"])
     mean = tiled / (math.pi * (r_out**2 - r_in**2))
+    # The rings tile the plate from the bore's edge to the rim, so their impulses must add up to
+    # the run's own plate impulse less the bore's (the record is per M u_rms; u_rms = sqrt(k)/(1+k)
+    # of the disk's speed for a merged mass of 1 + k disks).
+    plate = (
+        (float(str(solid["wall_impulse"])) - float(str(solid["hole_impulse"]))) * math.sqrt(k) * v
+    )
+    assert abs(tiled / plate - 1.0) < 1e-3, (plate_label, k, tiled, plate)
     mean_smooth = sum(
         float(b["impulse"]) * v * math.pi * (float(b["r_hi"]) ** 2 - float(b["r_lo"]) ** 2)
         for b in smooth_bands
@@ -277,6 +288,14 @@ def collar(
         eroded_per_final_best=sum(r.eroded_best for r in rings) * per_final,
         eroded_per_final_worst=sum(r.eroded_worst for r in rings) * per_final,
         disks_per_final=per_final,
+        max_depth_best=max(r.eroded_best / r.area for r in rings)
+        * per_final
+        * FINAL_MASS
+        / GRAPHITE_DENSITY,
+        max_depth_worst=max(r.eroded_worst / r.area for r in rings)
+        * per_final
+        * FINAL_MASS
+        / GRAPHITE_DENSITY,
         added_share_best=best[0],
         added_share_worst=worst[0],
         collar_v_e_best=best[1],
