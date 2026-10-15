@@ -571,7 +571,9 @@ That takes **20.8 km/s**, so a mass ratio of 3 needs Isp 1930 s. The fall from J
 3.5 km/s faster than a fall from 1 AU.
 
 **The fireball is dense, so it does not radiate.** On the polyethylene table, a k = 30 charge
-starts at 32 eV and about 2e6 optical depths thick, and radiates under 0.01% of its heat. Its heat
+starts at 32 eV and about 2e5 optical depths thick, and radiates under 0.01% of its heat. Shocked
+solid polyethylene, ~4x 950 kg/m^3, lies above the table's 1284 kg/m^3 ceiling. The one-zone
+start is therefore held at the ceiling, which only understates the opacity. Its heat
 all becomes expansion: `u_rms` = 85, 71 and 62 km/s at k = 20, 30 and 40. It drifts away from the
 plate at `w = v/(1+k)` = 19, 13 and 10 km/s. That holds only if the charge is **compact and in
 the disk's path**. The disk couples only to the column it crosses: at k = 20 it needs ~160 kg/m^2
@@ -635,10 +637,50 @@ so the production values above are upper ones.
   final mass at a mass ratio of 1.8 needs ~2700 pulses, about one every 13 s across a ~10 h
   periapsis arc.
 
+### Higher k, the bond toll and the finite arc
+
+The rebound table now runs down to 20 km/s (`--propellant-rebound low`). Polyethylene rebounds
+*better* when slow: `e_eff` = 0.68-0.73 at 30-50 km/s and 0.1-1 kg/m^2, and 0.73-0.79 at 20 km/s.
+The leading plates were re-run at k = 60, 80 and 100, where `u_rms` is 51, 44 and 40 km/s and the
+drift is 6.6, 4.9 and 4.0 km/s. The table gives Isp and its value if no polyethylene bond re-forms
+(84 MJ/kg, which the CH2 table, counting atoms only, does not charge). It also gives the mass ratio
+for an impulsive boost and for a 10 h burn arc centred on periapsis (`finite_arc_mass_ratio`, a
+heliocentric integration). Values are for a 1 kg projectile on the production grid.
+
+| k | parent bowl: Isp (bonds frozen) / mass ratio (10 h arc) / projectile per kg final / peak | δ/D 0.5 paraboloid at 1.5 F: same |
+|---|---|---|
+| 30 | 2990 (2940) s / 2.03 (2.05) / 0.034 / 163 MPa | 3860 (3800) s / 1.73 (1.74) / 0.024 / 280 MPa |
+| 60 | 2450 (2370) s / 2.37 (2.40) / 0.023 / 214 MPa | 3100 (3000) s / 1.98 (2.00) / 0.016 / 349 MPa |
+| 80 | 2200 (2100) s / 2.62 (2.65) / 0.020 / 231 MPa | 2760 (2640) s / 2.15 (2.17) / 0.014 / 395 MPa |
+| 100 | 2015 (1905) s / 2.86 (2.90) / 0.019 / 239 MPa | 2520 (2380) s / 2.32 (2.34) / 0.013 / 405 MPa |
+
+(The bowl with a 4 m skirt sits between them: 2330 s, mass ratio 2.48 and 0.015 at k = 100.)
+
+- **High k pays.** From k = 30 to 100 the projectile bill falls by 45%. At k = 100 the 0.5
+  paraboloid needs 0.013 kg of projectile per kilogram of final mass. Even the parent's unchanged
+  bowl meets the mass ratio of 3 (2.86). If no bond re-forms it is at the edge (Isp 1905 s, mass
+  ratio 3.04).
+- **The polyethylene bond toll is minor.** It costs 3% of exhaust velocity at k = 60 and 5.5% at
+  k = 100, in the worst case where no bond re-forms. Ionization holds ~18% of the energy at the
+  start. If it froze at once, it would cost ~10% more of the velocity. The fireball starts at
+  solid density, where three-body recombination is very fast, so most of it should return.
+  Freeze-out is not computed here.
+- **The finite arc is minor.** A 10 h arc raises the mass ratio by about 1%. Against impulsive,
+  20 h raises it 3-5% and 40 h 9-15%.
+- **More projectile mass per pulse does not come from higher k.** At fixed plate geometry the peak
+  pressure goes as the projectile's energy and rises slowly with k: 163 to 239 MPa per kilogram
+  for the bowl. The levers are geometry:
+  - Moving the charge off the focus: the bowl at 1.5 F peaks at 55 MPa/kg at k = 30, so it takes
+    ~7 kg per pulse at 400 MPa, for capture 0.37 against 0.44.
+  - A larger plate: peak pressure goes as `m/R^3` at a fixed shape, so a plate twice the diameter
+    takes eight times the projectile.
+  - A stronger facesheet.
+
+  A graphite disk 1 mm thick that fits the 0.5 m bore weighs 0.43 kg (2.3 mm makes 1 kg). It
+  needs only ~2.2k kg/m^2 of charge column to stop.
+
 Open:
-- k above 40. The rebound table starts at 60 km/s, and `u_rms` falls below that past k ~ 40, so
-  rebound runs at 30-60 km/s are needed first.
-- The finite-arc boost: ~2700 pulses over hours lose some Oberth gain.
+- Ionization and bond freeze-out in the expanding fireball (`recombination.py`-style kinetics).
 - The charge as a uniform equilibrated sphere. The snowplow's hot core and its early X-rays are
   not followed.
 - The rigid, non-ablating plate. At ~70 km/s the `v/4` rule asks it to absorb ~18 kJ per N s.

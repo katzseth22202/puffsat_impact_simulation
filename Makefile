@@ -1120,6 +1120,7 @@ data/tables/ch2.json: python/puffsat/water_plate/spray_eos.py python/puffsat/tab
 ## 60-150 km/s (the f(v) coupled bounce) -> data/results/xray_collision/propellant_rebound.jsonl
 xray-collision-rebound: data/tables/ch2.json
 	cargo run --release -p sweep -- --propellant-rebound
+	cargo run --release -p sweep -- --propellant-rebound low
 
 ## xray-collision-charge-2d: the charge's point fireball onto the 20 m plate in 2-D (euler2d):
 ## shapes at k = 30, the leading three at k = 20 / 40 and on a 2x grid -> charge_2d*.jsonl
@@ -1128,6 +1129,9 @@ xray-collision-charge-2d:
 	cargo run --release -p sweep -- --charge-2d 30 1,5,9 x2
 	cargo run --release -p sweep -- --charge-2d 20 1,5,9
 	cargo run --release -p sweep -- --charge-2d 40 1,5,9
+	cargo run --release -p sweep -- --charge-2d 60 1,5,9
+	cargo run --release -p sweep -- --charge-2d 80 1,5,9
+	cargo run --release -p sweep -- --charge-2d 100 1,5,9
 
 ## xray-collision-charge: Isp, mass ratio and projectile bill from the 2-D runs and the rebound
 ## table -> data/results/xray_collision/charge_ledger.csv

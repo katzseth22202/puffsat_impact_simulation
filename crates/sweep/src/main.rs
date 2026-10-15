@@ -6502,6 +6502,9 @@ fn cmd_heavyplate(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 const TABLE_PATH_CH2: &str = "data/tables/ch2.json";
 const RESULT_PATH_PROPELLANT: &str = "data/results/xray_collision/propellant_rebound.jsonl";
 const PROP_V: [f64; 5] = [60_000.0, 80_000.0, 100_000.0, 120_000.0, 150_000.0];
+/// The charge's slower fireballs (Result 10, k > 40) reach the plate at 20-60 km/s.
+const PROP_V_LOW: [f64; 4] = [20_000.0, 30_000.0, 40_000.0, 50_000.0];
+const RESULT_PATH_PROPELLANT_LOW: &str = "data/results/xray_collision/propellant_rebound_low.jsonl";
 const PROP_RHO: [f64; 5] = [0.1, 0.3, 1.0, 3.0, 10.0];
 const PROP_LENGTH: [f64; 2] = [1.0, 3.0];
 const PROP_TAU_RHO: [f64; 3] = [0.3, 1.0, 3.0];
@@ -6509,33 +6512,42 @@ const PROP_TAU_SCALES: [f64; 2] = [0.1, 10.0];
 
 /// `(v, rho, length, opacity_scale)`: the headline grid at real opacity, then an opacity bracket at
 /// 100 km/s and L = 1 m.
-fn propellant_cases() -> Vec<(f64, f64, f64, f64)> {
+fn propellant_cases(speeds: &[f64]) -> Vec<(f64, f64, f64, f64)> {
     let mut cases = Vec::new();
-    for &v in &PROP_V {
+    for &v in speeds {
         for &rho in &PROP_RHO {
             for &l in &PROP_LENGTH {
                 cases.push((v, rho, l, 1.0));
             }
         }
     }
-    for &rho in &PROP_TAU_RHO {
-        for &s in &PROP_TAU_SCALES {
-            cases.push((100_000.0, rho, 1.0, s));
+    if speeds.contains(&100_000.0) {
+        for &rho in &PROP_TAU_RHO {
+            for &s in &PROP_TAU_SCALES {
+                cases.push((100_000.0, rho, 1.0, s));
+            }
         }
     }
     cases
 }
 
-fn cmd_propellant_rebound(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+/// `--propellant-rebound` runs 60-150 km/s; `--propellant-rebound low` runs 20-50 km/s.
+fn cmd_propellant_rebound(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let table = Table::load(TABLE_PATH_CH2)?;
-    let cases = propellant_cases();
+    let low = args.iter().any(|a| a == "low");
+    let (speeds, out): (&[f64], &str) = if low {
+        (&PROP_V_LOW, RESULT_PATH_PROPELLANT_LOW)
+    } else {
+        (&PROP_V, RESULT_PATH_PROPELLANT)
+    };
+    let cases = propellant_cases(speeds);
     let rows = par_map_with_progress("propellant", &cases, |&(v, rho, l, s)| {
         run_one_heavyplate(v, rho, l, s, &table)
     });
-    if let Some(dir) = std::path::Path::new(RESULT_PATH_PROPELLANT).parent() {
+    if let Some(dir) = std::path::Path::new(out).parent() {
         std::fs::create_dir_all(dir)?;
     }
-    emit_scenario(RESULT_PATH_PROPELLANT, "propellant", &rows, |r| {
+    emit_scenario(out, "propellant", &rows, |r| {
         println!(
             "rust: v={:>6.0} rho={:.2} L={:.1} scale={:>4.1} -> e_eff={:.4} wall_rad={:.3e} escape={:.3e} conv={}",
             r.v,
@@ -6562,8 +6574,16 @@ const CHARGE_DR: f64 = 0.05;
 const CHARGE_BALL_R: f64 = 0.5;
 const CHARGE_HOLE_R: f64 = 0.25;
 const CHARGE_AMBIENT: f64 = 1.0e-9;
-/// `w / u_rms` for k = 20, 30, 40 (one-zone u_rms on the CH2 table, w = 400 km/s / (1+k)).
-const CHARGE_DRIFT: [(f64, f64); 3] = [(20.0, 0.224), (30.0, 0.183), (40.0, 0.158)];
+/// `w / u_rms` for k = 20-100 (one-zone u_rms on the CH2 table, w = 400 km/s / (1+k);
+/// `charge.charge_fireball`).
+const CHARGE_DRIFT: [(f64, f64); 6] = [
+    (20.0, 0.224),
+    (30.0, 0.183),
+    (40.0, 0.158),
+    (60.0, 0.129),
+    (80.0, 0.112),
+    (100.0, 0.100),
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Charge2dRecord {
@@ -6734,7 +6754,7 @@ fn cmd_charge_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .find(|(kk, _)| (kk - k).abs() < 1e-9)
         .map(|&(_, d)| d)
-        .ok_or("k must be 20, 30 or 40")?;
+        .ok_or("k must be 20, 30, 40, 60, 80 or 100")?;
     let confined = charge_confined_ratio();
     let picked: Vec<(&str, f64, f64, f64)> = CHARGE_CASES
         .iter()
