@@ -76,3 +76,24 @@ modelling choices could each move the answer by tens of percent, and some are no
 - **The baseline periapsis stays at 9.86 R_sun**, the one Parker Solar Probe has flown. 4 R_sun
   saves a third of the boost but multiplies the sunlight six times. It is kept as the route to a
   150 km/s crossing, not used here.
+
+## Amendment (2026-10-15): the point fireball is optimistic, and the ledger prices the real collision
+
+- **Defect.** `run_disk_charge_bounce` started the charge at the disk's *temperature*, not its
+  pressure. That stored spurious heat in the charge: +10% of the collision's at k = 10, +28% at
+  k = 30, +90% at k = 100. The mixing check then read the real collision as 4-25% above the point
+  fireball, so decision 3's "conservative" was wrong. The charge now starts at the disk's cold
+  pressure, scaled so a long foam column stores under a quarter of the disk's heat. Both
+  disk-charge runners assert a cold start.
+- **Corrected, the real collision gives less:** 0.82-0.87 of the point fireball at k = 30 and
+  0.64-0.68 at k = 100. The disk's heat is strung along a longer cylinder as k grows. The finer
+  grid raises it 8-20%, so the ratio is if anything pessimistic.
+- **Decision 3 is revised.** The point fireball stays the scale-free 2-D model, but every mission
+  figure is now multiplied by the measured ratio (`charge.mixing_factor`, `charge_mixing.csv`).
+  This applies to `mission.py` (mass ratio, k, breeding) and `growth.py` (the Sun stage).
+- **Decision 1's high-k recommendation is withdrawn.** On the real collision the projectile bill
+  is nearly flat above k ≈ 30 (0.033 -> 0.029 kg/kg on the deep paraboloid) while the mass ratio
+  climbs steeply. Mass ratio 2 is met at k ≈ 19 / 26 / 28 (bowl / skirted bowl / deep
+  paraboloid), and the practical design is the deep paraboloid at k ≈ 30.
+- The bore collar's loads came from the same runner and were rerun (see the study's collar
+  section).

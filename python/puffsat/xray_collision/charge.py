@@ -311,6 +311,55 @@ def load_jsonl(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
+# The real collision against the point fireball (Result 10 check, corrected 2026-10-15). The disk
+# striking a solid charge leaves its heat strung along the axis, so it gives *less* plate impulse
+# than the round fireball the ledger is priced on. The ratio, measured at k = 30 and 100 on the two
+# plates that have both (`sweep --charge-mix [100]`), is written to a committed CSV and applied to
+# the ledger's `v_e` as its "real collision" value.
+MIXING_CSV = OUT_DIR / "charge_mixing.csv"
+#: The mixing runs' plate labels, to the ledger's.
+MIXING_PLATES = {
+    "bowl 0.30 at focus": "paraboloid 0.30 at focus (parent bowl)",
+    "paraboloid 0.50 at 1.5 F": "paraboloid 0.50 at 1.5 focus",
+}
+
+
+def write_mixing() -> list[dict[str, object]]:
+    """Real-collision over point-fireball impulse, per plate and k, from the production grids."""
+    out: list[dict[str, object]] = []
+    for path in (OUT_DIR / "charge_mix.jsonl", OUT_DIR / "charge_mix_k100.jsonl"):
+        if not path.exists():
+            continue
+        rows = load_jsonl(path)
+        for label, ledger in MIXING_PLATES.items():
+            point = next(r for r in rows if r["case"] == f"{label}: point fireball")
+            solid = next(r for r in rows if r["case"] == f"{label}: disk into solid charge")
+            out.append(
+                {
+                    "plate": ledger,
+                    "k": float(str(point["k"])),
+                    "point": float(str(point["wall_impulse"])),
+                    "solid": float(str(solid["wall_impulse"])),
+                    "ratio": float(str(solid["wall_impulse"])) / float(str(point["wall_impulse"])),
+                }
+            )
+    if out:
+        _write(MIXING_CSV, out)
+    return out
+
+
+def mixing_factor(plate: str, k: float) -> float:
+    """Real collision over point fireball for a ledger `plate` at `k`: interpolated in ln k between
+    the measured k = 30 and 100, held outside them. Plates without their own runs (the skirted
+    bowl) take the parent bowl's, which they extend."""
+    with MIXING_CSV.open() as fh:
+        rows = list(csv.DictReader(fh))
+    own = [r for r in rows if r["plate"] == plate]
+    use = own or [r for r in rows if r["plate"] == MIXING_PLATES["bowl 0.30 at focus"]]
+    pts = sorted((float(r["k"]), float(r["ratio"])) for r in use)
+    return float(np.interp(math.log(k), [math.log(a) for a, _ in pts], [b for _, b in pts]))
+
+
 def main() -> None:
     dv = boost_dv()
     print(

@@ -53,3 +53,14 @@ the plate, with the plume pressure-coupled across it, and asked whether k = 40 w
   - the sail acceleration is 0.23-0.73 mm/s^2.
 
   Seth chose polyimide (Kapton) for the sheet.
+
+## Amendment (2026-10-15): the compact and sheet runs, rerun cold
+
+The compact-charge and sheet runs came from the disk-into-charge runner, which first started the
+charge as hot as the impactor (ADR-0060 amendment). Rerun cold:
+- **The compact charge gives 6-15% less impulse than the point fireball** (k = 10-20), not 1-4%.
+- **The wide sheets match the point fireball** (0-2% above on the flat skirted plate). Planar
+  sheets therefore cost nothing in impulse against the point fireball and spread the load.
+- **The recommendation stands.** The point-fireball k for mass ratio 1.5 is unchanged: k ≈ 10-12
+  on the bowl, 12-14 on the deep paraboloid. A compact charge needs ~1 less; a sheet does not.
+  `mission.overtake_mixing` carries the compact factor into the breeding cycle.

@@ -29,17 +29,19 @@ projectile is the "first impactor" that aims the rest.
 
 | Earth stage's bonds | `f_dead` | `k_E` | departs per kg of impactor | `G` | payload share | Sun-wave impactor per kg of payload | in Earth orbit per kg of payload |
 |---|---|---|---|---|---|---|---|
-| carbon atomic | 0 | 12.0 | 24.1 kg | **12.0** | 92% | 0.88 g ($0.88) | 1.64 kg |
-| carbon atomic | 0.16 | 12.0 | 24.1 kg | **10.1** | 90% | 1.06 g ($1.06) | 1.66 kg |
-| bonds returned | 0 | 14.1 | 28.2 kg | 14.1 | 93% | 0.74 g ($0.74) | 1.61 kg |
-| bonds returned | 0.16 | 14.1 | 28.2 kg | 11.9 | 92% | 0.89 g ($0.89) | 1.64 kg |
+| carbon atomic | 0 | 10.6 | 21.2 kg | **10.6** | 91% | 1.86 g ($1.86) | 1.66 kg |
+| carbon atomic | 0.16 | 10.6 | 21.2 kg | **8.9** | 89% | 2.26 g ($2.26) | 1.69 kg |
+| bonds returned | 0 | 12.0 | 24.0 kg | 12.0 | 92% | 1.63 g ($1.63) | 1.64 kg |
+| bonds returned | 0.16 | 12.0 | 24.0 kg | 10.1 | 90% | 1.97 g ($1.97) | 1.67 kg |
 
-`k_S` = 51.7 in every row.
+`k_S` = 27.9 in every row. *Corrected 2026-10-15:* both stages are now priced on the real
+collision, not the point fireball (ADR-0060 amendment). The first version had `G` 10.1-14.1 at
+`k_S` = 51.7 and ~$0.74-1.06 per kg.
 
 ## Consequences
 
-- **The expensive impactor costs about a dollar per kg of payload.** One kg of Sun-wave projectile
-  sends ~52 kg of Earth impactor back, and that launches ~1250 kg at 11 km/s.
+- **The expensive impactor costs about two dollars per kg of payload.** One kg of Sun-wave
+  projectile sends ~28 kg of Earth impactor back, and that launches ~600 kg at 11 km/s.
 - **The loop multiplies impactor, not total mass.** Every departing kg must first be in Earth orbit
   with its polyethylene: ~1.64 kg in orbit per kg of payload departing. The chemical equivalent for
   11 km/s is a mass ratio of ~12.

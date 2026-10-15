@@ -15,6 +15,10 @@ converged: a finer grid gives 18-30% less, so the values here are upper ones.
 
 ## Conclusion for the paper
 
+**Correction, 2026-10-15.** The mass ratios below are the point fireball's. The real collision gives
+13-36% less impulse, rising with k. Read the mission basis below for the corrected k (≈ 30 on the
+deep paraboloid at mass ratio 2) and the corrected projectile bill (~0.033 kg/kg).
+
 The near-Sun boost does not need X-rays or a radiation case. A graphite disk at the 400 km/s
 closing speed of a Parker-like periapsis (9.86 solar radii, 200 km/s met head-on) threads the
 bore and stops in a compact **charge** of near-solid polyethylene. The charge is 20-100 times
@@ -30,16 +34,22 @@ projectile, is the reaction mass.
 
 `make xray-collision-mission` (`mission.py`).
 - **Target: mass ratio 2** (propellant half the starting mass) for the 100 km/s crossing,
-  replacing the earlier 3. With every bond charged and the 10 h arc, it is met at:
-  - **k ≈ 24** on the parent bowl;
-  - **k ≈ 40** with a 4 m skirt;
-  - **k ≈ 52** on the δ/D 0.5 paraboloid at 1.5 F.
+  replacing the earlier 3.
+- **Priced on the real collision** (`mission_real_collision.csv`, corrected 2026-10-15). The disk
+  striking a solid charge gives 13-18% less impulse than the point fireball at k = 30, and 32-36%
+  less at k = 100 (`charge.mixing_factor`). With every bond charged and the 10 h arc, mass ratio 2
+  is met at:
+  - **k ≈ 19** on the parent bowl (just below the simulated k = 20, so extrapolated);
+  - **k ≈ 26** with a 4 m skirt;
+  - **k ≈ 28** on the δ/D 0.5 paraboloid at 1.5 F.
 
-  The projectile bill is then 0.041, 0.025 and 0.019 kg per kg of final mass. All three are
-  inside the simulated k = 20-100. Mass ratio 3 would allow k ≈ 100-190, extrapolated beyond
-  k = 100 for the last two.
+  The projectile bill is then 0.054, 0.038 and 0.036 kg per kg of final mass.
+- **Above k ≈ 30 the bill barely falls.** On the paraboloid it goes 0.033 -> 0.029 from k = 30 to
+  60 while the mass ratio climbs to 2.7, because a heavier charge is a longer cylinder that couples
+  worse. **k ≈ 30 on the deep paraboloid is the practical choice: mass ratio 2.0, 0.033 kg/kg.**
+  The earlier point-fireball values (k ≈ 24 / 40 / 52, 0.019 kg/kg) were optimistic.
 - **Projectiles cost $1000/kg** in mass production, against ~$1/kg for polyethylene. On the
-  paraboloid at k ≈ 52 that is **~$19 per kg of propellant**.
+  paraboloid at k ≈ 28-30 that is **~$33-36 per kg of propellant**.
 - **Periapsis stays at Parker's 9.86 R_sun**, which has flown.
   - At 4 R_sun the boost to 100 km/s falls from 20.8 to 13.6 km/s, but the sunlight is 2890 suns
     against 476. A black flat plate there runs at ~2890 K against ~1840 K.
@@ -114,8 +124,10 @@ For §`pass_through_pusher`, a closing paragraph or an alternative subsection:
   ~0.03% frozen. Polyethylene's bonds do not re-form before the plate, because the gas is still
   0.4-1.4 eV there. They cost 1.6% of exhaust velocity at k = 30 and 5.4% at k = 100, charged in
   full.
-- **Mixing.** The real disk-into-charge collision, in 2-D, gives -4% to +25% *more* plate impulse
-  than the uniform fireball for a solid charge, so the ledger above is conservative. A 30 kg/m^3
+- **Mixing (corrected 2026-10-15).** The real disk-into-solid-charge collision gives 13-18% *less*
+  plate impulse than the uniform fireball at k = 30, and 32-36% less at k = 100. The ledger above is
+  the point fireball's, so it is optimistic; the mission basis applies the measured factor. The
+  first version read +4-25% because the charge started as hot as the disk. A 30 kg/m^3
   foam charge loses 15-39% as a line source, so the charge must be solid.
 - **Uneven exit speeds.** Without a nozzle the exhaust's direction factor is 0.70-0.89 and its
   speed uniformity 0.64-0.83. In jet-efficiency terms that is 0.4-0.6 against a magnetic
@@ -124,22 +136,20 @@ For §`pass_through_pusher`, a closing paragraph or an alternative subsection:
 
 - **The bore collar** (`collar_ledger.csv`, `make xray-collision-collar`).
   - **The jet.** The real collision throws a narrow back-splash jet down the axis, peaking just
-    outside the bore at 5-20 GPa per kg of projectile (not converged). The pulse is microseconds
+    outside the bore at 6-15 GPa per kg of projectile (not converged). The pulse is microseconds
     long, so the plate is damaged by its impulse, which does converge. That impulse is 8-10 times
     the plate's mean on the inner ring, ~5 times at 1-2 m, ~3 times at 2-3.5 m, and back to the
     mean near 6 m.
-  - **Structure.** Matching the jet's increment, the collar is **~1-1.5 t of extra structure on a
-    100 t ship**, at 100-120 kg/m^2 on the inner rings, out to ~3.5 m. It is dry mass, and it does
-    not scale with the disk. The conservative bound, which also grades the plate for the smooth
-    fireball's own centre-heavy load, is +3.3-3.8 t out to 6 m. **Grade the plate**; the parent's
-    uniform 30 kg/m^2 does not.
-  - **Erosion.** The collar is eaten by the jet's radiation: 0.2-0.5 t over the boost at the floor
-    and 6-11 t at a hot-jet ceiling, mostly on the inner ring. At k = 30 the ceiling is metres of
-    graphite there, so that ring must be a fed, renewable sleeve. At k = 100 the jet arrives
-    slower and denser, radiates little, and ~0.5 m of graphite covers even the ceiling.
-  - **The eroded collar is reaction mass.** Its vapour leaves at 45-72 km/s, faster than the
-    charge's own exhaust, so it lowers the mass ratio slightly. At the ceiling, the extra erosion
-    is counted as dead weight. The mass ratio then rises to at most 2.93 (k = 100, parent bowl).
+  - **Structure (corrected 2026-10-15).** Matching the jet's increment, the collar is
+    **~0.5-1 t of extra structure on a 100 t ship** (0.2-0.7 t on the production grid, still
+    rising on refinement), out to 2-3.5 m. It is dry mass, and it does not scale with the disk. The
+    conservative bound, which also grades the plate for the smooth fireball's own centre-heavy load,
+    is +3.6-4.1 t out to 6 m. **Grade the plate**; the parent's uniform 30 kg/m^2 does not.
+  - **Erosion.** The collar is eaten by the jet's radiation: 0.1-0.7 t over the boost at the floor
+    (3-12 cm of graphite on the worst ring), and 5-9 t at a hot-jet ceiling (1.2-2.3 m there,
+    which needs a fed sleeve).
+  - **The eroded collar is reaction mass but adds little:** 0.02-1.3% of a pulse's impulse. Charged
+    as propellant, it moves the mass ratio by -0.03 to +0.12.
 
 ## Not modelled; open for the parent to flag
 

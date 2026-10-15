@@ -262,10 +262,9 @@ def test_charge_fireball_recombines_but_keeps_its_bonds() -> None:
 
 
 def test_bore_collar_ledger() -> None:
-    """The committed collar ledger: the jet's own structural increment is a fraction of a percent
-    to ~1% of a 100 t ship, the eroded collar leaves faster than the charge's exhaust when only
-    the arriving column heats it, and even the hot-jet erosion ceiling keeps the mass ratio
-    under 3."""
+    """The committed collar ledger (corrected 2026-10-15): the jet's own structural increment is
+    under 1% of a 100 t ship, the eroded collar barely moves the mass ratio at the floor, and
+    even the hot-jet erosion ceiling keeps it under 3."""
     import csv
 
     from puffsat.xray_collision import collar
@@ -276,7 +275,8 @@ def test_bore_collar_ledger() -> None:
     for r in rows:
         assert 0.0 < float(r["jet_extra"]) < float(r["collar_extra"])
         assert float(r["collar_extra"]) < 0.05 * collar.FINAL_MASS
-        assert float(r["mass_ratio_with_collar_best"]) <= float(r["mass_ratio"])
+        # At the floor the eroded collar is nearly free: it moves the mass ratio by hundredths.
+        assert float(r["mass_ratio_with_collar_best"]) <= float(r["mass_ratio"]) + 0.02
         assert float(r["mass_ratio_with_collar_worst"]) < 3.0
         assert float(r["eroded_per_final_best"]) < float(r["eroded_per_final_worst"])
         # The rings tile the plate, so the innermost one carries several times the mean.
@@ -308,14 +308,21 @@ def test_overtake_pusher_ledger() -> None:
 
 
 def test_mission_basis_mass_ratio_two() -> None:
-    """The recorded mission basis (ADR-0060 amendment): mass ratio 2 at 100 km/s is met at
-    k ~ 24 / 40 / 52 on the bowl / skirted bowl / deep paraboloid, inside the simulated range, and
-    a deeper periapsis lowers the boost while multiplying the sunlight as 1/r^2."""
-    from puffsat.xray_collision import mission
+    """The recorded mission basis (ADR-0060 amendments), priced on the real collision: mass ratio 2
+    at 100 km/s is met at k ~ 19 / 26 / 28 on the bowl / skirted bowl / deep paraboloid; above
+    k ~ 30 the projectile bill barely falls while the mass ratio climbs; and a deeper periapsis
+    lowers the boost while multiplying the sunlight as 1/r^2."""
+    from puffsat.xray_collision import charge, mission
 
     ks = [mission.k_for_mass_ratio(p, 2.0).k for p in mission.PLATES]
-    assert ks == pytest.approx([24.3, 40.4, 51.7], abs=1.0)
-    assert all(mission.k_for_mass_ratio(p, 2.0).in_simulated_range for p in mission.PLATES)
+    assert ks == pytest.approx([18.5, 26.4, 27.9], abs=1.0)
+    assert charge.mixing_factor(mission.PLATES[2], 30.0) < 0.9
+    assert charge.mixing_factor(mission.PLATES[2], 100.0) < charge.mixing_factor(
+        mission.PLATES[2], 30.0
+    )
+    paraboloid = [r for r in mission.real_collision_ledger() if r["plate"] == mission.PLATES[2]]
+    bill = {float(str(r["k"])): float(str(r["projectile_per_final_real"])) for r in paraboloid}
+    assert bill[60.0] > 0.85 * bill[30.0]  # nearly flat above k ~ 30
     parker, deep = mission.periapsis(9.86), mission.periapsis(4.0)
     assert parker.dv_100 == pytest.approx(20.76e3, rel=0.01)
     assert deep.dv_100 < 0.7 * parker.dv_100
@@ -336,19 +343,19 @@ def test_impactor_sheet_budget_closed_forms() -> None:
 
 
 def test_breeding_cycle() -> None:
-    """ADR-0062: each kg of 100 km/s Earth impactor sends ~24 kg off at 11 km/s, a Sun ship at
+    """ADR-0062: each kg of 100 km/s Earth impactor sends ~21-24 kg off at 11 km/s, a Sun ship at
     mass ratio 2 returns half its departing mass as the next wave's impactor, so the impactor grows
-    ~12x a generation (~10x if the Sun ship's plate is dead mass), and the expensive Sun-wave
-    impactor costs about a dollar per kg of payload departure."""
+    ~9-12x a generation, and the expensive Sun-wave impactor costs a dollar or two per kg of
+    payload departure."""
     from puffsat.xray_collision import mission
 
     ideal = mission.breeding_cycle(frozen=True, dead_fraction=0.0)
     assert ideal.departing_per_impactor == pytest.approx(2.0 * ideal.k_earth)
     assert ideal.growth == pytest.approx(ideal.k_earth)  # k_E / ((MR_E - 1) MR_S) at 1.5 and 2
-    assert 11.0 < ideal.growth < 13.0
+    assert 9.5 < ideal.growth < 13.0  # real collisions at both stages (corrected 2026-10-15)
     plate = mission.plate_dead_fraction()
     assert plate == pytest.approx(0.16, abs=0.01)
     dead = mission.breeding_cycle(frozen=True, dead_fraction=plate)
     assert dead.growth == pytest.approx(ideal.growth * (1.0 - plate))
-    assert dead.sun_impactor_cost_per_payload < 2.0
+    assert dead.sun_impactor_cost_per_payload < 3.0
     assert 1.5 < dead.orbit_mass_per_payload < 1.8

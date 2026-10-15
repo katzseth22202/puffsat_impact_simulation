@@ -115,7 +115,11 @@ def _ledger(plate: str) -> tuple[np.ndarray, np.ndarray]:
                 and r["grid"] == "x1"
                 and abs(float(r["projectile_mass"]) - 1.0) < 1e-9
             ):
-                seen.setdefault(float(r["k"]), float(r["isp_bonds_frozen"]) * charge.G0)
+                k = float(r["k"])
+                # The real collision, not the point fireball (charge.mixing_factor).
+                seen.setdefault(
+                    k, float(r["isp_bonds_frozen"]) * charge.G0 * charge.mixing_factor(plate, k)
+                )
     ks = np.array(sorted(seen))
     return ks, np.array([seen[k] for k in ks])
 
@@ -164,15 +168,33 @@ def earth_k(frozen: bool) -> float:
     (point fireball, production grid): carbon left atomic if `frozen`, else bonds returned."""
     rows = []
     with (charge.OUT_DIR / "overtake_ledger.csv").open() as fh:
-        for r in csv.DictReader(fh):
-            if r["case"] == EARTH_PLATE and r["kind"] == "point" and r["grid"] == "x1":
-                rows.append((float(r["k"]), float(r["v_e_carbon_frozen" if frozen else "v_e"])))
+        ledger = list(csv.DictReader(fh))
+    for r in ledger:
+        if r["case"] == EARTH_PLATE and r["kind"] == "point" and r["grid"] == "x1":
+            k = float(r["k"])
+            v = float(r["v_e_carbon_frozen" if frozen else "v_e"])
+            rows.append((k, v * overtake_mixing(ledger, k)))
     slope, icept = np.polyfit(np.log([k for k, _ in rows]), np.log([v for _, v in rows]), 1)
     need = DV_EARTH / math.log(MR_EARTH)
     return float(math.exp((math.log(need) - icept) / slope))
 
 
 DV_EARTH = 11.0e3  # [m/s], Result 11's departure
+
+
+def overtake_mixing(ledger: list[dict[str, str]], k: float) -> float:
+    """Result 11's real compact collision over its point fireball on the parent bowl (the only
+    plate with both, k = 10 and 20), interpolated in ln k and held outside: the overtake's
+    counterpart of `charge.mixing_factor`."""
+    plate = "parent bowl at focus"
+    x1 = [r for r in ledger if r["case"] == plate and r["grid"] == "x1"]
+    pts = []
+    for r in x1:
+        if r["kind"] == "compact":
+            point = next(p for p in x1 if p["kind"] == "point" and p["k"] == r["k"])
+            pts.append((float(r["k"]), float(r["impulse_per_mv"]) / float(point["impulse_per_mv"])))
+    pts.sort()
+    return float(np.interp(math.log(k), [math.log(a) for a, _ in pts], [b for _, b in pts]))
 
 
 @dataclass(frozen=True)
@@ -217,6 +239,36 @@ def plate_dead_fraction() -> float:
     return charge.SURVIVAL_AREAL * charge.plate_area(0.50, 0.0) / FINAL_MASS
 
 
+OUT_REAL = charge.OUT_DIR / "mission_real_collision.csv"
+
+
+def real_collision_ledger() -> list[dict[str, object]]:
+    """Result 10's ledger on the real-collision basis: per plate and simulated k, the point
+    fireball's `v_e` (bonds charged), the mixing factor, and the mass ratio and projectile bill
+    for the 100 km/s crossing with the 10 h arc."""
+    dv = charge.boost_dv()
+    out: list[dict[str, object]] = []
+    for plate in PLATES:
+        ks, ve = _ledger(plate)
+        for k, v in zip(ks, ve, strict=True):
+            f = charge.mixing_factor(plate, float(k))
+            v_point = float(v) / f
+            mr = charge.finite_arc_mass_ratio(float(v), charge.ARC_HOURS * 3600.0)
+            out.append(
+                {
+                    "plate": plate,
+                    "k": float(k),
+                    "v_e_point": v_point,
+                    "mixing_factor": f,
+                    "v_e_real": float(v),
+                    "mass_ratio_point": math.exp(dv / v_point),
+                    "mass_ratio_real": mr,
+                    "projectile_per_final_real": (mr - 1.0) / float(k),
+                }
+            )
+    return out
+
+
 def _write(path: Path, rows: list[dict[str, object]]) -> None:
     with path.open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=list(rows[0]))
@@ -256,8 +308,18 @@ def main() -> None:
             f" {1e3 * b.sun_impactor_per_payload:.2f} g (${b.sun_impactor_cost_per_payload:.2f})"
             f" and {b.orbit_mass_per_payload:.2f} kg in orbit per kg of payload departing"
         )
+    real = real_collision_ledger()
+    for r in real:
+        print(
+            f"  real collision {str(r['plate'])[:30]:<30} k {float(str(r['k'])):5.0f}: mixing"
+            f" {float(str(r['mixing_factor'])):.2f}, mass ratio"
+            f" {float(str(r['mass_ratio_point'])):.2f}"
+            f" (point) -> {float(str(r['mass_ratio_real'])):.2f} (real, 10 h arc),"
+            f" {float(str(r['projectile_per_final_real'])):.3f} kg/kg final"
+        )
     OUT_PERIAPSIS.parent.mkdir(parents=True, exist_ok=True)
     _write(OUT_BREEDING, [asdict(b) for b in breed])
+    _write(OUT_REAL, real)
     _write(OUT_PERIAPSIS, [asdict(p) for p in per])
     _write(OUT_K, [asdict(c) for c in ks])
     print(

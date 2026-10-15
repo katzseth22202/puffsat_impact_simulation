@@ -905,6 +905,16 @@ pub struct DiskCharge {
     pub toward_plate: bool,
 }
 
+/// Internal energy on the grid, `sum p/(gamma - 1) dV` with the common `2π` dropped (the
+/// convention the disk's unit mass is set in).
+fn cold_heat(g: &Grid2D, gamma: f64) -> f64 {
+    let two_pi = 2.0 * std::f64::consts::PI;
+    (0..g.nz())
+        .flat_map(|iz| (0..g.nr()).map(move |ir| (iz, ir)))
+        .map(|(iz, ir)| g.prim(iz, ir).p / (gamma - 1.0) * g.cell_volume(ir) / two_pi)
+        .sum()
+}
+
 /// Run a [`DiskCharge`] collision onto the dished or cupped plate of `cfg`.
 ///
 /// # Panics
@@ -965,9 +975,23 @@ pub fn run_disk_charge_bounce(cfg: &SlugConfig, dc: DiskCharge) -> FireballBounc
     let rho_amb = dc.ambient * rho_charge;
     g.init(|iz, ir| match region(iz, ir) {
         1 => Prim::new(rho_disk, disk_speed, 0.0, p_cold),
-        2 => Prim::new(rho_charge, 0.0, 0.0, p_cold * rho_charge / rho_disk),
+        // The charge starts at the disk's cold *pressure*. At the disk's temperature it would hold
+        // k times the disk's specific heat: at Mach 20 and k = 30 that is ~28% of the collision's
+        // own heat, and ~90% at k = 100 (the defect corrected 2026-10-15).
+        // A long foam column holds ~50 disk volumes, so its cold pressure is scaled down to keep
+        // its stored heat under a quarter of the disk's own (itself ~1% of the disk's energy).
+        2 => Prim::new(
+            rho_charge,
+            0.0,
+            0.0,
+            p_cold * (0.25 * v_disk / v_charge).min(1.0),
+        ),
         _ => Prim::new(rho_amb, 0.0, 0.0, p_cold * 1.0e-6),
     });
+    assert!(
+        cold_heat(&g, cfg.gamma) < 0.02 * 0.5,
+        "the disk and charge must start cold against the disk's kinetic energy of 1/2"
+    );
     let merged = 1.0 + dc.k;
     run_fireball_grid(
         g,
