@@ -296,6 +296,49 @@ is taken to be collisional (ion-ion mean free path ~0.2 m at 1e-3 kg/m^3 against
 marginal by 1e-5); and LTE is assumed, though electron excitation at 1e-3 kg/m^3 would radiate
 the heat in ~0.1 us (a rough coronal estimate, loss rate ~3e-31 W m^3) against a ~1 ms expansion, so emission is not the limit and escape is.
 
+## Result 7: 400 km/s, a carbon or a steel lattice -- `near_sun_400.csv`
+
+The same dense 1 kg graphite projectile and `piston` model as Result 5, at a 400 km/s closing
+speed: a 200 km/s periapsis, met head-on by a ship moving at about the same speed. The target is
+a carbon lattice or a steel one. Steel is modelled as pure iron (NIST ladder, Saha), with a new
+TOPS pull to 3 keV (`data/tables/tops/tops_iron_hot_gray.html`). The older iron pull stops at
+60 eV, and these fireballs start at 130-340 eV. The question was whether the heavier atom, with
+more energy per atom, gets hotter and radiates more.
+
+Per kilogram of projectile, ship frame, ideal Saha. "Light/KE" is the radiated share of the
+projectile's 80 GJ of kinetic energy. The iron range spans opacity 0.1x to 10x.
+
+| k | lattice rho0 | C kT0 | Fe kT0 | **C light/KE** | **Fe light/KE** (0.1x-10x) | C / Fe heat above 1 keV |
+|---|---|---|---|---|---|---|
+| 1 | 1 | 376 eV | 233 eV | **0.42** | 0.39 (0.44-0.30) | 21% / 13% |
+| 2 | 1 | 218 | 189 | **0.49** | 0.46 (0.54-0.32) | 5% / 6% |
+| 3 | 1 | 140 | 166 | 0.45 | 0.46 (0.57-0.31) | 0.6% / 3% |
+| 2 | 3 | 218 | 207 | 0.35 | 0.32 | 5% / 5% |
+| 2 | 10 | 219 | 229 | 0.18 | 0.17 | 3% / 1% |
+| 3 | 10 | 145 | 197 | 0.10 | 0.15 | 0.1% / 0.4% |
+
+Continuum lowering moves iron by under 0.005. A 1 kg/m^3 target of 2 kg (k = 2) is a column 290 m
+long behind the 4.7 cm graphite ball, or 16 m behind the handoff's 40 cm disk.
+
+- **About half the projectile's kinetic energy can still leave as light, but only from a lattice
+  ten times lighter.** The best case is carbon at k = 2 and 1 kg/m^3: 0.49, against 0.47 for the
+  618 km/s recommendation at 10 kg/m^3. At 10 kg/m^3 and 400 km/s the share falls to 0.18.
+- **The light is softer.** At k = 2 it is emitted near 110 eV, against 320-380 eV at 618 km/s.
+  Above 1 keV is 3% of the kinetic energy, against 28%.
+- **Steel does not run hotter.** An iron atom gets 4.6 times carbon's energy, but at about
+  Ne-like stripping it shares it with ~20 free electrons and pays several keV to free them. At
+  k = 1 iron starts at 233 eV against carbon's 376 eV. Iron only matches or beats carbon at k >= 3
+  or in denser lattices, where carbon has fallen below its K shell and iron still emits from its
+  L shell.
+- **Iron's difference is opacity.** It starts 30-1000 optical depths thick where carbon starts
+  near one. Its answer therefore depends far more on the opacity (0.54-0.32 at k = 2).
+- **Carbon is the choice.** It is level with or better than iron at k <= 2, its result is less
+  sensitive to opacity, and it is the material already shown to survive the near-Sun exposure.
+
+The limits of Result 5 carry over. At 1 kg/m^3 the sweep is longer still: ~80 us behind the
+40 cm disk and ~1.5 ms behind the ball. So the time-graded heating described under Limits
+matters more here, not less.
+
 ## Limits
 
 **The piston's heat goes in over the sweep, not at once.** This is the largest unmodelled effect

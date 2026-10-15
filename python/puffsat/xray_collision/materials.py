@@ -7,11 +7,13 @@ ladder matches `puffsat.water_plate.spray_eos.IP_AR_EV` (retrieved 2026-10-05).
 
 Opacities are TOPS (LANL OPLIB) gray Rosseland/Planck means for the pure element, pulled over
 rho 1e-9..20-30 g/cc and T 0.5-60 eV for argon and iron, 0.5 eV-3 keV for carbon (the parent's
-618 km/s fireball) (`make xray-collision-tops`).
+618 km/s fireball) (`make xray-collision-tops`). `IRON_HOT` is the same iron with a second pull
+running to 3 keV, for steel targets at 400 km/s whose fireballs start at 130-340 eV.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -100,5 +102,7 @@ CARBON = Material(
     g_ground=(1, 2, 1, 2, 1, 2, 1),
     tops_pull=Path("data/tables/tops/tops_carbon_fireball_gray.html"),
 )
+
+IRON_HOT = dataclasses.replace(IRON, tops_pull=Path("data/tables/tops/tops_iron_hot_gray.html"))
 
 MATERIALS = {m.name: m for m in (ARGON, IRON, CARBON)}

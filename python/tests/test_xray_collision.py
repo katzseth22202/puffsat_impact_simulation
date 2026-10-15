@@ -15,7 +15,7 @@ from puffsat.xray_collision.fireball import (
     planck_above,
     shocked_state,
 )
-from puffsat.xray_collision.materials import ARGON, CARBON, IRON
+from puffsat.xray_collision.materials import ARGON, CARBON, IRON, IRON_HOT
 
 
 @pytest.mark.parametrize("k", [1.0, 3.0, 10.0])
@@ -107,6 +107,26 @@ def test_piston_puts_all_heat_in_the_target() -> None:
     assert plow.heat == pytest.approx(foam.heat)
     assert plow.kt_start_ev > 1.8 * foam.kt_start_ev
     assert plow.closure == pytest.approx(1.0, abs=1e-4)
+
+
+def test_steel_target_runs_cooler_than_carbon_at_400_kms() -> None:
+    """More energy per iron atom, but split over ~23 free electrons and paid into ionization:
+    at k = 1 the iron fireball starts cooler than carbon's, and radiates about as much."""
+    fe = piston(IRON_HOT, 1.0, 1.0, 1.0, 400.0e3)
+    c = piston(CARBON, 1.0, 1.0, 1.0, 400.0e3)
+    assert fe.heat == pytest.approx(c.heat)
+    assert fe.kt_start_ev < 0.7 * c.kt_start_ev
+    assert fe.zbar_shock > 20.0
+    assert fe.light_of_ship_ke == pytest.approx(c.light_of_ship_ke, abs=0.05)
+    assert fe.closure == pytest.approx(1.0, abs=1e-4)
+
+
+def test_hot_iron_pull_reaches_kev() -> None:
+    """The 3 keV pull is not held at the 60 eV edge: hot dilute iron is far more transparent."""
+    hot = eos.build_table(IRON_HOT)
+    kr_hot = hot.state(1.0, 300.0 * eos.EV / eos.K_B)[2]
+    kr_held = eos.build_table(IRON).state(1.0, 300.0 * eos.EV / eos.K_B)[2]
+    assert kr_hot < 0.5 * kr_held
 
 
 def test_multigroup_pull_sees_argons_windows() -> None:

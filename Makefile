@@ -1082,6 +1082,9 @@ xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. c" \
 	    --mixname carbonfireball --t-up-kev 3 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
 	    --out data/tables/tops/tops_carbon_fireball_gray.html
+	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. fe" \
+	    --mixname ironhot --t-up-kev 3 --rho-low-gcc 1.0e-9 --rho-up-gcc 30 --n-rho 60 \
+	    --out data/tables/tops/tops_iron_hot_gray.html
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argongroups --t-up-kev 0.01 --rho-low-gcc 1.0e-9 --rho-up-gcc 1.0e-4 --n-rho 11 \
 	    --n-groups 121 --eg-low-kev 0.001 --eg-high-kev 0.3 \
