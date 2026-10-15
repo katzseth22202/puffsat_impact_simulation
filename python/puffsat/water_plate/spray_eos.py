@@ -16,6 +16,7 @@ as the Rust loader requires.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 import numpy as np
 
@@ -52,12 +53,40 @@ G_AR_LADDER = (
     1.0, 6.0, 9.0, 4.0, 9.0, 6.0, 1.0, 2.0, 1.0, 6.0, 9.0, 4.0, 9.0, 6.0, 1.0, 2.0, 1.0, 2.0, 1.0
 )  # fmt: skip
 
+M_C = 12.011 * ew.AMU
+# Carbon ionization energies C I->II .. C VI->VII [eV], NIST ASD ionization-energy query, retrieved
+# 2026-10-08 (the same ladder as `puffsat.xray_collision.materials.CARBON`). Added for the X-ray
+# collision study's polyethylene propellant (Result 9); the spray mixture never uses it.
+IP_C_EV = (11.2602880, 24.383143, 47.88778, 64.49352, 392.09056, 489.99320779)
+# Ground-term degeneracies (2S+1)(2L+1) of C I .. C VII: 3P, 2P, 1S, 2S, 1S, 2S, bare.
+G_C_LADDER = (9.0, 6.0, 1.0, 2.0, 1.0, 2.0, 1.0)
+
 # Element ladders: (atomic mass, ionization energies [J], degeneracies of stages 0..Z).
 _LADDERS = {
     "H": (ew.M_H, (ew.IP_H,), (ew.G_H, ew.G_HP)),
     "O": (ew.M_O, ew.IP_O_LADDER, ew.G_O_LADDER),
     "Ar": (M_AR, tuple(ip * EV for ip in IP_AR_EV), G_AR_LADDER),
+    "C": (M_C, tuple(ip * EV for ip in IP_C_EV), G_C_LADDER),
 }
+
+
+class Mixture(Protocol):
+    """Anything that gives element numbers per kilogram, keyed by `_LADDERS` names."""
+
+    @property
+    def per_kg(self) -> dict[str, float]: ...
+
+
+@dataclass(frozen=True)
+class AtomMixture:
+    """A mixture given by atom number fractions, e.g. polyethylene `{"C": 1, "H": 2}`."""
+
+    numbers: tuple[tuple[str, float], ...]
+
+    @property
+    def per_kg(self) -> dict[str, float]:
+        mass = sum(n * _LADDERS[name][0] for name, n in self.numbers)
+        return {name: n / mass for name, n in self.numbers}
 
 
 @dataclass(frozen=True)
@@ -102,7 +131,7 @@ class SprayState:
         return float(np.dot(np.arange(len(f)), f))
 
 
-def state(mix: SprayMixture, rho: float, temp: float) -> SprayState:
+def state(mix: Mixture, rho: float, temp: float) -> SprayState:
     """Solve charge neutrality `n_e = sum n_el Zbar_el(n_e)` by bisection in `ln n_e`.
 
     The right side falls as `n_e` rises, so the root is unique and bisection cannot miss it.
@@ -131,7 +160,7 @@ def state(mix: SprayMixture, rho: float, temp: float) -> SprayState:
     return SprayState(n_e=float(np.exp(ln_ne)), fractions=fractions, n_element=n_el)
 
 
-def pressure_energy(mix: SprayMixture, rho: float, temp: float) -> tuple[float, float]:
+def pressure_energy(mix: Mixture, rho: float, temp: float) -> tuple[float, float]:
     """`(p [Pa], e [J/kg])`: ideal translational pressure and energy plus ionization energy."""
     s = state(mix, rho, temp)
     n_heavy = sum(s.n_element.values())
@@ -144,12 +173,12 @@ def pressure_energy(mix: SprayMixture, rho: float, temp: float) -> tuple[float, 
     return float(p), float(e)
 
 
-def sound_speed(mix: SprayMixture, rho: float, temp: float) -> float:
+def sound_speed(mix: Mixture, rho: float, temp: float) -> float:
     """Equilibrium adiabatic sound speed [m/s], by the water module's finite-difference rule."""
     return ew.sound_speed_fd(lambda r, t: pressure_energy(mix, r, t), rho, temp)
 
 
-def eos_grid(mix: SprayMixture, rho_grid: Vec, t_grid: Vec) -> tuple[Vec, Vec, Vec]:
+def eos_grid(mix: Mixture, rho_grid: Vec, t_grid: Vec) -> tuple[Vec, Vec, Vec]:
     """`(p, e, c_s)` on the `(rho, T)` grid, shaped `(n_rho, n_T)`, row-major over `(rho, T)`."""
     shape = (len(rho_grid), len(t_grid))
     p, e, cs = np.empty(shape), np.empty(shape), np.empty(shape)

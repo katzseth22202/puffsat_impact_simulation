@@ -397,6 +397,58 @@ def build_table_spray(
     }
 
 
+DEFAULT_TABLE_PATH_CH2 = Path("data/tables/ch2.json")
+DEFAULT_TOPS_CH2 = Path("data/tables/tops/tops_ch2_gray.html")
+T_RANGE_CH2 = (300.0, 3.0e6)  # K; 260 eV covers a 150 km/s stagnation with room
+N_T_CH2 = 97  # the Jupiter grid's ~24 nodes per decade
+
+
+def build_table_ch2(tops_path: Path = DEFAULT_TOPS_CH2) -> dict[str, object]:
+    """Polyethylene (CH2) for the X-ray collision study's propellant-plate rebound (Result 9):
+    atomic H/C Saha EOS on the Jupiter density grid, TOPS gray means for C:H = 1:2."""
+    from puffsat.water_plate import spray_eos
+
+    rho_grid = jupiter_rho_grid()
+    t_grid = np.geomspace(T_RANGE_CH2[0], T_RANGE_CH2[1], N_T_CH2)
+    mix = spray_eos.AtomMixture((("C", 1.0), ("H", 2.0)))
+    p, e, cs = spray_eos.eos_grid(mix, rho_grid, t_grid)
+    kappa_r, kappa_p = tops.resample(tops.load_tops_gray(tops_path), rho_grid, t_grid)
+    prov: dict[str, object] = {
+        "schema": "ADR-0007",
+        "generated_by": "puffsat.tables.build_table_ch2",
+        "study": "X-ray collision study, Result 9: polyethylene propellant rebound",
+        "grid": {
+            "rho_range": [float(rho_grid[0]), float(rho_grid[-1])],
+            "T_range": list(T_RANGE_CH2),
+            "units": "rho kg/m^3, T K, p Pa, e J/kg, c_s m/s, kappa m^2/kg",
+        },
+        "eos": {
+            "model": "atomic Saha mixture: C, H, all ionization stages, shared n_e",
+            "energy_reference": "neutral ground-state atoms at T->0 = 0",
+            "omitted": "molecular bonds (~80 MJ/kg of CH2, under 2% of the impact energy)",
+            "atomic_data": "NIST ASD ionization energies, ground terms only",
+        },
+        "opacity": {
+            "status": "TOPS gray Rosseland/Planck means for C:H = 1:2",
+            "tops_pull": str(tops_path),
+            "below_floor": "held at the 5802 K floor value",
+        },
+    }
+    return {
+        "rho_grid": [float(x) for x in rho_grid],
+        "T_grid": [float(x) for x in t_grid],
+        "shape": [len(rho_grid), len(t_grid)],
+        "fields": {
+            "p": _flatten(p),
+            "e": _flatten(e),
+            "c_s": _flatten(cs),
+            "kappa_rosseland": _flatten(kappa_r),
+            "kappa_planck": _flatten(kappa_p),
+        },
+        "provenance": prov,
+    }
+
+
 DEFAULT_TABLE_DIR_FROZEN = Path("data/tables/frozen")
 DEFAULT_TABLE_DIR_FROZEN_JUPITER = Path("data/tables/frozen_jupiter")
 
@@ -646,7 +698,20 @@ def main() -> None:
         action="store_true",
         help="build the pure-argon table for the layered spray runs (ADR-0055 step 2a)",
     )
+    parser.add_argument(
+        "--ch2",
+        action="store_true",
+        help="build the polyethylene table for the X-ray collision propellant rebound",
+    )
     args = parser.parse_args()
+
+    if args.ch2:
+        out_ch2: Path = args.out or DEFAULT_TABLE_PATH_CH2
+        out_ch2.parent.mkdir(parents=True, exist_ok=True)
+        with out_ch2.open("w") as fh:
+            json.dump(build_table_ch2(tops_path=args.tops or DEFAULT_TOPS_CH2), fh)
+        print(f"python: wrote polyethylene table -> {out_ch2}")
+        return
 
     if args.spray:
         out_spray: Path = args.out or DEFAULT_TABLE_PATH_SPRAY

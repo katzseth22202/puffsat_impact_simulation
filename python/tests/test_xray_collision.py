@@ -200,3 +200,31 @@ def test_foam_on_anvil_is_the_flipped_snowplow() -> None:
 def test_case_delivery_limits() -> None:
     assert anvil.case_delivery(1.0, 1.0, 5.0, 0.0) == pytest.approx(1.0)
     assert anvil.case_delivery(0.0, 1.0, 3.0, 0.0) == pytest.approx(0.25)
+
+
+def test_entry_hole_plug_needs_a_foam_longer_than_the_case() -> None:
+    """A foam shorter than the case has passed the hole before any parcel stagnates, so all of
+    the light meets an open hole. Narrowing the foam lengthens it, plugs the hole, and helps."""
+    kernel = anvil.emission_kernel()
+    wide = anvil.hole_delivery(1.0, 0.95, kernel, case_length=1.5)
+    assert wide.foam_length < 1.5
+    assert wide.open_share == pytest.approx(1.0, abs=1e-3)
+    assert wide.delivery_plugged == pytest.approx(wide.delivery_static, abs=1e-3)
+    narrow = anvil.hole_delivery(0.5, 0.95, kernel, case_length=0.5)
+    assert narrow.open_share < 0.25
+    assert narrow.delivery_plugged > wide.delivery_plugged + 0.2
+
+
+def test_emission_kernel_is_fast_against_the_pulse() -> None:
+    """A stagnated parcel sends half its light out within ns, so emission tracks arrival."""
+    t, cum = anvil.emission_kernel()
+    assert cum[-1] == pytest.approx(1.0)
+    assert float(np.interp(0.5, cum, t)) < 0.1e-6
+
+
+def test_narrower_foam_carries_heavier_sheets() -> None:
+    """Same volume, side area 4 V / d: halving the diameter roughly doubles the sunward C-C."""
+    wide, narrow = anvil.sheet_mass(1.0), anvil.sheet_mass(0.5)
+    assert 1.4 < wide < 1.7
+    assert narrow > 1.6 * wide
+    assert anvil.sheet_mass(0.5) < anvil.PROJECTILE_MASS

@@ -204,9 +204,15 @@ class _Fireball:
 
 
 def _expand(
-    table: EosTable, mass: float, rho_start: float, heat: float, kappa_scale: float
+    table: EosTable,
+    mass: float,
+    rho_start: float,
+    heat: float,
+    kappa_scale: float,
+    trace: list[tuple[float, float]] | None = None,
 ) -> _Fireball:
-    """Integrate a one-zone fireball of `mass` holding `heat`, from rest at `rho_start` (RK4)."""
+    """Integrate a one-zone fireball of `mass` holding `heat`, from rest at `rho_start` (RK4).
+    `trace`, if given, collects `(t, radiated energy so far)` after every step."""
     r = (3.0 * mass / (4.0 * math.pi * rho_start)) ** (1.0 / 3.0)
     temp0 = table.temp(rho_start, heat / mass)
     p0, z0, kr0, _ = table.state(rho_start, temp0)
@@ -237,6 +243,8 @@ def _expand(
             for a, b1, b2, b3, b4 in zip(y, k1, k2, k3, k4, strict=True)
         )
         t += dt
+        if trace is not None:
+            trace.append((t, y[3]))
     return _Fireball(y, t, r, temp0, z0, tau0, race0, rad_to_matter0)
 
 
@@ -340,6 +348,7 @@ def piston(
     lowering: bool = False,
     radiation: bool = False,
     kappa_scale: float = 1.0,
+    trace: list[tuple[float, float]] | None = None,
 ) -> CollisionResult:
     """A dense projectile (condensed `material`) snowplows `mass_ratio` times its mass of a light
     target at `target_rho0`, a foam or a lattice at its mean density.
@@ -353,7 +362,7 @@ def piston(
     kin = Kinematics(projectile_mass, mass_ratio * projectile_mass, v_rel)
     m_t = kin.m_target
     shock = shocked_state(table, math.sqrt(2.0 * kin.heat / m_t), target_rho0)
-    fb = _expand(table, m_t, shock.rho, kin.heat, kappa_scale)
+    fb = _expand(table, m_t, shock.rho, kin.heat, kappa_scale, trace)
     r_proj = (3.0 * projectile_mass / (4.0 * math.pi * material.rho0)) ** (1.0 / 3.0)
     return _result(
         material,

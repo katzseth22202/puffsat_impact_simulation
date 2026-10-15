@@ -1071,7 +1071,8 @@ walled-nozzle-test:
 ## xray-collision-tops: re-pull the pure argon, iron and carbon TOPS gray means the fireball reads
 ## (network). Pulled one after the other: concurrent TOPS submissions share server session state
 ## and can both come back as the same mixture.
-.PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil xray-collision-test
+.PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
+	xray-collision-ch2-table xray-collision-rebound xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1085,6 +1086,9 @@ xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. fe" \
 	    --mixname ironhot --t-up-kev 3 --rho-low-gcc 1.0e-9 --rho-up-gcc 30 --n-rho 60 \
 	    --out data/tables/tops/tops_iron_hot_gray.html
+	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. c 2. h" \
+	    --mixname polyethylene --t-up-kev 0.3 --rho-low-gcc 1.0e-7 --rho-up-gcc 1.3 --n-rho 60 \
+	    --out data/tables/tops/tops_ch2_gray.html
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argongroups --t-up-kev 0.01 --rho-low-gcc 1.0e-9 --rho-up-gcc 1.0e-4 --n-rho 11 \
 	    --n-groups 121 --eg-low-kev 0.001 --eg-high-kev 0.3 \
@@ -1103,6 +1107,18 @@ xray-collision-argon-bags:
 ## filler/propellant thrust ledger -> data/results/xray_collision/anvil_{sweep,ledger}.csv
 xray-collision-anvil:
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.anvil
+
+## xray-collision-ch2-table: polyethylene (CH2) EOS/opacity table for the propellant rebound;
+## reads the TOPS pull data/tables/tops/tops_ch2_gray.html (fetch-tops --mixture "1. c 2. h")
+xray-collision-ch2-table: data/tables/ch2.json
+
+data/tables/ch2.json: python/puffsat/water_plate/spray_eos.py python/puffsat/tables.py data/tables/tops/tops_ch2_gray.html
+	PYTHONPATH=python $(PY) -m puffsat.tables --ch2
+
+## xray-collision-rebound: the polyethylene propellant plate's rebound off the pusher plate at
+## 60-150 km/s (the f(v) coupled bounce) -> data/results/xray_collision/propellant_rebound.jsonl
+xray-collision-rebound: data/tables/ch2.json
+	cargo run --release -p sweep -- --propellant-rebound
 
 ## xray-collision-test: that study's tests alone
 xray-collision-test:

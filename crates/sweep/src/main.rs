@@ -6496,6 +6496,60 @@ fn cmd_heavyplate(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     })
 }
 
+// X-ray collision study, Result 9: the polyethylene propellant plate's rebound off the pusher plate
+// at ~100 km/s (docs/xray_collision_study.md). The f(v) coupled bounce (rigid wall, FLD radiation)
+// on the CH2 table; needs `make xray-collision-ch2-table` first.
+const TABLE_PATH_CH2: &str = "data/tables/ch2.json";
+const RESULT_PATH_PROPELLANT: &str = "data/results/xray_collision/propellant_rebound.jsonl";
+const PROP_V: [f64; 5] = [60_000.0, 80_000.0, 100_000.0, 120_000.0, 150_000.0];
+const PROP_RHO: [f64; 5] = [0.1, 0.3, 1.0, 3.0, 10.0];
+const PROP_LENGTH: [f64; 2] = [1.0, 3.0];
+const PROP_TAU_RHO: [f64; 3] = [0.3, 1.0, 3.0];
+const PROP_TAU_SCALES: [f64; 2] = [0.1, 10.0];
+
+/// `(v, rho, length, opacity_scale)`: the headline grid at real opacity, then an opacity bracket at
+/// 100 km/s and L = 1 m.
+fn propellant_cases() -> Vec<(f64, f64, f64, f64)> {
+    let mut cases = Vec::new();
+    for &v in &PROP_V {
+        for &rho in &PROP_RHO {
+            for &l in &PROP_LENGTH {
+                cases.push((v, rho, l, 1.0));
+            }
+        }
+    }
+    for &rho in &PROP_TAU_RHO {
+        for &s in &PROP_TAU_SCALES {
+            cases.push((100_000.0, rho, 1.0, s));
+        }
+    }
+    cases
+}
+
+fn cmd_propellant_rebound(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let table = Table::load(TABLE_PATH_CH2)?;
+    let cases = propellant_cases();
+    let rows = par_map_with_progress("propellant", &cases, |&(v, rho, l, s)| {
+        run_one_heavyplate(v, rho, l, s, &table)
+    });
+    if let Some(dir) = std::path::Path::new(RESULT_PATH_PROPELLANT).parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    emit_scenario(RESULT_PATH_PROPELLANT, "propellant", &rows, |r| {
+        println!(
+            "rust: v={:>6.0} rho={:.2} L={:.1} scale={:>4.1} -> e_eff={:.4} wall_rad={:.3e} escape={:.3e} conv={}",
+            r.v,
+            r.rho_impact,
+            r.length,
+            r.opacity_scale,
+            r.e_eff,
+            r.loss_radiative_wall,
+            r.loss_escape_space,
+            r.converged,
+        );
+    })
+}
+
 // Pulse-shape sensitivity sweep (design §13, ADR-0028): the fixed-grid 2D box + the fresh
 // Σ-contract 1D runs, into two JSONL files. Needs `make tables` first (the 1D arm). `--1d-only`
 // skips the (slow, unchanged) 2D box — a dev shortcut for 1D-schema re-runs.
@@ -6738,6 +6792,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--spray", cmd_spray),
     ("--jupiter", cmd_jupiter),
     ("--heavyplate", cmd_heavyplate),
+    ("--propellant-rebound", cmd_propellant_rebound),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),
     ("--geometry-wide", cmd_geometry_wide),

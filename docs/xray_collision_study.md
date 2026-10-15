@@ -447,6 +447,117 @@ inertial-tamping estimate is ~20 kg/m^2, or ~100 kg, against the 15 kg the budge
 case albedo and the entry hole; the rebound at ~100 km/s; sheet survival through a ~10 solar
 radii dive; and the time-graded stagnation, which the one-zone model replaces with an average.
 
+## Result 9: the propellant's rebound and the entry hole -- `propellant_rebound.csv`, `anvil_hole.csv`, `anvil_design.csv`
+
+Result 8 left two inputs as assumptions. One is how much of the forward momentum the pusher plate
+catches. The parent takes 0.8 with no bounce credit. The other is how much of the light the case
+delivers to the filler. The parent assumes 80%. This result computes both for the Result 8
+design: a low-Z filler and a polyethylene propellant plate of equal mass, the iron backing dropped.
+
+### Rebound: the f(v) bounce at 60-150 km/s (`make xray-collision-rebound`)
+
+This is the `f(v)` study's coupled bounce (`hydro1d` `CoupledBounce`: a 1-D Lagrangian slug on a
+rigid wall, with flux-limited radiation), run with a new polyethylene table. `data/tables/ch2.json` (`make
+xray-collision-ch2-table`) is an atomic C/H Saha EOS (`spray_eos.AtomMixture`, carbon ladder
+added) with TOPS gray means for C:H = 1:2 (`tops_ch2_gray.html`, 0.5-300 eV). A cold uniform slug of
+density `rho` and length `L` strikes the plate at `v`, and `e_eff = J_wall / p_in - 1`. At
+100 km/s the stagnated gas runs at about 38 eV.
+
+| `rho`, `L` (column) | 60 km/s | 80 | **100** | 120 | 150 |
+|---|---|---|---|---|---|
+| 0.1, 1 m (0.1 kg/m^2) | 0.66 | 0.55 | 0.44 | 0.36 | 0.29 |
+| 0.3, 1 m (0.3) | 0.71 | 0.64 | 0.51 | 0.42 | 0.34 |
+| 1, 1 m (1) | 0.73 | 0.72 | **0.63** | 0.53 | 0.42 |
+| 1, 3 m (3) | 0.73 | 0.73 | **0.68** | 0.59 | 0.49 |
+| 3, 1 m (3) | 0.74 | 0.74 | **0.72** | 0.66 | 0.61 |
+| 10, 1 m (10) | 0.75 | 0.75 | 0.75 | 0.75 | 0.74 |
+
+At 100 km/s, opacity scaled from 0.1x to 10x gives 0.54-0.73 at `rho = 1` and 0.65-0.74 at
+`rho = 3`. Two rows (`rho = 10`, `L = 3` m at 120 and 150 km/s) did not converge. They are flagged
+in the CSV and left out.
+
+- **The propellant does rebound.** At the ~95 km/s the optimizer chooses, `e_eff` is 0.63-0.72
+  for an arriving column of 1-3 kg/m^2. With the parent's 0.8 geometric capture, the plate catches
+  `0.8 (1 + e)` = **1.30-1.38** times the forward momentum, against the parent's 0.8. The ceiling
+  is about 0.75, which the densest columns reach at every speed.
+- **Thin and fast is lossy.** Below ~1 kg/m^3, the stagnated layer is thin enough for its light
+  to escape upstream before it re-expands. The rebound falls to 0.44-0.51 at 100 km/s and to
+  ~0.3 at 150 km/s. That is a reason to stay well under the impingement cap, not just at it. The
+  column is the propellant's mass over the plate's area. 30-40 kg per pulse needs a plate under
+  about 30 m^2 to stay at or above 1 kg/m^2.
+
+### The entry hole (`hole_delivery`)
+
+The projectile enters the case through a hole its own diameter wide, and the hole is lost area. Two
+facts set how much it costs:
+
+- **Emission tracks arrival.** A stagnated parcel sends out half its light within 3.5 ns and 90%
+  within 0.3 us (the one-zone history, `emission_kernel`), while the pulse lasts microseconds.
+- **The foam's own tail plugs the hole**, but only while it is still in the hole. The plug helps
+  only if the foam is **longer than the case**. A 1 m wide foam is 1.0 m long, so in a 1.5 m case
+  its tail has passed the hole before the head stagnates, and all of the light meets an open
+  hole.
+
+The model is a time-dependent cavity balance:
+
+    A_filler / (A_filler + (1 - alpha) A_wall + (1 - alpha_c) A_column + A_open)
+
+The foam in flight absorbs light and recycles it at `alpha_c = 0.7` (about its radiated share
+once stagnated), bracketed at 0.5-0.9. The wall albedo is 0.95. The table gives the share of the
+light delivered to the filler:
+
+| hole = foam diameter | foam length / pulse | case 1.6 x 0.5 m | case 1.6 x 1.5 m | case 2.5 x 0.5 m |
+|---|---|---|---|---|
+| 1.0 m | 1.0 m / 2.6 us | 0.53 | 0.42 | 0.76 |
+| 0.7 m | 2.1 m / 5.3 us | 0.70 | 0.55 | 0.83 |
+| **0.5 m** | 4.2 m / 10 us | **0.78** | 0.62 | 0.87 |
+| 0.35 m | 8.5 m / 21 us | 0.82 | 0.67 | 0.88 |
+
+**A smaller hole does help.** In a short case it takes delivery from 0.53 to 0.78, which is the
+parent's 80%. Most of the gain comes from the plug, which covers all but 16% of the light at
+0.5 m. Below ~0.35 m the returns are small. A wider, shorter case helps as much as a smaller hole.
+
+Three costs come with a narrow foam:
+- **Its sheets weigh more.** The same volume has `4V/d` of side area, so the sunward C-C is 2.6 kg
+  at 0.5 m against 1.5 kg at 1 m, and the light share falls from 0.52 to 0.46.
+- **The pulse is longer:** 9.4 us. The 50 kg anvil is then 0.5 m wide and four times as thick per
+  area, so it still outlasts the pulse (Rayleigh-Taylor 15.7 us).
+- **The stagnated plasma spreads further.** At ~250 km/s it moves ~2.5 m sideways during the
+  pulse, so it reaches the case walls early. That makes the case-tamping problem worse.
+
+### The design ledger (per kg of projectile, 400 km/s)
+
+The 50 kg anvil, walls and liner at 1.5 kg/kg (the parent's 6.5 kg/kg cap), a case 1.6 m across
+and 0.5 m long, the computed delivery, and a 150 km/s cap that does not bind:
+
+| | light | delivered | rebound | **Isp** | impulse | propellant speed | jet efficiency |
+|---|---|---|---|---|---|---|---|
+| 1 m hole, no bounce (parent's convention) | 0.52 | 0.54 | none | 1680 s | 215 kN s | 82 km/s | 2.2% |
+| 1 m hole, 1 kg/m^2 column | 0.52 | 0.54 | 0.63 | **2740 s** | 350 kN s | 82 km/s | 5.9% |
+| 1 m hole, 3 kg/m^2 column | 0.52 | 0.54 | 0.72 | 2890 s | 369 kN s | 82 km/s | 6.5% |
+| 0.5 m hole, no bounce | 0.46 | 0.78 | none | 1920 s | 244 kN s | 94 km/s | 2.9% |
+| **0.5 m hole, 1 kg/m^2 column** | 0.46 | 0.78 | 0.63 | **3130 s** | 398 kN s | 94 km/s | 7.6% |
+| 0.5 m hole, 3 kg/m^2 column | 0.46 | 0.78 | 0.72 | 3300 s | 420 kN s | 94 km/s | 8.5% |
+
+- **With the computed rebound, the design clears the parent's 2650 s bar.** It gives 2740-2890 s
+  with the 1 m hole and 3130-3300 s with a 0.5 m one. Without a rebound it fails at 1680-1920 s.
+  The rebound is worth a factor of 1.6 in impulse. It is the largest single lever in the ledger,
+  and the parent does not count it.
+- **The 0.5 m hole is worth about 400 s.** The higher delivery more than pays for the heavier
+  sheets.
+- **Energy efficiency rises to 6-8.5%**, from 2-3% without a bounce. It stays low for the reason
+  given in Result 8: the exhaust leaves at an effective 27-32 km/s, while the projectile arrived
+  at 400 km/s.
+
+Open, beyond Result 8's list:
+- The plate is rigid and does not ablate. At ~95 km/s the `v/4` rule gives it about 24 kJ per
+  N s to absorb. The f(v) study's ablating-wall arm (`--ablating`) is the tool for that.
+- The arriving propellant is a uniform cold slug. A real jet is stretched, with a velocity
+  gradient, and the drive shock has preheated it.
+- The column the plate sees depends on its area, which is the parent's to fix.
+- The cavity balance is steady at each instant, with no shadowing by the in-flight foam column.
+  Its column albedo is a bracketed estimate, not a calculation.
+
 ## Limits
 
 **The piston's heat goes in over the sweep, not at once.** This is the largest unmodelled effect
