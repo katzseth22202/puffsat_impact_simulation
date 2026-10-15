@@ -363,6 +363,17 @@ through the pusher plate rather than being lost. Its figure of merit is its wall
 re-emitted share of the light falling on it.
 _Avoid_: "blanket" (implies spaced insulating foils, which do not survive the drive)
 
+**Charge**:
+The cheap, expendable low-Z mass a pulse unit carries astern for a dense projectile to detonate:
+a near-solid polyethylene cylinder about the projectile's diameter, which the projectile
+snowplows to rest. The merged fireball expands onto the pusher plate with no radiation case. It
+works by column density, so it is compact, not a cloud of foam balls. In this study `k` is charge
+mass over projectile mass. It is the same quantity as the target's `k`, and neither is the tamper
+study's slug ratio nor the spray plate's injection ratio. It is the head-on, pass-through kin of the
+spray plate's **Plug**: the same column-density body, but its fireball drifts *away* from the plate.
+_Avoid_: "plug" for this one (the spray plate's tethered body, drifting toward its plate); "foam
+balls" for the intended state
+
 **Channel filler**:
 The low-density, low atomic number fill inside the radiation case, between the collision and the
 pusher plate, that absorbs the case's light. Its heated surface blows off, and the reaction

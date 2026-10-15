@@ -558,6 +558,93 @@ Open, beyond Result 8's list:
 - The cavity balance is steady at each instant, with no shadowing by the in-flight foam column.
   Its column albedo is a bracketed estimate, not a calculation.
 
+## Result 10: a cheap polyethylene charge and a point fireball onto the plate -- `charge_ledger.csv`
+
+`make xray-collision-charge-2d`, `make xray-collision-charge` (`charge.py`,
+`euler2d::bounce::run_fireball_bounce`). This design uses no radiation and no case. It suits an
+architecture where projectiles cost money and ship-carried mass is cheap. A 1 kg graphite disk at
+400 km/s threads the bore. It stops in a **charge** astern of the plate: near-solid polyethylene,
+k = 20-40 times its mass, with a graphite skin, kept in the ship's shadow until the pulse. The
+merged fireball expands onto the parent's 20 m plate. The mission falls from Jupiter to a 9.86
+solar radii periapsis (Parker Solar Probe's) and boosts there to cross Earth's orbit at 100 km/s.
+That takes **20.8 km/s**, so a mass ratio of 3 needs Isp 1930 s. The fall from Jupiter arrives
+3.5 km/s faster than a fall from 1 AU.
+
+**The fireball is dense, so it does not radiate.** On the polyethylene table, a k = 30 charge
+starts at 32 eV and about 2e6 optical depths thick, and radiates under 0.01% of its heat. Its heat
+all becomes expansion: `u_rms` = 85, 71 and 62 km/s at k = 20, 30 and 40. It drifts away from the
+plate at `w = v/(1+k)` = 19, 13 and 10 km/s. That holds only if the charge is **compact and in
+the disk's path**. The disk couples only to the column it crosses: at k = 20 it needs ~160 kg/m^2
+of polyethylene, 17 cm of solid against 5 m of 30 kg/m^3 foam. A long foam column would be a line
+source exploding sideways. A loose cloud of foam balls would mostly be missed. The snowplow also
+puts half its heat into the first projectile-mass of polyethylene it sweeps. Inside a solid charge,
+shocks spread that heat in ~4 us, long before the gas reaches the plate.
+
+**The plate, in 2-D.** The merged mass starts as a uniform hot sphere, 0.5 m in radius, drifting
+away. The run is lossless effective-gamma Euler (gamma 1.4; the CH2 table gives 1.3-1.5 over these
+states) with an immersed paraboloid and cups. As in the f(v) study, the gas-dynamic rebound
+`1 + e_gamma` = 1.749 (the confined plane wave) is swapped for polyethylene's radiative
+`1 + e_eff` from Result 9, at the plate speed and arriving column. The impulse inside the 0.25 m
+bore is subtracted. It is 0.1-0.5% everywhere. "Capture" is the plate impulse per `M u_rms`. The
+energy ceiling is `1 - w/u_rms` = 0.82 at k = 30.
+
+| plate (20 m across), k = 30 | capture | Isp | mass ratio | projectile kg per kg final | peak pressure, 1 kg projectile | wetted area |
+|---|---|---|---|---|---|---|
+| paraboloid δ/D 0.25, charge at focus (5.0 m) | 0.37 | 2530 s | 2.31 | 0.044 | 95 MPa | 383 m^2 |
+| **parent's bowl δ/D 0.30, at focus (4.2 m)** | **0.44** | **2990 s** | **2.03** | **0.034** | 163 MPa | 409 m^2 |
+| paraboloid δ/D 0.50, at focus (2.5 m) | 0.58 | 3980 s | 1.70 | 0.023 | 783 MPa | 533 m^2 |
+| paraboloid δ/D 0.75, at focus (1.7 m) | 0.64 | 4380 s | 1.62 | 0.021 | 2580 MPa | 713 m^2 |
+| bowl 0.30 + 2 m skirt (the parent's cup) | 0.50 | 3400 s | 1.86 | 0.029 | 163 MPa | 535 m^2 |
+| bowl 0.30 + 4 m skirt | 0.52 | 3540 s | 1.82 | 0.027 | 162 MPa | 660 m^2 |
+| bowl 0.30 + 8 m skirt | 0.53 | 3580 s | 1.81 | 0.027 | 162 MPa | 912 m^2 |
+| flat + 4 m skirt, charge 2.7 m off | 0.43 | 2940 s | 2.06 | 0.035 | 465 MPa | 565 m^2 |
+| bowl 0.30, charge at 1.5 x focus | 0.37 | 2540 s | 2.30 | 0.043 | 55 MPa | 409 m^2 |
+| **paraboloid δ/D 0.50, charge at 1.5 x focus (3.75 m)** | **0.57** | **3860 s** | **1.73** | **0.024** | **280 MPa** | 533 m^2 |
+
+Rebound `e_eff` = 0.60 at a 1 kg projectile. Its fireball lays only ~0.05 kg/m^2 on the bowl,
+below the rebound table's 0.1 kg/m^2 edge where it is held, so `e` may be a few hundredths lower.
+A 10 kg projectile (0.5 kg/m^2, `e` 0.69) gains 5-6% in Isp.
+
+| leading designs | k = 20 | k = 30 | k = 40 |
+|---|---|---|---|
+| parent bowl: Isp / mass ratio / projectile per final / peak | 3200 s / 1.94 / 0.047 / 131 MPa | 2990 s / 2.03 / 0.034 / 163 MPa | 2800 s / 2.13 / 0.028 / 184 MPa |
+| bowl + 4 m skirt | 3830 s / 1.74 / 0.037 / 132 MPa | 3540 s / 1.82 / 0.027 / 162 MPa | 3290 s / 1.90 / 0.023 / 184 MPa |
+| paraboloid 0.50 at 1.5 F | 4210 s / 1.65 / 0.033 / 214 MPa | 3860 s / 1.73 / 0.024 / 280 MPa | 3580 s / 1.81 / 0.020 / 320 MPa |
+
+On a grid twice as fine (k = 30), capture moves by under 1.2% (0.438 to 0.442, 0.519 to 0.525,
+0.566 to 0.570). Peak pressure is not converged. It falls 18-30% (163 to 133 MPa, 280 to 195 MPa),
+so the production values above are upper ones.
+
+- **The design works, with a wide margin.** Every plate reaches the mass ratio of 3. The
+  parent's own bowl, unchanged, gives 2.0. Its 2990 s is 1.4 times the ballistic estimate of
+  2080 s for an infinite flat plate at the same k, because the gas is pressure-borne and the bowl
+  turns it toward the mouth. The plug study found the same.
+- **A deep paraboloid beats a bowl with a skirt, and its advantage is enclosure, not focus.**
+  Moving the charge from the δ/D 0.5 focus to 1.5 F costs 3% of capture but cuts the peak
+  pressure 2.8 times. A skirt on the 0.30 bowl saturates near 4 m (0.52). The 0.5 paraboloid
+  gets 0.57 with 19% less wetted area than bowl plus 4 m skirt. Per square metre, and so per
+  kilogram of plate at the parent's survival floor of tens of kg/m^2, it is the best of the set.
+  A flat plate with a skirt does no better than the parent's bowl and peaks three times higher.
+- **The mass-ratio limit does not bind, so the projectile bill decides k.** Raising k from 20 to
+  40 costs 10-15% of Isp and cuts projectiles per kilogram of final mass by 40%. The optimum lies
+  above k = 40.
+- **Peak pressure caps the projectile at about 1-2.5 kg per pulse on a 20 m plate.** Pressure
+  scales with the fireball's mass at fixed geometry. Against the f(v) study's 400 MPa facesheet
+  limit, the parent bowl takes about 2.5 kg at k = 30 and the 0.5 paraboloid at 1.5 F about 1.4 kg
+  (2 kg on the fine grid). Per pulse that is about 0.9 MN s from a 1 kg projectile, so a 100 t
+  final mass at a mass ratio of 1.8 needs ~2700 pulses, about one every 13 s across a ~10 h
+  periapsis arc.
+
+Open:
+- k above 40. The rebound table starts at 60 km/s, and `u_rms` falls below that past k ~ 40, so
+  rebound runs at 30-60 km/s are needed first.
+- The finite-arc boost: ~2700 pulses over hours lose some Oberth gain.
+- The charge as a uniform equilibrated sphere. The snowplow's hot core and its early X-rays are
+  not followed.
+- The rigid, non-ablating plate. At ~70 km/s the `v/4` rule asks it to absorb ~18 kJ per N s.
+- Peak-pressure convergence.
+- The charge's thermal survival in the ship's shadow.
+
 ## Limits
 
 **The piston's heat goes in over the sweep, not at once.** This is the largest unmodelled effect

@@ -32,9 +32,9 @@ use std::io::Write as _;
 use std::path::Path;
 
 use euler2d::bounce::{
-    PlateShape, SlugConfig, SprayCloud, TrailingPearl, eta_capture, init_spray_grid,
-    run_slug_bounce, run_spray_bounce, run_spray_bounce_with_ambient, run_spray_bounce_with_pearl,
-    run_spray_bounce_with_skirt_history, taper_sigma_stats,
+    PlateShape, PointFireball, SlugConfig, SprayCloud, TrailingPearl, eta_capture, init_spray_grid,
+    run_fireball_bounce, run_slug_bounce, run_spray_bounce, run_spray_bounce_with_ambient,
+    run_spray_bounce_with_pearl, run_spray_bounce_with_skirt_history, taper_sigma_stats,
 };
 use hydro1d::conduction::Solid;
 use hydro1d::eos::{Eos as _, TableEos};
@@ -6550,6 +6550,223 @@ fn cmd_propellant_rebound(_args: &[String]) -> Result<(), Box<dyn std::error::Er
     })
 }
 
+// X-ray collision study, Result 10: the charge's point fireball onto the plate in 2-D. A 1 kg
+// graphite disk threads the bore and stops in a polyethylene charge k times its mass astern of a
+// 20 m plate. The merged mass starts as a hot sphere at the plate's focus (or a set standoff),
+// drifting away from the plate at w = v/(1+k). Lengths in metres; impulse in units of the
+// fireball's M u_rms (scale-free in the projectile's mass). Effective γ 1.4, as the plug study.
+
+const RESULT_PATH_CHARGE_2D: &str = "data/results/xray_collision/charge_2d.jsonl";
+const CHARGE_PLATE_R: f64 = 10.0;
+const CHARGE_DR: f64 = 0.05;
+const CHARGE_BALL_R: f64 = 0.5;
+const CHARGE_HOLE_R: f64 = 0.25;
+const CHARGE_AMBIENT: f64 = 1.0e-9;
+/// `w / u_rms` for k = 20, 30, 40 (one-zone u_rms on the CH2 table, w = 400 km/s / (1+k)).
+const CHARGE_DRIFT: [(f64, f64); 3] = [(20.0, 0.224), (30.0, 0.183), (40.0, 0.158)];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct Charge2dRecord {
+    case: String,
+    k: f64,
+    drift: f64,
+    d_over_d: f64,
+    skirt: f64,
+    height: f64,
+    /// Axial plate impulse per `M u_rms`, the whole plate.
+    wall_impulse: f64,
+    /// The part from inside the 0.25 m bore (lost through the real hole).
+    hole_impulse: f64,
+    /// Peak local surface pressure per `M u_rms^2 / m^3`.
+    peak_local_pressure: f64,
+    ambient_mass_share: f64,
+    steps: usize,
+    /// `J/p_in` of the confined plane-wave slug at the same γ: `1 + e_γ`, for the rebound swap.
+    confined_ratio: f64,
+    nr: usize,
+    nz: usize,
+}
+
+/// `(label, d/D, skirt [m], height above the vertex [m]; NaN = the paraboloid's focus)`.
+const CHARGE_CASES: [(&str, f64, f64, f64); 10] = [
+    ("paraboloid 0.25 at focus", 0.25, 0.0, f64::NAN),
+    (
+        "paraboloid 0.30 at focus (parent bowl)",
+        0.30,
+        0.0,
+        f64::NAN,
+    ),
+    ("paraboloid 0.50 at focus", 0.50, 0.0, f64::NAN),
+    ("paraboloid 0.75 at focus", 0.75, 0.0, f64::NAN),
+    ("bowl 0.30 + skirt 2 m at focus", 0.30, 2.0, f64::NAN),
+    ("bowl 0.30 + skirt 4 m at focus", 0.30, 4.0, f64::NAN),
+    ("bowl 0.30 + skirt 8 m at focus", 0.30, 8.0, f64::NAN),
+    ("flat + skirt 4 m, 2.7 m off", 0.0, 4.0, 2.7),
+    ("paraboloid 0.30 at 1.5 focus", 0.30, 0.0, -1.5),
+    ("paraboloid 0.50 at 1.5 focus", 0.50, 0.0, -1.5),
+];
+
+/// The confined plane-wave slug at γ 1.4: `J/p_in = 1 + e_γ`, the lossless 1-D rebound the 2-D run
+/// contains, to be swapped for the polyethylene table's radiative `e_eff`.
+fn charge_confined_ratio() -> f64 {
+    let cfg = SlugConfig {
+        gamma: SPRAY_2D_GAMMA,
+        mach: SPRAY_2D_MACH,
+        r_foot: 1.0,
+        length: 1.0,
+        r_plate: 1.0,
+        r_max: 0.05,
+        z_max: 4.0,
+        nr: 2,
+        nz: 400,
+        confined: true,
+        shape: PlateShape::FlatGridAligned,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    };
+    run_slug_bounce(&cfg).restitution_ratio()
+}
+
+fn charge_case(
+    label: &str,
+    d_over_d: f64,
+    skirt: f64,
+    height: f64,
+    k: f64,
+    drift: f64,
+    refine: usize,
+    confined_ratio: f64,
+) -> Charge2dRecord {
+    let focus = if d_over_d > 0.0 {
+        CHARGE_PLATE_R / (8.0 * d_over_d)
+    } else {
+        f64::NAN
+    };
+    let h = if height.is_nan() {
+        focus
+    } else if height < 0.0 {
+        -height * focus
+    } else {
+        height
+    };
+    let dr = CHARGE_DR / refine as f64;
+    let depth = d_over_d * 2.0 * CHARGE_PLATE_R;
+    let top = 4.0 * dr + depth.max(h + CHARGE_BALL_R) + skirt + 3.0;
+    let mut nz = 0usize;
+    while (nz as f64) * dr < top {
+        nz += 1;
+    }
+    let r_max = CHARGE_PLATE_R + 2.0;
+    let mut nr = 0usize;
+    while (nr as f64) * dr < r_max {
+        nr += 1;
+    }
+    let shape = if skirt > 0.0 {
+        PlateShape::Cup {
+            d_over_d,
+            skirt_height: skirt,
+            flare: 0.0,
+            thickness: 4.0 * dr,
+        }
+    } else {
+        PlateShape::Dish { d_over_d }
+    };
+    let cfg = SlugConfig {
+        gamma: SPRAY_2D_GAMMA,
+        mach: SPRAY_2D_MACH,
+        r_foot: CHARGE_BALL_R,
+        length: CHARGE_BALL_R,
+        r_plate: CHARGE_PLATE_R,
+        r_max: nr as f64 * dr,
+        z_max: nz as f64 * dr,
+        nr,
+        nz,
+        confined: false,
+        shape,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    };
+    let r = run_fireball_bounce(
+        &cfg,
+        PointFireball {
+            height: h,
+            radius: CHARGE_BALL_R,
+            drift,
+            ambient: CHARGE_AMBIENT,
+            hole_radius: CHARGE_HOLE_R,
+        },
+    );
+    Charge2dRecord {
+        case: label.to_string(),
+        k,
+        drift,
+        d_over_d,
+        skirt,
+        height: h,
+        wall_impulse: r.wall_impulse,
+        hole_impulse: r.hole_impulse,
+        peak_local_pressure: r.peak_local_pressure,
+        ambient_mass_share: r.ambient_mass_share,
+        steps: r.steps,
+        confined_ratio,
+        nr,
+        nz,
+    }
+}
+
+/// `--charge-2d`: every shape at k = 30. `--charge-2d K i,j,..` reruns cases `i,j` at k = K;
+/// a trailing `xR` refines the grid R times (written to `charge_2d_k{K}_x{R}.jsonl`).
+fn cmd_charge_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let rest: Vec<&String> = args
+        .iter()
+        .skip_while(|a| *a != "--charge-2d")
+        .skip(1)
+        .collect();
+    let k: f64 = rest.first().and_then(|a| a.parse().ok()).unwrap_or(30.0);
+    let only: Option<Vec<usize>> = rest
+        .get(1)
+        .map(|a| a.split(',').filter_map(|i| i.parse().ok()).collect());
+    let refine: usize = rest
+        .iter()
+        .find_map(|a| a.strip_prefix('x').and_then(|r| r.parse().ok()))
+        .unwrap_or(1);
+    let drift = CHARGE_DRIFT
+        .iter()
+        .find(|(kk, _)| (kk - k).abs() < 1e-9)
+        .map(|&(_, d)| d)
+        .ok_or("k must be 20, 30 or 40")?;
+    let confined = charge_confined_ratio();
+    let picked: Vec<(&str, f64, f64, f64)> = CHARGE_CASES
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| only.as_ref().is_none_or(|o| o.contains(i)))
+        .map(|(_, &c)| c)
+        .collect();
+    let rows = par_map_with_progress("charge-2d", &picked, |&(label, dd, skirt, h)| {
+        charge_case(label, dd, skirt, h, k, drift, refine, confined)
+    });
+    let path = if only.is_none() && refine == 1 && (k - 30.0).abs() < 1e-9 {
+        RESULT_PATH_CHARGE_2D.to_string()
+    } else {
+        format!("data/results/xray_collision/charge_2d_k{k:.0}_x{refine}.jsonl")
+    };
+    emit_scenario(&path, "charge-2d", &rows, |r| {
+        println!(
+            "rust: {:<40} k {:>2.0} J {:.4} hole {:.4} peak {:.3e} amb {:.1e} steps {} [{}x{}] (1+e_g {:.3})",
+            r.case,
+            r.k,
+            r.wall_impulse,
+            r.hole_impulse,
+            r.peak_local_pressure,
+            r.ambient_mass_share,
+            r.steps,
+            r.nr,
+            r.nz,
+            r.confined_ratio,
+        );
+    })
+}
+
 // Pulse-shape sensitivity sweep (design §13, ADR-0028): the fixed-grid 2D box + the fresh
 // Σ-contract 1D runs, into two JSONL files. Needs `make tables` first (the 1D arm). `--1d-only`
 // skips the (slow, unchanged) 2D box — a dev shortcut for 1D-schema re-runs.
@@ -6793,6 +7010,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--jupiter", cmd_jupiter),
     ("--heavyplate", cmd_heavyplate),
     ("--propellant-rebound", cmd_propellant_rebound),
+    ("--charge-2d", cmd_charge_2d),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),
     ("--geometry-wide", cmd_geometry_wide),

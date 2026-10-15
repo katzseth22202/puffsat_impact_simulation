@@ -1072,7 +1072,8 @@ walled-nozzle-test:
 ## (network). Pulled one after the other: concurrent TOPS submissions share server session state
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
-	xray-collision-ch2-table xray-collision-rebound xray-collision-test
+	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
+	xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1119,6 +1120,19 @@ data/tables/ch2.json: python/puffsat/water_plate/spray_eos.py python/puffsat/tab
 ## 60-150 km/s (the f(v) coupled bounce) -> data/results/xray_collision/propellant_rebound.jsonl
 xray-collision-rebound: data/tables/ch2.json
 	cargo run --release -p sweep -- --propellant-rebound
+
+## xray-collision-charge-2d: the charge's point fireball onto the 20 m plate in 2-D (euler2d):
+## shapes at k = 30, the leading three at k = 20 / 40 and on a 2x grid -> charge_2d*.jsonl
+xray-collision-charge-2d:
+	cargo run --release -p sweep -- --charge-2d
+	cargo run --release -p sweep -- --charge-2d 30 1,5,9 x2
+	cargo run --release -p sweep -- --charge-2d 20 1,5,9
+	cargo run --release -p sweep -- --charge-2d 40 1,5,9
+
+## xray-collision-charge: Isp, mass ratio and projectile bill from the 2-D runs and the rebound
+## table -> data/results/xray_collision/charge_ledger.csv
+xray-collision-charge: data/tables/ch2.json
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.charge
 
 ## xray-collision-test: that study's tests alone
 xray-collision-test:

@@ -228,3 +228,18 @@ def test_narrower_foam_carries_heavier_sheets() -> None:
     assert 1.4 < wide < 1.7
     assert narrow > 1.6 * wide
     assert anvil.sheet_mass(0.5) < anvil.PROJECTILE_MASS
+
+
+def test_jupiter_fall_boost_and_opaque_charge() -> None:
+    """A fall from Jupiter to 9.86 R_sun needs ~20.8 km/s to cross Earth at 100 km/s, and a
+    near-solid polyethylene charge fireball is so opaque it radiates essentially nothing."""
+    from puffsat.xray_collision import charge
+
+    assert charge.boost_dv() == pytest.approx(20.76e3, rel=0.01)
+    assert charge.boost_dv(aphelion=charge.AU) > charge.boost_dv()
+    fire = charge.charge_fireball(30.0)
+    assert fire.f_rad < 1e-3
+    assert fire.tau0 > 1e5
+    assert fire.drift == pytest.approx(400e3 / 31.0)
+    assert charge.plate_area(0.0, 0.0) == pytest.approx(math.pi * 100.0)
+    assert charge.plate_area(0.30, 4.0) > charge.plate_area(0.30, 0.0)

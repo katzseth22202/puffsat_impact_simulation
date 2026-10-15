@@ -215,6 +215,24 @@ impl Grid2D {
         }
     }
 
+    /// Axial plate force from the columns inside radius `r_max` only (`2π` dropped, as in
+    /// [`Self::plate_force`]). The X-ray study's point fireball reads it at the bore radius: that
+    /// area is open in the real plate, so its impulse is subtracted as lost.
+    #[must_use]
+    pub fn plate_force_within(&self, r_max: f64) -> f64 {
+        if let Some(profile) = self.plate_profile {
+            (0..self.nr)
+                .filter(|&ir| self.r_center(ir) < r_max && profile.covers(self.r_center(ir)))
+                .map(|ir| self.column_axial_force(ir))
+                .sum()
+        } else {
+            (0..self.nr)
+                .filter(|&ir| self.r_center(ir) < r_max)
+                .map(|ir| self.prim(0, ir).p * self.r_center(ir) * self.dr)
+                .sum()
+        }
+    }
+
     /// The peak *local* facesheet pressure: the maximum surface-cell pressure over the plate
     /// (`r ≤ r_plate`). A concave plate focuses the rebound, so its local peak exceeds the flat
     /// plate's near-uniform stagnation pressure — the survivability concentration factor (Rung S,

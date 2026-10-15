@@ -545,11 +545,117 @@ fn run_bounce_observed(
     }
 }
 
+/// A point-source fireball for the X-ray collision study's charge (Result 10): a projectile has
+/// threaded the bore and stopped in a polyethylene charge astern of the plate. The merged mass is
+/// started as a uniform hot sphere at rest in its own frame, drifting **away** from the plate.
+///
+/// Units: the fireball's mass is 1 (with the common `2π` dropped, as in the impulse) and its
+/// internal energy is 1/2, so its eventual rms expansion speed is about 1 and impulses read
+/// directly in units of `M u_rms`. Lengths are physical (metres).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PointFireball {
+    /// Height of the sphere's centre above the plate's vertex (the focus, for a paraboloid).
+    pub height: f64,
+    /// Initial sphere radius (several cells; the far-field answer should not depend on it).
+    pub radius: f64,
+    /// Drift speed away from the plate, in units of `u_rms`: `w/u_rms` with `w = v/(1+k)`.
+    pub drift: f64,
+    /// Ambient density as a fraction of the sphere's (a vacuum stand-in; keep its mass ≪ 1).
+    pub ambient: f64,
+    /// Open bore radius at the vertex: its impulse is tallied separately and reported as lost.
+    pub hole_radius: f64,
+}
+
+/// The result of one point-fireball run.
+#[derive(Debug, Clone, Copy)]
+pub struct FireballBounce {
+    /// Axial plate impulse over the whole plate, in units of `M u_rms`.
+    pub wall_impulse: f64,
+    /// The part of `wall_impulse` from inside the bore radius (lost through the real hole).
+    pub hole_impulse: f64,
+    /// Peak axial plate force.
+    pub peak_force: f64,
+    /// Peak local surface pressure, in units of `M u_rms^2 / m^3` (the `2π` restored).
+    pub peak_local_pressure: f64,
+    /// The ambient's mass as a share of the fireball's.
+    pub ambient_mass_share: f64,
+    pub steps: usize,
+}
+
+/// Run a [`PointFireball`] onto the dished or cupped plate of `cfg` (`cfg.shape` must be a
+/// `Dish` or `Cup`; `gamma`, `r_plate` and the domain are read from `cfg`, the slug fields are not).
+///
+/// # Panics
+///
+/// If `cfg.shape` is the grid-aligned flat plate, which has no immersed profile.
+#[must_use]
+pub fn run_fireball_bounce(cfg: &SlugConfig, fb: PointFireball) -> FireballBounce {
+    let dz = cfg.z_max / cfg.nz as f64;
+    let dr = cfg.r_max / cfg.nr as f64;
+    let mut g = Grid2D::new(cfg.nz, cfg.nr, dz, dr, cfg.gamma);
+    g.set_axisymmetric(true);
+    g.bc_rlo = Bc::Reflect;
+    g.bc_rhi = Bc::Transmissive;
+    g.bc_zhi = Bc::Transmissive;
+    g.bc_zlo = Bc::Transmissive;
+    let profile = immersed_profile(cfg).expect("a dished or cupped plate");
+    g.set_plate_profile(Some(profile));
+    let z_c = profile.z_surface(0.0) + fb.height;
+
+    let inside = |iz: usize, ir: usize| {
+        let z = (iz as f64 + 0.5) * dz;
+        let r = (ir as f64 + 0.5) * dr;
+        (z - z_c).hypot(r) < fb.radius
+    };
+    // Volumes with the common 2π dropped, so mass and impulse share one convention.
+    let two_pi = 2.0 * std::f64::consts::PI;
+    let mut v_ball = 0.0;
+    let mut v_domain = 0.0;
+    for iz in 0..cfg.nz {
+        for ir in 0..cfg.nr {
+            let v = g.cell_volume(ir) / two_pi;
+            v_domain += v;
+            if inside(iz, ir) {
+                v_ball += v;
+            }
+        }
+    }
+    let rho = 1.0 / v_ball;
+    let p = (cfg.gamma - 1.0) * 0.5 / v_ball;
+    let rho_amb = fb.ambient * rho;
+    let p_amb = rho_amb * 1.0e-6;
+    g.init(|iz, ir| {
+        if inside(iz, ir) {
+            Prim::new(rho, fb.drift, 0.0, p)
+        } else {
+            Prim::new(rho_amb, 0.0, 0.0, p_amb)
+        }
+    });
+
+    let mut hole_impulse = 0.0;
+    let mut hole_old = 0.0;
+    let mut t_old = 0.0;
+    let r = run_bounce_observed(g, cfg.nz, |grid, t| {
+        let hole_new = grid.plate_force_within(fb.hole_radius);
+        hole_impulse += 0.5 * (t - t_old) * (hole_old + hole_new);
+        hole_old = hole_new;
+        t_old = t;
+    });
+    FireballBounce {
+        wall_impulse: r.wall_impulse,
+        hole_impulse,
+        peak_force: r.peak_force,
+        peak_local_pressure: r.peak_local_pressure / two_pi,
+        ambient_mass_share: rho_amb * (v_domain - v_ball),
+        steps: r.steps,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        PlateShape, SlugConfig, init_slug_grid, run_slug_bounce, taper_mass_factor,
-        taper_sigma_stats, taper_weight,
+        PlateShape, PointFireball, SlugConfig, init_slug_grid, run_fireball_bounce,
+        run_slug_bounce, taper_mass_factor, taper_sigma_stats, taper_weight,
     };
 
     /// A small dished free-bounce config the shape tests perturb (taper/divergence default 0).
@@ -797,5 +903,33 @@ mod tests {
             "force never decayed: ran to the step cap ({} steps)",
             b.steps
         );
+    }
+
+    /// The X-ray study's point fireball (Result 10): a fireball receding faster from the plate
+    /// delivers less impulse, the bore's share is a small part of it, and the ambient is light.
+    #[test]
+    fn point_fireball_recedes_and_the_bore_is_a_small_share() {
+        let cfg = SlugConfig {
+            r_plate: 2.0,
+            r_max: 2.4,
+            z_max: 2.4,
+            nr: 48,
+            nz: 48,
+            shape: PlateShape::Dish { d_over_d: 0.30 },
+            ..base_cfg()
+        };
+        let fireball = |drift: f64| PointFireball {
+            height: 2.0 / (8.0 * 0.30),
+            radius: 0.25,
+            drift,
+            ambient: 1.0e-8,
+            hole_radius: 0.1,
+        };
+        let still = run_fireball_bounce(&cfg, fireball(0.0));
+        let fleeing = run_fireball_bounce(&cfg, fireball(0.4));
+        assert!(still.wall_impulse > 0.0);
+        assert!(fleeing.wall_impulse < still.wall_impulse);
+        assert!(still.hole_impulse > 0.0 && still.hole_impulse < 0.1 * still.wall_impulse);
+        assert!(still.ambient_mass_share < 1.0e-3);
     }
 }
