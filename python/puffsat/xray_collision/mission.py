@@ -269,6 +269,58 @@ def real_collision_ledger() -> list[dict[str, object]]:
     return out
 
 
+# The Jupiter split (ADR-0063 amendment). The head-on meeting at the dive periapsis needs two
+# mirror-image dives from Jupiter: the heavy Sun ship falls *prograde* and rides the 3S cycle
+# unpowered (its remainder is what returns to Earth); the light Sun-wave impactors fall
+# *retrograde* and are spent at periapsis. A flyby rotates but never rescales the Jupiter-relative
+# excess, so the impactors need a perijove burn raising it from the cycle's arrival excess to the
+# retrograde dive's floor. Floors and arrival excesses are the calcs repo's
+# (`aim_is_all_you_need` 868e88a, `solar_dive_depth_trade.opposing_stream_placement` on the
+# `solve_synodic_closure(3, ...)` closures); this repository does not import that code.
+MU_JUPITER = 1.26686534e8  # [km^3/s^2]
+R_JUPITER = 71_492.0  # [km]
+#: `(closure, arrival excess, prograde floor, retrograde floor, bend required, bend available)`
+#: [km/s, deg], cited.
+JUPITER_FLOORS = (
+    ("9.86 R_sun, 100 km/s crossing", 11.70, 11.33, 14.78, 77.0, 135.2),
+    ("4 R_sun, 150 km/s return", 12.17, 11.96, 14.16, 74.7, 133.5),
+)
+PERIJOVES_RJ = (1.1, 2.0, 5.0, 10.0)
+#: The impactor carrier's stage [s]: a storable bipropellant, stated not derived.
+CARRIER_ISP = 330.0
+SUN_K = 30.0  # Result 12's Sun-wave k on the real collision
+OUT_JUPITER = charge.OUT_DIR / "mission_jupiter_split.csv"
+
+
+def jupiter_split() -> list[dict[str, object]]:
+    """The impactor stream's perijove burn to the retrograde floor, against perijove radius,
+    and its propellant as a share of the Sun ship it serves (impactors `(1 - 1/MR_S)/k_S` of the
+    ship at mass ratio 2, propellant only: the carrier's dry mass is not counted)."""
+    out: list[dict[str, object]] = []
+    for name, arrival, pro, retro, bend_req, bend_avail in JUPITER_FLOORS:
+        impactor_share = (1.0 - 1.0 / MR_SUN) / SUN_K
+        for rj in PERIJOVES_RJ:
+            esc2 = 2.0 * MU_JUPITER / (rj * R_JUPITER)
+            burn = math.sqrt(retro**2 + esc2) - math.sqrt(arrival**2 + esc2)
+            stage = math.exp(burn * 1e3 / (CARRIER_ISP * charge.G0))
+            out.append(
+                {
+                    "closure": name,
+                    "arrival_excess": arrival,
+                    "prograde_floor": pro,
+                    "retrograde_floor": retro,
+                    "ship_rides_unpowered": arrival >= pro,
+                    "perijove_rj": rj,
+                    "perijove_burn": burn,
+                    "carrier_mass_ratio": stage,
+                    "propellant_per_ship": impactor_share * (stage - 1.0),
+                    "bend_required_ship": bend_req,
+                    "bend_available_ship": bend_avail,
+                }
+            )
+    return out
+
+
 def _write(path: Path, rows: list[dict[str, object]]) -> None:
     with path.open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=list(rows[0]))
@@ -308,6 +360,17 @@ def main() -> None:
             f" {1e3 * b.sun_impactor_per_payload:.2f} g (${b.sun_impactor_cost_per_payload:.2f})"
             f" and {b.orbit_mass_per_payload:.2f} kg in orbit per kg of payload departing"
         )
+    split = jupiter_split()
+    for r in split:
+        print(
+            f"  Jupiter split {str(r['closure'])[:12]:<12}"
+            f" perijove {float(str(r['perijove_rj'])):4.1f} R_J:"
+            f" impactors {float(str(r['arrival_excess'])):.2f} ->"
+            f" {float(str(r['retrograde_floor'])):.2f} km/s needs"
+            f" {float(str(r['perijove_burn'])):.2f} km/s, propellant"
+            f" {float(str(r['propellant_per_ship'])):.2%} of the ship"
+        )
+    _write(OUT_JUPITER, split)
     real = real_collision_ledger()
     for r in real:
         print(

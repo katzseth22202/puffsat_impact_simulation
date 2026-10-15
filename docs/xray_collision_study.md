@@ -1127,13 +1127,26 @@ How to read the table:
     +30% growth.
   - A bond-free charge lifts the `k_E` cap.
 
-Open (the asks G1-G9 in `docs/solar_environment_4rsun_ask_for_parent.md`):
+**The Jupiter split** (`mission.jupiter_split`, ADR-0063 amendment, `mission_jupiter_split.csv`).
+The Sun-wave impactors travel with the ship from Earth and split from it at Jupiter. The ship
+falls into a prograde dive and the impactors into its mirror-image retrograde dive, so the two
+meet head-on at periapsis. A flyby cannot change the size of the excess, so the impactors' carrier
+burns at perijove to raise it from 11.70 to 14.78 km/s (9.86 R_sun), with Jupiter's Oberth boost:
+- 0.70 km/s at 1.1 R_J and 1.37 km/s at 5 R_J;
+- 0.40-0.88% of the ship in propellant at 330 s, because the impactors are only ~1/60 of the ship;
+- at 4 R_sun (12.17 -> 14.16 km/s), 0.45-0.88 km/s.
+
+Radiation at low perijove, the flyby's bend at the higher excess, and mirror-image timing are
+open (G10).
+
+Open (the asks G1-G10 in `docs/solar_environment_4rsun_ask_for_parent.md`):
 - the closures' confirmation and a ledger run in the calcs repo;
 - the departure charged from the pad, which the calcs repo found costs ~6.6x;
 - releasing the Sun ship's plate;
 - the sheet's guidance;
 - the Sun-wave projectile's placement and survival;
-- the charge material.
+- the charge material;
+- the Jupiter split's bend, timing and radiation.
 
 Not modelled:
 - real 3-D sheets and charges (the strips are planar);

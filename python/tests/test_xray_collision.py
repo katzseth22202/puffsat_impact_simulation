@@ -391,3 +391,22 @@ def test_growth_cycle_ledger() -> None:
     }
     for r in design:
         assert float(r["growth_per_total_impactor"]) < point[(r["closure"], r["dead_fraction"])]
+
+
+def test_jupiter_split_burn() -> None:
+    """The impactors' perijove burn to the retrograde floor (ADR-0063 amendment): Oberth makes it
+    far smaller than the 3.08 km/s excess change, it grows with perijove radius, and its propellant
+    is ~1% of the ship or less, because the impactors are only ~1/60 of the ship."""
+    from puffsat.xray_collision import mission
+
+    rows = mission.jupiter_split()
+    assert len(rows) == len(mission.JUPITER_FLOORS) * len(mission.PERIJOVES_RJ)
+    for name, arrival, _pro, retro, _req, _avail in mission.JUPITER_FLOORS:
+        mine = [r for r in rows if r["closure"] == name]
+        burns = [float(str(r["perijove_burn"])) for r in mine]
+        assert burns == sorted(burns)
+        assert all(0.0 < b < retro - arrival for b in burns)
+        assert all(r["ship_rides_unpowered"] for r in mine)
+        assert all(float(str(r["propellant_per_ship"])) < 0.015 for r in mine)
+    base = rows[0]
+    assert abs(float(str(base["perijove_burn"])) - 0.70) < 0.01

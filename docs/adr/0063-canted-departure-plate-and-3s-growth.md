@@ -2,7 +2,7 @@
 
 Status: accepted, 2026-10-15. Result 12 of [`xray_collision_study.md`](../xray_collision_study.md);
 code `euler2d::canted`, `sweep --canted-2d`, `growth.py` (`make xray-collision-growth`). Builds on
-[ADR-0062](0062-sun-wave-redirects-earth-wave-breeds.md). Asks G1-G9 in
+[ADR-0062](0062-sun-wave-redirects-earth-wave-breeds.md). Asks G1-G10 in
 [`solar_environment_4rsun_ask_for_parent.md`](../solar_environment_4rsun_ask_for_parent.md).
 
 ## Context
@@ -51,3 +51,40 @@ The Sun stage is priced on the real disk-into-charge collision (ADR-0060 amendme
   temperature, not its pressure, giving it spurious heat (+10% at k = 10, +90% at k = 100). Both
   runners now start cold and assert it. Results 10-11's affected rows were rerun (see ADR-0060 and
   ADR-0061, amended 2026-10-15).
+
+## Amendment, 2026-10-15: the impactor stream splits from the ship at Jupiter
+
+Code `mission.jupiter_split` (`make xray-collision-mission` -> `mission_jupiter_split.csv`).
+
+**Decision.** The Sun-wave impactors and the Sun ship leave Earth together and split at Jupiter.
+The ship falls into a *prograde* dive and rides the cycle unpowered. The impactors fall into the
+mirror-image *retrograde* dive. Mirror-image dives that leave Jupiter together reach periapsis
+together, so the two streams meet head-on there.
+
+A flyby rotates the Jupiter-relative excess but never changes its size. So the impactors need a
+perijove burn that raises it to the retrograde floor, and that burn gets Jupiter's Oberth boost.
+The burn is done by a carrier bus with a storable stage (330 s, stated not derived). It takes all
+the disks through the flyby, burns once at perijove, and then releases them. The calcs repo's
+floors and arrival excesses are copied as cited inputs (`aim_is_all_you_need` 868e88a,
+`opposing_stream_placement`):
+
+| closure | excess at arrival -> retrograde floor | burn at 1.1 / 2 / 5 / 10 R_J | propellant, share of the ship |
+|---|---|---|---|
+| 9.86 R_sun | 11.70 -> 14.78 km/s | 0.70 / 0.92 / 1.37 / 1.77 km/s | 0.40 / 0.55 / 0.88 / 1.21% |
+| 4 R_sun | 12.17 -> 14.16 km/s | 0.45 / 0.59 / 0.88 / 1.14 km/s | 0.25 / 0.34 / 0.52 / 0.70% |
+
+The impactors are `(1 - 1/MR_S)/k_S` ≈ 1/60 of the ship, so the split costs ≲1% of the ship in
+propellant. The carrier's dry mass is not counted.
+
+**Rejected alternative.** A separate, faster Earth departure for the impactors (~11.3 km/s excess,
+~0.6 km/s more burn than the ship's). That would make the two streams' timing at Jupiter a second
+problem to solve.
+
+**Open (ask G10).**
+- **Radiation.** A 1.1 R_J perijove is severe for the disks' guidance electronics. Higher
+  perijoves are gentler but cost about twice the burn.
+- **Bend.** At the higher excess the flyby bends the path less, and only the ship's bend is
+  checked (135° available against 77° needed).
+- **Timing.** The streams must leave Jupiter as true mirror images.
+
+Bend and timing are the calcs repo's flyby machinery, so they are asked of it, not computed here.

@@ -1171,7 +1171,8 @@ xray-collision-overtake: data/tables/ch2.json
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.overtake
 
 ## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on
-## each plate -> data/results/xray_collision/mission_periapsis.csv, mission_k.csv
+## each plate, and the Jupiter split's perijove burn -> data/results/xray_collision/mission_periapsis.csv,
+## mission_k.csv, mission_jupiter_split.csv
 xray-collision-mission:
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.mission
 

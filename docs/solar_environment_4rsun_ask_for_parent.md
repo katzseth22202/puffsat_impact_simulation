@@ -6,7 +6,7 @@ It is self-contained: nothing in it needs this repository's code.
 
 Two groups:
 - E1-E6 (the near-Sun environment) are for the parent.
-- G1-G9 (the charge pusher's growth cycle, Results 10-12 and ADR-0060 to ADR-0063) are split
+- G1-G10 (the charge pusher's growth cycle, Results 10-12 and ADR-0060 to ADR-0063) are split
   between the parent and the calcs repo (`aim_is_all_you_need`). Each says who owes it.
 
 ## Why it is asked
@@ -72,7 +72,7 @@ projectile budgets.
 
 ---
 
-## The charge pusher's growth cycle (G1-G9)
+## The charge pusher's growth cycle (G1-G10)
 
 The context, for a reader in the parent:
 - A **Sun wave** of guided projectiles (graphite disks, $1000/kg) boosts **Sun ships** at the
@@ -139,3 +139,22 @@ as energy over plate size cubed).
 optimum k by 2-3x (`growth_cycle.csv`, "bonds returned" rows). A bond-free charge, such as argon
 ice or a metal, would remove the cap. Is there a reason the ship must carry polyethylene, or can
 the Earth-departure charge be argon, as in the calcs repo's spray plate?
+
+**G10 (calcs repo): split the impactor stream from the ship at Jupiter.** The Sun-wave impactors
+leave Earth with the ship. At Jupiter the ship takes the prograde dive (arrival excess 11.70 km/s
+against its 11.33 km/s floor, so it rides unpowered). The impactors take the mirror-image
+retrograde dive, so both reach periapsis together, head-on. A flyby cannot change the size of the
+excess, so the impactors' carrier must burn at perijove to raise it to the 14.78 km/s retrograde
+floor (12.17 -> 14.16 km/s at 4 R_sun). This repository prices the burn with Oberth alone, without
+bend or timing: 0.70 km/s at 1.1 R_J and 1.37 km/s at 5 R_J, ≲1% of the ship in propellant
+(`mission_jupiter_split.csv`). With the flyby code (`opposing_stream_placement`,
+`solve_synodic_closure(3, ...)`):
+1. Check that the flyby at 14.78 km/s still turns the impactors onto the retrograde dive at each
+   perijove from 1.1 to 10 R_J. The ship's own flyby has 135° of bend available against 77° needed;
+   the impactors' is not checked.
+2. Solve the two departures from Jupiter as true mirror images that meet at the dive periapsis, and
+   give the timing tolerance on the perijove burn.
+3. Give the lowest perijove the disks' guidance electronics survive in Jupiter's radiation belts.
+   Above it the burn roughly doubles.
+4. Compare with the alternative: a separate impactor departure from Earth at ~11.3 km/s excess,
+   ~0.6 km/s more than the ship's burn, with its own Jupiter timing.
