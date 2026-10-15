@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-mission xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-mission xray-collision-growth xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1174,6 +1174,16 @@ xray-collision-overtake: data/tables/ch2.json
 ## each plate -> data/results/xray_collision/mission_periapsis.csv, mission_k.csv
 xray-collision-mission:
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.mission
+
+## xray-collision-growth: Result 12, the canted departure plate in planar 2-D (charge shapes, two
+## grids) and the 3S growth cycle optimized over k at each wave, for the 9.86 R_sun / 100 km/s and
+## 4 R_sun / 150 km/s closures -> data/results/xray_collision/growth_cycle.csv
+xray-collision-growth: data/tables/ch2.json
+	cargo run --release -p sweep -- --canted-2d
+	cargo run --release -p sweep -- --canted-2d coarse
+	cargo run --release -p sweep -- --canted-2d shapes
+	cargo run --release -p sweep -- --canted-2d shapes coarse
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.growth
 
 ## xray-collision-test: that study's tests alone
 xray-collision-test:

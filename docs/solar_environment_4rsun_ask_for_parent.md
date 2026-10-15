@@ -1,8 +1,13 @@
-# Ask for the parent: the near-Sun environment at 4 solar radii during solar maximum
+# Asks for the companion repos: the near-Sun environment, and the charge pusher's growth cycle
 
 From `katzseth22202/puffsat_impact_simulation`, 2026-10-15. This is written to be copied into
 `katzseth22202/Balloon-Pulse-Propulsion` and worked there, as `docs/solar_environment_ask_from_impact_sim.md`.
 It is self-contained: nothing in it needs this repository's code.
+
+Two groups:
+- E1-E6 (the near-Sun environment) are for the parent.
+- G1-G9 (the charge pusher's growth cycle, Results 10-12 and ADR-0060 to ADR-0063) are split
+  between the parent and the calcs repo (`aim_is_all_you_need`). Each says who owes it.
 
 ## Why it is asked
 
@@ -64,3 +69,73 @@ A short table for 4 R_sun against 9.86 R_sun, at solar minimum and maximum:
 Return the answer to this repository as `docs/solar_environment_answers_for_impact_sim.md` in the
 parent, and this repository will fold any dose or heat figure into the Sun ship and Sun-wave
 projectile budgets.
+
+---
+
+## The charge pusher's growth cycle (G1-G9)
+
+The context, for a reader in the parent:
+- A **Sun wave** of guided projectiles (graphite disks, $1000/kg) boosts **Sun ships** at the
+  solar periapsis. The ships' cheap polyethylene charges are the reaction mass.
+- Each Sun ship's whole remainder returns at ~100 km/s as the **Earth wave**: Kapton sheets that
+  push the next departure.
+- On the 3S Jovian cycle (Earth -> Jupiter -> Sun -> Earth) the departure burn's thrust meets the
+  returning stream at ~101 degrees. So the plate is a flat **canted plate** beside which the
+  merged fireball explodes as it slides past.
+- With a square polyethylene charge, this repository's growth optimizer (`growth.py`, ADR-0063)
+  finds 7-8x per 3S at 9.86 R_sun and 9-11x at 4 R_sun. Those values count Sun-wave and
+  Earth-wave impactor alike, with polyethylene's carbon left atomic. Its inputs from the calcs
+  repo are copied, not computed here.
+
+**G1 (calcs repo): confirm the 3S closures this repository copied.** From commit 868e88a,
+`solve_synodic_closure(3, dive_solar_radii=R, return_excess=X)` and `departure_nozzle_ledger(...,
+30.0, 0.6)` gave:
+- at 9.86 R_sun, X = 90 km/s: a 10.43 km/s departure excess aimed -13.5 degrees, a 4.15 km/s burn
+  from the 10-day parking orbit, the stream at 100-102 degrees to the thrust axis and 103 km/s,
+  and a 20.45 km/s periapsis boost;
+- at 4 R_sun, X = 150 km/s: 10.54 km/s, 4.23 km/s, 94-96 degrees at 158 km/s, and 35.04 km/s.
+
+Please confirm them against the current ledger, and say whether X = 90 km/s at 9.86 R_sun is the
+right stand-in for a 100 km/s heliocentric Earth crossing.
+
+**G2 (calcs repo): replace the departure's impulse law with the canted plate's.** The calcs repo
+prices the departure with a magnetic nozzle's impact-angle law. This repository's flat canted plate
+gets 29-37% of the canted ceiling `m w (cos theta + sqrt(1 + k - sin^2 theta))` with a square
+polyethylene charge, and up to 43% for an ideal point fireball (`canted_2d.jsonl`). Re-run the cycle
+growth ledger with that law, and with the Sun stage priced from this repository's
+`charge_ledger.csv` scaled to the dive's closing speed. Compare against this repository's 7-11x
+per 3S.
+
+**G3 (calcs repo): charge the departure from the pad.** The 4.15 km/s burn starts at the 10-day
+parking orbit's periapsis. The calcs repo's own `split_push_ledger` found growth falls ~6.6x when the
+departure is charged from the pad. Price the canted plate's growth that way too.
+
+**G4 (calcs repo): the 5.3 km/s 3S outbound.** `growth_cost_for_parent.md` quotes ~5.3 km/s for a
+3S outbound on the retrograde-return cycle. Confirm the departure excess it implies (~12 km/s from
+near-escape, by `sqrt(v_inf^2 + v_esc^2) - v_esc`), so the paper can say why the solar-dive cycle's
+4.15 km/s is cheaper: Jupiter only has to stop the ship, not reverse it.
+
+**G5 (parent): the Sun ship's plate as impactor.** The breeding factor assumes the Sun ship releases
+its whole remainder as Earth-wave sheets. Its plate (the δ/D 0.5 paraboloid, ~0.16 of its final
+mass) cannot obviously be released. Is it cut up, released whole as an impactor, or kept? Keeping
+it costs ~16% of growth (ADR-0062).
+
+**G6 (parent): the Earth-wave sheet's guidance.** A 35-55 µm Kapton sheet at 0.05-0.07 kg/m^2 is a
+solar sail. It drifts 30,000-100,000 km on its 0.5-1 AU coast (`overtake_sheet.csv`). It must
+arrive face-on within ~1 degree and tens of cm. Size the spin, attitude control and tracking, and
+the guidance mass per sheet.
+
+**G7 (parent): how the Sun-wave projectiles reach their orbit.** The cost basis is $1000/kg to
+manufacture. Delivering a projectile onto a retrograde orbit with a 9.86 or 4 R_sun periapsis is
+likely to dominate its real cost. State how they are placed and what that costs per kg.
+
+**G8 (parent): the Sun-wave projectile at 4 R_sun.** There the closing speed is ~617 km/s and the
+sunlight ~2890 suns. Say whether the 0.5 m graphite disk, its guidance and its shade survive the
+approach, and what peak plate pressure limits the projectile per pulse (this repository scales it
+as energy over plate size cubed).
+
+**G9 (parent): the charge material.** Polyethylene's 84 MJ/kg of bonds caps k at the Earth wave
+(the gas has only `w^2/2/(1+k)` per kg). Whether the carbon condenses before the plate moves the
+optimum k by 2-3x (`growth_cycle.csv`, "bonds returned" rows). A bond-free charge, such as argon
+ice or a metal, would remove the cap. Is there a reason the ship must carry polyethylene, or can
+the Earth-departure charge be argon, as in the calcs repo's spray plate?

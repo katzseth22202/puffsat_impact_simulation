@@ -28,19 +28,20 @@ is dark, ionization recombines, and H2 re-forms before the plate; only carbon's 
 
 | plate | geometry | k = 10 | k = 20 | k = 40 | impactor per pulse (400 MPa) |
 |---|---|---|---|---|---|
-| parent bowl | compact charge at focus | 1.49-1.50 | 1.94-2.00 | 3.23 | 2.4-6 kg |
+| parent bowl | point fireball / compact charge at focus | 1.49 / 1.53 | 1.94 / 2.17 | 3.23 | 2-6 kg |
 | δ/D 0.5 paraboloid at 1.5 F | compact charge | **1.42** | 1.79 | 2.76 | 3-5 kg |
-| flat + 4 m skirt | 7 m impactor sheet onto a 7 m charge sheet | **1.46** | 1.86 | | ~11 kg |
+| flat + 4 m skirt | 7 m impactor sheet onto a 7 m charge sheet | **1.48** | 1.94 | | ~11-14 kg |
 
 - **Cost:** the impactor is 0.042-0.049 kg per kg of final mass. At $1000/kg that is ~$45 per kg of
   final mass, or $70-100 per kg of propellant.
 - **The planar sheet buys loading, not impulse.** The peak scales with the impactor's mass per area,
-  so the plate takes 0.05-0.07 kg/m^2 of impactor at 400 MPa. In polyimide (Kapton, Seth's choice)
-  that is 35-55 µm. The ship's charge sheet is ~0.5-0.8 mm of polyethylene.
+  so the plate takes 0.05-0.09 kg/m^2 of impactor at 400 MPa. In polyimide (Kapton, Seth's choice)
+  that is 35-62 µm. The sheets match the point fireball's impulse; a compact charge falls 6-15%
+  short (corrected 2026-10-15). The ship's charge sheet is ~0.5-0.8 mm of polyethylene.
 - **The sheet must last from 0.5 to 1 AU**, at 468 K face-on at 0.5 AU.
   - Polyimide film (IKAROS-proven) is the choice. Carbon fibre also works, in a polyimide or dry
     matrix; Kevlar only with a UV coating.
-  - It is a solar sail: 0.23-0.73 mm/s^2 at 0.5 AU, and 30,000-100,000 km of drift over the
+  - It is a solar sail: 0.21-0.73 mm/s^2 at 0.5 AU, and 29,000-100,000 km of drift over the
     ~9-day coast. It needs spin for flatness, a controlled attitude, tracking and late
     correction.
   - Arrival tolerances are loose: a 10 cm sag or a 1° tilt spreads the arrival by 1-2.4 µs,
@@ -53,14 +54,23 @@ is dark, ionization recombines, and H2 re-forms before the plate; only carbon's 
 
 ## The breeding cycle (ADR-0062, `mission_breeding.csv`)
 
-The Earth wave is the released mass of Sun ships, so the two stages form one loop. Per kg of
-100 km/s impactor, ~24 kg departs at 11 km/s. A Sun ship at mass ratio 2 returns half its
-departing mass as the next wave's impactor.
-- **Growth:** the impactor grows **~12x per generation**. That is ~10x if the Sun ship's plate
-  (0.16 of its final mass) can't be released, and ~14x if the carbon condenses to soot.
+The Earth wave is the released mass of Sun ships, so the two stages form one loop. Priced on the
+real collisions (corrected 2026-10-15), each kg of 100 km/s impactor sends ~21-24 kg off at
+11 km/s. A Sun ship at mass ratio 2 returns half its departing mass as the next wave's impactor.
+- **Growth:** the impactor grows **~9-12x per generation**. That is ~9x if the Sun ship's plate
+  (0.16 of its final mass) can't be released, and ~12x if it can and the carbon condenses.
 - **Payload:** ~90% of each departure is payload.
-- **Cost:** the expensive Sun-wave projectile costs **~$1 per kg of payload departure**.
-- **Orbit mass:** each departing kg needs ~1.64 kg already in Earth orbit.
+- **Cost:** the expensive Sun-wave projectile costs **~$1.6-2.3 per kg of payload departure**.
+- **Orbit mass:** each departing kg needs ~1.65 kg already in Earth orbit.
+
+## The 3S growth cycle (Result 12, ADR-0063, `growth_cycle.csv`)
+
+When the Earth wave launches ships onto the 3S Jovian cycle, the departure needs only 4.15 km/s
+(from the 10-day parking orbit). But the stream meets the thrust axis at ~101°, so the flat canted
+plate keeps only ~1/3 of its ceiling.
+- **9.86 R_sun:** with a square polyethylene charge, k ≈ 24 at Earth and ~30 at the Sun maximize
+  growth per total impactor: ~7-8x per 3S, doubling in ~1.1 years.
+- **4 R_sun:** k ≈ 54 and ~30 give ~9-11x.
 
 ## Suggested text for the parent
 

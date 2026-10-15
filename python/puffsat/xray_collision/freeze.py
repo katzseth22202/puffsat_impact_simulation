@@ -71,7 +71,7 @@ class FreezeResult:
     bond_share: float  # bond toll as a share of the heat
     velocity_loss_ions: float  # 1 - sqrt(1 - frozen ion share)
     velocity_loss_bonds_carbon_frozen: float  # H2 re-formed, carbon left atomic
-    velocity_loss_bonds_all_frozen: float
+    velocity_loss_bonds_all_frozen: float  # 1 once the bonds outweigh the heat (no exhaust)
     velocity_loss_worst: float  # ions frozen as found, plus every bond
 
 
@@ -138,8 +138,8 @@ def freeze(
         h2_extrapolated=rates.H_ATOMIC_H.extrapolated(h2[0]) if not math.isnan(h2[0]) else True,
         bond_share=bond,
         velocity_loss_ions=1.0 - math.sqrt(1.0 - frozen),
-        velocity_loss_bonds_carbon_frozen=1.0 - math.sqrt(1.0 - bond * carbon_part),
-        velocity_loss_bonds_all_frozen=1.0 - math.sqrt(1.0 - bond),
+        velocity_loss_bonds_carbon_frozen=1.0 - math.sqrt(max(1.0 - bond * carbon_part, 0.0)),
+        velocity_loss_bonds_all_frozen=1.0 - math.sqrt(max(1.0 - bond, 0.0)),
         velocity_loss_worst=1.0 - math.sqrt(max(1.0 - frozen - bond, 0.0)),
     )
 

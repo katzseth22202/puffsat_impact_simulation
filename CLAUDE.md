@@ -56,7 +56,8 @@ Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`),
 `make xray-collision-argon-bags`, `make xray-collision-anvil`, `make xray-collision-ch2-table`,
 `make xray-collision-rebound`, `make xray-collision-charge-2d`, `make xray-collision-charge`,
 `make xray-collision-charge-mix`, `make xray-collision-freeze`, `make xray-collision-collar`,
-`make xray-collision-overtake`, `make xray-collision-mission` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
+`make xray-collision-overtake`, `make xray-collision-mission`, `make xray-collision-growth`
+and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
 (lattice target, k = 2, per-projectile light and kinetic energy) is
 [`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md). The 66 km/s verdict (argon clouds
 radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the Sun dive) is

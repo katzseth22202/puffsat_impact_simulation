@@ -15,6 +15,7 @@
 //! Numerics are ADR-0023 (the 2D sibling of the 1D kernel's ADR-0022).
 
 pub mod bounce;
+pub mod canted;
 pub mod kernel;
 pub mod merge;
 pub mod moments;

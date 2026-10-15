@@ -359,3 +359,35 @@ def test_breeding_cycle() -> None:
     assert dead.growth == pytest.approx(ideal.growth * (1.0 - plate))
     assert dead.sun_impactor_cost_per_payload < 3.0
     assert 1.5 < dead.orbit_mass_per_payload < 1.8
+
+
+def test_growth_cycle_ledger() -> None:
+    """Result 12 (ADR-0063): the canted departure plate keeps well under its ceiling, yet the 3S
+    cycle still grows ~8-15x a generation on the square-block charge, more at the deeper dive; the
+    optimum k at each wave sits inside the simulated ranges for the conservative bracket."""
+    import csv
+
+    from puffsat.xray_collision import growth
+
+    with growth.OUT.open() as fh:
+        rows = list(csv.DictReader(fh))
+    design = [r for r in rows if r["geometry"] == "square charge" and r["bonds"] == "carbon atomic"]
+    assert len(design) == 4
+    shallow = [r for r in design if r["closure"].startswith("9.86")]
+    deep = [r for r in design if r["closure"].startswith("4 R")]
+    for r in design:
+        assert r["at_edge"] == ""
+        assert 1.0 < float(r["mass_ratio_sun"]) < 3.0
+    assert all(6.0 < float(r["growth_per_total_impactor"]) < 12.0 for r in shallow)
+    assert all(
+        float(d["growth_per_total_impactor"]) > float(s["growth_per_total_impactor"])
+        for d, s in zip(deep, shallow, strict=True)
+    )
+    # The ideal point fireball bounds the real collision from above.
+    point = {
+        (r["closure"], r["dead_fraction"]): float(r["growth_per_total_impactor"])
+        for r in rows
+        if r["geometry"] == "point" and r["bonds"] == "carbon atomic"
+    }
+    for r in design:
+        assert float(r["growth_per_total_impactor"]) < point[(r["closure"], r["dead_fraction"])]

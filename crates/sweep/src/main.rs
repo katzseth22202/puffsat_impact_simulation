@@ -7279,6 +7279,218 @@ fn cmd_overtake_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     })
 }
 
+// X-ray collision study, Result 12: the canted departure plate for the 3S Jovian cycle. The
+// returning stream meets the departure's thrust axis at ~101 degrees (calcs repo,
+// `departure_nozzle_ledger` at a 9.86 R_sun dive), so a wide sheet sweeps *past* a flat plate and
+// its merged fireball explodes beside it. Planar (x, z) strips, `euler2d::canted`.
+
+const RESULT_PATH_CANTED: &str = "data/results/xray_collision/canted_2d.jsonl";
+const CANTED_THETA: f64 = 101.0;
+const CANTED_K: [f64; 6] = [5.0, 10.0, 20.0, 30.0, 40.0, 60.0];
+const CANTED_STANDOFF: [f64; 3] = [1.0, 2.0, 4.0];
+const CANTED_PLATE: f64 = 20.0;
+const CANTED_CHARGE_X: f64 = 4.0;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct CantedRecord {
+    family: String,
+    theta_deg: f64,
+    k: f64,
+    standoff: f64,
+    charge_x: f64,
+    plate_length: f64,
+    /// Normal plate impulse per `m w` (lossless gamma gas), its canted ceiling and their ratio.
+    impulse: f64,
+    ceiling: f64,
+    ceiling_share: f64,
+    /// Impulse centroid downstream of the plate's upstream edge, and of the charge [m].
+    centroid_x: f64,
+    centroid_offset: f64,
+    /// Peak plate pressure per `m w^2` per m of depth, and where [m].
+    peak_pressure: f64,
+    peak_x: f64,
+    ambient_mass_share: f64,
+    confined_ratio: f64,
+    steps: usize,
+    dx: f64,
+}
+
+/// `(family, theta, k, standoff, charge_x, plate_length, charge_length, point_radius)`.
+type CantedSpec = (&'static str, f64, f64, f64, f64, f64, f64, Option<f64>);
+/// The charge-shape families (Seth's hemisphere question): planar half-cylinders and a round
+/// charge, 1 m across like the square block, at the 1 m standoff.
+const CANTED_SHAPES: [(&str, euler2d::canted::ChargeShape); 4] = [
+    ("round charge", euler2d::canted::ChargeShape::Round),
+    (
+        "half, flat face to the sheet",
+        euler2d::canted::ChargeShape::HalfFlatUpstream,
+    ),
+    ("half, dome up", euler2d::canted::ChargeShape::HalfDomeUp),
+    (
+        "half, dome to the plate",
+        euler2d::canted::ChargeShape::HalfDomeDown,
+    ),
+];
+/// The slab charge's length along the stream [m]; the square one is as long as it is wide.
+const CANTED_SLAB: f64 = 0.3;
+const CANTED_SQUARE: f64 = 1.0;
+const CANTED_POINT_R: f64 = 0.5;
+
+fn canted_cases() -> Vec<CantedSpec> {
+    let (t, x, l) = (CANTED_THETA, CANTED_CHARGE_X, CANTED_PLATE);
+    let mut v = Vec::new();
+    for &h in &CANTED_STANDOFF {
+        for &k in &CANTED_K {
+            v.push(("design", t, k, h, x, l, CANTED_SLAB, None));
+        }
+    }
+    for &lp in &[10.0, 40.0] {
+        v.push(("plate length", t, 30.0, 2.0, x, lp, CANTED_SLAB, None));
+    }
+    for &xc in &[2.0, 8.0] {
+        v.push(("charge position", t, 30.0, 2.0, xc, l, CANTED_SLAB, None));
+    }
+    for &a in &[90.0, 110.0] {
+        v.push(("angle", a, 30.0, 2.0, x, l, CANTED_SLAB, None));
+    }
+    for &k in &[10.0, 30.0] {
+        v.push((
+            "head-on reference",
+            0.0,
+            k,
+            2.0,
+            0.5 * l,
+            l,
+            CANTED_SLAB,
+            None,
+        ));
+    }
+    // The charge's shape: a square block, and the planar point fireball it would make.
+    for &h in &[1.0, 2.0] {
+        for &k in &CANTED_K {
+            v.push(("square charge", t, k, h, x, l, CANTED_SQUARE, None));
+            v.push((
+                "point fireball",
+                t,
+                k,
+                h,
+                x,
+                l,
+                CANTED_SQUARE,
+                Some(CANTED_POINT_R),
+            ));
+        }
+    }
+    for &k in &[10.0, 30.0] {
+        v.push((
+            "head-on point",
+            0.0,
+            k,
+            2.0,
+            0.5 * l,
+            l,
+            CANTED_SQUARE,
+            Some(CANTED_POINT_R),
+        ));
+    }
+    v
+}
+
+/// `--canted-2d shapes`: the charge-shape families at the 1 m standoff.
+fn canted_shape_cases() -> Vec<CantedSpec> {
+    let mut v = Vec::new();
+    for &(family, _) in &CANTED_SHAPES {
+        for &k in &[10.0, 30.0, 60.0] {
+            v.push((
+                family,
+                CANTED_THETA,
+                k,
+                1.0,
+                CANTED_CHARGE_X,
+                CANTED_PLATE,
+                CANTED_SQUARE,
+                None,
+            ));
+        }
+    }
+    v
+}
+
+/// `--canted-2d [shapes] [coarse]`: the design sweep and its sensitivities, or the charge-shape
+/// families (`canted_2d[_shapes][_coarse].jsonl`).
+fn cmd_canted_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let coarse = args.iter().any(|a| a == "coarse");
+    let dx = if coarse { 0.1 } else { 0.05 };
+    let confined = charge_confined_ratio();
+    let shapes = args.iter().any(|a| a == "shapes");
+    let cases = if shapes {
+        canted_shape_cases()
+    } else {
+        canted_cases()
+    };
+    let rows = par_map_with_progress("canted", &cases, |&(family, theta, k, h, x, l, cl, pr)| {
+        let c = euler2d::canted::CantedStrip {
+            theta_deg: theta,
+            k,
+            standoff: h,
+            charge_x: x,
+            plate_length: l,
+            width: 1.0,
+            charge_length: cl,
+            dx,
+            gamma: SPRAY_2D_GAMMA,
+            ambient: CHARGE_AMBIENT,
+            point_radius: pr,
+            shape: CANTED_SHAPES
+                .iter()
+                .find(|(name, _)| *name == family)
+                .map_or(euler2d::canted::ChargeShape::Block, |&(_, sh)| sh),
+        };
+        let r = euler2d::canted::run_canted_strip(&c);
+        CantedRecord {
+            family: family.to_string(),
+            theta_deg: theta,
+            k,
+            standoff: h,
+            charge_x: x,
+            plate_length: l,
+            impulse: r.impulse,
+            ceiling: r.ceiling,
+            ceiling_share: r.impulse / r.ceiling,
+            centroid_x: r.centroid_x,
+            centroid_offset: r.centroid_offset,
+            peak_pressure: r.peak_pressure,
+            peak_x: r.peak_x,
+            ambient_mass_share: r.ambient_mass_share,
+            confined_ratio: confined,
+            steps: r.steps,
+            dx,
+        }
+    });
+    let stem = if shapes { "_shapes" } else { "" };
+    let grid = if coarse { "_coarse" } else { "" };
+    let path = RESULT_PATH_CANTED.replace(".jsonl", &format!("{stem}{grid}.jsonl"));
+    emit_scenario(&path, "canted", &rows, |r| {
+        println!(
+            "rust: {:<18} theta {:>5.1} k {:>4.0} h {:.0} x {:.0} L {:>2.0} | J/mw {:6.3} ceiling {:6.3} ({:.0}%) centroid +{:.2} m peak {:.2e} at {:.1} amb {:.1e} steps {}",
+            r.family,
+            r.theta_deg,
+            r.k,
+            r.standoff,
+            r.charge_x,
+            r.plate_length,
+            r.impulse,
+            r.ceiling,
+            100.0 * r.ceiling_share,
+            r.centroid_offset,
+            r.peak_pressure,
+            r.peak_x,
+            r.ambient_mass_share,
+            r.steps,
+        );
+    })
+}
+
 // X-ray collision study, Result 10: the bore collar. The 2-D disk-into-charge runs
 // (`--charge-mix K collar`) tally what lands on each ring around the bore: a column, a speed, a
 // peak pressure. Each ring is re-run here as the study's 1-D radiation-hydrodynamic bounce on the
@@ -7694,6 +7906,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--charge-mix", cmd_charge_mix),
     ("--collar-ablation", cmd_collar_ablation),
     ("--overtake-2d", cmd_overtake_2d),
+    ("--canted-2d", cmd_canted_2d),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),
     ("--geometry-wide", cmd_geometry_wide),

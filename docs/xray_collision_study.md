@@ -32,15 +32,21 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
      polyethylene, 20-100 times its mass. The fireball is too dense to radiate, so all of its heat
      becomes expansion onto the plate.
    - **Mission:** on the parent's own 20 m bowl, a Jupiter fall boosted at 9.86 R_sun crosses
-     Earth's orbit at 100 km/s with a mass ratio of 2.0-2.9. A δ/D 0.5 paraboloid lowers that to
-     1.7-2.3.
-   - **Cost:** projectiles come to 1-3% of the final mass.
-   - **Checks:** ionization recombines and polyethylene's bonds cost 1.6-5.4% of velocity. A solid
-     charge mixes well enough, and foam does not.
+     Earth's orbit at 100 km/s with a mass ratio of 2.2-2.3 at k = 20-30, priced on the real
+     collision (corrected 2026-10-15). A δ/D 0.5 paraboloid gives 1.9-2.0. Above k ≈ 30 the mass
+     ratio climbs steeply while the projectile bill barely falls, so k ≈ 30 is the practical
+     choice.
+   - **Cost:** projectiles come to ~3-4% of the final mass (0.033 kg/kg on the paraboloid at
+     k ≈ 30).
+   - **Checks:** ionization recombines and polyethylene's bonds cost 1.6-5.4% of velocity. The
+     real disk-into-solid-charge collision gives 13-18% less impulse than the point fireball at
+     k = 30, and 32-36% less at k = 100 (corrected 2026-10-15). On that basis mass ratio 2 needs
+     k ≈ 19 / 26 / 28 on the bowl, the skirted bowl and the deep paraboloid. Foam is far worse.
    - **The one hazard** is a back-splash jet of several GPa onto the ring around the bore. Sized
-     by impulse, its collar is ~1-1.5 t of extra structure on a 100 t ship, out to ~3.5 m. Its
-     erosion, 0.2-11 t over the boost, leaves as reaction mass, faster than the charge's own
-     exhaust at the floor. The mass ratio stays under 3 even at the ceiling.
+     by impulse, its collar is ~0.5-1 t of extra structure on a 100 t ship, out to ~2-3.5 m. The
+     plate also needs grading for the smooth fireball's centre load (+3.6-4.1 t in all). The
+     collar's erosion, 0.1-9 t over the boost, leaves as reaction mass, and the mass ratio stays
+     under 3 even at the ceiling.
 5. **The same charge launches the ship from Earth** (Result 11, ADR-0061). A 100 km/s impactor
    overtaking a polyethylene charge held off the plate gives an 11 km/s departure at a mass ratio
    of 1.5 with k ≈ 10-12.
@@ -49,9 +55,16 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
      little, but spreads the load. The plate then takes ~11 kg per pulse instead of ~2-6 kg.
    - **Cost:** the impactor is ~$70-100 per kg of propellant.
    - **The two stages close a loop** (ADR-0062). The Sun wave redirects Sun ships whose whole
-     remaining mass becomes the Earth wave. The impactor grows ~10-14x a generation, and the
-     expensive projectile costs ~$1 per kg of payload departure.
-6. **Without a nozzle, a plate recovers less directed energy per joule.** In jet-efficiency terms
+     remaining mass becomes the Earth wave. Priced on the real collisions, the impactor grows
+     ~9-12x a generation, and the expensive projectile costs ~$1.6-2.3 per kg of payload
+     departure.
+6. **The Earth wave can also drive the 3S Jovian growth cycle** (Result 12, ADR-0063). The stream
+   meets the departure's thrust axis almost sideways (~101°).
+   - **The plate:** a flat canted plate keeps only ~1/3 of its ceiling.
+   - **Why it still works:** the burn from the parking orbit is only 4.15 km/s.
+   - **Growth:** with k ≈ 24 at Earth and ~30 at the Sun, the cycle grows ~7-8x per 3S at
+     9.86 R_sun, counting all impactor. At 4 R_sun it grows ~9-11x.
+7. **Without a nozzle, a plate recovers less directed energy per joule.** In jet-efficiency terms
    it gets 0.4-0.6, against the 0.8-1 the parent assumes for a magnetic nozzle. With cheap reaction
    mass that is enough: the projectile bill, not Isp, is the figure of merit.
 
@@ -748,19 +761,26 @@ is shared through the charge. The test runs the real collision in 2-D. A 0.5 m d
 from the plate strikes a charge of its own footprint: near-solid (0.16 m at k = 30, 0.54 m at
 k = 100, on a grid twice as fine) or 30 kg/m^3 foam (5.1 m). Capture is per `M u_rms` throughout.
 
-| plate | k | point fireball | disk into solid charge (2x coarser grid) | disk into foam charge |
-|---|---|---|---|---|
-| parent bowl | 30 | 0.439 | **0.473** (0.422) | 0.267 |
-| δ/D 0.5 at 1.5 F | 30 | 0.567 | **0.580** (0.553) | 0.481 |
-| parent bowl | 100 | 0.512 | **0.642** (0.588) | -- |
-| δ/D 0.5 at 1.5 F | 100 | 0.641 | **0.761** (0.730) | -- |
+| plate | k | point fireball | disk into solid charge (2x coarser grid) | real / point | disk into foam charge |
+|---|---|---|---|---|---|
+| parent bowl | 30 | 0.439 | **0.382** (0.345) | 0.87 | 0.129 |
+| δ/D 0.5 at 1.5 F | 30 | 0.567 | **0.465** (0.442) | 0.82 | 0.208 |
+| parent bowl | 100 | 0.512 | **0.348** (0.289) | 0.68 | -- |
+| δ/D 0.5 at 1.5 F | 100 | 0.641 | **0.410** (0.369) | 0.64 | -- |
 
-- **A solid charge mixes well enough.** The real collision gives as much impulse as the uniform
-  fireball or more: -4% to +25%, and more at k = 100 and on the finer grid. The snowplow puts its
-  hottest, first-swept mass on the plate's side, and that mass leaves toward the plate. Result
-  10's capture is conservative.
-- **Foam does not mix well.** A 5 m column is a line source. It loses 15-39% of the impulse, and
-  its exhaust is the least uniform of all (below).
+*Corrected 2026-10-15.* The first version of this table started the charge at the disk's
+temperature rather than its pressure, giving it spurious heat (+28% of the collision's at k = 30,
++90% at k = 100). It read the real collision as 4-25% *above* the point fireball. Both runners now
+start cold and assert it (ADR-0060 amendment).
+
+- **The real collision gives less than the point fireball:** 13-18% less at k = 30 and 32-36% less
+  at k = 100. The disk leaves its heat strung along the charge's axis, and a heavier charge is a
+  longer cylinder. The finer grid raises the real collision 8-20%, so these ratios are if anything
+  pessimistic, but the point fireball is **not** conservative.
+- **The ledger now prices the real collision.** `charge.mixing_factor` interpolates the ratio in
+  ln k (`charge_mixing.csv`). `mission.py` and `growth.py` apply it to the point fireball's `v_e`.
+  `charge_ledger.csv` itself stays the point fireball's.
+- **Foam is far worse:** 0.30-0.37 of the point fireball. A 5 m column is a line source.
 
 **The exit flow: no nozzle, so uneven speeds.** The plate impulse comes from integrating the wall
 pressure of the full 2-D flow, so gas leaving at uneven speeds and angles is already in every
@@ -772,9 +792,9 @@ the domain's outer faces. Nothing is lost (exit mass 1.00):
 
 | exhaust, k = 30 | direction | uniformity | dir^2 x unif |
 |---|---|---|---|
-| point fireball, bowl / paraboloid | 0.70 / 0.87 | 0.83 / 0.83 | 0.41 / 0.62 |
-| disk into solid, bowl / paraboloid | 0.76 / 0.89 | 0.65 / 0.64 | 0.37 / 0.51 |
-| disk into foam, bowl / paraboloid | 0.61 / 0.91 | 0.45 / 0.44 | 0.17 / 0.36 |
+| point fireball, bowl / paraboloid | 0.70 / 0.87 | 0.83 / 0.82 | 0.41 / 0.62 |
+| disk into solid, bowl / paraboloid | 0.77 / 0.89 | 0.59 / 0.59 | 0.35 / 0.47 |
+| disk into foam, bowl / paraboloid | 0.69 / 0.88 | 0.21 / 0.21 | 0.10 / 0.16 |
 
 An ideal nozzle would have 1 and 1. The parent assumes 0.8-1 for its magnetic nozzle. A plate
 recovers less directed energy per joule than that. It still meets the mission (Result 10) because
@@ -857,37 +877,31 @@ by the 1-D gain gives the vapour an impossible exhaust speed (~0.6-2.7 Mm/s).
 
 The ledger for a 100 t final mass (production grid; jet-only coarse-grid values in brackets):
 
-| plate, k | collar, jet only | collar, vs the mean | eroded over the boost, floor-ceiling | vapour's own `v_e` (floor) | impulse added | mass ratio: ledger -> floor / ceiling |
+| plate, k | collar, jet only | collar, vs the mean | eroded over the boost, floor-ceiling | worst-ring depth | impulse the vapour adds | mass ratio change, floor / ceiling |
 |---|---|---|---|---|---|---|
-| bowl, 30 | +1.07 t (0.74) | +3.4 t to 6 m | 0.44-11.0 t | 45 km/s | 0.7% | 2.032 -> 2.029 / 2.170 |
-| paraboloid 1.5 F, 30 | +0.85 t (0.44) | +3.7 t | 0.16-8.8 t | 61 km/s | 0.4% | 1.731 -> 1.730 / 1.845 |
-| bowl, 100 | +1.20 t (0.86) | +3.3 t | 0.47-6.8 t | 56 km/s | 0.7% | 2.860 -> 2.846 / 2.930 |
-| paraboloid 1.5 F, 100 | +0.92 t (0.76) | +3.8 t | 0.49-6.0 t | 72 km/s | 1.1% | 2.316 -> 2.302 / 2.363 |
+| bowl, 30 | +0.73 t (0.50) | +3.6 t to 6 m | 0.25-9.2 t | 0.10-2.3 m | 0.02-0.4% | +0.00 / +0.12 |
+| paraboloid 1.5 F, 30 | +0.53 t (0.26) | +4.0 t | 0.08-5.0 t | 0.03-1.2 m | 0.2-0.4% | -0.00 / +0.06 |
+| bowl, 100 | +0.29 t (0.12) | +3.8 t | 0.68-9.2 t | 0.11-1.7 m | 1.3% | -0.03 / +0.11 |
+| paraboloid 1.5 F, 100 | +0.21 t (0.05) | +4.1 t | 0.45-5.5 t | 0.12-1.2 m | 0.4-1.2% | -0.00 / +0.06 |
 
-- **The collar is ~1 t of extra structure for the jet**, centre-heavy out to ~3.5 m at
-  100-120 kg/m^2 on the inner rings. That is about 1% of a 100 t ship, and it scales with no
-  disk size. It rises on refinement (0.4-0.9 t coarse), so ~1-1.5 t is the honest figure. The
-  conservative bound, which also grades the plate for the smooth fireball's centre load, is
-  **+3.3-3.8 t** out to 6 m. This is dry mass: it costs payload, not mass ratio. Of that, 2.0-3.1 t
-  is the smooth fireball's own load, which the parent's uniform 30 kg/m^2 plate does not grade
-  for. **The plate should be graded, with the jet as a modest addition.**
-- **Erosion is a consumable, concentrated on the inner ring.**
-  - The floor eats 0.2-0.5 t over the boost. The inner ring then loses up to 420 kg/m^2 at k = 30
-    on the bowl (19 cm of 2200 kg/m^3 graphite), and 20-65 kg/m^2 per ring at k = 100.
-  - The ceiling is 6-11 t. That is 3.9 m of graphite on the k = 30 bowl's inner ring (3.0 m on the
-    paraboloid), which no fixed collar holds. At k = 100 it is ~1 t/m^2 (0.45 m). The depths are
-    `collar_ledger.csv`'s `max_depth_*`.
-  - So at k = 30 the inner ring must be a renewable, fed sleeve unless the floor holds. At
-    k = 100 the jet arrives slower and denser (47-60 km/s, not 140-185 km/s), radiates far less
-    (1% of its kinetic energy against 23-32%), and a thick fixed ring suffices.
-- **The eroded collar does become reaction mass, and good reaction mass.** At the floor its vapour
-  leaves at 45-72 km/s. That is faster than the charge's own 20-29 km/s exhaust, because it is
-  heated by the hottest gas on the plate. So charging it as propellant *lowers* the mass ratio
-  slightly (by 0.001-0.014). It adds 0.4-1.1% to the pulse's impulse.
-  - At the ceiling, the extra erosion is credited with no extra push, which is conservative. It is
-    then mostly dead weight leaving at 0-11 km/s. The mass ratio rises by 0.05-0.14, to at most
-    2.93 (k = 100, bowl).
-  - Under 3 in every case.
+*Corrected 2026-10-15.* The ring loads come from the disk-into-charge runner, which first started
+the charge as hot as the disk (ADR-0060 amendment). This is the rerun. The earlier version had
+~1 t for the jet and 6-11 t of ceiling erosion. Values in brackets are the coarse grid.
+
+- **The jet itself costs ~0.2-0.7 t of structure**, centre-heavy out to 2-3.5 m. That is under 1%
+  of a 100 t ship, and it scales with no disk size. It rises on refinement (0.05-0.5 t coarse), so
+  it is not converged: ~0.5-1 t is the honest figure.
+- **The smooth fireball's centre load costs more.** The conservative bound, which also grades the
+  plate for it, is **+3.6-4.1 t** out to 6 m, of which 2.0-3.1 t is the smooth fireball's own
+  load. This is dry mass, so it costs payload, not mass ratio. **The plate should be graded, and
+  the jet is a modest addition.**
+- **Erosion is a consumable, concentrated on the inner ring.** The floor eats 0.1-0.7 t over the
+  boost, a few cm to 12 cm of graphite on the worst ring. The hot-jet ceiling eats 5-9 t, 1.2-2.3 m
+  there: a fed sleeve at the ceiling, a thick fixed ring at the floor.
+- **The vapour adds little either way.** It leaves at 3-68 km/s depending on the ring's flow, and
+  adds 0.02-1.3% to the pulse's impulse. Charged as propellant, the eroded collar moves the mass
+  ratio by -0.03 to +0.12, never past 3. (These mass ratios are the point-fireball ledger's; the
+  changes are what the collar adds.)
 
 Not modelled here: mechanical erosion (spall and crushing; a bonded, backed collar has no free
 rear face to spall), the collar's own heat soak between pulses, the jet's true resolved peak, and
@@ -927,9 +941,9 @@ Three geometries were run on two grids (0.05 m and 0.1 m cells):
 | parent bowl | point | 5 / 10 / 20 / 40 | 2.53 / 3.05 / 3.82 / 4.93 | 0.62 at k 10 | 1.27 / **1.49** / 1.94 / 3.23 | 4-10 kg |
 | paraboloid 1.5 F | point | 5 / 10 / 20 / 40 | 2.81 / 3.45 / 4.38 / 5.72 | 0.74 at k 10 | 1.24 / **1.42** / 1.79 / 2.76 | 3-6 kg |
 | flat + 4 m skirt | point | 10 / 20 | 3.04 / 3.79 | 0.61 | 1.49 / 1.97 | ~2 kg |
-| parent bowl | compact | 10 / 20 | 3.01 / 3.67 | 0.61 | 1.50 / 2.00 | 2.4 / 6.2 kg |
-| flat + 4 m skirt | 4 m sheet | 10 / 20 | 3.13 / 3.96 | 0.64 | 1.48 / 1.91 | 3.5 / 3.9 kg |
-| flat + 4 m skirt | 7 m sheet | 10 / 20 | 3.21 / 4.07 | 0.67 | 1.46 / 1.86 | 10.6 / 12.1 kg |
+| parent bowl | compact | 10 / 20 | 2.88 / 3.24 | 0.57 | 1.53 / 2.17 | 2.0 / 15.7 kg |
+| flat + 4 m skirt | 4 m sheet | 10 / 20 | 3.03 / 3.69 | 0.61 | 1.50 / 2.00 | 3.6 / 4.4 kg |
+| flat + 4 m skirt | 7 m sheet | 10 / 20 | 3.10 / 3.79 | 0.63 | 1.48 / 1.94 | 10.9 / 13.6 kg |
 
 `η = (J/mv - 1)/√(1+k)` is the share of the expansion's ideal momentum the plate keeps.
 
@@ -946,14 +960,17 @@ share of its heat.
 
 - **The overtake couples better than the departing case.** `η` is 0.61-0.74 here, against
   0.40-0.55 when Result 10's fireball drifted away from the plate.
-- **Planar coupling barely helps the impulse.** A 7 m sheet gives 3-6% more than a compact charge
-  on the same plate: its exhaust leaves straighter (direction factor 0.92 against 0.81), but with
-  a wider spread of speeds.
+- **The planar sheets match the point fireball; the compact charge falls short.** On the flat
+  skirted plate a 7 m sheet gives 0-2% more impulse than the point fireball. The compact charge
+  on the bowl gives 6% less at k = 10 and 15% less at k = 20: it leaves its heat strung along
+  the axis, as at 400 km/s. (The first version had the compact charge at 1-4% and the sheets 3-6%
+  above it. Both runs had started the charge as hot as the impactor; ADR-0060 amendment.)
 - **Planar coupling greatly helps the plate's loading.** The peak scales with the impactor's mass
-  per area, so a sheet takes ~0.07 kg/m^2 at 400 MPa whatever its radius. That is ~11 kg on a 7 m
-  sheet against ~2 kg as a compact charge on the same flat plate.
-- **The compact collision matches the point fireball** to 1-4% on impulse. It peaks ~2.5 times
-  higher.
+  per area, so a sheet in front of the flat plate takes 0.071-0.088 kg/m^2 at 400 MPa whatever its
+  radius. That is ~11-14 kg on a 7 m sheet against ~2 kg as a compact charge. Inside the
+  paraboloid it is lower, 0.02-0.07 kg/m^2.
+- **The ledgers carry the compact factor.** `mission.overtake_mixing` applies the measured
+  compact-over-point ratio to the breeding cycle's Earth stage.
 - **The grid study is conservative.** The finer grid gives 2-4% more impulse for the point
   fireball and 5-8% more for the sheets. The compact and sheet peaks rise on refinement, as at
   400 km/s, so their per-pulse limits are upper values; ~0.05 kg/m^2 is the safer sheet figure.
@@ -973,7 +990,7 @@ k = 10, 15 and 20:
 | + 4 m or 8 m skirt | 80% | 0.96-0.97 | 0.76-0.78 | 12.2-13.9 | ~4 kg |
 | δ/D 0.75 paraboloid, 2 F | **84%** | 0.96 | 0.83 | **13.0-14.9** | 3.5-4.5 kg |
 | δ/D 0.75 paraboloid, 1.5 F | 84% | 0.96 | 0.81 | 13.0-14.9 | ~1.3 kg |
-| 4-5.5 m sheet inside the δ/D 0.5 paraboloid | 78% | 0.90-0.91 | 0.68-0.70 | 11.6-13.2 | ~2.4 kg |
+| 4-5.5 m sheet inside the δ/D 0.5 paraboloid | 75-76% | 0.90-0.91 | 0.66-0.70 | 11.1-12.4 | ~2-2.5 kg |
 
 - **Direction is solved; speed spread is the rest.** Deep bowls and skirts send the exhaust out at
   a direction factor of 0.96. What remains is the spread of exit speeds (uniformity ~0.8), which
@@ -992,9 +1009,10 @@ k = 10, 15 and 20:
 **The impactor sheet** (`overtake_sheet.csv`, `overtake.sheet_budget`). At 100 km/s the impactor
 carries ~5 GJ/kg, a thousand times any binding energy, so its material does not matter to the
 coupling. Seth chose polyimide (Kapton).
-- **Mass per area:** the sheets' peak gives 0.069-0.079 kg/m^2 at 400 MPa on the production grid
-  (column `max_areal`). It is an upper value, since the peak rises on refinement; 0.05 kg/m^2 is
-  the safer figure. That is 35-55 µm of polyimide or Kevlar, or 31-49 µm of carbon-fibre laminate.
+- **Mass per area:** the flat-plate sheets' peak gives 0.071-0.088 kg/m^2 at 400 MPa on the
+  production grid (column `max_areal`). It is an upper value, since the peak rises on refinement;
+  0.05 kg/m^2 is the safer figure. That is 35-62 µm of polyimide or Kevlar, or 31-55 µm of
+  carbon-fibre laminate.
   The ship's polyethylene sheet at k = 10 is ~0.5-0.8 mm thick.
 - **Survival from 0.5 to 1 AU:** a black sheet facing the Sun and radiating from both faces runs
   at 468 K at 0.5 AU and 331 K at 1 AU.
@@ -1002,8 +1020,8 @@ coupling. Seth chose polyimide (Kapton).
   - Carbon fibre needs a dry or polyimide matrix, not epoxy.
   - Kevlar needs a UV-blocking coating.
 - **The sheet is a solar sail.** At 0.5 AU it accelerates at 0.23-0.73 mm/s^2, from absorbing to
-  perfectly reflecting. Over an 8.7-day coast from 0.5 to 1 AU (at an assumed 100 km/s outward)
-  that is **30,000-100,000 km of drift**. It is predictable only with a known attitude, so the
+  perfectly reflecting (0.21-0.41 mm/s^2 at 0.088 kg/m^2). Over an 8.7-day coast from 0.5 to 1 AU
+  (at an assumed 100 km/s outward) that is **29,000-100,000 km of drift**. It is predictable only with a known attitude, so the
   sheet spins to stay flat, flies face-on to its direction of travel (so the push mostly shifts
   its arrival time), and is tracked and corrected late.
 - **Tolerances are loose.** A 10 cm sag spreads the arrival by 1.0 µs, and a 1° tilt across 7 m by
@@ -1016,6 +1034,111 @@ Open:
   holes, a spin-flattened cone.
 - The plate's own ablation at 20-45 km/s, and the charge sheet's deployment and survival on the
   ship.
+
+## Result 12: the canted departure plate and the 3S growth cycle -- `growth_cycle.csv`
+
+`make xray-collision-growth` (`growth.py`, `euler2d::canted`, `sweep --canted-2d`, ADR-0063).
+
+**The cycle.** The Earth wave now launches ships onto the calcs repo's 3S Jovian cycle: Earth ->
+Jupiter -> dive periapsis -> Earth, 3.28 years. The closures were run in that repo
+(`solve_synodic_closure`, `departure_nozzle_ledger`) and are copied as cited inputs:
+
+| closure | departure burn | stream vs thrust axis | stream closing speed | periapsis boost | Sun-wave closing speed |
+|---|---|---|---|---|---|
+| 9.86 R_sun, 100 km/s return | 4.15 km/s | 100-102° | 103 km/s | 20.45 km/s | 392 km/s |
+| 4 R_sun, 150 km/s return | 4.23 km/s | 94-96° | 158 km/s | 35.04 km/s | 617 km/s |
+
+- **The burn is small.** It starts at the 10-day parking orbit's periapsis, near escape speed, and
+  Jupiter only has to stop the ship, not reverse it.
+- **The stream arrives almost sideways**, ~10° *away* from the thrust direction. It cannot rebound
+  off the plate. The impulse has to come from the merged fireball exploding beside a flat plate as
+  it slides past.
+
+**The canted ceiling.** A frictionless flat plate takes no tangential force. Conserving the
+stream's tangential momentum and spending all the energy normally gives
+
+`J_n <= m w (cos theta + sqrt(1 + k - sin^2 theta))`,
+
+which is the overtake ceiling at θ = 0.
+
+**The canted plate in planar 2-D** (`euler2d::canted`). This is a strip model: wide sheets, a flat
+20 m plate, and the charge 4 m in at a 1-4 m standoff. The share of the canted ceiling, best at the
+1 m standoff:
+
+| charge, 1 m across | k = 5 | 10 | 30 | 60 |
+|---|---|---|---|---|
+| thin slab, 0.3 m along the stream | 0.30 | 0.29 | 0.26 | 0.24 |
+| **square block (the design)** | **0.37** | **0.36** | **0.32** | **0.29** |
+| round | | 0.34 | 0.30 | 0.27 |
+| half-cylinder: flat face to the sheet / dome to the plate / dome up | | 0.31 / 0.28 / 0.23 | 0.28 / 0.24 / 0.19 | 0.25 / 0.22 / 0.17 |
+| ideal point fireball (the merged state) | 0.42 | 0.43 | 0.43 | 0.44 |
+| head-on reference, point fireball | | 0.53 | 0.49 | |
+
+- **The sideways geometry itself costs ~20%** against head-on in the same model (0.43 against 0.53
+  for the point fireball).
+- **The rest is how the collision leaves its heat.** A sheet-on-charge strike leaves hot gas
+  strung along the stream, so it expands along the plate rather than into it.
+- **The square block is the best real charge.** Curved charges give the sheet's edges too thin a
+  column. Half-cylinders are worse in every orientation, and dome-up is worst because its mass
+  sits farther from the plate.
+- **The torque fix is placement.** The impulse centroid lies 0.5-1.3 m downstream of the charge at
+  the 1 m standoff, so the ship's centre of mass goes there, or the charge is graded to match.
+- **Grids agree to 3%.**
+
+**The optimizer.**
+- **Earth stage:** the canted share (fitted in ln k), times the canted ceiling at the closure's
+  angle and speed. Polyethylene's rebound is swapped in at the fireball's `u_rms`. The bond toll
+  comes from `freeze.freeze` at the stream's speed.
+- **Sun stage:** the δ/D 0.5 paraboloid's `v_e(k)` from `charge_ledger.csv`, carried from 400 km/s
+  to the dive's closing speed with its rebound and bond toll re-evaluated.
+- **Objective:** Earth-wave impactor returned per kg of *all* impactor spent (Earth and Sun wave)
+  per 3S, maximized over `k_E` (5-60) and `k_S` (20-100).
+
+| closure | Earth charge | `k_E` | `k_S` | Earth / Sun mass ratio | departs per kg of Earth impactor | **growth per 3S** (per total impactor) | per Earth-wave kg | doubling |
+|---|---|---|---|---|---|---|---|---|
+| 9.86 R_sun | **square** | **24** | **30** | 2.06 / 1.98 | 22.7 kg | **7.0-8.4** | 9.6-11.5 | 1.1-1.2 yr |
+| 9.86 R_sun | point (ideal) | 34 | 30 | 2.00 / 1.98 | 34.3 kg | 9.3-11.1 | 14.5-17.3 | 1.0 yr |
+| 4 R_sun | **square** | **54** | **30** | 2.11 / 2.33 | 48.7 kg | **9.2-10.9** | 17.6-20.9 | 1.0 yr |
+| 4 R_sun | point (ideal) | 60* | 40 | 1.73 / 2.59 | 81.8 kg | 11.8-14.1 | 26.5-31.5 | 0.9 yr |
+
+How to read the table:
+- The ranges run from the Sun ship's plate kept as dead mass (0.16) to the plate released as
+  impactor.
+- Polyethylene's carbon is left atomic.
+- The Sun stage is always the real disk-into-charge collision (`charge.mixing_factor`), and that
+  keeps `k_S` at ~30. Above it, the real collision's coupling falls faster than the projectile
+  bill.
+- If the carbon condenses before the plate, growth rises 10-27%. Those optima sit on the `k_E` = 60
+  edge of the simulated range, and are flagged rather than extrapolated.
+- \* = an optimum on the edge of the range.
+- The Sun wave is 27-55% of all the impactor spent.
+
+**Conclusions.**
+- **The departure plate is the weak link, and the cycle still closes.** The plate keeps only ~1/3
+  of its ceiling (head-on plates kept 70-84%), but the burn is only 4.15 km/s.
+- **The real optimum is k ≈ 24 at Earth and ~30 at the Sun at 9.86 R_sun**, growing ~7-8x per 3S
+  (doubling in ~1.1 years).
+- **4 R_sun is worth ~30% more growth**, ~9-11x, at k ≈ 54 and ~30. Its faster stream raises the
+  Earth-side k, but its larger boost needs ~half of all impactor to be Sun wave.
+- **Per Earth-wave kilogram the square charge returns 9.6-20.9 kg.** The calcs repo's 4 R_sun
+  ledger, with a magnetic nozzle from the same parking orbit, quotes 23.0.
+- **The levers left are the charge and the energy.**
+  - A charge whose merged state is rounder approaches the point fireball's 0.43 share, worth
+    +30% growth.
+  - A bond-free charge lifts the `k_E` cap.
+
+Open (the asks G1-G9 in `docs/solar_environment_4rsun_ask_for_parent.md`):
+- the closures' confirmation and a ledger run in the calcs repo;
+- the departure charged from the pad, which the calcs repo found costs ~6.6x;
+- releasing the Sun ship's plate;
+- the sheet's guidance;
+- the Sun-wave projectile's placement and survival;
+- the charge material.
+
+Not modelled:
+- real 3-D sheets and charges (the strips are planar);
+- the plate's ablation at 15-30 km/s arrival speeds;
+- the canted plate's peak pressure, which sets the impactor per pulse.
 
 ## Limits
 
