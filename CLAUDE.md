@@ -58,7 +58,9 @@ Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`),
 (lattice target, k = 2, per-projectile light and kinetic energy) is
 [`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md). The 66 km/s verdict (argon clouds
 radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the Sun dive) is
-[`docs/xray_pusher_66kms_handoff.md`](docs/xray_pusher_66kms_handoff.md).
+[`docs/xray_pusher_66kms_handoff.md`](docs/xray_pusher_66kms_handoff.md). The 400 km/s design (a light foam
+stopped on a dense graphite anvil; computed rebound and entry hole; 2740-3300 s) is
+[`docs/xray_pusher_400kms_handoff.md`](docs/xray_pusher_400kms_handoff.md).
 
 ## Architecture (settled)
 
