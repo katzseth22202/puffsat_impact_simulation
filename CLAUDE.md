@@ -61,7 +61,9 @@ and `make xray-collision-tops`. The recommendation and energy ledger owed to the
 radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the Sun dive) is
 [`docs/xray_pusher_66kms_handoff.md`](docs/xray_pusher_66kms_handoff.md). The 400 km/s design (a light foam
 stopped on a dense graphite anvil; computed rebound and entry hole; 2740-3300 s) is
-[`docs/xray_pusher_400kms_handoff.md`](docs/xray_pusher_400kms_handoff.md).
+[`docs/xray_pusher_400kms_handoff.md`](docs/xray_pusher_400kms_handoff.md). The simpler charge pusher (a disk into cheap polyethylene,
+no radiation case; the parent's bowl gives a mass ratio of 2-2.9) is
+[`docs/charge_pusher_handoff.md`](docs/charge_pusher_handoff.md).
 
 ## Architecture (settled)
 
