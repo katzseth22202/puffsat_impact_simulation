@@ -67,7 +67,9 @@ stopped on a dense graphite anvil; computed rebound and entry hole; 2740-3300 s)
 no radiation case; the parent's bowl gives a mass ratio of 2-2.9) is
 [`docs/charge_pusher_handoff.md`](docs/charge_pusher_handoff.md). The Earth-departure overtake pusher (a
 100 km/s impactor onto a charge held off the plate; k = 10-12 for an 11 km/s boost at a mass ratio
-of 1.5) is [`docs/overtake_pusher_handoff.md`](docs/overtake_pusher_handoff.md).
+of 1.5) is [`docs/overtake_pusher_handoff.md`](docs/overtake_pusher_handoff.md). The ask that the calcs
+repo re-evaluate growth on the solar-dive charge-pusher cycle (Result 12) with plates, dry mass,
+launch and seed charged is [`docs/solar_dive_cycle_ask_for_calcs.md`](docs/solar_dive_cycle_ask_for_calcs.md).
 
 ## Architecture (settled)
 

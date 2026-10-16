@@ -7,7 +7,9 @@ It is self-contained: nothing in it needs this repository's code.
 Two groups:
 - E1-E6 (the near-Sun environment) are for the parent.
 - G1-G10 (the charge pusher's growth cycle, Results 10-12 and ADR-0060 to ADR-0063) are split
-  between the parent and the calcs repo (`aim_is_all_you_need`). Each says who owes it.
+  between the parent and the calcs repo (`aim_is_all_you_need`). Each says who owes it. The
+  calcs-repo items G1-G4 and G10 are gathered into one re-evaluation, D1-D7, in
+  `solar_dive_cycle_ask_for_calcs.md` (2026-10-16).
 
 ## Why it is asked
 
