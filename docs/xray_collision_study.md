@@ -1070,7 +1070,7 @@ which is the overtake ceiling at θ = 0.
 | thin slab, 0.3 m along the stream | 0.30 | 0.29 | 0.26 | 0.24 |
 | **square block (the design)** | **0.37** | **0.36** | **0.32** | **0.29** |
 | round | | 0.34 | 0.30 | 0.27 |
-| half-cylinder: flat face to the sheet / dome to the plate / dome up | | 0.31 / 0.28 / 0.23 | 0.28 / 0.24 / 0.19 | 0.25 / 0.22 / 0.17 |
+| half-cylinder: flat face to the sheet / dome to the plate / dome up | | 0.31 / **0.38** / 0.32 | 0.28 / **0.33** / 0.27 | 0.25 / **0.30** / 0.23 |
 | ideal point fireball (the merged state) | 0.42 | 0.43 | 0.43 | 0.44 |
 | head-on reference, point fireball | | 0.53 | 0.49 | |
 
@@ -1078,12 +1078,43 @@ which is the overtake ceiling at θ = 0.
   for the point fireball).
 - **The rest is how the collision leaves its heat.** A sheet-on-charge strike leaves hot gas
   strung along the stream, so it expands along the plate rather than into it.
-- **The square block is the best real charge.** Curved charges give the sheet's edges too thin a
-  column. Half-cylinders are worse in every orientation, and dome-up is worst because its mass
-  sits farther from the plate.
+- **The half-cylinder with its dome to the plate edges out the square block** (+6% at k = 10,
+  +1-3% at k = 30-60, within ~2x the grid difference). The round charge and the half-cylinder
+  with its flat face to the sheet do worse: they give the sheet's edges too thin a column. Dome
+  up is worst, because its mass sits farther from the plate.
+- **Corrected 2026-10-15.** The first shape runs aimed a sheet 1 m wide at the charge's centre,
+  so ~41% of it passed beside the two half-cylinders lying on a face. They read 0.23-0.28 at
+  k = 10. The sheet now spans what it strikes. The square, slab, round and flat-face runs are
+  unchanged, and so is the growth optimizer, which uses the square block.
 - **The torque fix is placement.** The impulse centroid lies 0.5-1.3 m downstream of the charge at
   the 1 m standoff, so the ship's centre of mass goes there, or the charge is graded to match.
-- **Grids agree to 3%.**
+- **Grids agree to 3%** (5% for the half-cylinders).
+
+**A methane-faced charge** (`--canted-2d layers`, `canted_2d_layers.jsonl`, Seth's question). A
+dense layer on the charge's plate side (solid methane, ~520 kg/m^3) holds part of k, under a
+polyethylene foam, and the sheet strikes the foam alone. Methane vaporizes at ~0.6 MJ/kg, so it is
+a safe home for mass that a solid polyethylene charge might leave unvaporized. In the gamma-gas
+model only the density differs between the layers. Share of the canted ceiling at the 1 m standoff:
+
+| charge | layer share / density ratio | k = 10 | k = 30 |
+|---|---|---|---|
+| square block | none | 0.361 | 0.322 |
+| square block | 0.5 / 5 | 0.357 | 0.330 |
+| half-cylinder, dome to the plate | none | 0.383 | 0.326 |
+| **half-cylinder, dome to the plate** | **0.25-0.5 / 5** | **0.397-0.399** | **0.337-0.346** |
+| half-cylinder, dome to the plate | 0.25-0.5 / 15 | 0.368-0.379 | 0.313-0.326 |
+| half-cylinder, dome up (methane on the flat face) | 0.5 / 5 | 0.345 | 0.295 |
+
+- **The best layered charge gains ~10% (k = 10) and ~7% (k = 30) over the square block.** That is
+  the dome-to-the-plate half-cylinder with a thick methane layer (density ratio 5, i.e. a foam of
+  ~100 kg/m^3). About half the gain is the shape and half the layer.
+- **A thin, dense layer (ratio 15) does nothing or harm.** The methane has to be a thick cushion,
+  not a skin.
+- **Methane on the flat face of a dome-up charge loses** to the plain square.
+- **The gains are a few times the grid difference, but small.** The coarse grid ranks them the
+  same. The growth optimizer has not been rerun with this charge.
+- **Not modelled:** methane's own EOS, rebound and bonds (both layers are one gamma gas), and
+  whether the foam's fireball mixes into the methane.
 
 **The optimizer.**
 - **Earth stage:** the canted share (fitted in ln k), times the canted ceiling at the closure's

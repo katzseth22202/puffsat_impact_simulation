@@ -1176,14 +1176,17 @@ xray-collision-overtake: data/tables/ch2.json
 xray-collision-mission:
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.mission
 
-## xray-collision-growth: Result 12, the canted departure plate in planar 2-D (charge shapes, two
-## grids) and the 3S growth cycle optimized over k at each wave, for the 9.86 R_sun / 100 km/s and
-## 4 R_sun / 150 km/s closures -> data/results/xray_collision/growth_cycle.csv
+## xray-collision-growth: Result 12, the canted departure plate in planar 2-D (charge shapes, a
+## methane-faced layered charge, two grids) and the 3S growth cycle optimized over k at each wave,
+## for the 9.86 R_sun / 100 km/s and 4 R_sun / 150 km/s closures
+## -> data/results/xray_collision/growth_cycle.csv
 xray-collision-growth: data/tables/ch2.json
 	cargo run --release -p sweep -- --canted-2d
 	cargo run --release -p sweep -- --canted-2d coarse
 	cargo run --release -p sweep -- --canted-2d shapes
 	cargo run --release -p sweep -- --canted-2d shapes coarse
+	cargo run --release -p sweep -- --canted-2d layers
+	cargo run --release -p sweep -- --canted-2d layers coarse
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.growth
 
 ## xray-collision-test: that study's tests alone

@@ -25,7 +25,9 @@ So the impactor sweeps past the plate and cannot rebound off it.
    2-D strips. A wide sheet strikes a polyethylene charge held 1 m off a 20 m flat plate. The real
    collision is the design value; the point fireball is the ideal it could approach.
 3. **The square block is the charge.** Slab, round and half-cylinder charges were tried, and all
-   did worse (Seth asked about hemispheres).
+   did worse (Seth asked about hemispheres). *Amended 2026-10-15:* two half-cylinder runs were
+   mis-aimed (see below); with the aim fixed, the dome-to-the-plate half-cylinder edges the
+   square by 1-6%. The square stays the design charge.
 4. **Growth counts all impactor.** The optimizer maximizes the Earth-wave impactor returned per kg
    of Earth- *and* Sun-wave impactor spent, over `k_E` in 5-60 and `k_S` in 20-100. The calcs
    repo's closures are copied inputs (commit 868e88a); this repository cannot import that code.
@@ -88,3 +90,25 @@ problem to solve.
 - **Timing.** The streams must leave Jupiter as true mirror images.
 
 Bend and timing are the calcs repo's flyby machinery, so they are asked of it, not computed here.
+
+## Amendment, 2026-10-15: the half-cylinders' aim, and a methane-faced charge
+
+Code `euler2d::canted` (`PlateLayer`), `sweep --canted-2d shapes` and `--canted-2d layers`
+(`make xray-collision-growth`).
+
+**Defect.** The sheet was always 1 m wide about the charge's centre. Half-cylinders lying on a face
+(dome up, dome to the plate) fill only half of that across the stream, so ~41% of the sheet missed
+them. The sheet now spans the across-stream extent of what it is aimed at, and full-width charges
+are unchanged. Corrected shares at k = 10 / 30 / 60: dome to the plate 0.38 / 0.33 / 0.30 (was
+0.28 / 0.24 / 0.22), dome up 0.32 / 0.27 / 0.23 (was 0.23 / 0.19 / 0.17). The square block is
+0.36 / 0.32 / 0.29.
+
+**Methane-faced charge.** A dense plate-side layer (solid methane) under polyethylene foam, with
+the sheet striking the foam alone. The best is the dome-to-the-plate half-cylinder with 25-50% of
+k in a layer 5x the foam's density: 0.397-0.399 at k = 10 and 0.337-0.346 at k = 30, about +10% and
++7% over the square block. A thin layer at 15x does nothing. Both layers are one gamma gas, so
+methane's EOS, rebound and bonds are not modelled.
+
+**Not yet decided.** The design charge stays the square block until the growth optimizer is rerun
+with the layered charge and methane's rebound and bonds are priced.
+

@@ -20,6 +20,12 @@
 //! at speed 1, the charge a block of mass `k` at rest just downstream of it, so their collision is
 //! a clean 1-D slab collision along `s`. Units: mass, speed and impulse per unit depth, read
 //! directly in `m w`.
+//!
+//! The sheet spans exactly the across-stream extent of what it is aimed at, so all of its unit
+//! mass strikes. (Until 2026-10-15 it was always `width` wide about the charge's centre, and ~41%
+//! of it passed beside the two half-disks lying on a face.) A [`PlateLayer`] splits the charge
+//! across the stream into a dense plate-side layer and the foam above it; the sheet is then aimed
+//! at the foam alone, so the layer is driven only by the foam's fireball.
 
 use crate::kernel::{Bc, Grid2D};
 use crate::state::Prim;
@@ -40,6 +46,15 @@ pub enum ChargeShape {
     HalfDomeUp,
     /// A half-disk with its dome toward the plate.
     HalfDomeDown,
+}
+
+/// A dense layer on the charge's plate side (a solid methane face under polyethylene foam): the
+/// charge cells nearest the plate across the stream, holding `mass_share` of `k` at
+/// `density_ratio` times the foam's density.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PlateLayer {
+    pub mass_share: f64,
+    pub density_ratio: f64,
 }
 
 /// One canted strip run.
@@ -69,6 +84,9 @@ pub struct CantedStrip {
     pub point_radius: Option<f64>,
     /// The charge's cross-section (the slab and square runs are [`ChargeShape::Block`]).
     pub shape: ChargeShape,
+    /// `Some` splits the charge into a plate-side layer and the struck foam (not with
+    /// `point_radius`).
+    pub layer: Option<PlateLayer>,
 }
 
 /// What the plate took.
@@ -87,6 +105,10 @@ pub struct CantedResult {
     pub peak_x: f64,
     /// Ambient mass as a share of the merged mass.
     pub ambient_mass_share: f64,
+    /// The layer's density over the foam's as gridded (the masses are exact, so this differs a
+    /// little from the requested ratio), and the layer's share of `k`; 1 and 0 with no layer.
+    pub layer_density_ratio: f64,
+    pub layer_mass_share: f64,
     pub steps: usize,
 }
 
@@ -157,10 +179,65 @@ pub fn run_canted_strip(c: &CantedStrip) -> CantedResult {
     let plate = (x0, x0 + c.plate_length);
     let charge = (x0 + c.charge_x, c.standoff);
     let back = 0.5 * c.charge_length + gap + 0.5 * disk;
-    let sheet = (charge.0 - back * s.0, charge.1 - back * s.1);
+    let centre = |iz: usize, ir: usize| ((ir as f64 + 0.5) * c.dx, (iz as f64 + 0.5) * c.dx);
+    // Across-stream coordinate about the charge's centre (positive away from the plate).
+    let across = |x: f64, z: f64| -(x - charge.0) * s.1 + (z - charge.1) * s.0;
+    let point = c.point_radius.is_some();
+    assert!(
+        !(point && c.layer.is_some()),
+        "a point fireball has no layers"
+    );
+    let mut charge_b: Vec<f64> = Vec::new();
+    if !point {
+        for iz in 0..nz {
+            for ir in 0..nr {
+                let (x, z) = centre(iz, ir);
+                if in_charge(x, z, charge, s, c) {
+                    charge_b.push(across(x, z));
+                }
+            }
+        }
+        charge_b.sort_by(f64::total_cmp);
+    }
+    // The layer is the `n_layer` charge cells nearest the plate across the stream; `n_layer`
+    // makes `r n / (r n + N - n)` the requested mass share at density ratio `r`.
+    let b_cut = c.layer.map_or(f64::NEG_INFINITY, |l| {
+        let n = charge_b.len() as f64;
+        let want = l.mass_share * n / (l.density_ratio * (1.0 - l.mass_share) + l.mass_share);
+        let mut n_layer = 1usize;
+        while (n_layer as f64) + 0.5 < want && n_layer + 1 < charge_b.len() {
+            n_layer += 1;
+        }
+        0.5 * (charge_b[n_layer - 1] + charge_b[n_layer])
+    });
+    // The sheet spans the struck cells' across extent, kept at the nominal edge wherever the
+    // struck part reaches it (so full-width charges are unchanged).
+    let (sheet_lo, sheet_hi) = if point {
+        (-0.5 * c.width, 0.5 * c.width)
+    } else {
+        let struck: Vec<f64> = charge_b.iter().copied().filter(|&b| b > b_cut).collect();
+        let (lo, hi) = (struck[0], struck[struck.len() - 1]);
+        (
+            if lo - c.dx <= -0.5 * c.width {
+                -0.5 * c.width
+            } else {
+                lo - 0.5 * c.dx
+            },
+            if hi + c.dx >= 0.5 * c.width {
+                0.5 * c.width
+            } else {
+                hi + 0.5 * c.dx
+            },
+        )
+    };
+    let mid = 0.5 * (sheet_lo + sheet_hi);
+    let sheet = (
+        charge.0 - back * s.0 - mid * s.1,
+        charge.1 - back * s.1 + mid * s.0,
+    );
+    let sheet_width = sheet_hi - sheet_lo;
     let region = |iz: usize, ir: usize| -> u8 {
-        let x = (ir as f64 + 0.5) * c.dx;
-        let z = (iz as f64 + 0.5) * c.dx;
+        let (x, z) = centre(iz, ir);
         if let Some(radius) = c.point_radius {
             return if (x - charge.0).hypot(z - charge.1) < radius {
                 3
@@ -169,32 +246,42 @@ pub fn run_canted_strip(c: &CantedStrip) -> CantedResult {
             };
         }
         if in_charge(x, z, charge, s, c) {
-            2
-        } else if in_rect(x, z, sheet, s, disk, c.width) {
+            if across(x, z) < b_cut { 4 } else { 2 }
+        } else if in_rect(x, z, sheet, s, disk, sheet_width) {
             1
         } else {
             0
         }
     };
     let cell = c.dx * c.dx;
-    let (mut v_sheet, mut v_charge, mut v_all) = (0.0, 0.0, 0.0);
+    let (mut v_sheet, mut v_foam, mut v_layer, mut v_all) = (0.0, 0.0, 0.0, 0.0);
     for iz in 0..nz {
         for ir in 0..nr {
             v_all += cell;
             match region(iz, ir) {
                 1 => v_sheet += cell,
-                2 | 3 => v_charge += cell,
+                2 | 3 => v_foam += cell,
+                4 => v_layer += cell,
                 _ => {}
             }
         }
     }
-    let point = c.point_radius.is_some();
+    let v_charge = v_foam + v_layer;
     // The point fireball has no sheet; its mass 1 + k sits in the charge's region.
     let rho_sheet = if point { 1.0 } else { 1.0 / v_sheet };
     let rho_charge = if point {
         (1.0 + c.k) / v_charge
     } else {
         c.k / v_charge
+    };
+    let layer_share = c.layer.map_or(0.0, |l| l.mass_share);
+    let (rho_foam, rho_layer) = if c.layer.is_some() {
+        (
+            c.k * (1.0 - layer_share) / v_foam,
+            c.k * layer_share / v_layer,
+        )
+    } else {
+        (rho_charge, rho_charge)
     };
     let drift = 1.0 / (1.0 + c.k);
     let p_hot = (c.gamma - 1.0) * 0.5 * c.k / (1.0 + c.k) / v_charge;
@@ -206,7 +293,8 @@ pub fn run_canted_strip(c: &CantedStrip) -> CantedResult {
     g.init(|iz, ir| match region(iz, ir) {
         // Prim is (rho, u_z, u_r, p); x is the grid's r direction.
         1 => Prim::new(rho_sheet, s.1, s.0, p_cold),
-        2 => Prim::new(rho_charge, 0.0, 0.0, p_cold * (v_sheet / v_charge).min(1.0)),
+        2 => Prim::new(rho_foam, 0.0, 0.0, p_cold * (v_sheet / v_charge).min(1.0)),
+        4 => Prim::new(rho_layer, 0.0, 0.0, p_cold * (v_sheet / v_charge).min(1.0)),
         3 => Prim::new(rho_charge, drift * s.1, drift * s.0, p_hot),
         _ => Prim::new(rho_amb, 0.0, 0.0, p_cold * 1.0e-6),
     });
@@ -276,6 +364,8 @@ pub fn run_canted_strip(c: &CantedStrip) -> CantedResult {
         peak_pressure: peak,
         peak_x,
         ambient_mass_share: rho_amb * (v_all - v_sheet - v_charge) / (1.0 + c.k),
+        layer_density_ratio: rho_layer / rho_foam,
+        layer_mass_share: layer_share,
         steps,
     }
 }
@@ -307,6 +397,7 @@ mod tests {
             ambient: 1.0e-9,
             point_radius: None,
             shape: super::ChargeShape::Block,
+            layer: None,
         }
     }
 
@@ -330,6 +421,36 @@ mod tests {
                 r.ceiling
             );
             assert!(r.ambient_mass_share < 1.0e-3);
+        }
+    }
+
+    /// A plate-side layer holds its share of `k` at close to the requested density ratio, the
+    /// half-disk lying on its face is struck by the whole sheet, and both stay under the ceiling.
+    #[test]
+    fn layered_and_half_charges_stay_under_their_ceiling() {
+        use super::{ChargeShape, PlateLayer};
+        for (shape, layer) in [
+            (ChargeShape::HalfDomeUp, None),
+            (
+                ChargeShape::Block,
+                Some(PlateLayer {
+                    mass_share: 0.5,
+                    density_ratio: 5.0,
+                }),
+            ),
+        ] {
+            let c = CantedStrip {
+                shape,
+                layer,
+                charge_length: 0.8,
+                ..small(101.0, 10.0)
+            };
+            let r = run_canted_strip(&c);
+            assert!(r.impulse > 0.0 && r.impulse < r.ceiling);
+            if layer.is_some() {
+                assert!((r.layer_density_ratio / 5.0 - 1.0).abs() < 0.35);
+                assert!((r.layer_mass_share - 0.5).abs() < 1.0e-12);
+            }
         }
     }
 }

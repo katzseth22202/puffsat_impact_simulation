@@ -7311,12 +7311,57 @@ struct CantedRecord {
     peak_x: f64,
     ambient_mass_share: f64,
     confined_ratio: f64,
+    /// The plate-side layer's share of `k` and its density over the foam's (0 and 1 with none).
+    #[serde(default)]
+    layer_mass_share: f64,
+    #[serde(default)]
+    layer_density_ratio: f64,
     steps: usize,
     dx: f64,
 }
 
 /// `(family, theta, k, standoff, charge_x, plate_length, charge_length, point_radius)`.
 type CantedSpec = (&'static str, f64, f64, f64, f64, f64, f64, Option<f64>);
+/// A `--canted-2d layers` case: `(family, shape, k, layer)` at the 1 m standoff.
+type LayeredSpec = (
+    &'static str,
+    euler2d::canted::ChargeShape,
+    f64,
+    Option<euler2d::canted::PlateLayer>,
+);
+/// Seth's methane-faced charge: a solid methane layer on the plate side, polyethylene foam above
+/// it, the sheet striking the foam alone. `(mass share, density ratio)`: solid methane is
+/// ~520 kg/m^3, a polyethylene foam ~35-100 kg/m^3.
+const CANTED_LAYERS: [(f64, f64); 4] = [(0.25, 5.0), (0.5, 5.0), (0.25, 15.0), (0.5, 15.0)];
+const CANTED_LAYER_SHAPES: [(&str, euler2d::canted::ChargeShape); 3] = [
+    ("square charge", euler2d::canted::ChargeShape::Block),
+    ("half, dome up", euler2d::canted::ChargeShape::HalfDomeUp),
+    (
+        "half, dome to the plate",
+        euler2d::canted::ChargeShape::HalfDomeDown,
+    ),
+];
+
+fn canted_layer_cases() -> Vec<LayeredSpec> {
+    let mut v = Vec::new();
+    for &(family, shape) in &CANTED_LAYER_SHAPES {
+        for &k in &[10.0, 30.0] {
+            v.push((family, shape, k, None));
+            for &(share, ratio) in &CANTED_LAYERS {
+                v.push((
+                    family,
+                    shape,
+                    k,
+                    Some(euler2d::canted::PlateLayer {
+                        mass_share: share,
+                        density_ratio: ratio,
+                    }),
+                ));
+            }
+        }
+    }
+    v
+}
 /// The charge-shape families (Seth's hemisphere question): planar half-cylinders and a round
 /// charge, 1 m across like the square block, at the 1 m standoff.
 const CANTED_SHAPES: [(&str, euler2d::canted::ChargeShape); 4] = [
@@ -7422,6 +7467,9 @@ fn cmd_canted_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let coarse = args.iter().any(|a| a == "coarse");
     let dx = if coarse { 0.1 } else { 0.05 };
     let confined = charge_confined_ratio();
+    if args.iter().any(|a| a == "layers") {
+        return cmd_canted_layers(dx, coarse, confined);
+    }
     let shapes = args.iter().any(|a| a == "shapes");
     let cases = if shapes {
         canted_shape_cases()
@@ -7445,6 +7493,7 @@ fn cmd_canted_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 .iter()
                 .find(|(name, _)| *name == family)
                 .map_or(euler2d::canted::ChargeShape::Block, |&(_, sh)| sh),
+            layer: None,
         };
         let r = euler2d::canted::run_canted_strip(&c);
         CantedRecord {
@@ -7463,6 +7512,8 @@ fn cmd_canted_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             peak_x: r.peak_x,
             ambient_mass_share: r.ambient_mass_share,
             confined_ratio: confined,
+            layer_mass_share: r.layer_mass_share,
+            layer_density_ratio: r.layer_density_ratio,
             steps: r.steps,
             dx,
         }
@@ -7487,6 +7538,71 @@ fn cmd_canted_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             r.peak_x,
             r.ambient_mass_share,
             r.steps,
+        );
+    })
+}
+
+/// `--canted-2d layers [coarse]`: the methane-faced charge against the same shapes unlayered
+/// (`canted_2d_layers[_coarse].jsonl`).
+fn cmd_canted_layers(
+    dx: f64,
+    coarse: bool,
+    confined: f64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let cases = canted_layer_cases();
+    let rows = par_map_with_progress("canted layers", &cases, |&(family, shape, k, layer)| {
+        let c = euler2d::canted::CantedStrip {
+            theta_deg: CANTED_THETA,
+            k,
+            standoff: 1.0,
+            charge_x: CANTED_CHARGE_X,
+            plate_length: CANTED_PLATE,
+            width: 1.0,
+            charge_length: CANTED_SQUARE,
+            dx,
+            gamma: SPRAY_2D_GAMMA,
+            ambient: CHARGE_AMBIENT,
+            point_radius: None,
+            shape,
+            layer,
+        };
+        let r = euler2d::canted::run_canted_strip(&c);
+        CantedRecord {
+            family: family.to_string(),
+            theta_deg: CANTED_THETA,
+            k,
+            standoff: 1.0,
+            charge_x: CANTED_CHARGE_X,
+            plate_length: CANTED_PLATE,
+            impulse: r.impulse,
+            ceiling: r.ceiling,
+            ceiling_share: r.impulse / r.ceiling,
+            centroid_x: r.centroid_x,
+            centroid_offset: r.centroid_offset,
+            peak_pressure: r.peak_pressure,
+            peak_x: r.peak_x,
+            ambient_mass_share: r.ambient_mass_share,
+            confined_ratio: confined,
+            layer_mass_share: r.layer_mass_share,
+            layer_density_ratio: r.layer_density_ratio,
+            steps: r.steps,
+            dx,
+        }
+    });
+    let grid = if coarse { "_coarse" } else { "" };
+    let path = RESULT_PATH_CANTED.replace(".jsonl", &format!("_layers{grid}.jsonl"));
+    emit_scenario(&path, "canted layers", &rows, |r| {
+        println!(
+            "rust: {:<24} k {:>4.0} layer {:.2} x{:>4.1} | J/mw {:6.3} ceiling {:6.3} ({:.1}%) centroid +{:.2} m peak {:.2e}",
+            r.family,
+            r.k,
+            r.layer_mass_share,
+            r.layer_density_ratio,
+            r.impulse,
+            r.ceiling,
+            100.0 * r.ceiling_share,
+            r.centroid_offset,
+            r.peak_pressure,
         );
     })
 }
