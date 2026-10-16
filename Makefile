@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-mission xray-collision-growth xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1188,6 +1188,12 @@ xray-collision-growth: data/tables/ch2.json
 	cargo run --release -p sweep -- --canted-2d layers
 	cargo run --release -p sweep -- --canted-2d layers coarse
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.growth
+
+## xray-collision-cme: CME density at 4 / 9.86 R_sun (coronagraph and in situ), non-radial CME flow,
+## the edge-on Sun-wave disk's drift, and edge-on sunlight over the finite solar disk (parent item 4-5)
+## -> data/results/xray_collision/cme_{density,tilt,drift,edge_sunlight}.csv
+xray-collision-cme:
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.cme_drift
 
 ## xray-collision-test: that study's tests alone
 xray-collision-test:

@@ -56,8 +56,8 @@ Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`),
 `make xray-collision-argon-bags`, `make xray-collision-anvil`, `make xray-collision-ch2-table`,
 `make xray-collision-rebound`, `make xray-collision-charge-2d`, `make xray-collision-charge`,
 `make xray-collision-charge-mix`, `make xray-collision-freeze`, `make xray-collision-collar`,
-`make xray-collision-overtake`, `make xray-collision-mission`, `make xray-collision-growth`
-and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
+`make xray-collision-overtake`, `make xray-collision-mission`, `make xray-collision-growth`,
+`make xray-collision-cme` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
 (lattice target, k = 2, per-projectile light and kinetic energy) is
 [`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md). The 66 km/s verdict (argon clouds
 radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the Sun dive) is
@@ -72,7 +72,10 @@ repo re-evaluate growth on the solar-dive charge-pusher cycle (Result 12) with p
 launch and seed charged is [`docs/solar_dive_cycle_ask_for_calcs.md`](docs/solar_dive_cycle_ask_for_calcs.md);
 the calcs repo's ADR 0072 had already answered it. The parent's near-Sun environment answers (E1-E6,
 G5-G9) are [`docs/solar_environment_answers_from_parent.md`](docs/solar_environment_answers_from_parent.md);
-that round is closed in ADR-0063's amendment of 2026-10-16.
+that round is closed in ADR-0063's amendment of 2026-10-16. The parent's follow-up CME asks (its item 4:
+CME density at depth and non-radial flow; item 5, edge-on sunlight) are answered in
+[`docs/cme_drift_answers_for_parent.md`](docs/cme_drift_answers_for_parent.md) (module `cme_drift.py`,
+target `make xray-collision-cme`).
 
 ## Architecture (settled)
 

@@ -157,3 +157,24 @@ launch, counted in launch units: 3.60x per cycle at 9.86 R_sun and 4.92x at 4 R_
 per total impactor), against this repository's 7.8-10.6x counted per impactor only. Its optima sit
 on this repository's table edges (k_E 5-6, k_S 20); widening them is that repo's ask, not part of
 this round.
+
+## Amendment, 2026-10-16: CME density and non-radial flow at depth (parent item 4)
+
+Code `cme_drift.py` (`make xray-collision-cme` -> `cme_{density,tilt,drift,edge_sunlight}.csv`).
+Answer: `docs/cme_drift_answers_for_parent.md`, for the parent's 53ca8e8 items 4(a), 4(b) and 5.
+
+- **Density.** Temmer et al. 2021's 29 coronagraph CMEs, scaled inward as r^-3 with 2-6%/R_sun of
+  mass still lifting, give a median of 2.7-6.1e5 cm^-3 at 4 R_sun (densest 1.0-2.2e6). The Helios
+  in-situ fits, extrapolated, give 1.0e5. The parent's 1e6 / 1e7 assumption is 1.6-10x high
+  typical and ~2x high extreme. Peak to mean is ~2: Parker's measured shock compression is 2.03.
+- **Tilt.** Inside ejecta it is ~1 degree (1 au). In a sheath it is 23 degrees, which Parker
+  measured downstream of the 2022-09-05 shock at 13-15 R_sun.
+- **Drift of the edge-on disk.** The CME's own speed is 91-96% of the ram at 1000 km/s. In the
+  ejecta even the extreme case costs <= 0.8 m/s and 1.4 km. Only the worst stacked sheath case
+  costs ~14 m/s, ~25 km and ~23 g of cold gas at 4 R_sun (2.6 m/s and 12 km at 9.86 R_sun).
+- **Edge-on sunlight.** The parent's 11% / 5% of face-on is confirmed (0.108 / 0.048,
+  limb-darkened).
+
+Recorded for the Sun-wave budget, not modelled further: a ~1 km tracking requirement and ~25 g of
+cold gas per 1 kg disk. Open: the out-of-plane flow inside near-Sun ejecta, and the sheath's
+thickness at 4 R_sun (an MHD CME run).

@@ -1,7 +1,8 @@
-> **Copied verbatim** from `katzseth22202/Balloon-Pulse-Propulsion` commit `1938f94`
-> (`docs/solar_environment_answers_for_impact_sim.md`), 2026-10-16. It answers this repository's
-> `docs/solar_environment_4rsun_ask_for_parent.md`. What this repository did with it is under
-> "Answered" in that ask and in ADR-0063's amendment of 2026-10-16.
+> **Copied verbatim** from `katzseth22202/Balloon-Pulse-Propulsion` commit `53ca8e8`
+> (`docs/solar_environment_answers_for_impact_sim.md`), 2026-10-16; first copied at `1938f94`. It
+> answers this repository's `docs/solar_environment_4rsun_ask_for_parent.md`. What this repository
+> did with it is under "Answered" in that ask and in ADR-0063's amendments of 2026-10-16. Its items
+> 4-5 (the CME asks) are answered in `docs/cme_drift_answers_for_parent.md`.
 
 # The near-Sun environment at 4 and 9.86 R_sun: answers to E1-E6, G5-G8 (and G9)
 
@@ -244,11 +245,124 @@ overtake it as design drivers, and neither is heat:
 1. **Fly the Sun-wave disks edge-on and flip at the last minute** (E2): the face normal out of the
    orbital plane, rotated 90 degrees to face the ship in the final minute. A few m/s of cold gas then
    covers even an extreme CME (<= 0.6 m/s at either depth). Size the tracking for a ~1 km drift.
-   The parent's estimate uses assumed CME densities, so check them against Parker's measured
-   moments first.
+   The parent's estimate uses assumed CME densities and purely radial flow, so check both first
+   (item 4).
 2. **Carry ~1% of Sun-wave passes lost to SEP events at solar maximum**, and >= 100 krad
    electronics behind ~1 g/cm^2, in the disk mass and the attrition (E3).
 3. **Use fluence scaling, not peak-flux scaling, for dose**: r^-0.7 to r^-1.5.
+4. **Two CME data asks that decide item 1** (added 2026-10-16, after the edge-on recommendation).
+   The edge-on rule assumes the CME flows exactly radially. Radial flow from the Sun does lie in the
+   disk's orbital plane, but the edge has 1/139 of the face area, so the rule holds only while the
+   flow stays within ~0.4 degrees of that plane. Non-radial motion (deflection, sheath flow along
+   the shock, flux-rope expansion) tilts the flow onto the face, and the projected area goes as
+   sin(tilt) + 1/139 of the face. Parent scratch estimate (est.), on this doc's assumed densities:
+
+   | out-of-plane flow, % of CME speed | tilt | 4 R_sun extreme, 1 h | 9.86 R_sun typical, 2.5 h |
+   |---|---|---|---|
+   | 0 (item 1) | 0 deg | 0.5 m/s, 1 km | 0.004 m/s, 16 m |
+   | 5 | 2.8 deg | 4 m/s, 7.5 km | - |
+   | 10 | 5.7 deg | 8 m/s, 14 km | - |
+   | 20 | 11 deg | 15 m/s, 27 km | 0.10 m/s, 450 m (1.1e-5 N mean on 1 kg) |
+
+   So a few degrees of tilt brings back most of the face-on push, and the extreme case no longer
+   fits "a few m/s of cold gas". Against that, a mass check suggests the assumed densities run
+   ~6-10x high: a typical 1.6e12 kg CME in a 50-degree shell r/2 thick at 4 R_sun is ~1.5e5 cm^-3,
+   and a heavy 1e13 kg one ~1e6 cm^-3 (est.; it spreads the mass evenly, and real cores and sheaths
+   are denser). The two asks:
+   - **(a) CME density at depth.** Parker's measured proton density (SWEAP moments) inside the
+     2022-09-05 CME at ~13 R_sun, and coronagraph mass-and-volume densities for CMEs at 4-10 R_sun,
+     typical and 99th percentile. Peak-to-mean ratio across the sheath and core too, since the
+     guidance sees the peak.
+   - **(b) Non-radial flow.** A bound on the out-of-plane velocity component inside CMEs near the
+     Sun, as a fraction of the bulk speed (Parker in-situ flow angles, or MHD CME runs). This sets
+     the tilt in the table above.
+   Together these decide between a ~1 km tracking requirement and a tens-of-m/s correction budget
+   for roughly one pass in ten at solar maximum.
+5. **Correction to item 1's sunlight figure.** The Sun is not a point source at depth. Its angular
+   radius is 14.5 degrees at 4 R_sun and 5.8 degrees at 9.86 R_sun, so an edge-on disk still sees
+   the upper and lower halves of the Sun on its two faces. The pressure across the face cancels by
+   symmetry, but the outward push does not. Averaged over a uniform solar disk, edge-on sunlight is
+   ~11% of face-on at 4 R_sun and ~5% at 9.86 R_sun, not 1/139. A 1% modeling error then misses by
+   ~80 m at 4 R_sun (not ~5 m), still a steady, plannable term.
+6. **Sun-wave co-flyers: how the disks' drift is measured** (Seth's proposal, 2026-10-16; parent
+   scratch numbers, est.). The paper gives the Sun wave no tracking architecture yet. The four
+   co-flyers of `sec:jupiter_coflyers` serve the Earth-return streams only.
+   - **Layout.** Four co-flyers ride the disks' retrograde dive, ~500,000 km off the train. The
+     train is ~3.4e6 km long (4.85 h at 197 km/s at 9.86 R_sun). Put them at the corners: each
+     offset both radially and out of plane, two near a quarter of the way along the train and two
+     near three quarters. The Sun ship ranges along-track as a fifth station.
+   - **Geometry (dilution of precision, two-way ranging).** Corners give a worst case of 2.0 in the
+     radial and normal components; two out-of-plane plus two radial give 3.7. Losing one corner
+     co-flyer still leaves 3.7, so four carries one spare. Corners also keep the Sun at least 45
+     degrees off every line of sight. A purely radial-outward co-flyer would look at its nearest
+     disks straight against the Sun.
+   - **Cost of the offsets (two-body, 9.86 R_sun dive from 5.2 AU, aphelion speed 1.73 km/s).**
+     Along-track is free (timing). Radial, a perihelion of 9.14 or 10.6 R_sun, is ~60 m/s at
+     aphelion. Out of plane is ~1.3 km/s, kicked near 2.6 AU inbound (1.7 km/s at 1 AU, 3.1 km/s
+     at 0.3 AU). A plane change at Jupiter does not help: every orbit leaving its aphelion with
+     purely tangential velocity keeps the same perihelion point, whatever its plane. A
+     differently targeted Jupiter flyby might supply the turn for free. That is unchecked against
+     the flyby's turning limit, and is ask (c) below. The inner co-flyers at 9.14 R_sun see ~16%
+     more sunlight.
+   - **What sets the precision: the network's shape.** Ranges measure distances only, so they fix
+     the shape of the network (ship, co-flyers, disks) up to a rigid rotation and translation. A
+     hit or miss depends only on the disk's state relative to the ship inside that shape, which a
+     rigid motion leaves unchanged. Cross-ranging between all nodes fixes the shape to
+     centimetres, at the same precision as ranging to the disks. Orientation enters only through
+     the Sun's differential gravity on the predicted closing path: a 1 microradian error on a disk
+     1e6 km (~43 min) out mispredicts its miss by ~4 mm. So the floor is centimetres, not the
+     ~40 m an assumed 20 m co-flyer position error once suggested. Lunar laser ranging is
+     millimetre-class for the same reason it works here: the geometry it needs is known, there
+     because its stations are tied into the ground reference frame, here because the network
+     ranges itself.
+   - **Light-path terms.** The Shapiro delay between two nodes 2e6 km apart at ~10 R_sun adds ~860 m
+     of path. General relativity predicts it to ~2 cm (PPN gamma to ~2e-5, Cassini), so it is
+     modelled, not budgeted. Coronal plasma delay at optical wavelengths is nanometres.
+   - **Co-flyer accelerometers.** They only bridge the gaps between range fixes, not the whole arc.
+     A bias b grows into ½·b·t² of position error. Across the whole 4.85 h arc with nothing else,
+     1 cm would take ~1e-10 m/s^2. Re-measured by ranging every ~100 s, it takes ~1e-6 m/s^2,
+     because each fix wipes out what built up since the last. Delta-DOR is not what saves this
+     (it is ~150 m at 1 AU, and fixes only the network's position, which a hit does not need).
+     The accelerometer may even be optional. A string of range fixes already measures how the
+     shape accelerates. It earns its place by smoothing over gaps (a disk's transponder pointed
+     at another co-flyer), and by telling whether a co-flyer or a disk was pushed, which ranges
+     alone cannot separate.
+     GOCE-class is the wrong spec. Its full range of 6.5e-6 m/s^2 worked only because GOCE flew
+     drag-free, and sunlight alone pushes a co-flyer with 1 m^2 per 50 kg at ~4e-5 m/s^2 at
+     9.86 R_sun. Needed: a range of ~1e-3 to 1e-2 m/s^2, and a bias holding ~1 cm over ~100 s
+     between fixes, i.e. ~1e-6 m/s^2. That is the same electrostatic technology set for wider
+     range. A ~13 kg, ~20 W simplified gravitational reference sensor (Conklin et al., arXiv
+     2107.08545) bounds the mass.
+   - **On each disk:** a pointed laser transponder, stepped between co-flyers. 1 W peak in a 1 mrad
+     beam into a 30 cm co-flyer telescope returns ~1e5 photons/s at 2e6 km. The paper's wide,
+     milliwatt-average beacon aimed at the ship does not reach the co-flyers. Cold gas for the
+     drift: ~25 g covers the worst tilted extreme CME (15 m/s at 60 s specific impulse), under 1 g
+     the typical tilted case at 9.86 R_sun (0.1-0.3 m/s).
+   - **Calibration disks (Seth, 2026-10-16).** The Sun-wave form of the paper's sacrificial lead
+     PuffSat. The first one or two disks aim to miss the ship by tens of metres. The ship's
+     terminal tracker sees the pass almost perfectly (3 microradians at 100 m is under 1 mm), and
+     the gap between the network's prediction and the measured pass gives the error all disks
+     share: transponder delay biases, the ship's place in the shape, sunlight-model error, and a
+     CME push common to the train. Correcting for it fixes that shared error for every disk behind.
+     Errors that differ from disk to disk stay each disk's own job. Aiming off first follows the
+     Earth sheets' rule (aim off until unfurl is confirmed), so a gross network error shows up as
+     a measured miss, not an off-centre strike. After the first hits every disk gives a residual
+     anyway, through the terminal tracker in its last seconds. But the shared error can change
+     mid-arc, so add a calibration miss after any long pause in pulses and after a CME passes.
+     Cost: even a dozen of ~8,100 disks is 0.15% of the wave. A missed disk is harmless, since
+     nothing orbits at that depth, and it coasts back out on its own orbit.
+   - **Split of the correction.** A CME pushes neighbouring disks at the same attitude alike, so
+     much of it is common-mode and can go to the ship. An extreme CME's ~27 km at 4 R_sun is too
+     much for it: moving 1500 t that far in an hour takes ~6 kN. The disks cancel most of it
+     themselves, and the ship trims what is left. CME density also varies along the train, which
+     needs per-disk thrust anyway.
+   - **Asks.**
+     - **(c) aim repo:** can a differently targeted Jupiter flyby put a co-flyer ~500,000 km out
+       of the disks' plane at perihelion, inside the flyby's turning limit, and at what cost
+       otherwise?
+     - **(d) control sim:** the disk-to-charge landing tolerance for the Sun wave (the paper says
+       only "within meters"), and an error budget for the co-flyer network against it: shape
+       noise, accelerometer gaps between fixes, and the CME push between fixes.
 
 ## Sources
 

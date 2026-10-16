@@ -427,3 +427,26 @@ def test_jupiter_split_burn() -> None:
         assert all(float(str(r["propellant_per_ship"])) < 0.015 for r in mine)
     base = {float(str(r["perijove_rj"])): float(str(r["perijove_burn"])) for r in rows[:4]}
     assert base[6.5] == pytest.approx(1.67, abs=0.01)
+
+
+def test_cme_drift_limits_and_sunlight() -> None:
+    """The edge-on sunlight share reproduces 4 alpha/(3 pi) for a uniform small Sun; density
+    scales as r^-3 with no mass growth; the CME's own flow dominates the ram; Parker's shock
+    downstream is tilted ~23 degrees out of the plane; zero tilt leaves only the edge's push."""
+    from puffsat.xray_collision import cme_drift as c
+
+    s = c.edge_sunlight(100.0, 0.0)
+    alpha = math.asin(0.01)
+    face, edge = c.disk_areas()
+    assert s == pytest.approx(4.0 * alpha / (3.0 * math.pi) + edge / face, rel=0.01)
+    assert c.edge_sunlight(4.0, 0.6) < c.edge_sunlight(4.0, 0.0)
+    assert c.coronagraph_density(1e-17, 10.75, 0.0) == pytest.approx(
+        8.0 * c.coronagraph_density(1e-17, 21.5, 0.0)
+    )
+    psp = next(t for t in c.tilt_rows() if "Parker" in t.source)
+    assert psp.tilt_deg == pytest.approx(23.4, abs=0.2)
+    _, p, f, _, _ = c.drift(4.0, 1e6, 1.0e6, 0.0)
+    assert f == pytest.approx(p * edge)
+    rows = [r for r in c.drift_rows() if "1000 km/s" in r.case and r.r_sun == 4.0]
+    assert all(0.85 < r.cme_share_of_ram < 0.95 for r in rows)
+    assert c.peak_to_mean()["psp_shock_compression"] == pytest.approx(2.03, abs=0.01)
