@@ -30,7 +30,13 @@ Two tables back decisions taken after Result 10, so that none rests on arithmeti
     `D MR_E / (D - S)`.
 
   `f_dead` is the Sun ship's mass that cannot be released as impactor. It is bracketed between 0
-  and its plate: the δ/D 0.5 paraboloid's floor at 30 kg/m^2 on a 100 t final mass.
+  and its kept plate. The calcs repo sizes that plate by pulse energy at 2 Hz over the arc and
+  finds it 1-2.5% of the ship (`PLATE_DEAD_CALCS`, cited). The δ/D 0.5 paraboloid's geometric
+  floor at 30 kg/m^2 on a 100 t final mass (0.16, `plate_dead_fraction`) is kept as a pessimistic
+  row only.
+
+- **The departure burn** (`departure_dv`). The 3S departure starts at the 10-day parking orbit's
+  600 km periapsis, so its burn is vis-viva from that orbit's periapsis speed to the hyperbola's.
 
 The decisions they back: the 400 km/s stage at mass ratio 2 (Seth, 2026-10-15), at $1000/kg of
 projectile; Parker's 9.86 R_sun rather than 4 R_sun as the baseline periapsis; and the Sun wave as
@@ -60,6 +66,15 @@ PLATES = (
     "paraboloid 0.50 at 1.5 focus",
 )
 OUT_PERIAPSIS = charge.OUT_DIR / "mission_periapsis.csv"
+GM_EARTH = 3.986004418e14  # [m^3/s^2]
+R_EARTH = 6.378137e6  # [m], equatorial
+#: The 3S departure's parking orbit (the calcs repo's ADR 0071): a 10-day ellipse, 600 km periapsis.
+PARKING_PERIOD = 10.0 * 86400.0  # [s]
+PARKING_PERIAPSIS_ALT = 600.0e3  # [m]
+#: The Sun ship's kept plate as a share of the ship, from the calcs repo's ADR 0072 (`aim_is_all_
+#: you_need` 127162f): its paraboloid sized as pulse energy^(2/3) with pulses capped at 2 Hz over a
+#: 2-5 h arc is 6-19 t. Cited, not computed: this repository does not size the ship.
+PLATE_DEAD_CALCS = (0.01, 0.025)
 OUT_K = charge.OUT_DIR / "mission_k.csv"
 
 
@@ -233,6 +248,21 @@ def breeding_cycle(frozen: bool, dead_fraction: float) -> Breeding:
     )
 
 
+def departure_dv(excess: float) -> float:
+    """The impulsive burn [m/s] at the 10-day parking orbit's periapsis onto an Earth-departure
+    hyperbola of excess `excess` [m/s]: `sqrt(v_inf^2 + 2 mu/r_p) - sqrt(mu (2/r_p - 1/a))`."""
+    rp = R_EARTH + PARKING_PERIAPSIS_ALT
+    a = (GM_EARTH * (PARKING_PERIOD / (2.0 * math.pi)) ** 2) ** (1.0 / 3.0)
+    v_park = math.sqrt(GM_EARTH * (2.0 / rp - 1.0 / a))
+    return math.sqrt(excess**2 + 2.0 * GM_EARTH / rp) - v_park
+
+
+def dead_fractions() -> tuple[float, float, float]:
+    """The Sun ship's dead-mass bracket: plate released (0), kept at the calcs repo's upper 2.5%,
+    and this repository's pessimistic 100 t geometric floor (0.16)."""
+    return (0.0, PLATE_DEAD_CALCS[1], plate_dead_fraction())
+
+
 def plate_dead_fraction() -> float:
     """The Sun ship's δ/D 0.5 paraboloid floor at `charge.SURVIVAL_AREAL`, as a share of
     `FINAL_MASS`: the mass that cannot be released as impactor if the plate is kept whole."""
@@ -274,18 +304,21 @@ def real_collision_ledger() -> list[dict[str, object]]:
 # unpowered (its remainder is what returns to Earth); the light Sun-wave impactors fall
 # *retrograde* and are spent at periapsis. A flyby rotates but never rescales the Jupiter-relative
 # excess, so the impactors need a perijove burn raising it from the cycle's arrival excess to the
-# retrograde dive's floor. Floors and arrival excesses are the calcs repo's
-# (`aim_is_all_you_need` 868e88a, `solar_dive_depth_trade.opposing_stream_placement` on the
-# `solve_synodic_closure(3, ...)` closures); this repository does not import that code.
+# true mirror dive's excess. That is above the retrograde dive's floor, which only reaches the
+# dive, not the ship's periapsis at the same instant. Floors and arrival excesses are the calcs
+# repo's (`aim_is_all_you_need` 868e88a, `solar_dive_depth_trade.opposing_stream_placement` on the
+# `solve_synodic_closure(3, ...)` closures); the mirror excess and the highest perijove at which
+# the flyby still turns the disks onto it are its ADR 0072 corrections (127162f). This repository
+# does not import that code.
 MU_JUPITER = 1.26686534e8  # [km^3/s^2]
 R_JUPITER = 71_492.0  # [km]
-#: `(closure, arrival excess, prograde floor, retrograde floor, bend required, bend available)`
-#: [km/s, deg], cited.
+#: `(closure, arrival excess, prograde floor, retrograde floor, true mirror excess, highest perijove
+#: that turns the disks, ship's bend required, bend available)` [km/s, R_J, deg], cited.
 JUPITER_FLOORS = (
-    ("9.86 R_sun, 100 km/s crossing", 11.70, 11.33, 14.78, 77.0, 135.2),
-    ("4 R_sun, 150 km/s return", 12.17, 11.96, 14.16, 74.7, 133.5),
+    ("9.86 R_sun, 100 km/s crossing", 11.70, 11.33, 14.78, 15.07, 6.72, 77.0, 135.2),
+    ("4 R_sun, 150 km/s return", 12.17, 11.96, 14.16, 14.34, 6.90, 74.7, 133.5),
 )
-PERIJOVES_RJ = (1.1, 2.0, 5.0, 10.0)
+PERIJOVES_RJ = (1.1, 2.0, 5.0, 6.5)
 #: The impactor carrier's stage [s]: a storable bipropellant, stated not derived.
 CARRIER_ISP = 330.0
 SUN_K = 30.0  # Result 12's Sun-wave k on the real collision
@@ -293,15 +326,15 @@ OUT_JUPITER = charge.OUT_DIR / "mission_jupiter_split.csv"
 
 
 def jupiter_split() -> list[dict[str, object]]:
-    """The impactor stream's perijove burn to the retrograde floor, against perijove radius,
+    """The impactor stream's perijove burn to the true mirror excess, against perijove radius,
     and its propellant as a share of the Sun ship it serves (impactors `(1 - 1/MR_S)/k_S` of the
     ship at mass ratio 2, propellant only: the carrier's dry mass is not counted)."""
     out: list[dict[str, object]] = []
-    for name, arrival, pro, retro, bend_req, bend_avail in JUPITER_FLOORS:
+    for name, arrival, pro, retro, mirror, turn_max, bend_req, bend_avail in JUPITER_FLOORS:
         impactor_share = (1.0 - 1.0 / MR_SUN) / SUN_K
         for rj in PERIJOVES_RJ:
             esc2 = 2.0 * MU_JUPITER / (rj * R_JUPITER)
-            burn = math.sqrt(retro**2 + esc2) - math.sqrt(arrival**2 + esc2)
+            burn = math.sqrt(mirror**2 + esc2) - math.sqrt(arrival**2 + esc2)
             stage = math.exp(burn * 1e3 / (CARRIER_ISP * charge.G0))
             out.append(
                 {
@@ -309,6 +342,8 @@ def jupiter_split() -> list[dict[str, object]]:
                     "arrival_excess": arrival,
                     "prograde_floor": pro,
                     "retrograde_floor": retro,
+                    "mirror_excess": mirror,
+                    "disks_turn": rj <= turn_max,
                     "ship_rides_unpowered": arrival >= pro,
                     "perijove_rj": rj,
                     "perijove_burn": burn,
@@ -347,11 +382,7 @@ def main() -> None:
             f"v_e {c.v_e_needed / 1e3:5.1f} km/s -> k {c.k:6.1f}, "
             f"{c.projectile_per_final:.3f} kg/kg final, ${c.cost_per_kg_propellant:5.0f}/kg{flag}"
         )
-    breed = [
-        breeding_cycle(frozen, dead)
-        for frozen in (True, False)
-        for dead in (0.0, plate_dead_fraction())
-    ]
+    breed = [breeding_cycle(frozen, dead) for frozen in (True, False) for dead in dead_fractions()]
     for b in breed:
         print(
             f"  breeding ({b.bonds}, dead {b.dead_fraction:.2f}): k_E {b.k_earth:4.1f}, k_S"
@@ -366,7 +397,7 @@ def main() -> None:
             f"  Jupiter split {str(r['closure'])[:12]:<12}"
             f" perijove {float(str(r['perijove_rj'])):4.1f} R_J:"
             f" impactors {float(str(r['arrival_excess'])):.2f} ->"
-            f" {float(str(r['retrograde_floor'])):.2f} km/s needs"
+            f" {float(str(r['mirror_excess'])):.2f} km/s needs"
             f" {float(str(r['perijove_burn'])):.2f} km/s, propellant"
             f" {float(str(r['propellant_per_ship'])):.2%} of the ship"
         )

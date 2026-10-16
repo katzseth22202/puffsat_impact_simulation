@@ -1,5 +1,10 @@
 # Asks for the companion repos: the near-Sun environment, and the charge pusher's growth cycle
 
+> **Answered and closed, 2026-10-16.** E1-E6 and G5-G9 by the parent (commit `1938f94`, copied as
+> `docs/solar_environment_answers_from_parent.md`); G1-G4 and G10 by the calcs repo's ADR 0072
+> (`aim_is_all_you_need` 127162f). The corrections taken into code are in ADR-0063's amendment of
+> 2026-10-16.
+
 From `katzseth22202/puffsat_impact_simulation`, 2026-10-15. This is written to be copied into
 `katzseth22202/Balloon-Pulse-Propulsion` and worked there, as `docs/solar_environment_ask_from_impact_sim.md`.
 It is self-contained: nothing in it needs this repository's code.

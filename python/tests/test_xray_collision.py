@@ -367,12 +367,12 @@ def test_growth_cycle_ledger() -> None:
     optimum k at each wave sits inside the simulated ranges for the conservative bracket."""
     import csv
 
-    from puffsat.xray_collision import growth
+    from puffsat.xray_collision import growth, mission
 
     with growth.OUT.open() as fh:
         rows = list(csv.DictReader(fh))
     design = [r for r in rows if r["geometry"] == "square charge" and r["bonds"] == "carbon atomic"]
-    assert len(design) == 4
+    assert len(design) == 2 * len(mission.dead_fractions())
     shallow = [r for r in design if r["closure"].startswith("9.86")]
     deep = [r for r in design if r["closure"].startswith("4 R")]
     for r in design:
@@ -393,20 +393,37 @@ def test_growth_cycle_ledger() -> None:
         assert float(r["growth_per_total_impactor"]) < point[(r["closure"], r["dead_fraction"])]
 
 
+def test_departure_dv_from_parking_orbit() -> None:
+    """The 3S departure from the 10-day orbit's 600 km periapsis reproduces the calcs repo's
+    ADR 0072 correction (4.34 and 4.42 km/s), above the 4.15 km/s that started from parabolic
+    speed."""
+    from puffsat.xray_collision import mission
+
+    assert mission.departure_dv(10.43e3) == pytest.approx(4.34e3, abs=10.0)
+    assert mission.departure_dv(10.54e3) == pytest.approx(4.42e3, abs=10.0)
+    # Parabolic speed at 200 km gives the old figure, so the difference is the parking orbit.
+    rp = mission.R_EARTH + 200.0e3
+    v_esc = math.sqrt(2.0 * mission.GM_EARTH / rp)
+    assert math.sqrt(10.43e3**2 + v_esc**2) - v_esc == pytest.approx(4.15e3, abs=30.0)
+
+
 def test_jupiter_split_burn() -> None:
-    """The impactors' perijove burn to the retrograde floor (ADR-0063 amendment): Oberth makes it
-    far smaller than the 3.08 km/s excess change, it grows with perijove radius, and its propellant
-    is ~1% of the ship or less, because the impactors are only ~1/60 of the ship."""
+    """The impactors' perijove burn to the true mirror excess (ADR-0063 amendment, calcs ADR 0072):
+    Oberth makes it far smaller than the excess change, it grows with perijove radius, it is
+    ~1.67 km/s at 6.5 R_J, the highest perijove listed that still turns the disks, and its
+    propellant is ~1% of the ship or less, because the impactors are only ~1/60 of the ship."""
     from puffsat.xray_collision import mission
 
     rows = mission.jupiter_split()
     assert len(rows) == len(mission.JUPITER_FLOORS) * len(mission.PERIJOVES_RJ)
-    for name, arrival, _pro, retro, _req, _avail in mission.JUPITER_FLOORS:
+    for name, arrival, _pro, retro, mirror, _turn, _req, _avail in mission.JUPITER_FLOORS:
+        assert mirror > retro
         mine = [r for r in rows if r["closure"] == name]
         burns = [float(str(r["perijove_burn"])) for r in mine]
         assert burns == sorted(burns)
-        assert all(0.0 < b < retro - arrival for b in burns)
+        assert all(0.0 < b < mirror - arrival for b in burns)
         assert all(r["ship_rides_unpowered"] for r in mine)
+        assert all(r["disks_turn"] for r in mine)
         assert all(float(str(r["propellant_per_ship"])) < 0.015 for r in mine)
-    base = rows[0]
-    assert abs(float(str(base["perijove_burn"])) - 0.70) < 0.01
+    base = {float(str(r["perijove_rj"])): float(str(r["perijove_burn"])) for r in rows[:4]}
+    assert base[6.5] == pytest.approx(1.67, abs=0.01)

@@ -1,5 +1,11 @@
 # Ask for the calcs repo: re-evaluate growth on the solar-dive charge-pusher cycle
 
+> **Already answered, 2026-10-16.** The calcs repo's ADR 0072 (`aim_is_all_you_need` 127162f,
+> 2026-10-15) priced this cycle with plates, dry mass, the carrier, launch, the seed and the
+> child's comparison before this ask was sent: 3.60x per cycle at 9.86 R_sun and 4.92x at 4 R_sun,
+> dear-seed break-even $104 / $67 per kg. Its corrections are taken into ADR-0063's amendment of
+> 2026-10-16. This ask is closed; its 4.15 km/s, 14.78 km/s and 0.16 below are superseded.
+
 From `katzseth22202/puffsat_impact_simulation`, 2026-10-16. This is written to be copied into
 `katzseth22202/aim_is_all_you_need` and worked there. It is self-contained: nothing in it needs
 this repository's code. The asks are D1-D7. They gather, and take over, the calcs-repo items

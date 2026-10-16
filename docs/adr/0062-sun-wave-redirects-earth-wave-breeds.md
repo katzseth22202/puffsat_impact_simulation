@@ -54,3 +54,23 @@ collision, not the point fireball (ADR-0060 amendment). The first version had `G
 - **Open:** releasing (or cutting up) the Sun ship's plate as impactor; the generation time
   (~5 years: Earth to Jupiter's distance, then the fall); the Earth wave's guidance mass inside
   `f_dead`.
+
+## Amendment, 2026-10-16: the kept plate is 1-2.5% of the ship, not 0.16
+
+The calcs repo sizes the Sun ship's paraboloid as pulse energy^(2/3) at a fixed peak pressure, with
+pulses capped at 2 Hz over a 2-5 h arc. That plate is 6-19 t, **1-2.5% of the ship** (its ADR 0072,
+`aim_is_all_you_need` 127162f), and the parent adopts it (G5 in
+`docs/solar_environment_answers_from_parent.md`): the plate is kept as dead mass, and cutting it
+into sheets stays an option not taken. This repository's 0.16 was the geometric floor of a fixed
+δ/D 0.5 paraboloid on a 100 t final mass, without the arc's pulse cap.
+
+`mission.PLATE_DEAD_CALCS` carries the bracket as a cited input, and `mission.dead_fractions()`
+now runs released (0), kept at 2.5%, and the old 0.16 as a pessimistic row
+(`make xray-collision-mission` -> `mission_breeding.csv`):
+
+| Earth stage's bonds | `f_dead` | `G` | payload share | Sun-wave impactor per kg of payload |
+|---|---|---|---|---|
+| carbon atomic | 0.025 | **10.4** | 90% | 1.91 g ($1.91) |
+| bonds returned | 0.025 | 11.7 | 91% | 1.67 g ($1.67) |
+
+So the growth is ~10-12x a generation, not ~9-12x. The plate item under **Open** is closed.

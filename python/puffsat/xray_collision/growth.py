@@ -10,7 +10,9 @@ wave** boosts them, and their whole remainder returns as the next Earth wave (AD
 `src.jovian_solar_dive_cycle`:
 `solve_synodic_closure(3, dive_solar_radii=R, return_excess=X)` followed by
 `departure_nozzle_ledger(c.departure_excess, c.departure_aim_deg, c.return_excess,
-c.push_axis_deg, 30.0, 0.6)`. The departure burn starts at the 10-day parking orbit's periapsis.
+c.push_axis_deg, 30.0, 0.6)`. The departure burn starts at the 10-day parking orbit's 600 km
+periapsis and is computed here from the departure excess (`mission.departure_dv`, the calcs repo's
+ADR 0072 correction of the 4.15 km/s first copied, which started from parabolic speed).
 Its thrust axis meets the stream at an **impact angle** above 90 degrees, so the stream sweeps
 *past* the plate (Result 12's canted plate). The values are copied in `CLOSURES`; this repository
 cannot import that one.
@@ -74,11 +76,15 @@ class Closure:
     return_excess: float  # [km/s], the closure's input
     departure_excess: float  # [km/s]
     departure_aim_deg: float
-    departure_dv: float  # [m/s], from the 10-day parking orbit's periapsis
     impact_angle_deg: tuple[float, float]  # stream vs thrust axis, start and end of the burn
     stream_closing: tuple[float, float]  # [m/s], vehicle frame, start and end
     periapsis_boost: float  # [m/s] the Sun stage must give
     cycle_years: float
+
+    @property
+    def departure_dv(self) -> float:
+        """[m/s], from the 10-day parking orbit's periapsis."""
+        return mission.departure_dv(self.departure_excess * 1e3)
 
     @property
     def theta(self) -> float:
@@ -100,7 +106,6 @@ CLOSURES = (
         90.0,
         10.43,
         -13.5,
-        4.15e3,
         (100.0, 102.3),
         (102.8e3, 103.6e3),
         20.45e3,
@@ -112,7 +117,6 @@ CLOSURES = (
         150.0,
         10.54,
         -12.1,
-        4.23e3,
         (93.9, 95.5),
         (158.2e3, 158.5e3),
         35.04e3,
@@ -336,7 +340,7 @@ def main() -> None:
         for fit in fits
         for c in CLOSURES
         for frozen in (True, False)
-        for dead in (0.0, mission.plate_dead_fraction())
+        for dead in mission.dead_fractions()
     ]
     for o in out:
         print(

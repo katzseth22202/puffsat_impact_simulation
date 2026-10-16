@@ -61,9 +61,9 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
 6. **The Earth wave can also drive the 3S Jovian growth cycle** (Result 12, ADR-0063). The stream
    meets the departure's thrust axis almost sideways (~101°).
    - **The plate:** a flat canted plate keeps only ~1/3 of its ceiling.
-   - **Why it still works:** the burn from the parking orbit is only 4.15 km/s.
-   - **Growth:** with k ≈ 24 at Earth and ~30 at the Sun, the cycle grows ~7-8x per 3S at
-     9.86 R_sun, counting all impactor. At 4 R_sun it grows ~9-11x.
+   - **Why it still works:** the burn from the parking orbit is only 4.34 km/s.
+   - **Growth:** with k ≈ 24 at Earth and ~30 at the Sun, the cycle grows ~8x per 3S at
+     9.86 R_sun, counting all impactor. At 4 R_sun it grows ~10-11x.
 7. **Without a nozzle, a plate recovers less directed energy per joule.** In jet-efficiency terms
    it gets 0.4-0.6, against the 0.8-1 the parent assumes for a magnetic nozzle. With cheap reaction
    mass that is enough: the projectile bill, not Isp, is the figure of merit.
@@ -1045,8 +1045,12 @@ Jupiter -> dive periapsis -> Earth, 3.28 years. The closures were run in that re
 
 | closure | departure burn | stream vs thrust axis | stream closing speed | periapsis boost | Sun-wave closing speed |
 |---|---|---|---|---|---|
-| 9.86 R_sun, 100 km/s return | 4.15 km/s | 100-102° | 103 km/s | 20.45 km/s | 392 km/s |
-| 4 R_sun, 150 km/s return | 4.23 km/s | 94-96° | 158 km/s | 35.04 km/s | 617 km/s |
+| 9.86 R_sun, 100 km/s return | 4.34 km/s | 100-102° | 103 km/s | 20.45 km/s | 392 km/s |
+| 4 R_sun, 150 km/s return | 4.42 km/s | 94-96° | 158 km/s | 35.04 km/s | 617 km/s |
+
+The departure burn is computed here (`mission.departure_dv`, vis-viva from the 10-day orbit's
+600 km periapsis); it reproduces the calcs repo's ADR 0072 correction of the 4.15 / 4.23 km/s
+first copied.
 
 - **The burn is small.** It starts at the 10-day parking orbit's periapsis, near escape speed, and
   Jupiter only has to stop the ship, not reverse it.
@@ -1127,13 +1131,14 @@ model only the density differs between the layers. Share of the canted ceiling a
 
 | closure | Earth charge | `k_E` | `k_S` | Earth / Sun mass ratio | departs per kg of Earth impactor | **growth per 3S** (per total impactor) | per Earth-wave kg | doubling |
 |---|---|---|---|---|---|---|---|---|
-| 9.86 R_sun | **square** | **24** | **30** | 2.06 / 1.98 | 22.7 kg | **7.0-8.4** | 9.6-11.5 | 1.1-1.2 yr |
-| 9.86 R_sun | point (ideal) | 34 | 30 | 2.00 / 1.98 | 34.3 kg | 9.3-11.1 | 14.5-17.3 | 1.0 yr |
-| 4 R_sun | **square** | **54** | **30** | 2.11 / 2.33 | 48.7 kg | **9.2-10.9** | 17.6-20.9 | 1.0 yr |
-| 4 R_sun | point (ideal) | 60* | 40 | 1.73 / 2.59 | 81.8 kg | 11.8-14.1 | 26.5-31.5 | 0.9 yr |
+| 9.86 R_sun | **square** | **24** | **30** | 2.13 / 1.98 | 21.3 kg | **7.8-8.0** | 10.5-10.8 | 1.1 yr |
+| 9.86 R_sun | point (ideal) | 34 | 30 | 2.07 / 1.98 | 32.2 kg | 10.4-10.6 | 15.8-16.3 | 1.0 yr |
+| 4 R_sun | **square** | **52** | **30** | 2.13 / 2.33 | 45.8 kg | **10.3-10.6** | 19.2-19.7 | 1.0 yr |
+| 4 R_sun | point (ideal) | 60* | 40 | 1.78 / 2.59 | 77.2 kg | 13.4-13.7 | 29.1-29.8 | 0.9 yr |
 
 How to read the table:
-- The ranges run from the Sun ship's plate kept as dead mass (0.16) to the plate released as
+- The ranges run from the Sun ship's plate kept as dead mass (2.5% of the ship, the calcs repo's
+  ADR 0072 sizing; ADR-0062 amendment) to the plate released as
   impactor.
 - Polyethylene's carbon is left atomic.
 - The Sun stage is always the real disk-into-charge collision (`charge.mixing_factor`), and that
@@ -1146,12 +1151,12 @@ How to read the table:
 
 **Conclusions.**
 - **The departure plate is the weak link, and the cycle still closes.** The plate keeps only ~1/3
-  of its ceiling (head-on plates kept 70-84%), but the burn is only 4.15 km/s.
-- **The real optimum is k ≈ 24 at Earth and ~30 at the Sun at 9.86 R_sun**, growing ~7-8x per 3S
+  of its ceiling (head-on plates kept 70-84%), but the burn is only 4.34 km/s.
+- **The real optimum is k ≈ 24 at Earth and ~30 at the Sun at 9.86 R_sun**, growing ~8x per 3S
   (doubling in ~1.1 years).
-- **4 R_sun is worth ~30% more growth**, ~9-11x, at k ≈ 54 and ~30. Its faster stream raises the
+- **4 R_sun is worth ~30% more growth**, ~10-11x, at k ≈ 52 and ~30. Its faster stream raises the
   Earth-side k, but its larger boost needs ~half of all impactor to be Sun wave.
-- **Per Earth-wave kilogram the square charge returns 9.6-20.9 kg.** The calcs repo's 4 R_sun
+- **Per Earth-wave kilogram the square charge returns 10.5-19.7 kg.** The calcs repo's 4 R_sun
   ledger, with a magnetic nozzle from the same parking orbit, quotes 23.0.
 - **The levers left are the charge and the energy.**
   - A charge whose merged state is rounder approaches the point fireball's 0.43 share, worth
@@ -1162,22 +1167,33 @@ How to read the table:
 The Sun-wave impactors travel with the ship from Earth and split from it at Jupiter. The ship
 falls into a prograde dive and the impactors into its mirror-image retrograde dive, so the two
 meet head-on at periapsis. A flyby cannot change the size of the excess, so the impactors' carrier
-burns at perijove to raise it from 11.70 to 14.78 km/s (9.86 R_sun), with Jupiter's Oberth boost:
-- 0.70 km/s at 1.1 R_J and 1.37 km/s at 5 R_J;
-- 0.40-0.88% of the ship in propellant at 330 s, because the impactors are only ~1/60 of the ship;
-- at 4 R_sun (12.17 -> 14.16 km/s), 0.45-0.88 km/s.
+burns at perijove to raise it from 11.70 to the true mirror excess, 15.07 km/s (9.86 R_sun), with
+Jupiter's Oberth boost:
+- 0.77 km/s at 1.1 R_J and 1.67 km/s at 6.5 R_J, near the 6.72 R_J above which the flyby cannot
+  turn the disks;
+- 0.45-1.13% of the ship in propellant at 330 s, because the impactors are only ~1/60 of the ship;
+- at 4 R_sun (12.17 -> 14.34 km/s), 0.49-1.07 km/s.
 
-Radiation at low perijove, the flyby's bend at the higher excess, and mirror-image timing are
-open (G10).
+The mirror excess and the turn ceiling are the calcs repo's (ADR 0072, 2026-10-16); the first
+version burned only to the retrograde floor (14.78 / 14.16 km/s).
 
-Open (the asks G1-G10 in `docs/solar_environment_4rsun_ask_for_parent.md`):
-- the closures' confirmation and a ledger run in the calcs repo;
-- the departure charged from the pad, which the calcs repo found costs ~6.6x;
-- releasing the Sun ship's plate;
-- the sheet's guidance;
-- the Sun-wave projectile's placement and survival;
-- the charge material;
-- the Jupiter split's bend, timing and radiation.
+**The round of asks G1-G10 and E1-E6 is closed** (2026-10-16; ADR-0063 amendment). The calcs
+repo answered G1-G4 and G10 in its ADR 0072, and the parent E1-E6 and G5-G9
+(`docs/solar_environment_answers_from_parent.md`):
+- G1 and G4 confirmed; the departure burn and the mirror excess corrected (above);
+- G5: the Sun ship's plate is kept as dead mass, 1-2.5% of the ship;
+- G6: sheets coast furled, unfurl ~100 s out and aim off the plate until the unfurl is confirmed;
+  guidance is 2-10% of sheet mass;
+- G7: the disks ride with the ship and the carrier burns 1.67 km/s at 6.5 R_J;
+- G8: the disk survives at 4 R_sun (~2430-2890 K face-on, ~700 K edge-on); its guidance needs a
+  shade and ~1 g/cm^2 of shielding;
+- G9: polyethylene stays the charge for now;
+- E1-E6: steady sunlight stays the design heat load at both depths. SEP dose (>= 100 krad parts,
+  ~1% of passes lost at solar maximum) and the CME push on the disks (flown edge-on) are the
+  design drivers, and neither is this repository's physics.
+
+Left with the calcs repo: the departure charged from the pad (G3, ~6.6x), and its ledger's optima
+on this repository's table edges (k_E 5-6, k_S 20).
 
 Not modelled:
 - real 3-D sheets and charges (the strips are planar);

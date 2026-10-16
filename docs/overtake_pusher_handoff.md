@@ -57,20 +57,21 @@ is dark, ionization recombines, and H2 re-forms before the plate; only carbon's 
 The Earth wave is the released mass of Sun ships, so the two stages form one loop. Priced on the
 real collisions (corrected 2026-10-15), each kg of 100 km/s impactor sends ~21-24 kg off at
 11 km/s. A Sun ship at mass ratio 2 returns half its departing mass as the next wave's impactor.
-- **Growth:** the impactor grows **~9-12x per generation**. That is ~9x if the Sun ship's plate
-  (0.16 of its final mass) can't be released, and ~12x if it can and the carbon condenses.
+- **Growth:** the impactor grows **~10-12x per generation**. That is ~10x if the Sun ship's plate
+  (at most 2.5% of the ship, the calcs repo's ADR 0072 sizing) is kept, and ~12x if it is released
+  and the carbon condenses.
 - **Payload:** ~90% of each departure is payload.
 - **Cost:** the expensive Sun-wave projectile costs **~$1.6-2.3 per kg of payload departure**.
 - **Orbit mass:** each departing kg needs ~1.65 kg already in Earth orbit.
 
 ## The 3S growth cycle (Result 12, ADR-0063, `growth_cycle.csv`)
 
-When the Earth wave launches ships onto the 3S Jovian cycle, the departure needs only 4.15 km/s
+When the Earth wave launches ships onto the 3S Jovian cycle, the departure needs only 4.34 km/s
 (from the 10-day parking orbit). But the stream meets the thrust axis at ~101°, so the flat canted
 plate keeps only ~1/3 of its ceiling.
 - **9.86 R_sun:** with a square polyethylene charge, k ≈ 24 at Earth and ~30 at the Sun maximize
-  growth per total impactor: ~7-8x per 3S, doubling in ~1.1 years.
-- **4 R_sun:** k ≈ 54 and ~30 give ~9-11x.
+  growth per total impactor: ~8x per 3S, doubling in ~1.1 years.
+- **4 R_sun:** k ≈ 52 and ~30 give ~10-11x.
 
 ## Suggested text for the parent
 

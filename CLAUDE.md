@@ -69,7 +69,10 @@ no radiation case; the parent's bowl gives a mass ratio of 2-2.9) is
 100 km/s impactor onto a charge held off the plate; k = 10-12 for an 11 km/s boost at a mass ratio
 of 1.5) is [`docs/overtake_pusher_handoff.md`](docs/overtake_pusher_handoff.md). The ask that the calcs
 repo re-evaluate growth on the solar-dive charge-pusher cycle (Result 12) with plates, dry mass,
-launch and seed charged is [`docs/solar_dive_cycle_ask_for_calcs.md`](docs/solar_dive_cycle_ask_for_calcs.md).
+launch and seed charged is [`docs/solar_dive_cycle_ask_for_calcs.md`](docs/solar_dive_cycle_ask_for_calcs.md);
+the calcs repo's ADR 0072 had already answered it. The parent's near-Sun environment answers (E1-E6,
+G5-G9) are [`docs/solar_environment_answers_from_parent.md`](docs/solar_environment_answers_from_parent.md);
+that round is closed in ADR-0063's amendment of 2026-10-16.
 
 ## Architecture (settled)
 

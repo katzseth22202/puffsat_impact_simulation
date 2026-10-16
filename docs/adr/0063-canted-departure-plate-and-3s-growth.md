@@ -37,8 +37,11 @@ So the impactor sweeps past the plate and cannot rebound off it.
 
 | closure | `k_E` | `k_S` | growth per 3S (square charge; plate dead to released) | doubling |
 |---|---|---|---|---|
-| 9.86 R_sun | 24 | 30 | 7.0-8.4x | 1.1-1.2 yr |
-| 4 R_sun | 54 | 30 | 9.2-10.9x | 1.0 yr |
+| 9.86 R_sun | 24 | 30 | 7.8-8.0x | 1.1 yr |
+| 4 R_sun | 52 | 30 | 10.3-10.6x | 1.0 yr |
+
+*Corrected 2026-10-16* (amendment below): the departure burn is 4.34 / 4.42 km/s and the kept
+plate 2.5% of the ship. The first version had 7.0-8.4x and 9.2-10.9x.
 
 The Sun stage is priced on the real disk-into-charge collision (ADR-0060 amendment). That holds
 `k_S` near 30 in both cycles.
@@ -70,10 +73,13 @@ the disks through the flyby, burns once at perijove, and then releases them. The
 floors and arrival excesses are copied as cited inputs (`aim_is_all_you_need` 868e88a,
 `opposing_stream_placement`):
 
-| closure | excess at arrival -> retrograde floor | burn at 1.1 / 2 / 5 / 10 R_J | propellant, share of the ship |
+| closure | excess at arrival -> true mirror excess | burn at 1.1 / 2 / 5 / 6.5 R_J | propellant, share of the ship |
 |---|---|---|---|
-| 9.86 R_sun | 11.70 -> 14.78 km/s | 0.70 / 0.92 / 1.37 / 1.77 km/s | 0.40 / 0.55 / 0.88 / 1.21% |
-| 4 R_sun | 12.17 -> 14.16 km/s | 0.45 / 0.59 / 0.88 / 1.14 km/s | 0.25 / 0.34 / 0.52 / 0.70% |
+| 9.86 R_sun | 11.70 -> 15.07 km/s | 0.77 / 1.02 / 1.51 / 1.67 km/s | 0.45 / 0.62 / 0.99 / 1.13% |
+| 4 R_sun | 12.17 -> 14.34 km/s | 0.49 / 0.65 / 0.97 / 1.07 km/s | 0.27 / 0.37 / 0.58 / 0.65% |
+
+*Corrected 2026-10-16* (amendment below): the first version burned only to the retrograde floor
+(14.78 / 14.16 km/s), and listed 10 R_J, where the flyby cannot turn the disks.
 
 The impactors are `(1 - 1/MR_S)/k_S` ≈ 1/60 of the ship, so the split costs ≲1% of the ship in
 propellant. The carrier's dry mass is not counted.
@@ -82,7 +88,7 @@ propellant. The carrier's dry mass is not counted.
 ~0.6 km/s more burn than the ship's). That would make the two streams' timing at Jupiter a second
 problem to solve.
 
-**Open (ask G10).**
+**Open (ask G10), closed 2026-10-16 by the calcs repo's ADR 0072; see the amendment below.**
 - **Radiation.** A 1.1 R_J perijove is severe for the disks' guidance electronics. Higher
   perijoves are gentler but cost about twice the burn.
 - **Bend.** At the higher excess the flyby bends the path less, and only the ship's bend is
@@ -112,3 +118,42 @@ methane's EOS, rebound and bonds are not modelled.
 **Not yet decided.** The design charge stays the square block until the growth optimizer is rerun
 with the layered charge and methane's rebound and bonds are priced.
 
+## Amendment, 2026-10-16: the companions' corrections (calcs ADR 0072, parent E1-E6 and G5-G9)
+
+The round of asks G1-G10 (`docs/solar_environment_4rsun_ask_for_parent.md`) is closed. The
+calcs repo answered G1-G4 and G10 in its ADR 0072 (`aim_is_all_you_need` 127162f); the parent
+answered E1-E6 and G5-G9 (`docs/solar_environment_answers_from_parent.md`, copied verbatim).
+
+**Corrections taken into code** (`make xray-collision-mission`, `make xray-collision-growth`):
+1. **The departure burn is 4.34 km/s (9.86 R_sun) and 4.42 km/s (4 R_sun)**, not 4.15 / 4.23. The
+   burn starts at the 10-day orbit's 600 km periapsis, not from parabolic speed at 200 km.
+   `mission.departure_dv` now computes it by vis-viva from the departure excess, reproducing the
+   calcs repo's figures, so `Closure.departure_dv` is no longer a copied input.
+2. **The impactors need the true mirror excess, 15.07 km/s (14.34 at 4 R_sun)**, not the
+   retrograde floor. The floor reaches the dive, but not the ship's periapsis at the same instant.
+   The flyby turns the disks only below 6.72 R_J (6.90), so the split is listed to 6.5 R_J, where
+   the burn is 1.67 km/s, as the calcs repo found. `mission.JUPITER_FLOORS` carries both.
+3. **The Sun ship's kept plate is 2.5% of the ship at most** (ADR-0062 amendment), not 0.16.
+
+Net effect: the burn costs ~5% of growth, the plate gives most of the bottom of the range back.
+The square charge grows **7.8-8.0x per 3S at 9.86 R_sun** (k_E 24, k_S 30, 21.3 kg departs per kg
+of Earth impactor) and **10.3-10.6x at 4 R_sun** (k_E 52, 45.8 kg). The point fireball bounds them
+at 10.4-10.6x and 13.4-13.7x.
+
+**Confirmed:** G1 (the closures) and G4 (the 5.3 km/s outbound).
+
+**Not this repository's physics, recorded for the Sun-wave budget** (parent, E2-E3):
+- the disks fly edge-on (face normal out of the orbital plane) and flip 90 degrees in the last
+  minute; an extreme CME then costs <= 0.6 m/s and ~1 km of drift. Edge-on at 4 R_sun the disk
+  runs at ~700 K, not 2400-2900 K;
+- guidance electronics >= 100 krad behind ~1 g/cm^2 (a few hundred grams per 1 kg disk), and ~1%
+  of passes lost to SEP events at solar maximum;
+- dose scales with fluence, r^-0.7 to r^-1.5, not the peak flux's r^-2 to r^-3.
+Steady sunlight stays the design heat load at both depths. The shielding mass may change how a
+disk strikes its charge if it does not hit like graphite. That is open, not modelled.
+
+**The calcs repo's own ledger** prices the whole cycle with plates, dry mass, the carrier and
+launch, counted in launch units: 3.60x per cycle at 9.86 R_sun and 4.92x at 4 R_sun (3.23 and 4.35
+per total impactor), against this repository's 7.8-10.6x counted per impactor only. Its optima sit
+on this repository's table edges (k_E 5-6, k_S 20); widening them is that repo's ask, not part of
+this round.
