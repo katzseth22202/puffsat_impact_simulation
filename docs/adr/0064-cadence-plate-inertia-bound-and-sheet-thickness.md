@@ -41,7 +41,7 @@ on a smaller plate pay.
 `coated_sheet.py` re-implements the parent's plume model (it reproduces the parent's doses) and
 conducts the dose through the sheet.
 
-- **2 Hz at 1 g is the candidate cadence.** Its plate is 12.2 t (the inertia bound at a quarter of
+- **2 Hz at 1 g is the adopted cadence** (Seth, 2026-10-18), with bare ~100 um sheets. Its plate is 12.2 t (the inertia bound at a quarter of
   1 Hz's), and ~100 um sheets hold below Kapton's rating at u >= 8 km/s (572 K face at u = 8). Its
   dose is twice the 1 Hz dose, 96 / 38 / 17 kJ/m^2.
 - **No emissive or reflective coating is adopted.** Even ideal emitters on both faces lower the
@@ -49,4 +49,4 @@ conducts the dose through the sheet.
 - **Thicker sheets do not rescue u = 5 km/s.** The face of every sheet up to 250 um passes 400 C
   ~100 ms out and decomposes to 31-38 um. A 25 um shield film ahead fails before the flux peaks.
 - Open: the plume's spread `u` (S36), and whether a sheet with a decomposed face still works
-  (S37.2). Both decide between 1 Hz and 2 Hz.
+  (S37.2). Both decide whether 2 Hz holds at the slow end of the spread.

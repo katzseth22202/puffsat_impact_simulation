@@ -6,6 +6,10 @@ Answers 2026-10-18 to the parent's `docs/plume_cadence_asks_for_impact_sim.md` (
 [ADR-0064](adr/0064-cadence-plate-inertia-bound-and-sheet-thickness.md);
 `make xray-collision-cadence-plate` (`cadence_plate.csv`, `cadence_sheet.csv`, `coated_sheet*.csv`).
 
+**Adopted 2026-10-18 (Seth): the push flies at 2 Hz and 1 g mean**, 7.35 MN s per pulse, with bare
+~100 um Kapton sheets (28.4 kg per pulse, an ~8 m sheet) on a 12.2 t flat plate with a 2 m skirt
+and a solid HY-100 / 4340 steel face. No coating.
+
 **S36 (the backward plume's spread) is not answered yet.** Everything below uses your
 expanding-cloud model with `u` as a free input, and `u` decides the cadence.
 
