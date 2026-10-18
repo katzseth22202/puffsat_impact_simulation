@@ -67,6 +67,10 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
 7. **Without a nozzle, a plate recovers less directed energy per joule.** In jet-efficiency terms
    it gets 0.4-0.6, against the 0.8-1 the parent assumes for a magnetic nozzle. With cheap reaction
    mass that is enough: the projectile bill, not Isp, is the figure of merit.
+8. **The 1 Hz growth push needs a ~49 t plate, at any size** (Result 13, ADR-0064). The plate is
+   set by the absorber's inertia bound `I^2 / (2 s M a)`, and the 1 g pulse is larger. A small
+   flat plate with a 2 m skirt keeps 94-97% of the impulse. The peak is `~0.65 sigma v^2` at 2 m,
+   so a heavy solid-steel plate admits 140-250 um sheets; 1 mm puts 5-9 GPa on the face.
 
 ## Model
 
@@ -1199,6 +1203,70 @@ Not modelled:
 - real 3-D sheets and charges (the strips are planar);
 - the plate's ablation at 15-30 km/s arrival speeds;
 - the canted plate's peak pressure, which sets the impactor per pulse.
+
+## Result 13: the plate for the 1 Hz growth push, and how thick its sheets may be -- `cadence_plate.csv`, `cadence_sheet.csv`
+
+The parent (`sec:charge_pusher_plume`, asks S36-S37 in its
+`docs/plume_cadence_asks_for_impact_sim.md`) slows the 400 km overtake push from 4 Hz at 12 MN s
+to 1 Hz at 14.7 MN s (~1 g on the 1500 t unit), so that the 100 km/s Kapton sheets survive the
+gas of earlier pulses. Seth asked what that does to the plate, whether a flat sheet's even load
+lightens it, and whether thicker sheets on a smaller plate pay. ADR-0064;
+`make xray-collision-cadence-plate` (`sweep --sheet-plate-2d`, `cadence_plate.py`).
+
+**The 2-D runs** (`sheet_plate_2d.jsonl`, two grids). The sheet and its charge sheet merge at the
+flown k = 6.74 and drift onto a flat plate. There are three thick-sheet radii (2.5 / 3.6 / 5 m),
+three standoffs (2 / 4 / 8 m) and three plates each (sheet + 1.5 m bare, sheet + 4 m bare,
+sheet + 1.5 m with a 2 m skirt). The reference is the flown 7 m sheet on the 20 m plate with its
+4 m skirt (J/mv 2.81).
+- **The peak is `c(h) sigma v^2`, set by the sheet's mass per area.** It does not depend on the
+  sheet's radius: c = 0.646 / 0.496 / 0.349 at 2 / 4 / 8 m on the production grid, with a spread
+  under 1% at 2 m. It is a lower value, since the coarse grid gives 0.47 / 0.36 / 0.22.
+- **A small flat plate that keeps a skirt keeps the impulse.** At 2 m standoff, sheet + 1.5 m with
+  a 2 m skirt keeps 94-97% of the reference. Bare, the same plate keeps 72-82%, and a plate 4 m
+  wider still only 77-86%: the bare plate throws the gas sideways (direction 0.57-0.69).
+- **Standoff costs impulse.** At 8 m the skirted small plates keep 73-81%.
+
+**The plate's mass is the inertia bound, not survival.** Each pulse kicks the plate, and the
+absorber must stop it within its stroke `s` under the cargo's peak `a`:
+`m_p >= I^2 / (2 s M a)`, with `M` the unit at the end of the push. This depends on the impulse
+per pulse, not on the plate's size or the mean thrust. At a fixed mean, `I` grows as 1/cadence.
+
+| push | sheet per pulse | calcs floor (E^(2/3)) | inertia at 100 g: 2 / 4 / 10 m stroke |
+|---|---|---|---|
+| 4 Hz, 12 MN s (priced) | 46.4 kg | 40.7 t | 32.4 / 16.2 / 6.5 t |
+| 1 Hz, 14.7 MN s (1 g) | 56.8 kg | 46.5 t | **48.8** / 24.4 / 9.8 t |
+
+- Slowing to 1 g lowers the force but raises `I^2` 1.5x, so the plate gets heavier.
+- The flat sheet's even load removes bending, which retires the calcs repo's survival floor, a
+  point-blast law (30 kg/m^2 scaled as pulse energy^(2/3)). The inertia bound was already larger.
+- **A smaller plate is not lighter, only thicker.** 48.8 t over a 5-20 m plate is 4-43 mm of
+  steel. The lever is the stroke.
+- The 100 g cap is the calcs repo's `G_CAP` for the growth units' cargo. The parent's 16 g case
+  (on a 10 m stroke) needs 61 t at the end-of-push mass.
+
+**The sheet's thickness has a floor and a ceiling.**
+- **Floor:** the parent's plume dose (full absorption) held inside Kapton's 400 C rating:
+  - 1 Hz: 82 / 33 / 14 um at spread u = 5 / 8 / 12 km/s;
+  - 4 Hz: 1.1 mm / 435 / 197 um.
+- **Ceiling:** the face pressure on a face that holds it:
+  - 35-62 um: 0.3-0.6 GPa, the sandwich facesheet;
+  - 140 um: 1.3 GPa at 2 m, HY-100 / 4340;
+  - 250 um: 2.3 GPa at 2 m (1.2 at 8 m), maraging 300;
+  - 0.5 mm: 4.7 / 2.5 GPa at 2 / 8 m, no face (allowables from
+    `docs/spray_plate_steel_face_limits.md`, without prestress);
+  - 1 mm (the parent's S37.3 option): 9.2 / 5.0 GPa, above every steel and in the range
+    `docs/spray_plate_fatigue_and_spall.md` found fatal in fatigue.
+- **So at 1 Hz, 140-250 um sheets** give a 2-3x margin over the slow-spread plume. They need a
+  solid hard-steel face and a 7-10 m plate with a 2 m skirt, at the same ~49 t (12-18 mm of
+  steel). Because the plate must be ~49 t anyway, making it solid steel costs nothing, and that is
+  what admits the thicker sheet.
+
+Not settled:
+- **The peaks grow ~37% from the coarse grid to the production one.** The grid's sheets are ~0.2 m
+  thick against the real millimetres, so the ceilings may be a third lower.
+- **The face's rise time is not resolved.** The face's pressure must rise slower than one round
+  trip of a stress wave through the steel, 4-15 us for these plates.
+- **The plume dose is the parent's model.** Its spread `u` (S36) is not fitted to our gas.
 
 ## Limits
 

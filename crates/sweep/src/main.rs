@@ -7279,6 +7279,177 @@ fn cmd_overtake_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     })
 }
 
+// X-ray collision study, Result 13: the plate for the 1 Hz growth push. The parent's plume-cadence
+// asks (S36-S37) slow the 400 km push to one 14.7 MN s pulse a second and offer thicker sheets.
+// The planar sheet's peak scales with its mass per area, so a thicker sheet of the same mass is
+// narrower and needs a longer standoff. These runs put the flown slug ratio's sheet-plus-charge on
+// flat plates of chosen radius, standoff and skirt, and record what lands on each ring.
+
+const RESULT_PATH_SHEET_PLATE: &str = "data/results/xray_collision/sheet_plate_2d.jsonl";
+/// The flown slug ratio of the push (parent `sec:charge_pusher_plume`; calcs `k_push`).
+const SHEET_PLATE_K: f64 = 6.74;
+/// Thick-sheet radii [m]: 56.8 kg per 14.7 MN s pulse at 2.9, 1.4 and 0.72 kg/m^2.
+const SHEET_PLATE_RADII: [f64; 3] = [2.5, 3.6, 5.0];
+/// Sheet-centre standoffs above the flat floor [m].
+const SHEET_PLATE_HEIGHTS: [f64; 3] = [2.0, 4.0, 8.0];
+/// Plates per sheet: `(plate radius over the sheet's [m], skirt height [m])`.
+const SHEET_PLATE_PLATES: [(f64, f64); 3] = [(1.5, 0.0), (4.0, 0.0), (1.5, 2.0)];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SheetPlateRecord {
+    k: f64,
+    sheet_radius: f64,
+    height: f64,
+    plate_radius: f64,
+    skirt: f64,
+    /// Plate impulse per `m v` (impactor mass and closing speed), lossless gamma gas.
+    impulse_per_mv: f64,
+    /// Peak local pressure per `m v^2 / m^3`.
+    peak_per_mv2: f64,
+    peak_radius: f64,
+    exit_direction: f64,
+    exit_uniformity: f64,
+    confined_ratio: f64,
+    steps: usize,
+    dr: f64,
+    /// Ring loads per kg of impactor, in its closing speed.
+    bands: Vec<CollarBand>,
+}
+
+/// A flat plate of radius `r_plate` with an optional straight skirt, sized like
+/// [`overtake_cfg`] but not tied to the 20 m plate.
+fn sheet_plate_cfg(r_plate: f64, skirt: f64, reach: f64, dr: f64) -> SlugConfig {
+    let top = 4.0 * dr + reach + skirt + 3.0;
+    let mut nz = 0usize;
+    while (nz as f64) * dr < top {
+        nz += 1;
+    }
+    let mut nr = 0usize;
+    while (nr as f64) * dr < r_plate + 2.0 {
+        nr += 1;
+    }
+    let shape = if skirt > 0.0 {
+        PlateShape::Cup {
+            d_over_d: 0.0,
+            skirt_height: skirt,
+            flare: 0.0,
+            thickness: 4.0 * dr,
+        }
+    } else {
+        PlateShape::Dish { d_over_d: 0.0 }
+    };
+    SlugConfig {
+        gamma: SPRAY_2D_GAMMA,
+        mach: SPRAY_2D_MACH,
+        r_foot: MIX_RADIUS,
+        length: MIX_RADIUS,
+        r_plate,
+        r_max: nr as f64 * dr,
+        z_max: nz as f64 * dr,
+        nr,
+        nz,
+        confined: false,
+        shape,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    }
+}
+
+/// One sheet-on-plate run: the impactor sheet meets its charge sheet of the same radius at
+/// `height` and the merged mass drifts onto a flat plate (the overtake's planar geometry).
+fn sheet_plate_case(
+    (sheet_radius, height, r_plate, skirt): (f64, f64, f64, f64),
+    k: f64,
+    dr: f64,
+    confined_ratio: f64,
+) -> SheetPlateRecord {
+    let length = OVERTAKE_SHEET_THICKNESS;
+    let cfg = sheet_plate_cfg(r_plate, skirt, height + 0.5 * length + 6.0 * dr, dr);
+    let r = run_disk_charge_bounce(
+        &cfg,
+        DiskCharge {
+            radius: sheet_radius,
+            height,
+            charge_length: length,
+            k,
+            disk_thickness: 4.0 * dr,
+            gap: 2.0 * dr,
+            ambient: CHARGE_AMBIENT,
+            hole_radius: 0.0,
+            toward_plate: true,
+        },
+    );
+    // The run's mass unit is the merged 1 + k sheets and its speed unit the closing speed.
+    let m = 1.0 + k;
+    SheetPlateRecord {
+        k,
+        sheet_radius,
+        height,
+        plate_radius: r_plate,
+        skirt,
+        impulse_per_mv: r.wall_impulse * m,
+        peak_per_mv2: r.peak_local_pressure * m,
+        peak_radius: r.peak_radius,
+        exit_direction: r.exit_direction,
+        exit_uniformity: r.exit_uniformity,
+        confined_ratio,
+        steps: r.steps,
+        dr,
+        bands: r
+            .bands
+            .iter()
+            .map(|b| CollarBand {
+                r_lo: b.r_lo,
+                r_hi: b.r_hi,
+                impulse: b.impulse * m,
+                mass_in: b.mass_in * m,
+                speed_in: b.speed_in,
+                energy_in: b.energy_in * m,
+                peak_pressure: b.peak_pressure * m,
+            })
+            .collect(),
+    }
+}
+
+/// `--sheet-plate-2d [coarse]`: the flown thin sheet (7 m on the 10 m plate with its 4 m skirt,
+/// 2 m off) at k = 6.74 as the reference, then three thick sheets at three standoffs on three flat
+/// plates each. `coarse` doubles the cell (and the sheets' grid thickness with it).
+fn cmd_sheet_plate_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let coarse = args.iter().any(|a| a == "coarse");
+    let dr = if coarse { 2.0 * CHARGE_DR } else { CHARGE_DR };
+    let confined = charge_confined_ratio();
+    let mut cases: Vec<(f64, f64, f64, f64)> = vec![(7.0, 2.0, CHARGE_PLATE_R, 4.0)];
+    for &rs in &SHEET_PLATE_RADII {
+        for &h in &SHEET_PLATE_HEIGHTS {
+            for &(extra, skirt) in &SHEET_PLATE_PLATES {
+                cases.push((rs, h, rs + extra, skirt));
+            }
+        }
+    }
+    let rows = par_map_with_progress("sheet plate", &cases, |&c| {
+        sheet_plate_case(c, SHEET_PLATE_K, dr, confined)
+    });
+    let path = if coarse {
+        RESULT_PATH_SHEET_PLATE.replace(".jsonl", "_coarse.jsonl")
+    } else {
+        RESULT_PATH_SHEET_PLATE.to_string()
+    };
+    emit_scenario(&path, "sheet plate", &rows, |r| {
+        println!(
+            "rust: sheet R {:>3.1} h {:>3.1} | plate R {:>4.1} skirt {:>3.1} | J/mv {:6.3} peak/mv2 {:.3e} at r {:.2} dir {:.3} steps {}",
+            r.sheet_radius,
+            r.height,
+            r.plate_radius,
+            r.skirt,
+            r.impulse_per_mv,
+            r.peak_per_mv2,
+            r.peak_radius,
+            r.exit_direction,
+            r.steps,
+        );
+    })
+}
+
 // X-ray collision study, Result 12: the canted departure plate for the 3S Jovian cycle. The
 // returning stream meets the departure's thrust axis at ~101 degrees (calcs repo,
 // `departure_nozzle_ledger` at a 9.86 R_sun dive), so a wide sheet sweeps *past* a flat plate and
@@ -8022,6 +8193,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--charge-mix", cmd_charge_mix),
     ("--collar-ablation", cmd_collar_ablation),
     ("--overtake-2d", cmd_overtake_2d),
+    ("--sheet-plate-2d", cmd_sheet_plate_2d),
     ("--canted-2d", cmd_canted_2d),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),

@@ -57,7 +57,7 @@ Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`),
 `make xray-collision-rebound`, `make xray-collision-charge-2d`, `make xray-collision-charge`,
 `make xray-collision-charge-mix`, `make xray-collision-freeze`, `make xray-collision-collar`,
 `make xray-collision-overtake`, `make xray-collision-mission`, `make xray-collision-growth`,
-`make xray-collision-cme` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
+`make xray-collision-cme`, `make xray-collision-cadence-plate` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
 (lattice target, k = 2, per-projectile light and kinetic energy) is
 [`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md). The 66 km/s verdict (argon clouds
 radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the Sun dive) is
@@ -75,7 +75,9 @@ G5-G9) are [`docs/solar_environment_answers_from_parent.md`](docs/solar_environm
 that round is closed in ADR-0063's amendment of 2026-10-16. The parent's follow-up CME asks (its item 4:
 CME density at depth and non-radial flow; item 5, edge-on sunlight) are answered in
 [`docs/cme_drift_answers_for_parent.md`](docs/cme_drift_answers_for_parent.md) (module `cme_drift.py`,
-target `make xray-collision-cme`).
+target `make xray-collision-cme`). The plate and sheet thickness for the parent's 1 Hz
+growth push (its S36-S37) are Result 13 and [ADR-0064](docs/adr/0064-cadence-plate-inertia-bound-and-sheet-thickness.md)
+(module `cadence_plate.py`, target `make xray-collision-cadence-plate`).
 
 ## Architecture (settled)
 

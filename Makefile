@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1169,6 +1169,14 @@ xray-collision-overtake: data/tables/ch2.json
 	cargo run --release -p sweep -- --overtake-2d confine
 	cargo run --release -p sweep -- --overtake-2d confine coarse
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.overtake
+
+## xray-collision-cadence-plate: Result 13, the plate for the 1 Hz growth push (parent S36-S37) --
+## thick sheets on small flat plates at k = 6.74 (two grids), the inertia bound and the sheet's
+## least thickness -> data/results/xray_collision/cadence_plate.csv, cadence_sheet.csv
+xray-collision-cadence-plate:
+	cargo run --release -p sweep -- --sheet-plate-2d
+	cargo run --release -p sweep -- --sheet-plate-2d coarse
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.cadence_plate
 
 ## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on
 ## each plate, and the Jupiter split's perijove burn -> data/results/xray_collision/mission_periapsis.csv,

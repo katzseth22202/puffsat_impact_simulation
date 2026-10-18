@@ -450,3 +450,32 @@ def test_cme_drift_limits_and_sunlight() -> None:
     rows = [r for r in c.drift_rows() if "1000 km/s" in r.case and r.r_sun == 4.0]
     assert all(0.85 < r.cme_share_of_ram < 0.95 for r in rows)
     assert c.peak_to_mean()["psp_shock_compression"] == pytest.approx(2.03, abs=0.01)
+
+
+def test_cadence_plate_inertia_matches_the_parents_figure() -> None:
+    """The parent's 16 g peak on the 1500 t unit at 14.7 MN s needs m_p s ~ 460 t m."""
+    from puffsat.xray_collision import cadence_plate as cp
+
+    ms = cp.inertia_plate(14.7e6, 1500.0e3, 16.0, 1.0)
+    assert 455.0e3 < ms < 465.0e3
+    # Halving the stroke doubles the plate; the plate's size never enters.
+    assert cp.inertia_plate(14.7e6, 1.0e6, 100.0, 1.0) == 2.0 * cp.inertia_plate(
+        14.7e6, 1.0e6, 100.0, 2.0
+    )
+
+
+def test_cadence_plate_calcs_floor_reproduces_41_t() -> None:
+    """The calcs repo's point-fireball floor gives ~41 t at the 46 kg pulse and ~47 t at 57 kg."""
+    from puffsat.xray_collision import cadence_plate as cp
+
+    assert abs(cp.calcs_floor(12.0e6 / (6.74 * 38.4e3)) - 40.7e3) < 0.3e3
+    assert abs(cp.calcs_floor(14.7e6 / (6.74 * 38.4e3)) - 46.5e3) < 0.3e3
+
+
+def test_cadence_plate_least_sheet_matches_the_parents_rise() -> None:
+    """The parent's 50 g/m^2 sheet rises ~340 K at 19 kJ/m^2: within 5% of our heat capacity."""
+    from puffsat.xray_collision import cadence_plate as cp
+
+    rise = 19.0e3 / (0.05 * cp.KAPTON_CP)
+    assert abs(rise - 340.0) / 340.0 < 0.05
+    assert cp.least_sheet(cp.KAPTON_CP * cp.KAPTON_RISE) == 1.0
