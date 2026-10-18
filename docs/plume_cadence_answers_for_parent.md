@@ -55,3 +55,30 @@ So 2 Hz at 1 g, with a quarter of the 1 Hz plate and the same lob, is workable w
 if u >= 8 km/s. At u ~ 5 it depends on S37.2: whether a sheet with a decomposed 30-40 um face
 still works as the impactor. Accommodation and sputtering (S37.1) and the strands (S37.4) are not
 yet done.
+
+## Suggested changes to the paper (for the parent to make)
+
+In `sec:charge_pusher_plume`:
+- **After the 1 Hz paragraph, add the flown cadence:**
+  > We fly the push at two pulses a second instead, still at 1 g. Each pulse is then 7.35 MN s
+  > and carries half the gas, but the sheet meets each cloud half as old, so the dose doubles to
+  > 38 kJ/m^2 in the reference case (96 and 17 at u of 5 and 12 km/s). A bare 100 um sheet,
+  > 142 g/m^2, peaks at 572 K on its front face in the reference case, inside Kapton's rating. At
+  > u = 5 km/s every film up to 250 um loses its face about 0.1 s out. Coatings do not help: the
+  > heat arrives as ~50 eV/nucleon particles that stop in the top tenth of a micrometre, and a
+  > perfect emitter on both faces lowers the peak by only 10-50 K.
+- **Add a row to `tab:charge_pusher_plume`:** 2 Hz, 7.35 MN s (flown) | 96 / 38 / 17 | 680 | 380 | 240.
+  The rises are the table's own full-absorption rule, twice the 1 Hz row's.
+- **Replace the paragraph "The plate gets harder too":** the plate is set by its absorber,
+  `I^2/(2 s M a)` on the 2 m stroke at 100 g. That is 32 t at 4 Hz, 49 t at 1 Hz and **12.2 t at
+  2 Hz**. A flat sheet loads the plate evenly, so the 41-47 t point-blast floor does not apply. The
+  sheet's peak is ~0.65 sigma v^2 at 2 m standoff, so the 100 um sheet (28.4 kg per pulse, ~8 m
+  radius) puts 0.92 GPa on a solid HY-100 / 4340 face. The plate is 9.5 m with a 2 m skirt (94-97%
+  of the full plate's impulse), about 4 mm of steel. A 1 mm sheet would put 5-9 GPa on it.
+
+Elsewhere:
+- `sec:charge_pusher_cycle`, first step: "Kapton sheets 35-62 um thick" becomes "about 100 um thick".
+- `sec:charge_pusher_open`, the cadence bullet: the push flies 2 Hz at 1 g on bare 100 um sheets
+  and a 12.2 t plate. The faster lob, the booster's return and the thicker sheets are not in the
+  ledger, and the gas's spread (S36) is not simulated.
+- Register: S37 partly answered (37.3 and the heating); S34 has the inertia inputs above.
