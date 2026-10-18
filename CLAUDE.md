@@ -77,7 +77,8 @@ CME density at depth and non-radial flow; item 5, edge-on sunlight) are answered
 [`docs/cme_drift_answers_for_parent.md`](docs/cme_drift_answers_for_parent.md) (module `cme_drift.py`,
 target `make xray-collision-cme`). The plate and sheet thickness for the parent's 1 Hz
 growth push (its S36-S37) are Result 13 and [ADR-0064](docs/adr/0064-cadence-plate-inertia-bound-and-sheet-thickness.md)
-(module `cadence_plate.py`, target `make xray-collision-cadence-plate`).
+(modules `cadence_plate.py` and `coated_sheet.py`, target `make xray-collision-cadence-plate`); the
+answers owed to the parent are [`docs/plume_cadence_answers_for_parent.md`](docs/plume_cadence_answers_for_parent.md).
 
 ## Architecture (settled)
 

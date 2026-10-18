@@ -479,3 +479,26 @@ def test_cadence_plate_least_sheet_matches_the_parents_rise() -> None:
     rise = 19.0e3 / (0.05 * cp.KAPTON_CP)
     assert abs(rise - 340.0) / 340.0 < 0.05
     assert cp.least_sheet(cp.KAPTON_CP * cp.KAPTON_RISE) == 1.0
+
+
+def test_coated_sheet_plume_reproduces_the_parents_doses() -> None:
+    """The re-implemented cloud model gives the parent's printed doses (u = 8 km/s)."""
+    from puffsat.xray_collision import coated_sheet as cs
+
+    for label, f, g in cs.PUSHES[:2]:
+        got = cs.dose(cs.push(label, f, g), 8.0e3)
+        want = cs.PARENT_DOSES[label][1]
+        assert abs(got - want) / want < 0.03
+
+
+def test_coated_sheet_conduction_conserves_energy() -> None:
+    """With no radiation, the sheet's mean rise is the absorbed dose over its heat capacity."""
+    import numpy as np
+
+    from puffsat.xray_collision import coated_sheet as cs
+
+    s = cs._times()
+    q = np.where(s < 0.5, 20.0e3, 0.0)  # 20 kW/m^2 for the last 0.5 s: 10 kJ/m^2
+    h, _ = cs.heat(q, 100e-6, 0.0, 0.0, 0.0)
+    rise = 10.0e3 / (cs.KAPTON_RHO * cs.KAPTON_CP * 100e-6)
+    assert abs(h.mean_max - cs.T_START - rise) / rise < 0.01

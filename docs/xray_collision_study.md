@@ -70,7 +70,9 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
 8. **The 1 Hz growth push needs a ~49 t plate, at any size** (Result 13, ADR-0064). The plate is
    set by the absorber's inertia bound `I^2 / (2 s M a)`, and the 1 g pulse is larger. A small
    flat plate with a 2 m skirt keeps 94-97% of the impulse. The peak is `~0.65 sigma v^2` at 2 m,
-   so a heavy solid-steel plate admits 140-250 um sheets; 1 mm puts 5-9 GPa on the face.
+   so a heavy solid-steel plate admits 140-250 um sheets; 1 mm puts 5-9 GPa on the face. At
+   2 Hz and 1 g the plate is ~12 t and ~100 um sheets hold if the plume spreads at u >= 8 km/s;
+   JWST-style coatings do not help, because the heat comes as particles, not light.
 
 ## Model
 
@@ -1267,6 +1269,58 @@ Not settled:
 - **The face's rise time is not resolved.** The face's pressure must rise slower than one round
   trip of a stress wave through the steel, 4-15 us for these plates.
 - **The plume dose is the parent's model.** Its spread `u` (S36) is not fitted to our gas.
+
+### 2 Hz at 1 g, and a JWST-style coated sheet -- `coated_sheet.csv`, `coated_sheet_dose.csv`
+
+Seth asked whether a thicker sheet with JWST's coatings (an emissive doped-silicon face over
+reflecting aluminium or silver, on ~100 um of Kapton) flies through the old plume at 2 Hz and 1 g.
+`coated_sheet.py` re-implements the parent's expanding-cloud model (`eq:jovian_plume_density`,
+summed over the train). It reproduces the parent's doses: 633/251/113 against its 635/251/114
+kJ/m^2 at 4 Hz, and 47/19/8 exactly at 1 Hz. The sheet is 1-D conduction through the Kapton, with
+each face radiating.
+
+**The dose at 2 Hz and 1 g is twice the 1 Hz dose: 96 / 38 / 17 kJ/m^2** at u = 5 / 8 / 12 km/s.
+Each pulse carries half the gas (220 kg, 7.35 MN s), but the sheet meets the clouds twice as young.
+At a fixed mean thrust the dose goes as the cadence. It arrives as a pulse peaking at 375 kW/m^2
+about 96 ms before impact (u = 8).
+
+**The coating does nothing useful.**
+- **The metal film cannot reflect this heat.** The heat arrives as ~50 eV/amu particles that stop
+  in the top ~0.1 um. A metal film reflects photons, and a 50-150 nm film under the silicon sits at
+  the face's temperature within nanoseconds.
+- **Radiation is too slow.** Even ideal emitters on both faces lower the face's peak by only
+  10-50 K. At 600 K a face radiates ~7 kW/m^2, against the 375 kW/m^2 pulse.
+- **JWST's own stack is 3-7 K worse than bare Kapton**, because its aluminised back face barely
+  radiates.
+
+**100 um at 2 Hz, 1 g** (face peak; Kapton's rating is 673 K):
+
+| u | bare | Si / Al / Kapton | ideal emitters | no radiation |
+|---|---|---|---|---|
+| 12 km/s | 406 K | 406 K | 403 K | 420 K |
+| 8 km/s (reference) | 572 K | 572 K | 568 K | 589 K |
+| 5 km/s | 1095 K: all of it past 800 K ~100 ms out | 1094 K | 1086 K | 1139 K |
+
+- **Thickness does not fix the slow spread.** The face heats faster than heat can soak into the
+  sheet: at u = 5, a 250 um sheet's face still reaches 985 K, passing 400 C ~102 ms out. The skin
+  past 800 K is only 31-38 um, though, and the rest of the sheet stays intact (mean 537-692 K).
+- **A sacrificial 25 um shield film ahead of the sheet, the JWST lesson of gaps, buys little.** It
+  fails ~208 ms out at u = 5, before the flux peaks, and the main sheet's face then reaches
+  940-990 K. At u = 8 it holds the main sheet's face to ~445 K.
+- **At 1 Hz, 1 g, 100 um holds at every spread** (619 K at u = 5).
+
+**The plate at 2 Hz and 1 g is a quarter of the 1 Hz plate**, since `I` halves: 12.2 t at 100 g on
+a 2 m stroke. With 100 um sheets (28.4 kg per pulse, an 8 m sheet) the 2 m peak is 0.92 GPa,
+inside HY-100's allowable, on a 9.5 m plate with a 2 m skirt; the 30 kg/m^2 floor and the
+inertia bound then meet at ~12 t (3.9 mm of steel). The lob and booster costs are the 1 Hz push's,
+because the mean thrust is the same 1 g.
+
+**So 2 Hz at 1 g works with ~100 um sheets if the plume spreads at u >= 8 km/s**, the parent's
+reference, and needs no coating. If u is nearer 5 km/s, every sheet loses its face over the last
+~100 ms. Whether a sheet with a decomposed 30-40 um face still works as the impactor is the
+parent's S37.2 question, and is not settled here. The spread `u` (S36) therefore decides 2 Hz.
+The doses are the parent's full-absorption bound; Kapton's c_p is held at its room value, which
+overstates the rise; and the 800 K decomposition threshold is assumed.
 
 ## Limits
 

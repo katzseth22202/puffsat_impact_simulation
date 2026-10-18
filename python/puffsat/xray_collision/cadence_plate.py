@@ -43,6 +43,7 @@ VE_PUSH = 38.4e3  # [m/s] per kg of charge, calcs `law.push_ve(6.74, 100)` as th
 PUSHES = (
     ("4 Hz, 12 MN s (priced)", 4.0, 12.0e6, 1.325),
     ("2 Hz, 14.7 MN s", 2.0, 14.7e6, 1.330),
+    ("2 Hz, 7.35 MN s (1 g)", 2.0, 7.35e6, 1.330),
     ("1 Hz, 14.7 MN s (1 g)", 1.0, 14.7e6, 1.330),
 )
 G_CAP = 100.0  # peak g of the growth units' cargo (calcs G_CAP, author 2026-10-16)
@@ -57,6 +58,9 @@ DOSES = {
     "4 Hz, 12 MN s (priced)": (635.0e3, 251.0e3, 114.0e3),
     "2 Hz, 14.7 MN s": (math.nan, 75.0e3, math.nan),
     "1 Hz, 14.7 MN s (1 g)": (47.0e3, 19.0e3, 8.0e3),
+    # Not the parent's: coated_sheet.py's re-implementation of its model (which reproduces the
+    # parent's other rows), at 2 Hz and 1 g.
+    "2 Hz, 7.35 MN s (1 g)": (96.0e3, 38.0e3, 17.0e3),
 }
 KAPTON_RHO = 1420.0  # [kg/m^3]
 KAPTON_CP = 1090.0  # [J/kg/K], DuPont Kapton HN at room temperature
@@ -197,8 +201,9 @@ def plate_rows() -> list[PlateRow]:
 
 @dataclass(frozen=True)
 class SheetRow:
-    """A sheet thickness on the 1 Hz push: its footprint, its face pressure, and the plate."""
+    """A sheet thickness on a 1 g push: its footprint, its face pressure, and the plate."""
 
+    push: str
     areal: float  # [kg/m^2]
     kapton_um: float
     sheet_radius: float  # [m] at the pulse's sheet mass
@@ -212,12 +217,19 @@ class SheetRow:
     ring_period_us: float  # 2L/c of that plate: the face's pressure must rise slower
 
 
-SHEET_AREALS = (0.05, 0.088, 0.12, 0.2, 0.35, 0.72, 1.42)
+SHEET_AREALS = (0.05, 0.088, 0.12, 0.142, 0.2, 0.35, 0.72, 1.42)
+#: The 1 g pushes the sheet table is run for.
+SHEET_PUSHES = ("1 Hz, 14.7 MN s (1 g)", "2 Hz, 7.35 MN s (1 g)")
 
 
 def sheet_rows(runs: list[Run]) -> list[SheetRow]:
-    _, _, pulse, mr = PUSHES[2]
-    end = LAUNCH_UNIT / mr
+    out = []
+    for label, _, pulse, mr in (p for p in PUSHES if p[0] in SHEET_PUSHES):
+        out += _sheet_rows(runs, label, pulse, LAUNCH_UNIT / mr)
+    return out
+
+
+def _sheet_rows(runs: list[Run], label: str, pulse: float, end: float) -> list[SheetRow]:
     mass = pulse / (K_PUSH * VE_PUSH)
     inertia = inertia_plate(pulse, end, G_CAP, STROKES[0])
     out = []
@@ -232,6 +244,7 @@ def sheet_rows(runs: list[Run]) -> list[SheetRow]:
             thick = m_p / (STEEL_RHO * area)
             out.append(
                 SheetRow(
+                    push=label,
                     areal=areal,
                     kapton_um=1e6 * areal / KAPTON_RHO,
                     sheet_radius=rs,
@@ -288,7 +301,8 @@ def main() -> None:
     sheets = sheet_rows(runs)
     for s in sheets:
         print(
-            f"  1 Hz sheet {s.areal:5.3f} kg/m^2 ({s.kapton_um:5.0f} um) R {s.sheet_radius:5.2f} m"
+            f"  {s.push[:4]} sheet {s.areal:5.3f} kg/m^2 ({s.kapton_um:5.0f} um)"
+            f" R {s.sheet_radius:5.2f} m"
             f" h {s.height:.0f} | peak {s.peak / 1e9:5.2f} GPa -> {s.face:<18} | plate R"
             f" {s.plate_radius:5.2f} + 2 m skirt, {s.plate_mass / 1e3:4.1f} t,"
             f" {s.plate_steel_mm:5.1f} mm steel, 2L/c {s.ring_period_us:4.1f} us"

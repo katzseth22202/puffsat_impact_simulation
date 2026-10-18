@@ -1172,10 +1172,12 @@ xray-collision-overtake: data/tables/ch2.json
 
 ## xray-collision-cadence-plate: Result 13, the plate for the 1 Hz growth push (parent S36-S37) --
 ## thick sheets on small flat plates at k = 6.74 (two grids), the inertia bound and the sheet's
-## least thickness -> data/results/xray_collision/cadence_plate.csv, cadence_sheet.csv
+## least thickness, and the coated sheet's heating in the old plume at 1-2 Hz (coated_sheet.py)
+## -> data/results/xray_collision/cadence_plate.csv, cadence_sheet.csv, coated_sheet*.csv
 xray-collision-cadence-plate:
 	cargo run --release -p sweep -- --sheet-plate-2d
 	cargo run --release -p sweep -- --sheet-plate-2d coarse
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.coated_sheet
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.cadence_plate
 
 ## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on
