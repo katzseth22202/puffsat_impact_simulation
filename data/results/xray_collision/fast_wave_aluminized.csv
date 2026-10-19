@@ -1,0 +1,25 @@
+closure,u,kapton_um,coat,face_max,rise_over_bare,holds
+"9.86 R_sun, 60 (headline)",5.0,100.0,bare,1096.4811942360923,0.0,False
+"9.86 R_sun, 60 (headline)",5.0,100.0,Al on the back,1103.5395060381225,7.058311802030175,False
+"9.86 R_sun, 60 (headline)",5.0,100.0,Al on the plume face,1127.1129291754758,30.631734939383477,False
+"9.86 R_sun, 60 (headline)",5.0,100.0,Al on both faces,1135.6535590552066,39.172364819114364,False
+"9.86 R_sun, 60 (headline)",5.0,150.0,bare,1028.3368749768588,0.0,False
+"9.86 R_sun, 60 (headline)",5.0,150.0,Al on the back,1032.1626725641447,3.8257975872859333,False
+"9.86 R_sun, 60 (headline)",5.0,150.0,Al on the plume face,1049.9748994365352,21.638024459676444,False
+"9.86 R_sun, 60 (headline)",5.0,150.0,Al on both faces,1054.3689914580614,26.032116481202593,False
+"9.86 R_sun, 60 (headline)",8.0,100.0,bare,573.0974898627164,0.0,True
+"9.86 R_sun, 60 (headline)",8.0,100.0,Al on the back,579.3472472731935,6.249757410477059,True
+"9.86 R_sun, 60 (headline)",8.0,100.0,Al on the plume face,581.80539786431,8.707908001593523,True
+"9.86 R_sun, 60 (headline)",8.0,100.0,Al on both faces,588.7451863185619,15.647696455845448,True
+"9.86 R_sun, 60 (headline)",8.0,150.0,bare,543.0858896404437,0.0,True
+"9.86 R_sun, 60 (headline)",8.0,150.0,Al on the back,547.0973046030164,4.011414962572644,True
+"9.86 R_sun, 60 (headline)",8.0,150.0,Al on the plume face,549.1530061823116,6.067116541867904,True
+"9.86 R_sun, 60 (headline)",8.0,150.0,Al on both faces,553.4636514989897,10.377761858546023,True
+"9.86 R_sun, 60 (headline)",12.0,100.0,bare,406.6126847894315,0.0,True
+"9.86 R_sun, 60 (headline)",12.0,100.0,Al on the back,412.63681070633214,6.02412591690063,True
+"9.86 R_sun, 60 (headline)",12.0,100.0,Al on the plume face,413.3612215910488,6.748536801617263,True
+"9.86 R_sun, 60 (headline)",12.0,100.0,Al on both faces,419.9495915060511,13.33690671661958,True
+"9.86 R_sun, 60 (headline)",12.0,150.0,bare,392.33277920042445,0.0,True
+"9.86 R_sun, 60 (headline)",12.0,150.0,Al on the back,396.34360173106984,4.010822530645385,True
+"9.86 R_sun, 60 (headline)",12.0,150.0,Al on the plume face,397.03753974323735,4.704760542812892,True
+"9.86 R_sun, 60 (headline)",12.0,150.0,Al on both faces,401.2969194338186,8.964140233394119,True

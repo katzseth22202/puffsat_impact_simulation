@@ -38,6 +38,13 @@ k = 6.67 / 7.93 / 8.21. That is why our 208 km/s peak is 3.7 GPa against your 4.
 | 137.1 | 131 / 52 / 23 | 708 K | 648 K | 1.73 GPa |
 | 207.8 | 212 / 83 / 37 | 1045 K, 52 um lost | 950 K, 25 um lost | 3.71 GPa |
 
+**An aluminium coat on the 9.86 R_sun loop's Kapton** (~100 nm, vapour-deposited;
+`fast_wave_aluminized.csv`): it warms the face 4-39 K and never changes a verdict. At u = 8,
+100 um peaks at 573 K bare, 579 K with Al on the back, 582 K on the plume face and 589 K on both.
+The plume's heat is particles stopping in the top ~0.1 um, so the metal reflects none of it; it
+only cuts that face's infrared emission (0.8 -> ~0.04). If the sheet needs a coat for handling,
+charging or sunlight on its coast, put the Al on one face with bare Kapton toward the plume.
+
 ## 2. The Kapton window at 137 km/s
 
 Thermal floor: the thinnest film whose face stays under 400 C to the last 10 ms. Pressure ceiling:

@@ -94,6 +94,7 @@ OUT_WINDOW = charge.OUT_DIR / "fast_wave_window.csv"
 OUT_GRAPHITE = charge.OUT_DIR / "fast_wave_graphite.csv"
 OUT_GRAPHITE_WINDOW = charge.OUT_DIR / "fast_wave_graphite_window.csv"
 OUT_LAW = charge.OUT_DIR / "fast_wave_law.csv"
+OUT_ALUMINIZED = charge.OUT_DIR / "fast_wave_aluminized.csv"
 OUT_COMPACT = charge.OUT_DIR / "fast_wave_compact.csv"
 OUT_BOWL = charge.OUT_DIR / "fast_wave_bowl.csv"
 OUT_BUFFER = charge.OUT_DIR / "fast_wave_buffer.csv"
@@ -232,6 +233,53 @@ def kapton_rows() -> list[KaptonRow]:
                         1e6 * h.fail_depth,
                         h.rating_before <= coated_sheet.LAST,
                         sheet_peak(c, coated_sheet.KAPTON_RHO * th) / 1e9,
+                    )
+                )
+    return out
+
+
+#: A ~100 nm vapour-deposited aluminium coat (Seth's practical option) sets that face's infrared
+#: emissivity to ~0.04 and adds its film's heat capacity (coated_sheet.AL_FILM).
+AL_EPS = 0.04
+ALUMINIZED = {
+    "bare": (KAPTON_EPS, KAPTON_EPS, 0.0),
+    "Al on the back": (KAPTON_EPS, AL_EPS, coated_sheet.AL_FILM),
+    "Al on the plume face": (AL_EPS, KAPTON_EPS, coated_sheet.AL_FILM),
+    "Al on both faces": (AL_EPS, AL_EPS, 2.0 * coated_sheet.AL_FILM),
+}
+
+
+@dataclass(frozen=True)
+class AluminizedRow:
+    closure: str
+    u: float  # [km/s]
+    kapton_um: float
+    coat: str
+    face_max: float  # [K]
+    rise_over_bare: float  # [K]
+    holds: bool
+
+
+def aluminized_rows(c: Closure = CLOSURES[0]) -> list[AluminizedRow]:
+    """Kapton with an aluminium coat on either face, in the plume of the 9.86 R_sun loop (the
+    closure where Kapton is flown). The plume's heat is particles stopping in the top ~0.1 um, so
+    the metal reflects none of it; it only lowers that face's infrared emission."""
+    out = []
+    for u in SPREADS:
+        q = flux(c, u)
+        for th in (100e-6, 150e-6):
+            bare = coated_sheet.heat(q, th, KAPTON_EPS, KAPTON_EPS, 0.0)[0].face_max
+            for coat, (ef, eb, films) in ALUMINIZED.items():
+                h, _ = coated_sheet.heat(q, th, ef, eb, films)
+                out.append(
+                    AluminizedRow(
+                        c.name,
+                        u / 1e3,
+                        1e6 * th,
+                        coat,
+                        h.face_max,
+                        h.face_max - bare,
+                        h.rating_before <= coated_sheet.LAST,
                     )
                 )
     return out
@@ -831,6 +879,13 @@ def main() -> None:
             f" face {r.face_max:5.0f} K, skin {r.skin_um:3.0f} um,"
             f" {'holds' if r.holds else 'fails'} | {r.peak_2m_gpa:4.2f} GPa at 2 m"
         )
+    alu = aluminized_rows()
+    for ar in alu:
+        print(
+            f"  aluminized {ar.closure:<26} u {ar.u:2.0f} {ar.kapton_um:3.0f} um {ar.coat:<22}"
+            f" face {ar.face_max:5.0f} K (+{ar.rise_over_bare:3.0f} K)"
+            f" {'holds' if ar.holds else 'fails'}"
+        )
     win = window_rows()
     for wr in win:
         if wr.u == 8.0 or wr.window:
@@ -905,6 +960,7 @@ def main() -> None:
     _write(OUT_GRAPHITE, list(gra))
     _write(OUT_GRAPHITE_WINDOW, list(gwin))
     _write(OUT_LAW, list(law))
+    _write(OUT_ALUMINIZED, list(alu))
     _write(OUT_COMPACT, list(com))
     _write(OUT_BOWL, list(bowl))
     _write(OUT_BUFFER, list(buf))

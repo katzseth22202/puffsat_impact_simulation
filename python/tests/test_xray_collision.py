@@ -581,3 +581,12 @@ def test_fast_wave_law_reproduces_result_11_at_100_kms() -> None:
 
     for k in (5.0, 10.0):
         assert abs(fw.push_ve(k, 100.0e3, 0.0)[0] / fw.calcs_push_ve(k, 100.0e3) - 1.0) < 1e-9
+
+
+def test_fast_wave_aluminium_coat_only_lowers_emission() -> None:
+    """A low-emissivity coat can only warm the face in the plume (it reflects photons, and the
+    plume's heat is particles), so every coated stack runs at least as hot as bare Kapton."""
+    from puffsat.xray_collision import fast_wave as fw
+
+    rows = fw.aluminized_rows()
+    assert all(r.rise_over_bare >= -1e-9 for r in rows)
