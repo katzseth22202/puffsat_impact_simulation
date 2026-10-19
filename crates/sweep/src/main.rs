@@ -7450,6 +7450,134 @@ fn cmd_sheet_plate_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>>
     })
 }
 
+// X-ray collision study, Result 14: the departure plate with a hole. The visible mirror sign of
+// the 3S departure (the parent's S38) meets the stream at ~117-130 degrees to the thrust axis, so
+// the impactor comes from the ship's side. As at the Sun, it threads a hole in the bowl and stops
+// in a compact charge at the focus. The merged fireball drifts at `w/(1+k)` along the stream; its
+// axial share, `-cos(theta)/sqrt(k)` of `u_rms` toward the plate, is run here (axisymmetric, so
+// the sideways share is not). The rings record what lands where the off-axis hole will be.
+
+const RESULT_PATH_HOLE_PLATE: &str = "data/results/xray_collision/hole_plate_2d.jsonl";
+/// Stream angles to the thrust axis [deg]: head-on (the Sun plate), the visible departure at
+/// 9.86 and 4 R_sun, and the flown (occulted) one at 9.86 R_sun (parent S38 table).
+const HOLE_PLATE_THETA: [f64; 4] = [180.0, 129.9, 117.0, 89.2];
+const HOLE_PLATE_K: [f64; 6] = [5.0, 10.0, 20.0, 30.0, 40.0, 60.0];
+/// `(label, d/D, skirt, height: NaN focus, < 0 multiple of the focus)`.
+const HOLE_PLATES: [(&str, f64, f64, f64); 4] = [
+    ("parent bowl at focus", 0.30, 0.0, f64::NAN),
+    ("paraboloid 0.50 at focus", 0.50, 0.0, f64::NAN),
+    ("paraboloid 0.50 at 1.5 F", 0.50, 0.0, -1.5),
+    ("paraboloid 0.75 at 2 F", 0.75, 0.0, -2.0),
+];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct HolePlateRecord {
+    case: String,
+    theta_deg: f64,
+    k: f64,
+    d_over_d: f64,
+    height: f64,
+    focus: f64,
+    /// Plate impulse per `M u_rms`, lossless gamma gas.
+    impulse_per_mu: f64,
+    /// The same per `m w` (impactor mass and closing speed).
+    impulse_per_mv: f64,
+    peak_per_mv2: f64,
+    exit_direction: f64,
+    confined_ratio: f64,
+    steps: usize,
+    dr: f64,
+    /// Ring loads per kg of impactor, in its closing speed.
+    bands: Vec<CollarBand>,
+}
+
+fn hole_plate_case(
+    (label, d_over_d, skirt, height): (&str, f64, f64, f64),
+    theta_deg: f64,
+    k: f64,
+    dr: f64,
+    confined_ratio: f64,
+) -> HolePlateRecord {
+    let focus = CHARGE_PLATE_R / (8.0 * d_over_d);
+    let h = if height.is_nan() {
+        focus
+    } else {
+        -height * focus
+    };
+    let u_rms = k.sqrt() / (1.0 + k);
+    let cfg = overtake_cfg(d_over_d, skirt, h + CHARGE_BALL_R, dr);
+    let r = run_fireball_bounce(
+        &cfg,
+        PointFireball {
+            height: h,
+            radius: CHARGE_BALL_R,
+            drift: -theta_deg.to_radians().cos() / k.sqrt(),
+            ambient: CHARGE_AMBIENT,
+            hole_radius: 0.0,
+        },
+    );
+    // The run's units are the merged mass and its u_rms; per kg of impactor in w they are 1 + k
+    // and u_rms.
+    let (m, v) = (1.0 + k, u_rms);
+    HolePlateRecord {
+        case: label.to_string(),
+        theta_deg,
+        k,
+        d_over_d,
+        height: h,
+        focus,
+        impulse_per_mu: r.wall_impulse,
+        impulse_per_mv: r.wall_impulse * m * v,
+        peak_per_mv2: r.peak_local_pressure * m * v * v,
+        exit_direction: r.exit_direction,
+        confined_ratio,
+        steps: r.steps,
+        dr,
+        bands: r
+            .bands
+            .iter()
+            .map(|b| CollarBand {
+                r_lo: b.r_lo,
+                r_hi: b.r_hi,
+                impulse: b.impulse * m * v,
+                mass_in: b.mass_in * m,
+                speed_in: b.speed_in * v,
+                energy_in: b.energy_in * m * v * v,
+                peak_pressure: b.peak_pressure * m * v * v,
+            })
+            .collect(),
+    }
+}
+
+/// `--hole-plate-2d [coarse]`: the point fireball on four bowls at four stream angles and five k.
+fn cmd_hole_plate_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let coarse = args.iter().any(|a| a == "coarse");
+    let dr = if coarse { 2.0 * CHARGE_DR } else { CHARGE_DR };
+    let confined = charge_confined_ratio();
+    let mut cases = Vec::new();
+    for &plate in &HOLE_PLATES {
+        for &theta in &HOLE_PLATE_THETA {
+            for &k in &HOLE_PLATE_K {
+                cases.push((plate, theta, k));
+            }
+        }
+    }
+    let rows = par_map_with_progress("hole plate", &cases, |&(plate, theta, k)| {
+        hole_plate_case(plate, theta, k, dr, confined)
+    });
+    let path = if coarse {
+        RESULT_PATH_HOLE_PLATE.replace(".jsonl", "_coarse.jsonl")
+    } else {
+        RESULT_PATH_HOLE_PLATE.to_string()
+    };
+    emit_scenario(&path, "hole plate", &rows, |r| {
+        println!(
+            "rust: {:<26} theta {:>5.1} k {:>3.0} | J/Mu {:.3} J/mv {:6.3} dir {:.3} steps {}",
+            r.case, r.theta_deg, r.k, r.impulse_per_mu, r.impulse_per_mv, r.exit_direction, r.steps
+        );
+    })
+}
+
 // X-ray collision study, Result 12: the canted departure plate for the 3S Jovian cycle. The
 // returning stream meets the departure's thrust axis at ~101 degrees (calcs repo,
 // `departure_nozzle_ledger` at a 9.86 R_sun dive), so a wide sheet sweeps *past* a flat plate and
@@ -8194,6 +8322,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--collar-ablation", cmd_collar_ablation),
     ("--overtake-2d", cmd_overtake_2d),
     ("--sheet-plate-2d", cmd_sheet_plate_2d),
+    ("--hole-plate-2d", cmd_hole_plate_2d),
     ("--canted-2d", cmd_canted_2d),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),

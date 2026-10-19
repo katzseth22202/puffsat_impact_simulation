@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1179,6 +1179,14 @@ xray-collision-cadence-plate:
 	cargo run --release -p sweep -- --sheet-plate-2d coarse
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.coated_sheet
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.cadence_plate
+
+## xray-collision-departure-hole: Result 14, the staged departure plate -- impactors thread a hole
+## into a compact charge at the bowl's focus at the visible sign's 117-130 deg (parent S38); the
+## capture, the hole's loss, the finite burn and the stage -> data/results/xray_collision/departure_hole_*.csv
+xray-collision-departure-hole:
+	cargo run --release -p sweep -- --hole-plate-2d
+	cargo run --release -p sweep -- --hole-plate-2d coarse
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.departure_hole
 
 ## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on
 ## each plate, and the Jupiter split's perijove burn -> data/results/xray_collision/mission_periapsis.csv,

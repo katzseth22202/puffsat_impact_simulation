@@ -73,6 +73,10 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
    so a heavy solid-steel plate admits 140-250 um sheets; 1 mm puts 5-9 GPa on the face. At
    2 Hz and 1 g the plate is ~12 t and ~100 um sheets hold if the plume spreads at u >= 8 km/s;
    JWST-style coatings do not help, because the heat comes as particles, not light.
+9. **The departure can stage to a second plate with a hole** (Result 14, ADR-0065). At the visible
+   sign's 130 deg, compact impactors through a hole into a charge at the focus give 780-1090 s
+   at k = 10-20 (carbon atomic), better than the old canted flat plate at 89 deg (440-760 s). The
+   hole takes ~0.6% of the impulse. The plate is ~10-12 t. A 0.25 g burn loses ~460 m/s.
 
 ## Model
 
@@ -1321,6 +1325,100 @@ reference, and needs no coating. If u is nearer 5 km/s, every sheet loses its fa
 parent's S37.2 question, and is not settled here. The spread `u` (S36) therefore decides 2 Hz.
 The doses are the parent's full-absorption bound; Kapton's c_p is held at its room value, which
 overstates the rise; and the 800 K decomposition threshold is assumed.
+
+## Result 14: a staged departure plate -- the impactor threads a hole at 117-130 deg -- `departure_hole_*.csv`
+
+The parent's S38 (its `docs/departure_occultation_ask_for_aim_repo.md`) finds that the flown mirror
+sign of the departure puts periapsis behind Earth, so the returning stream would pass through
+Earth. The visible sign meets the stream at **129.9 deg** to the thrust axis (75.0 -> 84.0 km/s
+closing) at 9.86 R_sun, and 117.0 deg (98.8 -> 107.9 km/s) at 4 R_sun, instead of 89.2 and
+76.5 deg. Above 90 deg the impactor comes from the ship's side.
+
+Seth's design copies the Sun plate and stages the plates:
+- the 12.2 t push plate (Result 13) is dropped before the departure;
+- a second bowl takes compact impactors through a narrow hole into a compact charge at its focus;
+- the hole slides as the stream turns over the burn, and its rim takes extra ablative spray;
+- 1 Hz (for aiming through the hole) at ~0.25 g mean.
+
+ADR-0065; `make xray-collision-departure-hole` (`sweep --hole-plate-2d`, `departure_hole.py`).
+
+**The runs.** These are point fireballs at the focus of four bowls: the parent bowl, the δ/D 0.5
+paraboloid at F and at 1.5 F, and δ/D 0.75 at 2 F. They run at 180 / 129.9 / 117 / 89.2 deg and
+k = 5-60, on two grids that agree to 1-2%. The fireball drifts along the axis at
+`-cos(theta)/sqrt(k)` of `u_rms`, the stream's axial share. The sideways share is not run
+(axisymmetric); it carries `sin^2 theta/(1 + k)` of the energy, 2-10% at k = 5-30.
+`v_e` per kg of charge is priced as Results 10-12 price a plate:
+- polyethylene's rebound swapped in;
+- the Sun plate's real-collision factor (held at its k = 30 value below 30);
+- Result 11's bond toll at the closing speed: H2 re-forms, and carbon is bracketed atomic /
+  condensed.
+
+**Impulse lost at 129.9 deg against 90 deg** (per `m w`):
+
+| k | flat ceiling | bowl ceiling | bowl run, vs 89.2 deg | per kg of impactor at 84 vs 75 km/s (bowl run) |
+|---|---|---|---|---|
+| 5 | -24.7% | -26.2% | -35.4% | -27.6% |
+| 10 | -18.2% | -19.3% | -25.9% | -17.0% |
+| 20 | -13.3% | -14.0% | -18.7% | -9.0% |
+| 30 | -11.0% | -11.5% | -15.5% | -5.3% |
+
+The loss is the impactor's own momentum, `cos theta` of `m w`, now pointing the wrong way. It
+fades as `1/sqrt(k)` beside the expansion's, and the visible stream's higher closing speed buys
+most of it back at k >= 20.
+
+**Effective Isp** (9.86 R_sun; carbon atomic, condensed in brackets):
+
+| k | old: canted flat plate, 89.2 deg, 75 km/s (Result 12 law) | new: hole bowl (δ/D 0.5 at 1.5 F), 129.9 deg, 84 km/s |
+|---|---|---|
+| 5 | 1185 s (1258) | 1387 s (1454) |
+| 10 | 758 s (851) | 1093 s (1196) |
+| 20 | 443 s (571) | 781 s (944) |
+| 30 | 290 s (451) | 589 s (806) |
+
+The bowl at 130 deg beats the canted flat plate at 89 deg by 17-100%. The flat plate let the
+fireball slide past and kept only ~1/3 of its ceiling; the bowl holds the fireball. At 4 R_sun
+(117 deg, 107.9 km/s) the hole bowl gives 2071 / 1569 / 1149 / 921 s at k = 5 / 10 / 20 / 30.
+
+**The hole loses little** (a 1 m-wide hole, radius 0.5 m). The impactor's line through the charge
+meets the 1.5 F paraboloid at r = 3.2 m, off the fireball's axis, where the load is light. There it
+takes 0.5-0.6% of the impulse and ~0.01% of the gas, against 0.5-0.6% and 0.04-0.05% for the Sun
+plate's on-axis bore. Across the four bowls it is 0.3-0.9% of the impulse and under 0.03% of the gas.
+
+**Large k works, up to ~30.** `v_e` falls as `1/sqrt(k)` (more reaction mass per kg of impactor),
+and at 84 km/s carbon's bonds take a growing share: 4.6% of the speed at k = 5, 27% at 30, and
+nearly all of it by k = 60. The impactor economy peaks at k ≈ 20-30: ~23 kg departs per kg of
+impactor at 9.86 R_sun with carbon atomic, 30-37 condensed, and 35-50 at 4 R_sun.
+
+**The burn at 0.25 g mean is not free.** On the 10-day orbit's 600 km periapsis, one fixed
+direction, centred (the calcs repo's `finite_burn_loss`, re-implemented and checked against its
+27 / 101 m/s pins):
+
+| burn | 300 s | 480 s | 600 s | 1000 s | 1600 s | 2400 s |
+|---|---|---|---|---|---|---|
+| loss on 4.21 km/s | 18 m/s | 45 m/s | 69 m/s | 171 m/s | 360 m/s | 626 m/s |
+
+At 0.25 g mean the ideal burn takes ~1905 s and loses ~460 m/s, 11% of the burn (~520 m/s at
+4 R_sun, over 2022 s). Seth's 1600 s loses 360 m/s. The flown 8-minute canted burn lost ~45 m/s.
+
+**The stage at 1 Hz** (9.86 R_sun; 1043 t stack: the push's 1128 t less ~0.24 km/s of methalox and
+the dropped 12.2 t plate, an input):
+
+| k | v_e | mass ratio | impactor per pulse | plate (floor / inertia, +1 t collar) | departs per kg impactor |
+|---|---|---|---|---|---|
+| 10 | 10.7 km/s | 1.55 | 19.4 kg | 15.4 t (14.4 / 1.6) | 17.9 |
+| 20 | 7.7 km/s | 1.84 | 12.5 kg | 11.8 t (10.8 / 1.7) | 23.3 |
+| 30 | 5.8 km/s | 2.25 | 10.1 kg | 10.3 t (9.3 / 1.7) | 23.5 |
+
+**The departure plate is ~10-12 t at k = 20-30.** It is set by survival, since the fireball is a
+point blast (30 kg/m^2 on the 533 m^2 paraboloid, scaled as pulse energy^(2/3)), not by inertia:
+1.6 t at 0.25 g. At 1 Hz the pulse is 1.8-2.1 MN s and 10-20 kg of impactor.
+
+Not modelled:
+- the fireball's sideways drift (axisymmetric runs);
+- the real compact-into-charge collision at 130 deg (the Sun plate's factor stands in);
+- the sliding hole and how far it travels;
+- the oblique hole's shape and the collar's spray;
+- the visible sign's apoapsis turn (S38 item 3, the calcs repo's).
 
 ## Limits
 

@@ -502,3 +502,25 @@ def test_coated_sheet_conduction_conserves_energy() -> None:
     h, _ = cs.heat(q, 100e-6, 0.0, 0.0, 0.0)
     rise = 10.0e3 / (cs.KAPTON_RHO * cs.KAPTON_CP * 100e-6)
     assert abs(h.mean_max - cs.T_START - rise) / rise < 0.01
+
+
+def test_departure_hole_burn_loss_matches_the_calcs_pins() -> None:
+    """The calcs repo's finite_burn_loss pins: 5.39 km/s at 906 s, one fixed direction, on the
+    20-day orbit at 600 km, loses 27 m/s over 320 s and 101 m/s over 640 s."""
+    from puffsat.xray_collision import departure_hole as d
+
+    period = 20.0 * 86400.0
+    assert abs(d.burn_loss(5.39e3, 906.0 * 9.80665, 320.0, period) - 27.0) < 2.0
+    assert abs(d.burn_loss(5.39e3, 906.0 * 9.80665, 640.0, period) - 101.0) < 5.0
+
+
+def test_departure_hole_ceilings() -> None:
+    """At 90 deg both ceilings are sqrt(k) (flat) and sqrt(1 + k) (bowl); head-on the bowl's is the
+    Sun plate's sqrt(1 + k) - 1; and above 90 deg the impactor's own momentum is lost."""
+    import math
+
+    from puffsat.xray_collision import departure_hole as d
+
+    assert abs(d.flat_ceiling(30.0, 90.0) - math.sqrt(30.0)) < 1e-12
+    assert abs(d.bowl_ceiling(30.0, 180.0) - (math.sqrt(31.0) - 1.0)) < 1e-12
+    assert d.bowl_ceiling(30.0, 129.9) < d.bowl_ceiling(30.0, 90.0)
