@@ -82,6 +82,10 @@ PLATES = (
 HOLE_RADII = (0.25, 0.5)  # [m]
 JSONL = charge.OUT_DIR / "hole_plate_2d.jsonl"
 JSONL_COARSE = charge.OUT_DIR / "hole_plate_2d_coarse.jsonl"
+#: Result 16's runs (`sweep --band-bowl-2d`): the bowl with its charge at 2.5 F, and the 1.5 F
+#: bowl at 160-176 deg. Read alongside when present; Result 14's own rows use exact angles.
+BAND_JSONL = charge.OUT_DIR / "band_bowl_2d.jsonl"
+BAND_JSONL_COARSE = charge.OUT_DIR / "band_bowl_2d_coarse.jsonl"
 
 # --- The departure stage (Seth, 2026-10-18): 1 Hz, ~0.25 g mean, the push plate dropped.
 CADENCE = 1.0  # [Hz]
@@ -120,9 +124,11 @@ def bowl_ceiling(k: float, theta: float) -> float:
 
 @cache
 def _runs(grid: str) -> dict[tuple[str, float, float], dict[str, object]]:
-    path = JSONL if grid == "x1" else JSONL_COARSE
+    paths = (JSONL, BAND_JSONL) if grid == "x1" else (JSONL_COARSE, BAND_JSONL_COARSE)
     return {
         (str(r["case"]), float(str(r["theta_deg"])), float(str(r["k"]))): r
+        for path in paths
+        if path.exists()
         for r in charge.load_jsonl(path)
     }
 
@@ -277,9 +283,9 @@ class Stage:
     carbon: str
 
 
-def stage(route: Route, k: float, frozen: bool = True) -> Stage:
+def stage(route: Route, k: float, frozen: bool = True, bowl: str = DESIGN_PLATE) -> Stage:
     """Fly the departure on the hole plate: iterate the burn time, its loss and the mass ratio."""
-    v_e = hole_ve(DESIGN_PLATE, route.theta, k, route.w, frozen=frozen)
+    v_e = hole_ve(bowl, route.theta, k, route.w, frozen=frozen)
     dv = route.dv
     for _ in range(4):
         mr = math.exp(dv / v_e)

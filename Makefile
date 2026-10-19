@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-fast-wave xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-fast-wave xray-collision-band-bowl xray-collision-gas-spring xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1196,6 +1196,22 @@ xray-collision-fast-wave: data/tables/ch2.json
 	cargo run --release -p sweep -- --fast-wave-2d
 	cargo run --release -p sweep -- --fast-wave-2d coarse
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.fast_wave
+
+## xray-collision-band-bowl: Result 16, the parent's S44 and S42 -- Kapton at 115-122 km/s (the
+## sheet re-run at each closure's k), the departure bowl with its charge at 2.5 F, the bowl at
+## 160-176 deg and the push at 54-69 km/s -> data/results/xray_collision/band_*.csv
+xray-collision-band-bowl: data/tables/ch2.json
+	cargo run --release -p sweep -- --band-bowl-2d
+	cargo run --release -p sweep -- --band-bowl-2d coarse
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.band_bowl
+
+## xray-collision-gas-spring: Result 17, the parent's S46 -- the lossless gas spring behind the
+## 63 t push plate (its nonlinear cycle, loss per cycle and the bags' heat over 2000 pulses), and
+## the plate's ring-down on the fine 2-D impulse profile -> data/results/xray_collision/gas_spring_*.csv
+xray-collision-gas-spring:
+	cargo run --release -p sweep -- --plate-profile-2d
+	cargo run --release -p sweep -- --plate-profile-2d coarse
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.gas_spring
 
 ## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on
 ## each plate, and the Jupiter split's perijove burn -> data/results/xray_collision/mission_periapsis.csv,

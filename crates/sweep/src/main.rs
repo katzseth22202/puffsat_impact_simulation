@@ -7752,6 +7752,155 @@ fn cmd_fast_wave_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     })
 }
 
+// X-ray collision study, Result 16: the parent's follow-ups S44 and S42. Three closures sit in the
+// 100-130 km/s band that Result 15 skipped, at push k = 6.20-7.45, so the planar sheet is re-run
+// at each. The departure bowl is run with its charge moved out to 2.5 F (where a bare impactor
+// clears the rim at 117 deg), and on the flown 1.5 F bowl at 160-176 deg, between the 129.9 and
+// 180 deg runs, for the Jupiter-only chain whose stream arrives nearly head-on.
+
+const RESULT_PATH_BAND_SHEET: &str = "data/results/xray_collision/band_sheet_2d.jsonl";
+const RESULT_PATH_BAND_BOWL: &str = "data/results/xray_collision/band_bowl_2d.jsonl";
+/// S44 item 1: `k_push` at 9.86 `R_sun` X 75, 4 `R_sun` X 90 on a 5-day gap and 4 `R_sun` X 75.
+const BAND_SHEET_K: [f64; 3] = [6.20, 6.53, 7.45];
+/// S44 item 2: the δ/D 0.5 paraboloid with its charge at 2.5 focal lengths.
+const BAND_BOWL_FAR: (&str, f64, f64, f64) = ("paraboloid 0.50 at 2.5 F", 0.50, 0.0, -2.5);
+const BAND_BOWL_FAR_THETA: [f64; 3] = [180.0, 129.9, 117.0];
+/// S42 item 1: the flown 1.5 F bowl nearly head-on, and the calcs repo's dollar k (12.3-12.7).
+const BAND_BOWL_HEAD_THETA: [f64; 4] = [160.0, 164.0, 168.0, 176.0];
+const BAND_BOWL_HEAD_K: [f64; 6] = [5.0, 7.0, 10.0, 12.5, 14.0, 20.0];
+
+/// `--band-bowl-2d [coarse]`: the sheet at the band's k, and the bowl at 2.5 F and near head-on.
+fn cmd_band_bowl_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let coarse = args.iter().any(|a| a == "coarse");
+    let dr = if coarse { 2.0 * CHARGE_DR } else { CHARGE_DR };
+    let confined = charge_confined_ratio();
+    let suffix = |p: &str| {
+        if coarse {
+            p.replace(".jsonl", "_coarse.jsonl")
+        } else {
+            p.to_string()
+        }
+    };
+    let mut sheets = Vec::new();
+    for &k in &BAND_SHEET_K {
+        for &rs in &FAST_WAVE_SHEET_RADII {
+            sheets.push((k, rs));
+        }
+    }
+    let rows = par_map_with_progress("band sheet", &sheets, |&(k, rs)| {
+        fast_wave_case(2, k, rs, FAST_WAVE_SHEET_HEIGHT, dr, confined)
+    });
+    emit_scenario(&suffix(RESULT_PATH_BAND_SHEET), "band sheet", &rows, |r| {
+        println!(
+            "rust: sheet k {:>4.2} R {:>3.1} | J/mv {:6.3} peak/mv2 {:.3e} at r {:.2} steps {}",
+            r.k, r.sheet_radius, r.impulse_per_mv, r.peak_per_mv2, r.peak_radius, r.steps,
+        );
+    })?;
+    let flown = HOLE_PLATES[2];
+    let mut bowls = Vec::new();
+    for &theta in &BAND_BOWL_FAR_THETA {
+        for &k in &HOLE_PLATE_K {
+            bowls.push((BAND_BOWL_FAR, theta, k));
+        }
+    }
+    for &theta in &BAND_BOWL_HEAD_THETA {
+        for &k in &BAND_BOWL_HEAD_K {
+            bowls.push((flown, theta, k));
+        }
+    }
+    let rows = par_map_with_progress("band bowl", &bowls, |&(plate, theta, k)| {
+        hole_plate_case(plate, theta, k, dr, confined)
+    });
+    emit_scenario(&suffix(RESULT_PATH_BAND_BOWL), "band bowl", &rows, |r| {
+        println!(
+            "rust: {:<26} theta {:>5.1} k {:>4.1} | J/mv {:6.3} dir {:.3} steps {}",
+            r.case, r.theta_deg, r.k, r.impulse_per_mv, r.exit_direction, r.steps
+        );
+    })
+}
+
+// X-ray collision study, Result 17 (the parent's S46 item 2): where the sheet's impulse lands on
+// the flown 9.5 m push plate, at the radial resolution a bending analysis needs. The flown sheet
+// (~8 m at 100 um), sheets 5% either side of the floor, and two that overfill it, at the
+// headline's k = 7.07.
+
+const RESULT_PATH_PLATE_PROFILE: &str = "data/results/xray_collision/plate_profile_2d.jsonl";
+const PLATE_PROFILE_K: f64 = 7.07;
+const PLATE_PROFILE_SHEETS: [f64; 6] = [8.0, 9.0, 9.5, 10.0, 10.5, 11.5];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct PlateProfileRecord {
+    k: f64,
+    sheet_radius: f64,
+    height: f64,
+    plate_radius: f64,
+    skirt: f64,
+    impulse_per_mv: f64,
+    peak_per_mv2: f64,
+    /// `(r, J(< r) / (m v))` every `PROFILE_DR`, out past the skirt.
+    profile: Vec<(f64, f64)>,
+    steps: usize,
+    dr: f64,
+}
+
+/// `--plate-profile-2d [coarse]`: the fine impulse profile on the flown push plate.
+fn cmd_plate_profile_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let coarse = args.iter().any(|a| a == "coarse");
+    let dr = if coarse { 2.0 * CHARGE_DR } else { CHARGE_DR };
+    let (r_plate, skirt) = FAST_WAVE_PLATE;
+    let rows = par_map_with_progress("plate profile", &PLATE_PROFILE_SHEETS, |&rs| {
+        let cfg = sheet_plate_cfg(
+            r_plate,
+            skirt,
+            FAST_WAVE_SHEET_HEIGHT + 0.5 * OVERTAKE_SHEET_THICKNESS + 6.0 * dr,
+            dr,
+        );
+        let r = run_disk_charge_bounce(
+            &cfg,
+            DiskCharge {
+                radius: rs,
+                height: FAST_WAVE_SHEET_HEIGHT,
+                charge_length: OVERTAKE_SHEET_THICKNESS,
+                k: PLATE_PROFILE_K,
+                disk_thickness: 4.0 * dr,
+                gap: 2.0 * dr,
+                ambient: CHARGE_AMBIENT,
+                hole_radius: 0.0,
+                toward_plate: true,
+            },
+        );
+        let m = 1.0 + PLATE_PROFILE_K;
+        PlateProfileRecord {
+            k: PLATE_PROFILE_K,
+            sheet_radius: rs,
+            height: FAST_WAVE_SHEET_HEIGHT,
+            plate_radius: r_plate,
+            skirt,
+            impulse_per_mv: r.wall_impulse * m,
+            peak_per_mv2: r.peak_local_pressure * m,
+            profile: r
+                .profile
+                .iter()
+                .enumerate()
+                .map(|(i, &j)| ((i + 1) as f64 * euler2d::bounce::PROFILE_DR, j * m))
+                .collect(),
+            steps: r.steps,
+            dr,
+        }
+    });
+    let path = if coarse {
+        RESULT_PATH_PLATE_PROFILE.replace(".jsonl", "_coarse.jsonl")
+    } else {
+        RESULT_PATH_PLATE_PROFILE.to_string()
+    };
+    emit_scenario(&path, "plate profile", &rows, |r| {
+        println!(
+            "rust: sheet R {:>4.1} on plate R {:>3.1} | J/mv {:6.3} peak/mv2 {:.3e} steps {}",
+            r.sheet_radius, r.plate_radius, r.impulse_per_mv, r.peak_per_mv2, r.steps
+        );
+    })
+}
+
 // X-ray collision study, Result 12: the canted departure plate for the 3S Jovian cycle. The
 // returning stream meets the departure's thrust axis at ~101 degrees (calcs repo,
 // `departure_nozzle_ledger` at a 9.86 R_sun dive), so a wide sheet sweeps *past* a flat plate and
@@ -8498,6 +8647,8 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--sheet-plate-2d", cmd_sheet_plate_2d),
     ("--hole-plate-2d", cmd_hole_plate_2d),
     ("--fast-wave-2d", cmd_fast_wave_2d),
+    ("--band-bowl-2d", cmd_band_bowl_2d),
+    ("--plate-profile-2d", cmd_plate_profile_2d),
     ("--canted-2d", cmd_canted_2d),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),

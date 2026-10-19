@@ -590,3 +590,59 @@ def test_fast_wave_aluminium_coat_only_lowers_emission() -> None:
 
     rows = fw.aluminized_rows()
     assert all(r.rise_over_bare >= -1e-9 for r in rows)
+
+
+def test_gas_spring_tall_column_reduces_to_the_papers_linear_law() -> None:
+    """A column far taller than its stroke is a linear spring: the solved orbit's stroke and its
+    peak over mean force approach the paper's `tan(theta/4) / (2 theta)` and
+    `(theta/2) / sin(theta/2)`."""
+    from puffsat.xray_collision import gas_spring as gs
+
+    theta = 0.6
+    o = gs.column_for_theta(gs.PLATE, theta, 1.4)
+    assert o.column > 10.0 * o.stroke
+    assert o.stroke == pytest.approx(gs.linear_stroke(gs.PLATE, theta), rel=0.03)
+    assert o.peak_over_mean == pytest.approx((theta / 2) / math.sin(theta / 2), rel=0.01)
+
+
+def test_gas_spring_orbit_carries_the_mean_force() -> None:
+    """Over a steady cycle the spring passes the craft its share `J nu M / (m + M)`."""
+    from puffsat.xray_collision import gas_spring as gs
+
+    o = gs.column_for_stroke(gs.PLATE, gs.STROKE, 1.4)
+    share = gs.PULSE * gs.CADENCE * gs.CRAFT / (gs.PLATE + gs.CRAFT)
+    assert o.f_mean == pytest.approx(share, rel=1e-3)
+    assert o.stroke == pytest.approx(gs.STROKE, rel=1e-3)
+
+
+def test_gas_spring_free_plate_first_mode() -> None:
+    """A free uniform circular plate's first axisymmetric mode has `omega R^2 sqrt(mu / D)` near
+    9.0 (Leissa, 9.003 at nu = 0.33; slightly lower at the steel's 0.29)."""
+    from puffsat.xray_collision import gas_spring as gs
+
+    sec = gs.Section("test", gs.PLATE, 0.0, False)
+    m = gs.plate_model(sec)
+    lam2 = float(m.omega[0]) * gs.PLATE_R**2 * math.sqrt(sec.areal / sec.rigidity)
+    assert lam2 == pytest.approx(9.0, abs=0.15)
+
+
+def test_gas_spring_even_kick_excites_no_bending() -> None:
+    """An even impulse on an even plate with no rim is a rigid-body kick."""
+    from puffsat.xray_collision import gas_spring as gs
+
+    sec = gs.Section("test", gs.PLATE, 0.3, False)
+    m = gs.plate_model(sec)
+    n = m.modes.shape[0]
+    phi = np.array([gs._basis(i, gs._R)[0] for i in range(n)])
+    qdot = m.modes.T @ (phi @ (gs._W * sec.areal * np.ones_like(gs._R)))
+    assert float(np.max(np.abs(qdot))) < 1e-8 * float(np.sum(gs._W * sec.areal))
+
+
+def test_gas_spring_thermal_loss_vanishes_when_adiabatic() -> None:
+    """No wall heat exchange, no hysteresis; some exchange, a positive loss."""
+    from puffsat.xray_collision import gas_spring as gs
+
+    bag = gs.BAGS[0]
+    o = gs.column_for_stroke(gs.PLATE, gs.STROKE, gs.gas(bag.gas, bag.pressure).gamma)
+    assert abs(gs.thermal_loss(bag, o, 0.0, cycles=30)) < 1.0
+    assert gs.thermal_loss(bag, o, 50.0, cycles=60) > 1.0e4

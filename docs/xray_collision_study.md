@@ -1551,6 +1551,164 @@ Not modelled:
 - the vapour blast's load on the bowl around a bare hit's hole, the rim's tearing, and the hole
   bowl's capture with the charge at 2.5 F.
 
+## Result 16: Kapton at 115-122 km/s, the bowl at 2.5 F, and the Jupiter chain's bowl and push -- `band_*.csv`
+
+The parent's S44 (its `docs/fast_growth_wave_asks_for_impact_sim.md`) and S42 (its
+`docs/plate_jupiter_loop_asks.md`). ADR-0067; `make xray-collision-band-bowl`
+(`sweep --band-bowl-2d`, `band_bowl.py`).
+
+**The runs.** The planar sheet on the flown 9.5 m plate (2 m standoff, 2 m skirt) at the three
+band closures' k. `c(k, 2 m)` = 0.664 / 0.653 / 0.625 at k = 6.20 / 6.53 / 7.45 (coarse grid
+0.46-0.48, the same ~37% rise on refinement as Result 15). The point fireball on the δ/D 0.5
+bowl with its charge at 2.5 F (117, 129.9 and 180 deg, k = 5-60), and on the flown 1.5 F bowl
+at 160 / 164 / 168 / 176 deg (k = 5-20). `departure_hole.py` reads these runs beside its own.
+
+**Kapton in the 100-130 km/s band (S44.1).** The closures' own k and `push_ve`, at the flown 2 m
+standoff (`band_window.csv`). The floor is the thinnest Kapton that holds its face under 400 C
+to the last 10 ms; the ceiling is the face's allowable over `c w^2`:
+
+| closure | closing, k | 100 um face, u = 8 | u = 8: HY-100 / maraging 300 | u = 12 | u = 5 |
+|---|---|---|---|---|---|
+| 9.86 R_sun, X 75 | 114.8, 7.45 | 634 K | 79-128 / 79-214 um | 29-128 / 29-214 | none |
+| 4 R_sun, X 90, 5-day gap | 119.0, 6.20 | 632 K | 78-112 / 78-187 | 28-112 / 28-187 | none |
+| 4 R_sun, X 75 | 121.8, 6.53 | 647 K | 84-109 / 84-182 | 29-109 / 29-182 | none |
+
+All three hold on Kapton wherever the 99 km/s headline does (u >= 8), and fail where it fails
+(u = 5). On maraging 300 the window survives another 37% rise in the peak (ceilings 133-156 um);
+on HY-100 it would not (79-93 um against floors of 78-84).
+
+**The bowl with its charge at 2.5 F (S44.2)** (`band_far_bowl.csv`). Moving the charge from 1.5
+to 2.5 F, where a bare impactor clears the rim at 117 deg (Result 15):
+
+| route, k | J/(m w), 1.5 -> 2.5 F | v_e (atomic C) | mass ratio | hole: r, impulse share |
+|---|---|---|---|---|
+| 4 R_sun 117 deg, 10 | 1.903 -> 1.726 | 15.4 -> 14.0 km/s (1423 s) | 1.381 -> 1.427 | 4.1 -> 5.8 m, 0.39 -> 0.34% |
+| 4 R_sun 117 deg, 20 | 2.861 -> 2.619 | 11.3 -> 10.3 | 1.553 -> 1.618 | 0.39 -> 0.35% |
+| 9.86 R_sun 129.9 deg, 10 | 1.739 -> 1.557 | 10.7 -> 9.6 | 1.547 -> 1.627 | 3.2 -> 4.8 m, 0.54 -> 0.33% |
+| 9.86 R_sun 129.9 deg, 20 | 2.692 -> 2.442 | 7.7 -> 7.0 | 1.841 -> 1.960 | 0.58 -> 0.34% |
+
+The law loses 8-10% at every k. The hole moves out and takes less (no gas lands on it at either
+height). The peak on the hole's band falls x0.34-0.43, and the bowl's peak anywhere x0.24-0.28.
+The energy arriving per area on the hole's band (3.5-6 m, one coarse band) rises x1.8-1.9 at
+117 deg and falls x0.3 at 129.9 deg; that band is too wide to say more.
+
+**The bowl nearly head-on (S42.1)** (`band_head_on.csv`). The calcs repo interpolated `hole_ve`
+in `cos theta` between the 129.9 and 180 deg runs. Against runs at 160-176 deg that
+interpolation is 0-3% high: +2.1-2.3% at its dollar-optimal k 12.5-14, +3% at k 7, ~0 at k 10.
+The coarse grid is within 1%. The bowl keeps 59-65% of its `cos theta + sqrt(1 + k)` ceiling.
+The hole, 0.26-1.30 m off axis, takes 0.42-0.54% of the impulse and 0.03-0.05% of the gas. At
+k = 12.5, `hole_ve` is 6.0-6.2 / 7.3-7.5 / 8.4-8.7 km/s at 66 / 76 / 85 km/s.
+
+**The push at 54-69 km/s (S42.2)** (`band_slow_push.csv`). Result 15's re-priced overtake law
+(Kapton's atomization charged) against the calcs repo's 100 km/s law scaled by `w / 100`:
+
+| closing | k 6.5: calcs -> re-priced | bond toll | impactor / pulse | 100 um face, u = 8 / u = 5 |
+|---|---|---|---|---|
+| 54 km/s | 21.3 -> 18.2 km/s (x0.86) | 17.2% | 62 kg | 426 K / 654 K |
+| 61 | 24.0 -> 21.4 (x0.89) | 13.2% | 53 | 444 / 713 |
+| 65 | 25.6 -> 23.1 (x0.90) | 11.5% | 49 | 456 / 748 |
+| 69 | 27.2 -> 24.9 (x0.92) | 10.2% | 45 | 467 / 784 |
+
+The k = 6-8 runs lie inside Result 11's (5-40); speed enters only through the rebound
+(e = 0.68-0.72) and the bond toll, which grows as the heat per kg falls with `w^2`. So the linear
+law overstates v_e by 8-20% here (9-17% at k 6.5), more than the 3% at 99 km/s. The sheets run
+cooler: at u = 8 the 100 um face peaks 105-150 K below the 99 km/s headline's 573 K, though each pulse needs 1.6-2.2x
+the impactor. At u = 5, 100 um holds at 54 km/s (floors 87-93 um at k 6-6.8) and fails above
+~57 km/s.
+
+## Result 17: the lossless gas spring behind the push plate -- its loss, heat and ring-down -- `gas_spring_*.csv`
+
+The parent's S46 (its `docs/fast_growth_wave_asks_for_impact_sim.md`). The parent drops
+ADR-0064's absorber-set plate, which would have to dissipate 2.2 GJ a pulse, for the lossless gas
+spring of its `sec:pusher_plate_damping`: 63 t of moving mass on an 8 m stroke for the 7.35 MN s,
+2 Hz push. ADR-0068; `make xray-collision-gas-spring` (`sweep --plate-profile-2d`,
+`gas_spring.py`).
+
+**The cycle, solved** (`gas_spring_design.csv`). The periodic orbit is shot for an adiabatic
+column `F = F0 (H / (H - x))^gamma` on the plate-craft reduced mass, kicked by `J/m` each pulse.
+The paper's linear law holds. At 63 t and `theta = 2 pi / 3` the solved stroke is 7.99 m against
+its 8.05 m (`m s` = 507 t m). The force peaks at 1.22x its mean, and the gas pressure swings
+x1.75. The column is set by the dynamics, `V/A = gamma Ma / k`, at **18.6 m** (nitrogen) or 22 m
+(helium, argon). A stiffer spring shortens it at the cost of the peak:
+
+| plate | theta | stroke | column | peak / mean | pressure swing |
+|---|---|---|---|---|---|
+| 63 t | pi/2 | 7.7 m | 33.1 m | 1.11 | x1.37 |
+| 63 t | 2 pi/3 | 8.0 | 18.6 | 1.22 | x1.75 |
+| 63 t | 5 pi/6 | 8.4 | 11.9 | 1.37 | x2.43 |
+| 63 t | pi | 8.9 | 8.3 | 1.61 | x3.63 |
+| 100 t | 2 pi/3 | 5.0 | 11.7 | 1.22 | x1.75 |
+
+**The bag.** Pressure sets only the footprint (the craft's 13.9 MN share of the 14.7 MN mean,
+over 268 m^2 at 52 kPa or 14 m^2 at 1 MPa). The hoop fibre (`2 P V rho / sigma`, Vectran at 3.0 GPa / 4) and the gas both go as
+`P V`, so neither depends on pressure: 1.5 t of fibre and 2.9 t of nitrogen (0.5 t helium,
+0.2 t hydrogen). A film bladder at 0.2 kg/m^2 adds 0.13 t at 1 MPa or 1.3 t under the whole floor.
+
+**The loss per cycle** (`gas_spring_loss.csv`), in three channels:
+- *Thermal hysteresis*: the lumped gas against a 300 K wall, integrated cycle by cycle to its
+  periodic state. The wall's coefficient is the largest of the laminar oscillating boundary layer
+  (`k / delta_kappa`), turbulent convection at the breathing speed (Colburn), and Kornhauser &
+  Smith's `Nu = 0.56 Pe_omega^0.69` (extrapolated from Pe ~ 1e4 to ~1e7). The last is the largest.
+- *Fibre hysteresis*: `pi eta sigma_a^2 / E` at an assumed loss factor of 1-5%.
+- *Wall friction* of the breathing flow.
+
+| bag | per cycle: thermal / fibre / friction | total | of the 107 MJ swing | push | bag rise, bare / radiating |
+|---|---|---|---|---|---|
+| nitrogen, whole floor (52 kPa) | 0.083 / 0.014-0.069 / 0.025 MJ | 0.18 MJ | 0.16% | 0.35 GJ | +65 / +38 K |
+| nitrogen, 1 MPa, 4 cells | 0.057 / 0.014-0.070 / 0.028 | 0.16 | 0.14% | 0.31 | +74 / +62 |
+| helium, whole floor | 0.313 / 0.016-0.080 / 0.006 | 0.40 | 0.37% | 0.80 | +152 / +73 |
+| helium, 1 MPa | 0.179 / 0.016-0.080 / 0.007 | 0.27 | 0.25% | 0.53 | +140 / +106 |
+| hydrogen, whole floor | 0.167 / 0.014-0.070 / 0.003 | 0.24 | 0.22% | 0.48 | +89 / +50 |
+| argon, whole floor | 0.147 / 0.016-0.080 / 0.040 | 0.27 | 0.25% | 0.54 | +102 / +51 |
+
+The spring loses 0.14-0.37% of its swing a cycle, not the parent's assumed 1%. Over 2000 pulses
+that is 0.3-0.8 GJ, against the 4.4 TJ a stopped plate would shed. The bag's rise is its lumped
+fibre, bladder and gas heat capacity with no cooling, and with radiation off the bundle's
+outside (emissivity 0.85, 250 K sink). Light gases lose more: they diffuse heat faster and hold
+less of it. The gas's pressure rises with its temperature (x1.22 for nitrogen at +65 K), so a
+slow trim must vent ~18% of the gas or let the column ride ~4 m longer.
+
+**The plate's ring-down** (S46 item 2; `gas_spring_ring.csv`). `--plate-profile-2d` re-runs the
+planar sheet at k = 7.07 on the flown 9.5 m plate and tallies the impulse inside every 0.25 m of
+radius. The flown ~8 m sheet lands 1.4x the mean impulse per area at the centre and 0.4-0.8x near
+the floor's edge. A 9.5 m sheet, as wide as the floor, lands evenly to 1% and keeps the same
+`J/(m v)` (2.842 against 2.828). Sheets wider than the floor (10.0 / 10.5 / 11.5 m) lose
+6 / 15 / 29% and strike the skirt's lip at 2.5 `sigma v^2`. A free axisymmetric Kirchhoff plate
+(Rayleigh-Ritz, 24 Legendre terms in `(r/R)^2`) is kicked by that profile over the pulse's ~61 us.
+Its free-plate first mode checks at `lambda^2` = 8.98.
+
+| plate | sheet | ringing per pulse | peak bending (coarser basis) | static, bags on a 5-8 m ring |
+|---|---|---|---|---|
+| 12.2 t solid, skirt on floor (ADR-0064) | 8.0 m | 38% = 1377 MJ | 91 GPa (79) | 98 GPa |
+| 63 t solid, skirt on floor | 8.0 m | 38% = 267 MJ | 12.5 GPa (18) | 3.7 GPa |
+| 63 t sandwich 0.3 m, skirt on floor | 8.0 / 9.5 m | 38 / 30% = 267 / 180 MJ | 13-19 GPa | 81 MPa |
+| 63 t sandwich 0.3 m, skirt on the frame | 8.0 m | 12% = 61 MJ | 6.2 GPa | 51 MPa |
+| same | 9.0 m (-5%) | 1.5% = 6.5 MJ | 2.1 GPa (1.7) | 51 MPa |
+| same | **9.5 m** | **0.02% = 0.1 MJ** | **0.29 GPa (0.18)** | 51 MPa |
+| same | 10.0 m (+5%) | 0 | 0.13 GPa, but 6% of the impulse lost | 51 MPa |
+| 63 t sandwich 1.0 m, skirt on the frame | 9.5 m | 0.1 MJ | 0.29 GPa (0.19) | 15 MPa |
+
+ADR-0064's face results carry over. The peak is gas-dynamic, set by `sigma v^2` against a
+rigid wall, and a plate moving at 117 m/s (or 600) is still at rest to gas closing at
+33-100 km/s. A 10-14 mm face rings in thickness every 3-5 us, a little shorter than Result 13's
+4-15 us, so it follows the load at least as closely. The
+skirt's capture is unchanged too. What ADR-0064 never checked is the plate's bending. A sheet
+that lands where the floor's mass is not leaves ~38% of the kick's energy ringing. That is
+1.4 GJ a pulse on the 12.2 t plate and 267 MJ (533 MW) on an evenly spread 63 t plate, at
+stresses no steel takes. The spring cannot help with this, because it carries only the rigid
+mode. The fix is to make the kick rigid. Fly the sheet as wide as the floor (9.5 m, ~70 um of
+Kapton, which holds at u = 8 with its face at 634 K against a 61 um floor at 99 km/s). Hang the
+skirt on the craft's frame, as the argon plate does, so the skirt is not dead mass on the floor's
+rim. Then a 0.3 m sandwich rings with 0.1 MJ at ~0.3 GPa. The footprint must hold to within a few
+percent and err wide. 5% narrow rings 6.5 MJ at ~2 GPa; 5% wide loses 6% and loads the lip.
+Bags under the whole floor put no static bending in it; a 5-8 m ring of 1 MPa cells puts
+15-51 MPa.
+
+Not modelled: the plate's own back-face heat on the bags, non-axisymmetric aim error (it rocks
+the plate in modes this axisymmetric model has not got), core shear in the sandwich (the
+Kirchhoff plate overstates short-wave stresses), how the bags fold over a 4 m swing, and the duct
+loss if part of the 18.6 m column is moved into a rigid reservoir.
+
 ## Limits
 
 **The piston's heat goes in over the sweep, not at once.** This is the largest unmodelled effect

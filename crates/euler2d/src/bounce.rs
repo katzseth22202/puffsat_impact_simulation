@@ -602,7 +602,15 @@ pub struct FireballBounce {
     pub exit_uniformity: f64,
     /// What lands on the rings of [`COLLAR_BANDS`] (the bore collar's footprint).
     pub bands: [BandLoad; N_BANDS],
+    /// Axial impulse on the plate within `(i + 1) PROFILE_DR` of the axis, in the units of
+    /// `wall_impulse`: the fine radial profile the bands are too coarse to give.
+    pub profile: [f64; N_PROFILE],
 }
+
+/// Number of radii in [`FireballBounce::profile`].
+pub const N_PROFILE: usize = 64;
+/// Spacing of [`FireballBounce::profile`]'s radii [m].
+pub const PROFILE_DR: f64 = 0.25;
 
 /// Number of radial bands in [`COLLAR_BANDS`].
 pub const N_BANDS: usize = 6;
@@ -754,8 +762,15 @@ fn run_fireball_grid(
     let mut band_force_old = [0.0; N_BANDS];
     let mut band_impulse = [0.0; N_BANDS];
     let mut band_flow = [(0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64); N_BANDS];
+    let mut profile = [0.0; N_PROFILE];
+    let mut profile_old = [0.0; N_PROFILE];
     let (r, g) = run_bounce_observed_final(g, nz, |grid, t| {
         let dt = t - t_old;
+        for (i, (acc, old)) in profile.iter_mut().zip(profile_old.iter_mut()).enumerate() {
+            let f = grid.plate_force_within((i + 1) as f64 * PROFILE_DR);
+            *acc += 0.5 * dt * (*old + f);
+            *old = f;
+        }
         let step = band_step(grid, &bands, dt);
         for (b, &(lo, hi)) in bands.iter().enumerate() {
             let f = grid.plate_force_within(hi) - grid.plate_force_within(lo);
@@ -812,6 +827,7 @@ fn run_fireball_grid(
                 peak_pressure: pk / (two_pi * fireball_mass),
             }
         }),
+        profile: profile.map(|j| j / fireball_mass),
     }
 }
 

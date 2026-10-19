@@ -57,7 +57,8 @@ Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`),
 `make xray-collision-rebound`, `make xray-collision-charge-2d`, `make xray-collision-charge`,
 `make xray-collision-charge-mix`, `make xray-collision-freeze`, `make xray-collision-collar`,
 `make xray-collision-overtake`, `make xray-collision-mission`, `make xray-collision-growth`,
-`make xray-collision-cme`, `make xray-collision-cadence-plate`, `make xray-collision-departure-hole`, `make xray-collision-fast-wave` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
+`make xray-collision-cme`, `make xray-collision-cadence-plate`, `make xray-collision-departure-hole`, `make xray-collision-fast-wave`,
+`make xray-collision-band-bowl`, `make xray-collision-gas-spring` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
 (lattice target, k = 2, per-projectile light and kinetic energy) is
 [`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md). The 66 km/s verdict (argon clouds
 radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the Sun dive) is
@@ -86,6 +87,15 @@ The growth wave above 100 km/s (Kapton holds for the 9.86 R_sun loop; dry carbon
 speed, compact disks on the push plate, a bare impactor on the bowl; the parent's S40) is Result 15
 and [ADR-0066](docs/adr/0066-fast-growth-wave-graphite-films.md) (module `fast_wave.py`, target
 `make xray-collision-fast-wave`); its answers are [`docs/fast_growth_wave_answers_for_parent.md`](docs/fast_growth_wave_answers_for_parent.md).
+The follow-ups S44 and S42 (Kapton holds at 115-122 km/s where it holds at 99; the 2.5 F bowl costs
+~9%; the Jupiter chain's head-on bowl and slow push both check slightly worse) are Result 16 and
+[ADR-0067](docs/adr/0067-kapton-band-far-bowl-and-jupiter-chain-checks.md) (module `band_bowl.py`,
+target `make xray-collision-band-bowl`); answers in [`docs/kapton_band_answers_for_parent.md`](docs/kapton_band_answers_for_parent.md).
+The lossless gas spring behind the 63 t push plate (S46: ~0.2% of the swing lost a cycle, an 18.6 m
+nitrogen column, and a sheet as wide as the sprung floor so the kick does not ring) is Result 17 and
+[ADR-0068](docs/adr/0068-gas-spring-loss-and-floor-wide-sheet.md), which supersedes ADR-0064's plate
+rule (module `gas_spring.py`, target `make xray-collision-gas-spring`); answers in
+[`docs/gas_spring_answers_for_parent.md`](docs/gas_spring_answers_for_parent.md).
 
 ## Architecture (settled)
 

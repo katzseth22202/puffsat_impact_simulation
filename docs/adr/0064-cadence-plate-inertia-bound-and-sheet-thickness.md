@@ -50,3 +50,11 @@ conducts the dose through the sheet.
   ~100 ms out and decomposes to 31-38 um. A 25 um shield film ahead fails before the flux peaks.
 - Open: the plume's spread `u` (S36), and whether a sheet with a decomposed face still works
   (S37.2). Both decide whether 2 Hz holds at the slow end of the spread.
+
+## Amendment 2026-10-19: the plate rule is superseded
+
+Decision 1 (the inertia bound) is superseded by [ADR-0068](0068-gas-spring-loss-and-floor-wide-sheet.md).
+A plate stopped within each pulse must shed its kinetic energy, so the push flies the parent's
+lossless gas spring: 63 t on an 8 m stroke. Decisions 2-5 and the 2 Hz amendment stand, but
+ADR-0068 adds that the sheet must cover the sprung floor and the skirt ride the frame.
+Otherwise ~38% of each kick rings in bending.
