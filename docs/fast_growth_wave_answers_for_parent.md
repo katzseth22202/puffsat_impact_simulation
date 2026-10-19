@@ -4,8 +4,8 @@ Answers 2026-10-19 to the parent's `docs/fast_growth_wave_asks_for_impact_sim.md
 d9c7fa1). **Written to be copied into the parent.** Evidence: Result 15 of
 [`xray_collision_study.md`](xray_collision_study.md) and
 [ADR-0066](adr/0066-fast-growth-wave-graphite-films.md); `make xray-collision-fast-wave`
-(`fast_wave_*.csv`). **Status: proposed.** The recommendation (graphite above ~130 km/s) is not yet
-adopted by Seth.
+(`fast_wave_*.csv`). **Status: proposed.** Kapton stays wherever its window is real; dry carbon
+fabric replaces it only where the speed rules Kapton out (Seth, 2026-10-19).
 
 ## Short answers
 
@@ -13,14 +13,17 @@ adopted by Seth.
 2. **At 137 km/s Kapton's window is nil at your 2 m standoff.** It opens to 143-188 um on maraging
    at 4 m, if the plume's spread is u >= 8 km/s. At 208 km/s there is none. At u = 5 there is none
    at any speed, 100 km/s included.
-3. **Graphite works as a planar film**, 26-106 um depending on speed and face, at every spread.
-   Compact disks do not: as a point blast they need a 35-49 t plate and lose ~1/5 of the
-   impulse. The overtake law is the same for graphite as for Kapton, but it is 1-4% below your
-   `push_ve` at 99-137 km/s and 9% below at 208.
+3. **Where the speed rules Kapton out, fly dry carbon instead, still as a planar sheet**: an
+   all-carbon sheet of 0.06-0.23 kg/m^2, best a dry woven carbon fabric (section 3). Kapton is
+   kept at 99 km/s, where it holds. The 4 R_sun headline (137 km/s) needs carbon at the flown 2 m
+   standoff, as do faster returns and fast interplanetary departures that maximize the crossing
+   speed. Compact impactors of any material do not work: as a point blast they need a 35-49 t
+   plate and lose ~1/5 of the impulse. The overtake law does not depend on the impactor's
+   material, but it is 1-4% below your `push_ve` at 99-137 km/s and 9% below at 208.
 4. **A bare compact impactor never touches the 130 deg bowl.** It leaves through the mouth. At
    117 deg (4 R_sun) it vaporizes a ~1 m^2 patch near the rim (0.14-0.55% of the impulse); moving
    the charge to 2.5 F avoids that.
-5. S36 stays open. Graphite removes the push's dependence on it.
+5. S36 stays open. A carbon sheet removes the push's dependence on it.
 
 ## 1. Result 13 at the real closing speeds
 
@@ -54,7 +57,7 @@ the face's allowable over `c w^2`. At u = 8:
   reaches the steel through any layer (`docs/spray_plate_steel_face_limits.md` in the sim). The
   levers are standoff (lower `c`), a stronger face, or a material that runs hotter: graphite.
 
-## 3. Graphite growth impactors
+## 3. Carbon growth impactors, where Kapton fails
 
 **Geometry: a film.** It is flown like the Kapton sheet, at the same areal-mass ceiling. With
 graphite's real specific heat (710 J/kg/K at 300 K, ~1800 at 1000 K) and radiation from both faces
@@ -75,6 +78,22 @@ at 0.85, every film run holds. The face at the ceiling thickness, at the worst s
 - At 208 km/s on HY-100 the 26 um film is 8.9 m in radius, so the plate grows to ~10.4 m. On
   maraging it stays near the flown 9.5 m.
 
+**The material: dry woven carbon fabric.** These runs use graphite's properties, but every
+all-carbon form heats the same per kg/m^2: the same specific heat, emissivity and sublimation, and
+nothing to decompose. So the choice is set by handling. A graphite film is brittle; a dry
+(resin-free) carbon fabric drapes, rolls and folds.
+- Spread-tow fabrics are sold at ~64-90 g/m^2, inside every ceiling at 132-137 km/s (2-3 layers fit
+  on maraging). At 208 km/s, 64 g/m^2 fits maraging at 2 m and HY-100 at 4 m.
+- In-plane, a 0/90 weave has almost no shear stiffness on the bias, and a spinning sheet's radial
+  and hoop stresses differ, so it would trellis and wrinkle. A triaxial weave (0/+-60, flown in
+  silicone-matrix reflectors) or light stitching fixes it. The flatness tolerance is loose (a 10 cm
+  sag spreads the arrival by ~1 us against a ~100 us pulse; Result 11).
+- Fabric comes ~1-1.3 m wide, so the 6-9 m sheet is seamed; its mass per area must stay even on the
+  metre scale. Avoid pressed creases: carbon filaments break at a bend radius of ~0.2 mm.
+- Ceramic yarns (alumina, silica, SiC) are no better here: they are more brittle (except silica),
+  weaker per kg, poorer emitters when hot, and softer at 1900-2400 K. Their usual advantage,
+  surviving hot air, does not apply in vacuum.
+
 **The overtake law, graphite onto polyethylene** (Result 11's flat plate, carbon atomic, re-priced
 at the closing speed):
 
@@ -94,7 +113,7 @@ at the closing speed):
 - At 99-137 km/s most of the gap is your law's interpolation, linear in log k between the k = 5
   and 10 rows, which overstates by ~2.5% near k = 7. The rows are in `fast_wave_law.csv`.
 
-**Compact disks: the point-blast plate** (a 0.25 m disk into a compact polyethylene charge, on the
+**Compact impactors, any material: the point-blast plate** (a 0.25 m disk into a compact polyethylene charge, on the
 flown 9.5 m plate with its 2 m skirt; 14-29 kg per 7.35 MN s pulse):
 
 | closing | sheet at 2 m | compact at 4 m | compact at 6 m | point-blast floor (energy^(2/3)) |
@@ -106,6 +125,8 @@ flown 9.5 m plate with its 2 m skirt; 14-29 kg per 7.35 MN s pulse):
 - The compact peak is on the axis. Its hottest ring takes 1.4-7.5x the plate's mean impulse per
   area; the sheet's takes 1.7x.
 - At 2.7 m it is 5-9 GPa. So a compact impactor costs ~1/5 of the impulse and 3-4x the plate.
+  This comes from the shape, not the material: the impactor never touches the plate, only the
+  merged gas does.
   ADR-0064's 12.2 t holds only for a planar sheet.
 
 ## 4. A bare compact impactor on the bowl (S30/S31 extended)
@@ -140,11 +161,13 @@ The push plate's own S30 (a bare Kapton or graphite film on the flat plate) is n
 
 ## Suggested changes to the paper (for the parent to make)
 
-- Where the paper says the faster returns "probably need graphite sheets": *Above about 130 km/s
-  the push flies graphite films 25-110 um thick, as planar sheets like the Kapton ones. Graphite's
-  heat capacity rises threefold by 1000 K and it radiates hard, so even at the plume's slowest
-  spread it peaks at 750-2000 K and sublimes less than a nanometre. Kapton at 137 km/s holds only
-  on a maraging face 4 m off, and only if the spread is above ~8 km/s.*
+- Where the paper says the faster returns "probably need graphite sheets": *Kapton serves the push
+  up to about 100 km/s. Above about 130 km/s, which includes the 4 R_sun loop and faster departures
+  that trade growth for crossing speed, the sheet is a dry woven carbon fabric of 60-230 g/m^2,
+  flown flat like the Kapton. Carbon's heat capacity triples by 1000 K and it radiates hard, so
+  even at the plume's slowest spread it peaks at 750-2000 K and sublimes less than a nanometre.
+  Kapton at 137 km/s holds only on a maraging face 4 m off, and only if the spread is above
+  ~8 km/s.*
 - The table of sheet heating: use section 1's rows.
 - `push_ve` above 130 km/s: use `fast_wave_law.csv` (62.3 km/s at 208, not 68.4).
 - The departure abort: *At the visible sign's 130 deg a bare impactor leaves through the bowl's

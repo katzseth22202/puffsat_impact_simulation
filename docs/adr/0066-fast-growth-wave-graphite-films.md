@@ -1,4 +1,4 @@
-# ADR-0066: Above ~130 km/s the growth push needs graphite films, and a bare impactor misses the 130 deg bowl
+# ADR-0066: Above ~130 km/s the growth push needs dry carbon sheets, and a bare impactor misses the 130 deg bowl
 
 Status: proposed, 2026-10-19. Result 15 of [`xray_collision_study.md`](../xray_collision_study.md);
 code `sweep --fast-wave-2d`, `fast_wave.py` (`make xray-collision-fast-wave`). Answers the parent's
@@ -21,11 +21,14 @@ to the overtake law and the plate, and what a bare compact impactor does to the 
    nil at 137, so it needs a 4 m standoff (143-188 um, 94% of the impulse) or HY-100 at
    8 m (84%). At 208 km/s no thickness up to 2 mm holds at u = 8. At u = 5 Kapton fails at every
    speed.
-3. **Graphite films are recommended for every closure above ~130 km/s**, flown as a planar sheet
-   as Kapton is. They hold thermally at every spread run, including u = 5. They take the same
+3. **Kapton is kept where it holds; dry carbon replaces it only where the speed rules it out**
+   (Seth, 2026-10-19): the 4 R_sun headline and above, and fast departures that maximize the
+   crossing speed. The carbon is flown as a planar sheet as Kapton is, best as a dry woven fabric
+   (spread-tow ~64-90 g/m^2, triaxial or stitched against bias shear). The runs use graphite's
+   properties; any all-carbon form heats the same per kg/m^2. They hold thermally at every spread run, including u = 5. They take the same
    pressure ceiling per kg/m^2 (26-64 um on HY-100, 44-106 um on maraging at 2 m), and sublimation
    is negligible below ~2600 K.
-4. **Compact graphite disks are not used on the push plate.** As a point blast they exceed HY-100
+4. **Compact impactors, of any material, are not used on the push plate.** As a point blast they exceed HY-100
    below 6 m of standoff (2.1-9 GPa at 2.7-4 m), and at 6 m keep 80-83% of the sheet's impulse. The point-blast
    floor puts the plate at 35-49 t against the planar sheet's 12.2 t.
 5. **The overtake law is re-priced at speed** for the push: the rebound and bond toll are taken at
@@ -38,9 +41,9 @@ to the overtake law and the plate, and what a bare compact impactor does to the 
 
 ## Consequences
 
-- The 4 R_sun headline's push needs graphite, or Kapton at a 4 m standoff and maraging face if
-  the plume's spread is u >= 8 km/s. Graphite also removes the push's dependence on S36's `u`.
+- The 4 R_sun headline's push needs carbon, or Kapton at a 4 m standoff and maraging face if
+  the plume's spread is u >= 8 km/s. Carbon also removes the push's dependence on S36's `u`.
 - The calcs repo's `push_ve` should take `fast_wave_law.csv` above 130 km/s (or a factor of 0.97
   at 99-137 km/s and 0.91 at 208 km/s).
-- Open: the peak's convergence; graphite film's handling and manufacture at 6-9 m; the bowl's
+- Open: the peak's convergence; the carbon fabric's bias shear and seams at 6-9 m; the bowl's
   capture with the charge at 2.5 F; the vapour blast around a bare hit's hole.

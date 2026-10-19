@@ -1483,7 +1483,9 @@ Kapton's, and the face there at the slowest spread (u = 5) is:
 | 207.8 km/s | <= 26 um (R 8.9 m), 1972 K | <= 44 um (R 6.9 m), 1533 K | <= 57 um, 1326 K |
 
 Every case holds thermally, including u = 5, where Kapton fails at any speed. The floor is set by
-handling, not heat. At 208 km/s on HY-100 the 26 um film is 8.9 m in radius, so the plate grows
+handling, not heat. Any all-carbon form heats the same per kg/m^2, so the flown form is a dry
+woven carbon fabric (spread-tow, ~64-90 g/m^2), which unlike a graphite film can be rolled and
+folded. It is used only where the speed rules Kapton out (Seth, 2026-10-19). At 208 km/s on HY-100 the 26 um film is 8.9 m in radius, so the plate grows
 to ~10.4 m; on maraging it stays near the flown 9.5 m.
 
 **The overtake law at speed** (`fast_wave_law.csv`; Result 11's flat-plate point rows, carbon
