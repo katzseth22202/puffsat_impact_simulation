@@ -51,6 +51,45 @@ The visible sign's stream arrives at 129.9 deg (117.0 at 4 R_sun), from the ship
    halves the burn and cuts the loss to ~170 m/s (the 1000 s row). At 1 Hz each pulse then doubles, and
    the survival floor grows as pulse energy^(2/3); at 2 Hz it would not.
 
+## Why 130 deg on the bowl beats 89 deg on the flat plate
+
+The plate matters far more than the angle. Splitting the gain in two (Isp, 9.86 R_sun, carbon
+atomic; `departure_hole_law.csv`, where "bowl at 89 deg" is the hole bowl's law at the flown
+route's angle and speed):
+
+| k | flat plate, 89 deg | bowl, 89 deg | bowl, 130 deg | bowl / flat at 89 deg | 89 -> 130 deg on the bowl | net |
+|---|---|---|---|---|---|---|
+| 5 | 1185 s | 1904 s | 1387 s | x1.61 | x0.73 | x1.17 |
+| 10 | 758 s | 1292 s | 1093 s | x1.71 | x0.85 | x1.44 |
+| 20 | 443 s | 806 s | 781 s | x1.82 | x0.97 | x1.76 |
+| 30 | 290 s | 548 s | 589 s | x1.89 | x1.07 | x2.03 |
+
+**The bowl gains x1.6-1.9.**
+- On the flat canted plate the fireball forms beside the plate and slides along it. Only the half
+  of the expansion thrown toward the plate pushes it.
+- A flat face takes no tangential force, so the sideways momentum leaves with the gas. Result 12's
+  flat plate kept only ~1/3 of its ceiling.
+- In the bowl the charge sits at the focus with plate on most sides, and the wall turns nearly
+  every direction of the expansion back along the axis. It captures 60-73% of the expansion's
+  momentum.
+
+**The angle costs little, x0.73 to x1.07.** Three effects pull against each other:
+1. **The impactor's own momentum is lost.** At 130 deg, `cos theta` = -0.64 of it points against
+   the thrust. This is the 11-26% ceiling loss of answer 1. It dominates at low k and fades as
+   `1/sqrt(k)`.
+2. **The visible stream is faster**, 84 against 75 km/s (+12%), so every kilogram brings more
+   energy into the fireball.
+3. **Faster means a smaller bond toll.** The heat per kilogram rises as `w^2`, so carbon's fixed bond
+   energy takes a smaller share of it: at k = 30, 27% of the speed at 84 km/s against 36% at
+   75 km/s (`departure_hole.bond_loss`).
+
+At low k effect 1 wins and the angle costs 15-27%. At k = 30, effects 2 and 3 outweigh it, and
+130 deg is 7% better than 89 deg on the same bowl.
+
+**The bowl at 89 deg is hypothetical.** That sign puts periapsis behind Earth (S38), so it is ruled out by
+occultation, not by plate physics. Had it been visible, a hole bowl there would have been the best
+of all. The old design's weakness was the flat plate, not the 89 deg geometry.
+
 ## For the calcs repo (S38 items 2 and 5)
 
 - Fly the visible sign on the hole bowl's law (`departure_hole_law.csv`) rather than the held-flat
