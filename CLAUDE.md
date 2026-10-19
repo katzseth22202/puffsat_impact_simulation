@@ -58,7 +58,7 @@ Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`),
 `make xray-collision-charge-mix`, `make xray-collision-freeze`, `make xray-collision-collar`,
 `make xray-collision-overtake`, `make xray-collision-mission`, `make xray-collision-growth`,
 `make xray-collision-cme`, `make xray-collision-cadence-plate`, `make xray-collision-departure-hole`, `make xray-collision-fast-wave`,
-`make xray-collision-band-bowl`, `make xray-collision-gas-spring` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
+`make xray-collision-band-bowl`, `make xray-collision-gas-spring`, `make xray-collision-plume` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
 (lattice target, k = 2, per-projectile light and kinetic energy) is
 [`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md). The 66 km/s verdict (argon clouds
 radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the Sun dive) is
@@ -96,6 +96,14 @@ nitrogen column, and a sheet as wide as the sprung floor so the kick does not ri
 [ADR-0068](docs/adr/0068-gas-spring-loss-and-floor-wide-sheet.md), which supersedes ADR-0064's plate
 rule (module `gas_spring.py`, target `make xray-collision-gas-spring`); answers in
 [`docs/gas_spring_answers_for_parent.md`](docs/gas_spring_answers_for_parent.md).
+The push plate's backward plume (S36: a broad lobe; the floor-wide sheet sees an equivalent u of
+8 km/s and Kapton holds, the flown 8 m sheet ~5 km/s and fails; cones rejected) is Result 18 and
+[ADR-0069](docs/adr/0069-backward-plume-and-floor-wide-sheet.md) (module `plume.py`, target
+`make xray-collision-plume`); answers in [`docs/plume_answers_for_parent.md`](docs/plume_answers_for_parent.md).
+How hot the Kapton face can run for a sub-second pulse (decomposition kinetics, other films,
+fillers, overlayers, carbon veils) is researched in
+[`docs/kapton_temperature_limits.md`](docs/kapton_temperature_limits.md); its numbers are not yet
+in a committed module.
 
 ## Architecture (settled)
 

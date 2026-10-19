@@ -18,6 +18,8 @@
 //!   `depth = (d/D)·2·r_plate` from the depth-to-diameter ratio (ADR-0021); `z0` raises the whole
 //!   dish a few cells off the domain floor so a solid layer always underlies it. Gas past the rim
 //!   (`r > r_plate`) is over no plate and escapes (§7).
+//! - [`PlateProfile::Cone`] — a convex cone `z = z_apex − slope·r` for `r ≤ r_plate`, its apex
+//!   toward the incoming stream, which throws the rebound off the axis (the X-ray study's S36).
 
 /// A reflecting plate surface `z = z_s(r)`, imposed as an immersed boundary.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -37,6 +39,15 @@ pub enum PlateProfile {
         z0: f64,
         /// Rim-to-floor depth `d` (so `depth = (d/D)·2·r_plate`).
         depth: f64,
+    },
+    /// A convex cone `z = z_apex − slope·r` for `r ≤ r_plate`, apex on the axis toward the stream.
+    Cone {
+        /// Plate radius (the rim; gas past it escapes).
+        r_plate: f64,
+        /// Surface height on the axis (the apex).
+        z_apex: f64,
+        /// Fall of the surface per unit radius, `tan` of the tilt from flat (positive is convex).
+        slope: f64,
     },
     /// A [`Self::Dish`] floor with a wall rising from its rim (ADR-0055): the spray plate's skirt
     /// or flared bell. The wall's inner face runs `r_in(z) = r_plate + flare·(z − z_rim)` from the
@@ -73,6 +84,11 @@ impl PlateProfile {
                 let rr = (r / r_plate).min(1.0);
                 z0 + depth * rr * rr
             }
+            Self::Cone {
+                r_plate,
+                z_apex,
+                slope,
+            } => z_apex - slope * r.min(r_plate),
         }
     }
 
@@ -88,6 +104,13 @@ impl PlateProfile {
                     2.0 * depth * r / (r_plate * r_plate)
                 }
             }
+            Self::Cone { r_plate, slope, .. } => {
+                if r >= r_plate {
+                    0.0
+                } else {
+                    -slope
+                }
+            }
         }
     }
 
@@ -96,7 +119,7 @@ impl PlateProfile {
     pub fn covers(&self, r: f64) -> bool {
         match *self {
             Self::InclinedPlane { .. } => true,
-            Self::Dish { r_plate, .. } => r <= r_plate,
+            Self::Dish { r_plate, .. } | Self::Cone { r_plate, .. } => r <= r_plate,
             Self::Cup {
                 r_plate,
                 skirt_height,
@@ -124,7 +147,9 @@ impl PlateProfile {
     pub fn normal(&self, z: f64, r: f64) -> (f64, f64) {
         match *self {
             Self::InclinedPlane { .. } => self.top_normal(r),
-            Self::Dish { r_plate, .. } => self.dish_normal(z, r, r_plate),
+            Self::Dish { r_plate, .. } | Self::Cone { r_plate, .. } => {
+                self.dish_normal(z, r, r_plate)
+            }
             Self::Cup { r_plate, .. } => {
                 if self.floor_solid(z, r) || !self.wall_solid(z, r) {
                     self.dish_normal(z, r, r_plate)
@@ -193,7 +218,9 @@ impl PlateProfile {
     /// The floor part of the solid (the dish).
     fn floor_solid(&self, z: f64, r: f64) -> bool {
         let r_plate = match *self {
-            Self::Dish { r_plate, .. } | Self::Cup { r_plate, .. } => r_plate,
+            Self::Dish { r_plate, .. } | Self::Cup { r_plate, .. } | Self::Cone { r_plate, .. } => {
+                r_plate
+            }
             Self::InclinedPlane { .. } => return z < self.z_surface(r),
         };
         r <= r_plate && z < self.z_surface(r)
@@ -264,7 +291,9 @@ impl PlateProfile {
     pub fn signed_distance(&self, z: f64, r: f64) -> f64 {
         match *self {
             Self::InclinedPlane { .. } => self.top_distance(z, r),
-            Self::Dish { r_plate, .. } => self.top_distance(z, r).max(r - r_plate),
+            Self::Dish { r_plate, .. } | Self::Cone { r_plate, .. } => {
+                self.top_distance(z, r).max(r - r_plate)
+            }
             Self::Cup { r_plate, .. } => {
                 let floor = self.top_distance(z, r).max(r - r_plate);
                 match self.wall_distance(z, r) {

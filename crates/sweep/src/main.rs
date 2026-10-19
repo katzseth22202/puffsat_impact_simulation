@@ -7901,6 +7901,118 @@ fn cmd_plate_profile_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error
     })
 }
 
+// X-ray collision study, Result 18 (the parent's S36): the push plate's backward plume. Where the
+// gas of each pulse goes, by angle from the stream axis and terminal speed, since the next sheet
+// flies down that axis through it. The flat skirted plate under the flown 8 m sheet and under the
+// floor-wide 9.5 m sheet of ADR-0068, the bare flat plate, and convex cones tilted 5-20 degrees
+// that throw the rebound off the axis. All at the 9.86 R_sun headline's k = 7.07, 2 m off the
+// plate's highest point.
+
+const RESULT_PATH_PLUME: &str = "data/results/xray_collision/plume_2d.jsonl";
+/// Extra domain above the plate [m], so the rebounding gas expands before it is tallied.
+const PLUME_EXTRA_TOP: f64 = 50.0;
+/// `(label, sheet radius, skirt, cone tilt [deg])`.
+const PLUME_CASES: [(&str, f64, f64, f64); 7] = [
+    ("flat + skirt, 8 m sheet", 8.0, 2.0, 0.0),
+    ("flat + skirt, 9.5 m sheet", 9.5, 2.0, 0.0),
+    ("flat bare, 9.5 m sheet", 9.5, 0.0, 0.0),
+    ("cone 5 deg, 9.5 m sheet", 9.5, 0.0, 5.0),
+    ("cone 10 deg, 9.5 m sheet", 9.5, 0.0, 10.0),
+    ("cone 15 deg, 9.5 m sheet", 9.5, 0.0, 15.0),
+    ("cone 20 deg, 9.5 m sheet", 9.5, 0.0, 20.0),
+];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct PlumeRecord {
+    case: String,
+    k: f64,
+    sheet_radius: f64,
+    plate_radius: f64,
+    skirt: f64,
+    tilt_deg: f64,
+    impulse_per_mv: f64,
+    peak_per_mv2: f64,
+    exit_direction: f64,
+    exit_mass_share: f64,
+    /// Angle bin edges [deg] from the stream axis (up the stream, away from the plate).
+    angles: Vec<f64>,
+    /// Speed bin width, in the closing speed.
+    speed_bin: f64,
+    /// Exhaust mass per bin as a share of the merged mass, `[angle][speed]`.
+    exhaust: Vec<Vec<f64>>,
+    steps: usize,
+    dr: f64,
+}
+
+/// `--plume-2d [coarse]`: the exhaust's angle and speed distribution off the push plate.
+fn cmd_plume_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let coarse = args.iter().any(|a| a == "coarse");
+    let dr = if coarse { 2.0 * CHARGE_DR } else { CHARGE_DR };
+    let r_plate = FAST_WAVE_PLATE.0;
+    let extra = if args.iter().any(|a| a == "short") {
+        0.0
+    } else {
+        PLUME_EXTRA_TOP
+    };
+    let rows = par_map_with_progress("plume", &PLUME_CASES, |&(label, rs, skirt, tilt)| {
+        let slope = tilt.to_radians().tan();
+        let rise = slope * r_plate;
+        let mut cfg = sheet_plate_cfg(
+            r_plate,
+            skirt,
+            FAST_WAVE_SHEET_HEIGHT + 0.5 * OVERTAKE_SHEET_THICKNESS + 6.0 * dr + rise + extra,
+            dr,
+        );
+        if tilt > 0.0 {
+            cfg.shape = PlateShape::Cone { slope };
+        }
+        let r = run_disk_charge_bounce(
+            &cfg,
+            DiskCharge {
+                radius: rs,
+                height: FAST_WAVE_SHEET_HEIGHT,
+                charge_length: OVERTAKE_SHEET_THICKNESS,
+                k: PLATE_PROFILE_K,
+                disk_thickness: 4.0 * dr,
+                gap: 2.0 * dr,
+                ambient: CHARGE_AMBIENT,
+                hole_radius: 0.0,
+                toward_plate: true,
+            },
+        );
+        let m = 1.0 + PLATE_PROFILE_K;
+        PlumeRecord {
+            case: label.to_string(),
+            k: PLATE_PROFILE_K,
+            sheet_radius: rs,
+            plate_radius: r_plate,
+            skirt,
+            tilt_deg: tilt,
+            impulse_per_mv: r.wall_impulse * m,
+            peak_per_mv2: r.peak_local_pressure * m,
+            exit_direction: r.exit_direction,
+            exit_mass_share: r.exit_mass_share,
+            angles: euler2d::bounce::EXHAUST_ANGLES.to_vec(),
+            speed_bin: euler2d::bounce::EXHAUST_DV,
+            exhaust: r.exhaust.iter().map(|row| row.to_vec()).collect(),
+            steps: r.steps,
+            dr,
+        }
+    });
+    let path = if coarse {
+        RESULT_PATH_PLUME.replace(".jsonl", "_coarse.jsonl")
+    } else {
+        RESULT_PATH_PLUME.to_string()
+    };
+    emit_scenario(&path, "plume", &rows, |r| {
+        let on_axis: f64 = r.exhaust[..5].iter().flatten().sum();
+        println!(
+            "rust: {:<26} | J/mv {:6.3} dir {:.3} exit {:.3} | within 3 deg {:.4} steps {}",
+            r.case, r.impulse_per_mv, r.exit_direction, r.exit_mass_share, on_axis, r.steps
+        );
+    })
+}
+
 // X-ray collision study, Result 12: the canted departure plate for the 3S Jovian cycle. The
 // returning stream meets the departure's thrust axis at ~101 degrees (calcs repo,
 // `departure_nozzle_ledger` at a 9.86 R_sun dive), so a wide sheet sweeps *past* a flat plate and
@@ -8649,6 +8761,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--fast-wave-2d", cmd_fast_wave_2d),
     ("--band-bowl-2d", cmd_band_bowl_2d),
     ("--plate-profile-2d", cmd_plate_profile_2d),
+    ("--plume-2d", cmd_plume_2d),
     ("--canted-2d", cmd_canted_2d),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),

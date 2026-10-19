@@ -646,3 +646,20 @@ def test_gas_spring_thermal_loss_vanishes_when_adiabatic() -> None:
     o = gs.column_for_stroke(gs.PLATE, gs.STROKE, gs.gas(bag.gas, bag.pressure).gamma)
     assert abs(gs.thermal_loss(bag, o, 0.0, cycles=30)) < 1.0
     assert gs.thermal_loss(bag, o, 50.0, cycles=60) > 1.0e4
+
+
+def test_plume_point_source_reproduces_the_gaussian_cloud() -> None:
+    """Fed the parent's Gaussian (receding at U, spread u) as its on-axis distribution, the
+    ballistic point-source flux gives the parent's dose: the two descriptions are one model."""
+    from puffsat.xray_collision import coated_sheet as cs
+    from puffsat.xray_collision import fast_wave as fw
+    from puffsat.xray_collision import plume as pl
+
+    c = fw.CLOSURES[0]
+    p = fw.push_at(c)
+    u = 8.0e3
+    v = np.linspace(1.0, 120.0e3, 6001)
+    f = v**2 / ((2.0 * math.pi) ** 1.5 * u**3) * np.exp(-((v - p.recession) ** 2) / (2.0 * u**2))
+    got = pl.dose(pl.point_flux(v, f, c))
+    want = pl.dose(cs.flux(p, u, cs._times()))
+    assert got == pytest.approx(want, rel=0.02)

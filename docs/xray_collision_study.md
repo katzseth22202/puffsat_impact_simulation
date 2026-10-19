@@ -1709,6 +1709,134 @@ the plate in modes this axisymmetric model has not got), core shear in the sandw
 Kirchhoff plate overstates short-wave stresses), how the bags fold over a 4 m swing, and the duct
 loss if part of the 18.6 m column is moved into a rigid reservoir.
 
+## Result 18: the push plate's backward plume, and what it does to the next sheet -- `plume_*.csv`
+
+The parent's S36 (its `docs/plume_cadence_asks_for_impact_sim.md`). On the 2 Hz, 1 g overtake
+push each sheet catches up from behind and flies face-on through the gas that earlier pulses threw
+back up the stream. The parent models each earlier pulse as a Gaussian cloud receding at U and
+spreading at u along any axis; u was a free input that set most of the dose. ADR-0069;
+`make xray-collision-plume` (`sweep --plume-2d`, `plume.py`).
+
+**The runs.** The planar sheet at k = 7.07 on the flown 9.5 m plate, 2 m standoff, on a grid that
+reaches 50 m above the plate. Each run tallies the exhaust leaving the grid, and the gas left on it
+at the end, by angle from the stream axis and terminal speed `sqrt(u^2 + 2h)`. A grid only ~7 m
+tall counts hot gas that has not finished spreading sideways as moving straight up the axis: 18-29%
+of the mass within 3 deg, against 3-5% at 20-100 m. Doses averaged over cones of 3 deg or more move
+under 3% between 50 and 100 m (coarse grid). On refinement the skirted plate's 3 deg doses move
+under 10% (35 -> 38 and 86 -> 83 kJ/m^2). The bare plate's and the cones' do not: bare 23 -> 63,
+cones 53-84 -> 92-151. Those cases are indicative only. The cones rank worse than the skirted plate on both grids, the
+bare plate only on the production grid.
+
+Cases: the flat skirted plate under the flown ~8 m sheet and under ADR-0068's floor-wide 9.5 m
+sheet, the bare flat plate, and convex cones tilted 5-20 deg, apex toward the stream
+(`PlateProfile::Cone`).
+
+**The exhaust (item 1)** (`plume_table.csv`). Mass share of the merged gas by angle from the axis
+and terminal speed, in units of the closing speed w. Flat skirted plate, floor-wide 9.5 m sheet:
+
+| angle | < 0.2 w | 0.2-0.3 | 0.3-0.4 | 0.4-0.5 | > 0.5 w |
+|---|---|---|---|---|---|
+| 0-5 deg | 0.001 | 0.005 | 0.013 | 0.007 | 0.014 |
+| 5-10 | 0.000 | 0.021 | 0.034 | 0.019 | 0.027 |
+| 10-20 | 0.000 | 0.094 | 0.111 | 0.061 | 0.026 |
+| 20-40 | 0.000 | 0.266 | 0.087 | 0.011 | 0.003 |
+| 40-90 | 0.001 | 0.150 | 0.036 | 0.001 | 0.001 |
+
+It is a broad lobe, not a hollow cone. Most of the gas leaves 10-40 deg off the axis at
+0.2-0.4 w (20-40 km/s at 99 km/s); 4% (8 m sheet: 5%) leaves within 5 deg.
+
+**The dose and the equivalent u (items 1-2)** (`plume_dose.csv`). Beyond ~1 km the gas is
+ballistic, so each earlier pulse is a point source. The on-axis density at distance `z` and age
+`t` is `f(v) / (v^2 t^3)` with `v = z/t` and `f = dm / (dOmega dv)` on the axis, and the flux
+`1/2 rho (v + w)^3` is summed over pulses as `coated_sheet.flux` sums the Gaussians. Fed a
+Gaussian, this reproduces the parent's dose to 2% (test). The next sheet subtends ~0.02 deg where
+the dose arrives, so the axis value counts. `f` is averaged over 1, 3, 5 and 10 deg cones; 3 deg
+is the narrowest that has converged in the grid's height and is the design value. The parent's
+Gaussian gives 97 / 38 / 17 kJ/m^2 at u = 5 / 8 / 12 km/s (U = 19.9 km/s).
+
+| 9.86 R_sun headline (99.2 km/s) | 1 deg | **3 deg** | 5 deg | 10 deg | J/(m w) |
+|---|---|---|---|---|---|
+| flat + skirt, flown 8 m sheet | 220 kJ/m^2 | **83 (u 5.4), fails** | 57 | 39 | 2.831 |
+| flat + skirt, floor-wide 9.5 m | 70 (u 5.9) | **38 (u 8.0), holds** | 30 | 28 | 2.843 |
+| flat bare, 9.5 m | 207 | 63 (u 6.2) | 44 | 29 | 2.408 |
+| cone 5 / 10 / 15 / 20 deg, 9.5 m | 360-610 | 92-151 (u 4.0-5.1) | 55-76 | 30-36 | 2.275-1.691 |
+
+"Holds" is Result 13's rule for 100 um Kapton (face under 400 C to the last 10 ms). On the
+floor-wide sheet the face peaks at 570 K and the thinnest Kapton that holds is 61 um; that sheet is
+~70 um. At the other closures (`k` and `v_e` their own, the exhaust's shape carried in units of w):
+
+| closure | 8 m sheet, 3 deg | floor-wide 9.5 m, 3 deg |
+|---|---|---|
+| 9.86 R_sun, X 75 (114.8 km/s) | u 6.2, fails | u 9.2, 540 K, floor 53 um |
+| 4 R_sun, X 90, 5-day gap (119.0) | u 6.6, fails | u 9.8, 506 K, floor 45 um |
+| 4 R_sun, X 75 (121.8) | u 6.7, fails | u 10.0, 507 K, floor 45 um |
+| 4 R_sun headline (137.1; flies carbon) | u 7.5, fails | u 11.2, 485 K, floor 40 um |
+
+**Kapton spread over each sheet, at each closure** (`plume_sheet.csv`). The pulse's impactor
+mass spread over the sheet, against the thinnest film that holds in this plume and the face's
+pressure ceiling at 2 m (the peak coefficient of this run). The impulse includes polyethylene's
+rebound at the arriving column:
+
+| closure | floor-wide sheet | least that holds | ceiling HY-100 / maraging | impulse vs 8 m sheet |
+|---|---|---|---|---|
+| 9.86 R_sun, 60 (99.2 km/s) | 70 um | 61 | 143 / 238 | +0.2% |
+| 9.86 R_sun, X 75 (114.8) | 60 | 53 | 107 / 178 | +0.2% |
+| 4 R_sun, X 90, 5-day (119.0) | 61 | 45 | 99 / 165 | +0.2% |
+| 4 R_sun, X 75 (121.8) | 59 | 45 | 95 / 158 | +0.2% |
+| 9.86 R_sun, 90 (132.1) | 52 | 48 | 80 / 134 | +0.2% |
+| 4 R_sun, 90 (137.1) | 52 | 40 | 75 / 124 | -0.1% |
+| 4 R_sun, 150 (207.8) | 33 | 28 | 33 / 54 | -1.2% |
+
+The floor-wide Kapton sheet holds at every closure through 137 km/s on either face, and at
+208 km/s on maraging only. The flown 8 m sheet fails at all of them. That reverses Result 15's
+"no Kapton window at 137 km/s", which used the parent's Gaussian at u = 8. The wider sheet does
+not cost impulse: the thinner gas layer rebounds a little less (e_eff 0.724 -> 0.720 at
+99 km/s), and the ideal-gas capture rises 0.4%.
+
+**The plume's push on the sheet** (`plume_push.csv`). The push is the momentum flux
+`rho (v + w)^2` of the same point sources. It points straight back along the flight line, and it is
+even across the sheet, which subtends ~0.02 deg of the plume. So it delays the sheet but does not
+steer it.
+
+| closure | taken over the approach | peak | film slows | arrives |
+|---|---|---|---|---|
+| 9.86 R_sun headline | 0.54 N s/m^2 | 5.3 Pa | 5.4 m/s | 14 m short, 145 us late |
+| 115-137 km/s | 0.27-0.41 | 2.7-4.1 | 3.7-4.8 | 10-13 m, 72-113 us |
+| 208 km/s | 0.13 | 1.3 | 2.9 | 8 m, 38 us |
+
+The delay is predictable, so guidance budgets it, and it is 0.03% of the 500 ms between pulses.
+A heavy point on the film is not slowed with it, so the film's tension must drag it along and the
+film dimples around it. Holding a 100 g node (a placeholder mass) to Result 11's 10 cm takes
+24-44 N/m: 0.5-0.75 MPa in the film, from a ~30-35 rpm spin.
+
+The floor-wide sheet is ~2x better than the flown one. A sheet that stops short of the floor's edge
+leaves a free edge on the plate, and the edge's rarefaction drives gas in toward the axis. The
+skirt helps on the production grid: the bare plate is worse at every cone, and it loses 15% of the
+impulse. Cones are worse still. They throw the main lobe off axis but focus a jet onto it, and they lose 20-40% of the
+impulse. They are dropped.
+
+**Species (item 3)** (`plume_species.csv`, Result 11's freeze-out). The ions recombine before the
+gas reaches the plate (4e-6 of the heat stays locked). H2 re-forms with 3.1 decades of margin.
+Only carbon is uncertain: if every carbon atom stays atomic and recombines on the Kapton face, it
+adds 53 MJ/kg against the 18 GJ/kg the gas brings at its dose-weighted speed (sheet frame): 0.3% of
+the dose. The plume's heat is kinetic, ~50 eV/amu.
+
+**Coatings, foams and veils on the sheet** (scratch estimates; `docs/kapton_temperature_limits.md`
+section 6). A bonded 1 um graphite coat lowers the face 3-12 K. A bonded 20-50 um carbon foam
+lowers it ~15-40 K on the floor-wide sheet and ~160 K at most in the 8 m case: real carbon
+aerogels conduct 0.17-0.7 W/m/K when hot, so a bonded layer passes most of the flux. Only a carbon
+veil held off the film by a gap (MLI-style scrim and ties) breaks conduction; it is the fallback if
+the plume proves worse, or at higher speed. A 50 um glass top layer outweighs the whole Kapton
+sheet and is rejected. A 0.1-1 um SiOx-class coat is worth flying against particle erosion, not
+for heat. None is needed for heat on the floor-wide sheet.
+
+**Open.** The axis itself: the 1 deg values are 1.8x the 3 deg ones and not converged, and an
+axisymmetric grid is weakest on its axis. Off-axis aim and pulse-to-pulse scatter of the lobe,
+which would smear the axis peak (not run). Erosion of the face by the ~0.6-0.8 keV atoms
+(`kapton_temperature_limits.md` puts it at ~0.04-0.5 um a pass, unmodelled here). The kinetics in
+that note suggest the face may run ~940-1140 K for a sub-second pulse rather than the 673 K rule
+used here; until they are in a committed module the rule stands.
+
 ## Limits
 
 **The piston's heat goes in over the sweep, not at once.** This is the largest unmodelled effect

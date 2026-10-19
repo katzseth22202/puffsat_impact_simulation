@@ -41,6 +41,11 @@ pub enum PlateShape {
         /// Depth-to-diameter ratio `d/D` (`D = 2·r_plate`).
         d_over_d: f64,
     },
+    /// A convex cone, apex toward the stream, falling `slope` per unit radius to its rim (no skirt).
+    Cone {
+        /// `tan` of the tilt from flat.
+        slope: f64,
+    },
     /// The dish with a wall rising from its rim: a skirt (`flare = 0`) or a flared bell
     /// (ADR-0055). Zero `skirt_height` runs exactly as [`Self::Dish`].
     Cup {
@@ -66,6 +71,11 @@ fn immersed_profile(cfg: &SlugConfig) -> Option<PlateProfile> {
             r_plate: cfg.r_plate,
             z0,
             depth: d_over_d * 2.0 * cfg.r_plate,
+        }),
+        PlateShape::Cone { slope } => Some(PlateProfile::Cone {
+            r_plate: cfg.r_plate,
+            z_apex: z0 + slope * cfg.r_plate,
+            slope,
         }),
         PlateShape::Cup {
             d_over_d,
@@ -267,7 +277,7 @@ pub fn init_slug_grid(cfg: &SlugConfig) -> Grid2D {
             g.set_plate_radius(Some(cfg.r_plate));
             0.0
         }
-        PlateShape::Dish { .. } | PlateShape::Cup { .. } => {
+        PlateShape::Dish { .. } | PlateShape::Cup { .. } | PlateShape::Cone { .. } => {
             g.bc_zlo = Bc::Transmissive; // the immersed surface, not z = 0, is the wall
             let profile = immersed_profile(cfg).expect("a dished or cupped plate");
             g.set_plate_profile(Some(profile));
@@ -605,7 +615,45 @@ pub struct FireballBounce {
     /// Axial impulse on the plate within `(i + 1) PROFILE_DR` of the axis, in the units of
     /// `wall_impulse`: the fine radial profile the bands are too coarse to give.
     pub profile: [f64; N_PROFILE],
+    /// The exhaust's mass (per unit fireball mass) by angle from `+z` ([`EXHAUST_ANGLES`]) and
+    /// terminal speed (bins of [`EXHAUST_DV`]): gas leaving through the outer faces as it goes,
+    /// then the gas still on the grid at the end. Terminal speed is `sqrt(u^2 + 2h)` with the
+    /// enthalpy `h = γ p / ((γ − 1) ρ)` spent along the parcel's present direction.
+    pub exhaust: [[f64; N_EXHAUST_SPEED]; N_EXHAUST_ANGLE],
 }
+
+/// Add `dm` of gas in state `w` to the exhaust histogram.
+fn tally_exhaust(
+    hist: &mut [[f64; N_EXHAUST_SPEED]; N_EXHAUST_ANGLE],
+    w: crate::state::Prim,
+    dm: f64,
+    gamma: f64,
+) {
+    let h = gamma / (gamma - 1.0) * w.p / w.rho;
+    let speed = (w.uz * w.uz + w.ur * w.ur + 2.0 * h).sqrt();
+    let angle = w.ur.atan2(w.uz).to_degrees().abs();
+    let a = EXHAUST_ANGLES[1..]
+        .iter()
+        .position(|&hi| angle < hi)
+        .unwrap_or(N_EXHAUST_ANGLE - 1);
+    // SAFE: speed and EXHAUST_DV are positive, and the bin is capped below N_EXHAUST_SPEED.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let v = ((speed / EXHAUST_DV) as usize).min(N_EXHAUST_SPEED - 1);
+    hist[a][v] += dm;
+}
+
+/// Edges [deg] of the exhaust histogram's angle bins, measured from `+z` (away from the plate, up
+/// the incoming stream). Fine near the axis, where the next sheet meets the gas.
+pub const EXHAUST_ANGLES: [f64; N_EXHAUST_ANGLE + 1] = [
+    0.0, 0.5, 1.0, 2.0, 3.0, 5.0, 7.5, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0, 60.0, 75.0, 90.0,
+    120.0, 180.0,
+];
+/// Number of angle bins in [`FireballBounce::exhaust`].
+pub const N_EXHAUST_ANGLE: usize = 18;
+/// Number of speed bins in [`FireballBounce::exhaust`]; the last also takes every faster parcel.
+pub const N_EXHAUST_SPEED: usize = 40;
+/// Width of a speed bin, in the run's speed unit.
+pub const EXHAUST_DV: f64 = 0.05;
 
 /// Number of radii in [`FireballBounce::profile`].
 pub const N_PROFILE: usize = 64;
@@ -693,13 +741,19 @@ fn band_step(
 
 /// Mass, axial momentum, `Σ m|u|` and `Σ m u^2` carried out through the far-`z` and outer-`r`
 /// faces in `dt` (`2π` dropped), from the outermost cells' states.
-fn outflow_moments(g: &Grid2D, dt: f64) -> (f64, f64, f64, f64) {
+fn outflow_moments(
+    g: &Grid2D,
+    dt: f64,
+    hist: &mut [[f64; N_EXHAUST_SPEED]; N_EXHAUST_ANGLE],
+) -> (f64, f64, f64, f64) {
     let (nz, nr) = (g.nz(), g.nr());
     let (dz, dr) = (g.dz(), g.dr());
+    let gamma = g.gamma();
     let (mut m, mut pz, mut ms, mut mu2) = (0.0, 0.0, 0.0, 0.0);
     let mut add = |w: crate::state::Prim, un: f64, area: f64| {
         if un > 0.0 {
             let dm = w.rho * un * area * dt;
+            tally_exhaust(hist, w, dm, gamma);
             let speed = w.uz.hypot(w.ur);
             m += dm;
             pz += dm * w.uz;
@@ -722,8 +776,12 @@ fn outflow_moments(g: &Grid2D, dt: f64) -> (f64, f64, f64, f64) {
 }
 
 /// Mass, axial momentum, `Σ m|u|` and `Σ m u^2` of the fluid on the grid (`2π` dropped).
-fn exit_moments(g: &Grid2D) -> (f64, f64, f64, f64) {
+fn exit_moments(
+    g: &Grid2D,
+    hist: &mut [[f64; N_EXHAUST_SPEED]; N_EXHAUST_ANGLE],
+) -> (f64, f64, f64, f64) {
     let two_pi = 2.0 * std::f64::consts::PI;
+    let gamma = g.gamma();
     let (mut m, mut pz, mut ms, mut mu2) = (0.0, 0.0, 0.0, 0.0);
     for iz in 0..g.nz() {
         for ir in 0..g.nr() {
@@ -732,6 +790,7 @@ fn exit_moments(g: &Grid2D) -> (f64, f64, f64, f64) {
             }
             let w = g.prim(iz, ir);
             let dm = w.rho * g.cell_volume(ir) / two_pi;
+            tally_exhaust(hist, w, dm, gamma);
             let speed = w.uz.hypot(w.ur);
             m += dm;
             pz += dm * w.uz;
@@ -764,6 +823,7 @@ fn run_fireball_grid(
     let mut band_flow = [(0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64); N_BANDS];
     let mut profile = [0.0; N_PROFILE];
     let mut profile_old = [0.0; N_PROFILE];
+    let mut exhaust = [[0.0; N_EXHAUST_SPEED]; N_EXHAUST_ANGLE];
     let (r, g) = run_bounce_observed_final(g, nz, |grid, t| {
         let dt = t - t_old;
         for (i, (acc, old)) in profile.iter_mut().zip(profile_old.iter_mut()).enumerate() {
@@ -789,11 +849,11 @@ fn run_fireball_grid(
             peak_outside = p_out;
             peak_at = (r_out, t);
         }
-        let f = outflow_moments(grid, t - t_old);
+        let f = outflow_moments(grid, t - t_old, &mut exhaust);
         out = (out.0 + f.0, out.1 + f.1, out.2 + f.2, out.3 + f.3);
         t_old = t;
     });
-    let grid_moments = exit_moments(&g);
+    let grid_moments = exit_moments(&g, &mut exhaust);
     let (m, pz, ms, mu2) = (
         out.0 + grid_moments.0,
         out.1 + grid_moments.1,
@@ -828,6 +888,7 @@ fn run_fireball_grid(
             }
         }),
         profile: profile.map(|j| j / fireball_mass),
+        exhaust: exhaust.map(|row| row.map(|dm| dm / fireball_mass)),
     }
 }
 

@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-fast-wave xray-collision-band-bowl xray-collision-gas-spring xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-fast-wave xray-collision-band-bowl xray-collision-gas-spring xray-collision-plume xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1212,6 +1212,14 @@ xray-collision-gas-spring:
 	cargo run --release -p sweep -- --plate-profile-2d
 	cargo run --release -p sweep -- --plate-profile-2d coarse
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.gas_spring
+
+## xray-collision-plume: Result 18, the parent's S36 -- the push plate's backward plume: the
+## exhaust by angle and speed (a grid 50 m tall), the dose on the next sheet from ballistic point
+## sources, the equivalent Gaussian u, and convex cones -> data/results/xray_collision/plume_*.csv
+xray-collision-plume: data/tables/ch2.json
+	cargo run --release -p sweep -- --plume-2d
+	cargo run --release -p sweep -- --plume-2d coarse
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.plume
 
 ## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on
 ## each plate, and the Jupiter split's perijove burn -> data/results/xray_collision/mission_periapsis.csv,
