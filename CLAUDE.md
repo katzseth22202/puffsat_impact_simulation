@@ -82,7 +82,7 @@ answers owed to the parent are [`docs/plume_cadence_answers_for_parent.md`](docs
 The staged departure plate (the impactor threads a hole at the visible sign's 117-130 deg, the parent's S38)
 is Result 14 and [ADR-0065](docs/adr/0065-staged-departure-plate-through-a-hole.md) (module `departure_hole.py`,
 target `make xray-collision-departure-hole`); its answers are [`docs/departure_hole_answers_for_parent.md`](docs/departure_hole_answers_for_parent.md).
-The growth wave above 100 km/s (Kapton against graphite films at 132-208 km/s, the overtake law at
+The growth wave above 100 km/s (Kapton holds for the 9.86 R_sun loop; dry carbon sheets from the 4 R_sun headline's 137 km/s up to 208 km/s, the overtake law at
 speed, compact disks on the push plate, a bare impactor on the bowl; the parent's S40) is Result 15
 and [ADR-0066](docs/adr/0066-fast-growth-wave-graphite-films.md) (module `fast_wave.py`, target
 `make xray-collision-fast-wave`); its answers are [`docs/fast_growth_wave_answers_for_parent.md`](docs/fast_growth_wave_answers_for_parent.md).
