@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-fast-wave xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1187,6 +1187,15 @@ xray-collision-departure-hole:
 	cargo run --release -p sweep -- --hole-plate-2d
 	cargo run --release -p sweep -- --hole-plate-2d coarse
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.departure_hole
+
+## xray-collision-fast-wave: Result 15, the growth wave above 100 km/s (parent S40) -- the sheet's
+## peak at each closure's k and the compact charge / point fireball on the push plate (two grids),
+## then Kapton and graphite in the plume at 132-208 km/s, the re-priced overtake law and a bare
+## compact impactor on the departure bowl -> data/results/xray_collision/fast_wave_*.csv
+xray-collision-fast-wave: data/tables/ch2.json
+	cargo run --release -p sweep -- --fast-wave-2d
+	cargo run --release -p sweep -- --fast-wave-2d coarse
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.fast_wave
 
 ## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on
 ## each plate, and the Jupiter split's perijove burn -> data/results/xray_collision/mission_periapsis.csv,

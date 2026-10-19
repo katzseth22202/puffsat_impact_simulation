@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import csv
 import math
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 
 import numpy as np
@@ -98,13 +99,21 @@ class Push:
     sheet: float  # [kg] of impactor per pulse
     cloud: float  # [kg], m_g: the sheet plus its charge
     recession: float  # [m/s], U
+    v_close: float = V_CLOSE  # [m/s], the sheets' closing speed
 
 
-def push(label: str, cadence: float, g_mean: float) -> Push:
+def push(
+    label: str,
+    cadence: float,
+    g_mean: float,
+    v_close: float = V_CLOSE,
+    k: float = K_PUSH,
+    v_e: float = VE_PUSH,
+) -> Push:
     pulse = LAUNCH_UNIT * g_mean * G0 / cadence
-    sheet = pulse / (K_PUSH * VE_PUSH)
-    cloud = sheet * (1.0 + K_PUSH)
-    return Push(label, cadence, pulse, sheet, cloud, (pulse - sheet * V_CLOSE) / cloud)
+    sheet = pulse / (k * v_e)
+    cloud = sheet * (1.0 + k)
+    return Push(label, cadence, pulse, sheet, cloud, (pulse - sheet * v_close) / cloud, v_close)
 
 
 def flux(p: Push, u: float, before: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -119,10 +128,10 @@ def flux(p: Push, u: float, before: NDArray[np.float64]) -> NDArray[np.float64]:
             p.cloud
             / ((2.0 * math.pi) ** 1.5 * (u * tt) ** 3)
             * np.exp(
-                -((V_CLOSE * k * tau - (V_CLOSE + p.recession) * tt) ** 2) / (2 * (u * tt) ** 2)
+                -((p.v_close * k * tau - (p.v_close + p.recession) * tt) ** 2) / (2 * (u * tt) ** 2)
             )
         )
-        w = V_CLOSE * k * tau / tt
+        w = p.v_close * k * tau / tt
         q[ok] += 0.5 * rho * w**3
     return q
 
@@ -147,6 +156,29 @@ class Heating:
     fail_depth: float  # [m], the deepest the sheet ever passes T_FAIL: the decomposed skin
 
 
+@dataclass(frozen=True)
+class Solid:
+    """A sheet material: density, through-thickness conductivity, specific heat (a function of
+    temperature) and the two face temperatures `heat` reports crossings of."""
+
+    name: str
+    rho: float  # [kg/m^3]
+    k: float  # [W/m/K], through the thickness
+    cp: Callable[[NDArray[np.float64]], NDArray[np.float64]]  # [J/kg/K] at T [K]
+    t_rating: float  # [K]
+    t_fail: float  # [K]
+
+
+KAPTON = Solid(
+    "Kapton",
+    KAPTON_RHO,
+    KAPTON_K,
+    lambda t: np.full_like(t, KAPTON_CP),
+    T_RATING,
+    T_FAIL,
+)
+
+
 def heat(
     q: NDArray[np.float64],
     thickness: float,
@@ -154,33 +186,35 @@ def heat(
     eps_back: float,
     films: float,
     t0: float = T_START,
+    solid: Solid = KAPTON,
 ) -> tuple[Heating, NDArray[np.float64]]:
-    """Backward-Euler conduction through the Kapton under face flux `q` (on `_times()`), with
-    radiation linearised about the last step. Returns the summary and the face history."""
+    """Backward-Euler conduction through the sheet under face flux `q` (on `_times()`), with
+    radiation linearised about the last step and the heat capacity taken at the last step's
+    temperature. Returns the summary and the face history."""
     n = CELLS
     dx = thickness / n
-    c = KAPTON_RHO * KAPTON_CP * dx  # [J/m^2/K] per cell
-    cap = np.full(n, c)
-    cap[0] += 0.5 * films if eps_back > 0 else films
-    cap[-1] += 0.5 * films if eps_back > 0 else 0.0
-    g = KAPTON_K / dx
+    films_at = np.zeros(n)
+    films_at[0] += 0.5 * films if eps_back > 0 else films
+    films_at[-1] += 0.5 * films if eps_back > 0 else 0.0
+    g = solid.k / dx
     temp = np.full(n, t0)
     face = np.empty(len(q))
     face[0] = t0
     mean_max = t0
     s = _times()
-    cross = {T_RATING: 0.0, T_FAIL: 0.0}
+    cross = {solid.t_rating: 0.0, solid.t_fail: 0.0}
     deepest = 0
-    base = np.diag(cap / DT)
+    conduct = np.zeros((n, n))
     for j in range(n):
         if j > 0:
-            base[j, j] += g
-            base[j, j - 1] -= g
+            conduct[j, j] += g
+            conduct[j, j - 1] -= g
         if j < n - 1:
-            base[j, j] += g
-            base[j, j + 1] -= g
+            conduct[j, j] += g
+            conduct[j, j + 1] -= g
     for i in range(1, len(q)):
-        a = base.copy()
+        cap = solid.rho * solid.cp(temp) * dx + films_at  # [J/m^2/K] per cell
+        a = conduct + np.diag(cap / DT)
         b = cap / DT * temp
         # Radiation, linearised: eps sigma T^4 ~ eps sigma (4 T0^3 T - 3 T0^4).
         for j, eps in ((0, eps_front), (n - 1, eps_back)):
@@ -191,12 +225,18 @@ def heat(
         temp = np.linalg.solve(a, b)
         face[i] = temp[0]
         mean_max = max(mean_max, float(np.mean(temp)))
-        deepest = max(deepest, int(np.sum(temp >= T_FAIL)))
+        deepest = max(deepest, int(np.sum(temp >= solid.t_fail)))
         for lim in cross:
             if cross[lim] == 0.0 and temp[0] >= lim:
                 cross[lim] = float(s[i])
     return (
-        Heating(float(face.max()), mean_max, cross[T_RATING], cross[T_FAIL], deepest * dx),
+        Heating(
+            float(face.max()),
+            mean_max,
+            cross[solid.t_rating],
+            cross[solid.t_fail],
+            deepest * dx,
+        ),
         face,
     )
 

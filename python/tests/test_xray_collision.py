@@ -524,3 +524,60 @@ def test_departure_hole_ceilings() -> None:
     assert abs(d.flat_ceiling(30.0, 90.0) - math.sqrt(30.0)) < 1e-12
     assert abs(d.bowl_ceiling(30.0, 180.0) - (math.sqrt(31.0) - 1.0)) < 1e-12
     assert d.bowl_ceiling(30.0, 129.9) < d.bowl_ceiling(30.0, 90.0)
+
+
+def test_fast_wave_bare_line_through_the_rim_at_the_critical_angle() -> None:
+    """At the critical angle the bare impactor's line meets the bowl exactly at the rim; steeper
+    it leaves through the mouth, shallower it strikes the far wall."""
+    from puffsat.xray_collision import fast_wave as fw
+
+    h = fw.charge_height(1.5)
+    crit = fw.critical_theta(h)
+    r, z = fw.exit_point(crit, h)
+    assert abs(r - fw.BOWL_R) < 1e-9 and abs(z - fw.BOWL_DEPTH) < 1e-9
+    assert fw.exit_point(crit + 5.0, h)[1] > fw.BOWL_DEPTH
+    assert fw.exit_point(crit - 5.0, h)[1] < fw.BOWL_DEPTH
+
+
+def test_fast_wave_graze_is_normal_where_the_wall_faces_the_line() -> None:
+    """On the axis the wall is flat, so a line along the axis (180 deg) hits it normally."""
+    from puffsat.xray_collision import fast_wave as fw
+
+    assert abs(fw.graze(180.0, 0.0) - math.pi / 2.0) < 1e-12
+
+
+def test_fast_wave_impedance_match_conserves_pressure() -> None:
+    """Both Hugoniots give the same pressure at the matched particle speed, and a projectile at
+    the target's own impedance splits the speed evenly (symmetric impact)."""
+    from puffsat.xray_collision import fast_wave as fw
+
+    p = fw.impact_pressure(60.0e3, fw.GRAPHITE_HUGONIOTS["stiff"])
+    c0, s = fw.IRON_HUGONIOT
+    u_t = (-c0 + math.sqrt(c0**2 + 4.0 * s * p / fw.STEEL_RHO)) / (2.0 * s)
+    c0p, sp = fw.GRAPHITE_HUGONIOTS["stiff"]
+    u_p = 60.0e3 - u_t
+    assert abs(fw.GRAPHITE_RHO * (c0p + sp * u_p) * u_p - p) / p < 1e-9
+    assert u_t < 30.0e3  # the lighter projectile gives up more of its speed
+
+
+def test_fast_wave_graphite_conduction_conserves_energy() -> None:
+    """With no radiation, the absorbed dose equals graphite's enthalpy rise (c_p rising with T)."""
+    from puffsat.xray_collision import coated_sheet as cs
+    from puffsat.xray_collision import fast_wave as fw
+
+    s = cs._times()
+    q = np.where(s < 0.5, 200.0e3, 0.0)  # 100 kJ/m^2
+    th = 50e-6
+    h, _ = cs.heat(q, th, 0.0, 0.0, 0.0, solid=fw.GRAPHITE)
+    grid = np.linspace(cs.T_START, h.mean_max, 2001)
+    enthalpy = fw.GRAPHITE_RHO * th * float(np.trapezoid(fw.graphite_cp(grid), grid))
+    assert abs(enthalpy - 100.0e3) / 100.0e3 < 0.02
+
+
+def test_fast_wave_law_reproduces_result_11_at_100_kms() -> None:
+    """Re-priced at 100 km/s with no impactor toll, the law is the overtake ledger's flat-plate
+    row."""
+    from puffsat.xray_collision import fast_wave as fw
+
+    for k in (5.0, 10.0):
+        assert abs(fw.push_ve(k, 100.0e3, 0.0)[0] / fw.calcs_push_ve(k, 100.0e3) - 1.0) < 1e-9

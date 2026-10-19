@@ -7578,6 +7578,180 @@ fn cmd_hole_plate_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
     })
 }
 
+// X-ray collision study, Result 15: the growth wave above 100 km/s (the parent's S40). The four
+// closures fly the push at k = 6.67-8.21, not Result 13's 6.74, so the planar sheet's peak
+// coefficient is re-run at each. A gamma-law gas has no speed scale, so `J/(m v)` and
+// `P/(sigma v^2)` do not depend on the closing speed; only k and the geometry enter. The compact
+// impactor (graphite disk into a compact charge) and the point fireball are run on the flown
+// 9.5 m push plate with its 2 m skirt, at several standoffs: the point-blast load on the push
+// plate, and the standoff law a buffer spray needs in front of a struck wall.
+
+const RESULT_PATH_FAST_WAVE: &str = "data/results/xray_collision/fast_wave_2d.jsonl";
+/// The parent's S40 table: `k_push` at 9.86 `R_sun` / 60 and 4 `R_sun` / 90 (headlines), 9.86
+/// `R_sun` / 90 and 4 `R_sun` / 150, with Result 13's 6.74 as the reference.
+const FAST_WAVE_K: [f64; 5] = [6.67, 6.74, 7.07, 7.93, 8.21];
+/// Point fireballs add two low slug ratios, for a buffer spray of k ~ 2-5.
+const FAST_WAVE_POINT_K: [f64; 7] = [2.0, 5.0, 6.67, 6.74, 7.07, 7.93, 8.21];
+/// The flown push plate (Result 13): radius [m] and skirt [m].
+const FAST_WAVE_PLATE: (f64, f64) = (9.5, 2.0);
+const FAST_WAVE_SHEET_RADII: [f64; 2] = [3.6, 5.0];
+const FAST_WAVE_SHEET_HEIGHT: f64 = 2.0;
+const FAST_WAVE_HEIGHTS: [f64; 3] = [2.7, 4.0, 6.0];
+/// The compact impactor's mass per pulse [kg], ~7.35 MN s / (`k v_e`) at 132-137 km/s. The charge
+/// is solid polyethylene behind a 0.25 m disk, so its length sets the run's length scale.
+const FAST_WAVE_COMPACT_KG: f64 = 20.0;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct FastWaveRecord {
+    /// `sheet`, `compact` or `point`.
+    kind: String,
+    k: f64,
+    sheet_radius: f64,
+    height: f64,
+    plate_radius: f64,
+    skirt: f64,
+    /// Plate impulse per `m v` (impactor mass and closing speed), lossless gamma gas.
+    impulse_per_mv: f64,
+    /// Peak local pressure per `m v^2 / m^3`.
+    peak_per_mv2: f64,
+    peak_radius: f64,
+    exit_direction: f64,
+    confined_ratio: f64,
+    steps: usize,
+    dr: f64,
+    /// Ring loads per kg of impactor, in its closing speed.
+    bands: Vec<CollarBand>,
+}
+
+/// One Result 15 run: `kind` 0 point fireball, 1 compact charge, 2 planar sheet of `radius`.
+fn fast_wave_case(
+    kind: u8,
+    k: f64,
+    radius: f64,
+    height: f64,
+    dr: f64,
+    confined_ratio: f64,
+) -> FastWaveRecord {
+    let (r_plate, skirt) = if kind == 2 {
+        (radius + 1.5, FAST_WAVE_PLATE.1)
+    } else {
+        FAST_WAVE_PLATE
+    };
+    let u_rms = k.sqrt() / (1.0 + k);
+    let (r, m, v) = if kind == 0 {
+        let cfg = sheet_plate_cfg(r_plate, skirt, height + CHARGE_BALL_R, dr);
+        let r = run_fireball_bounce(
+            &cfg,
+            PointFireball {
+                height,
+                radius: CHARGE_BALL_R,
+                drift: -1.0 / k.sqrt(),
+                ambient: CHARGE_AMBIENT,
+                hole_radius: 0.0,
+            },
+        );
+        // Units: the merged mass and its u_rms.
+        (r, 1.0 + k, u_rms)
+    } else {
+        let (disk, length) = if kind == 1 {
+            let area = std::f64::consts::PI * MIX_RADIUS * MIX_RADIUS;
+            (MIX_RADIUS, k * FAST_WAVE_COMPACT_KG / (950.0 * area))
+        } else {
+            (radius, OVERTAKE_SHEET_THICKNESS)
+        };
+        let cfg = sheet_plate_cfg(r_plate, skirt, height + 0.5 * length + 6.0 * dr, dr);
+        let r = run_disk_charge_bounce(
+            &cfg,
+            DiskCharge {
+                radius: disk,
+                height,
+                charge_length: length,
+                k,
+                disk_thickness: 4.0 * dr,
+                gap: 2.0 * dr,
+                ambient: CHARGE_AMBIENT,
+                hole_radius: 0.0,
+                toward_plate: true,
+            },
+        );
+        // Units: the merged mass and the closing speed.
+        (r, 1.0 + k, 1.0)
+    };
+    FastWaveRecord {
+        kind: ["point", "compact", "sheet"][kind as usize].to_string(),
+        k,
+        sheet_radius: if kind == 2 { radius } else { 0.0 },
+        height,
+        plate_radius: r_plate,
+        skirt,
+        impulse_per_mv: r.wall_impulse * m * v,
+        peak_per_mv2: r.peak_local_pressure * m * v * v,
+        peak_radius: r.peak_radius,
+        exit_direction: r.exit_direction,
+        confined_ratio,
+        steps: r.steps,
+        dr,
+        bands: r
+            .bands
+            .iter()
+            .map(|b| CollarBand {
+                r_lo: b.r_lo,
+                r_hi: b.r_hi,
+                impulse: b.impulse * m * v,
+                mass_in: b.mass_in * m,
+                speed_in: b.speed_in * v,
+                energy_in: b.energy_in * m * v * v,
+                peak_pressure: b.peak_pressure * m * v * v,
+            })
+            .collect(),
+    }
+}
+
+/// `--fast-wave-2d [coarse]`: the sheet at each closure's k, and the compact charge and point
+/// fireball on the flown push plate at three standoffs. `coarse` doubles the cell.
+fn cmd_fast_wave_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let coarse = args.iter().any(|a| a == "coarse");
+    let dr = if coarse { 2.0 * CHARGE_DR } else { CHARGE_DR };
+    let confined = charge_confined_ratio();
+    let mut cases: Vec<(u8, f64, f64, f64)> = Vec::new();
+    for &k in &FAST_WAVE_K {
+        for &rs in &FAST_WAVE_SHEET_RADII {
+            cases.push((2, k, rs, FAST_WAVE_SHEET_HEIGHT));
+        }
+        for &h in &FAST_WAVE_HEIGHTS {
+            cases.push((1, k, 0.0, h));
+        }
+    }
+    for &k in &FAST_WAVE_POINT_K {
+        for &h in &FAST_WAVE_HEIGHTS {
+            cases.push((0, k, 0.0, h));
+        }
+    }
+    let rows = par_map_with_progress("fast wave", &cases, |&(kind, k, rs, h)| {
+        fast_wave_case(kind, k, rs, h, dr, confined)
+    });
+    let path = if coarse {
+        RESULT_PATH_FAST_WAVE.replace(".jsonl", "_coarse.jsonl")
+    } else {
+        RESULT_PATH_FAST_WAVE.to_string()
+    };
+    emit_scenario(&path, "fast wave", &rows, |r| {
+        println!(
+            "rust: {:<7} k {:>4.2} R {:>3.1} h {:>3.1} | plate R {:>4.1} skirt {:>3.1} | J/mv {:6.3} peak/mv2 {:.3e} at r {:.2} steps {}",
+            r.kind,
+            r.k,
+            r.sheet_radius,
+            r.height,
+            r.plate_radius,
+            r.skirt,
+            r.impulse_per_mv,
+            r.peak_per_mv2,
+            r.peak_radius,
+            r.steps,
+        );
+    })
+}
+
 // X-ray collision study, Result 12: the canted departure plate for the 3S Jovian cycle. The
 // returning stream meets the departure's thrust axis at ~101 degrees (calcs repo,
 // `departure_nozzle_ledger` at a 9.86 R_sun dive), so a wide sheet sweeps *past* a flat plate and
@@ -8323,6 +8497,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--overtake-2d", cmd_overtake_2d),
     ("--sheet-plate-2d", cmd_sheet_plate_2d),
     ("--hole-plate-2d", cmd_hole_plate_2d),
+    ("--fast-wave-2d", cmd_fast_wave_2d),
     ("--canted-2d", cmd_canted_2d),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),

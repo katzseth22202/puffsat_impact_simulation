@@ -57,7 +57,7 @@ Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`),
 `make xray-collision-rebound`, `make xray-collision-charge-2d`, `make xray-collision-charge`,
 `make xray-collision-charge-mix`, `make xray-collision-freeze`, `make xray-collision-collar`,
 `make xray-collision-overtake`, `make xray-collision-mission`, `make xray-collision-growth`,
-`make xray-collision-cme`, `make xray-collision-cadence-plate`, `make xray-collision-departure-hole` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
+`make xray-collision-cme`, `make xray-collision-cadence-plate`, `make xray-collision-departure-hole`, `make xray-collision-fast-wave` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
 (lattice target, k = 2, per-projectile light and kinetic energy) is
 [`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md). The 66 km/s verdict (argon clouds
 radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the Sun dive) is
@@ -82,6 +82,10 @@ answers owed to the parent are [`docs/plume_cadence_answers_for_parent.md`](docs
 The staged departure plate (the impactor threads a hole at the visible sign's 117-130 deg, the parent's S38)
 is Result 14 and [ADR-0065](docs/adr/0065-staged-departure-plate-through-a-hole.md) (module `departure_hole.py`,
 target `make xray-collision-departure-hole`); its answers are [`docs/departure_hole_answers_for_parent.md`](docs/departure_hole_answers_for_parent.md).
+The growth wave above 100 km/s (Kapton against graphite films at 132-208 km/s, the overtake law at
+speed, compact disks on the push plate, a bare impactor on the bowl; the parent's S40) is Result 15
+and [ADR-0066](docs/adr/0066-fast-growth-wave-graphite-films.md) (module `fast_wave.py`, target
+`make xray-collision-fast-wave`); its answers are [`docs/fast_growth_wave_answers_for_parent.md`](docs/fast_growth_wave_answers_for_parent.md).
 
 ## Architecture (settled)
 

@@ -1420,6 +1420,135 @@ Not modelled:
 - the oblique hole's shape and the collar's spray;
 - the visible sign's apoapsis turn (S38 item 3, the calcs repo's).
 
+## Result 15: the growth wave above 100 km/s -- Kapton, graphite and a bare hit on the bowl -- `fast_wave_*.csv`
+
+The parent's S40 (its `docs/fast_growth_wave_asks_for_impact_sim.md`) notes that Result 13 ran the
+2 Hz, 1 g push at 100 km/s, but three of its four closures cross 400 km at 132-208 km/s
+(9.86 R_sun / 90: 132.1 km/s, k 7.93; 4 R_sun / 90, a headline: 137.1, k 6.67; 4 R_sun / 150:
+207.8, k 8.21). ADR-0066; `make xray-collision-fast-wave` (`sweep --fast-wave-2d`,
+`fast_wave.py`).
+
+**The runs.** A gamma-law gas has no speed scale, so `J/(m w)` and `P/(sigma w^2)` depend only on
+k and the geometry; speed enters through the Python-side rebound and bond toll. So
+`--fast-wave-2d` re-runs the planar sheet at each closure's k on the flown 9.5 m plate (2 m
+standoff, 2 m skirt), plus the compact disk-into-charge and the point fireball at 2.7 / 4 / 6 m.
+`c(k, 2 m)` = 0.649 / 0.636 / 0.612 / 0.604 at k = 6.67 / 7.07 / 7.93 / 8.21 (0.648 at 6.74,
+Result 13's 0.65). The coarse grid gives 0.45-0.47, so the peak still grows ~38% on refinement and
+every pressure ceiling below is an upper value.
+
+**Kapton at speed** (bare, both faces at 0.8; `coated_sheet.py` with each row's speed, k and v_e;
+`fast_wave_kapton.csv`). The parent's ballpark is confirmed to within a few kelvin:
+
+| closing | dose, u = 5 / 8 / 12 | 100 um face, u = 8 | 250 um, u = 8 | 100 um at 2 m |
+|---|---|---|---|---|
+| 99.2 | 97 / 38 / 17 kJ/m^2 | 573 K, holds | 528 K | 0.89 GPa |
+| 132.1 | 134 / 53 / 24 | 708 K, fails | 648 K | 1.52 GPa |
+| 137.1 | 131 / 52 / 23 | 708 K, fails | 648 K | 1.73 GPa |
+| 207.8 | 212 / 83 / 37 | 1045 K, 52 um skin | 950 K, 25 um skin | 3.71 GPa |
+
+At u = 5 km/s no Kapton thickness holds at any closing speed, 100 km/s included.
+
+**The Kapton window** (`fast_wave_window.csv`): the thermal floor (thinnest film whose face stays
+under 400 C to the last 10 ms) against the pressure ceiling `allowable / (c w^2 rho)`:
+
+| closure, u = 8 | floor | HY-100, 2 / 4 / 8 m | maraging 300, 2 / 4 / 8 m | prestressed maraging, 2 / 4 m |
+|---|---|---|---|---|
+| 99.2 km/s | 61 um | 169 / 220 / 313 | 281 / 367 / 521 | 394 / 513 |
+| 132.1 km/s | 141 um | 99 / 129 / **183** | **165 / 215 / 305** | **231 / 300** |
+| 137.1 km/s | 143 um | 87 / 113 / **161** | **144** / **188** / **268** | **202 / 263** |
+| 207.8 km/s | none to 2 mm | 40 / 53 / 75 | 67 / 88 / 125 | 94 / 123 |
+
+Bold ceilings are above the floor (a window). At 137 km/s the window is 143-144 um on maraging at
+2 m, which is nil once the ~38% refinement growth is allowed for. It opens to 143-188 um at 4 m
+(94% of the 2 m plate's impulse, Result 13's runs) and 143-161 um on HY-100 at 8 m (84%). At
+u = 12 the windows are wide (34-99 um at 132-137 km/s on HY-100 at 2 m). No face material
+widens it: the gas's stagnation pressure reaches the steel through any layer
+(`spray_plate_steel_face_limits.md`), so only standoff and the face's strength move the ceiling.
+
+**Graphite heats far less** (`fast_wave_graphite.csv`). Its specific heat rises from 710 J/kg/K at
+300 K to ~1800 at 1000 K and ~2000 at 2000 K (NIST-JANAF), it radiates at 0.85 from both faces,
+and it does not decompose. Sublimation (C atoms, Hertz-Knudsen, x10 for C2/C3) removes less than
+0.3 nm at every case run, up to the 2580 K face of a 10 um film at 208 km/s and u = 5. The
+parent's lumped check (c_p fixed at 710) is reproduced (1542 K against its 1591 K for 100 um at
+208 km/s, u = 5); with the real c_p and conduction it is 976 K. The 1 mm plate runs hotter than
+lumped (575 against 435 K), since 5 W/m/K across its planes does not spread the heat in 0.1 s.
+
+**The graphite window** (`fast_wave_graphite_window.csv`): the ceiling is the same areal mass as
+Kapton's, and the face there at the slowest spread (u = 5) is:
+
+| closure | HY-100, 2 m | maraging 300, 2 m | maraging 300, 4 m |
+|---|---|---|---|
+| 132.1 km/s | <= 64 um (R 6.9 m), 956 K | <= 106 um (R 5.4 m), 751 K | <= 139 um, 669 K |
+| 137.1 km/s | <= 56 um (R 7.5 m), 1011 K | <= 93 um (R 5.8 m), 790 K | <= 121 um, 702 K |
+| 207.8 km/s | <= 26 um (R 8.9 m), 1972 K | <= 44 um (R 6.9 m), 1533 K | <= 57 um, 1326 K |
+
+Every case holds thermally, including u = 5, where Kapton fails at any speed. The floor is set by
+handling, not heat. At 208 km/s on HY-100 the 26 um film is 8.9 m in radius, so the plate grows
+to ~10.4 m; on maraging it stays near the flown 9.5 m.
+
+**The overtake law at speed** (`fast_wave_law.csv`; Result 11's flat-plate point rows, carbon
+atomic). The calcs repo's `push_ve` carries the 100 km/s law linearly in `w`. Re-priced:
+
+| closing | k | calcs `push_ve` | re-priced, graphite | of which: speed | rebound `e_eff` | toll |
+|---|---|---|---|---|---|---|
+| 99.2 | 7.07 | 36.7 km/s | 35.5 | x0.999 | 0.68 | 5.2% |
+| 132.1 | 7.93 | 44.7 | 44.1 | x1.019 | 0.67 | 3.2% |
+| 137.1 | 6.67 | 53.0 | 51.3 | x0.999 | 0.64 | 2.6% |
+| 207.8 | 8.21 | 68.4 | 62.3 | **x0.940** | 0.51 | 1.3% |
+
+- The calcs law's linear-in-log-k interpolation overstates `v_e` by ~2.5% between its k = 5 and
+  10 rows (the law is convex in log k); this is the bulk of the gap at 99-137 km/s.
+- At 208 km/s the bond toll falls (1.3% against 5%), but the gas arrives hot enough to radiate:
+  polyethylene's rebound drops from 0.68 to 0.51, and `v_e` is 6% below linear.
+- The impactor's own atomization (Results 10-14 never charged it) costs 0.2-0.8% of `v_e`.
+  Graphite's 59.7 MJ/kg against Kapton's ~53 MJ/kg differs by under 0.1%. The bond toll does not
+  choose the material.
+
+**Compact disks load the push plate as a point blast** (`fast_wave_compact.csv`; the impactor is
+14-29 kg per 7.35 MN s pulse):
+
+| closure | sheet, 2 m | compact at 2.7 m | compact at 4 m | compact at 6 m | point-blast floor |
+|---|---|---|---|---|---|
+| 132.1 km/s | 1.52 GPa, 1.00 | 5.1 GPa, 0.94 | 3.1 GPa, 0.94 | 1.1 GPa, 0.81 | 34.8 t |
+| 137.1 km/s | 1.73 GPa, 1.00 | 9.0 GPa, 0.95 | 3.9 GPa, 0.95 | 1.6 GPa, 0.83 | 37.1 t |
+| 207.8 km/s | 3.71 GPa, 1.00 | 7.8 GPa, 0.94 | 3.1 GPa, 0.93 | 1.8 GPa, 0.80 | 49.4 t |
+
+(peak, impulse against the sheet). The compact charge's peak sits on the axis, and its hottest
+ring takes 1.4-7.5x the plate's mean impulse per area (the sheet's, 1.7x). Below 6 m it exceeds
+every face; at 6 m it fits HY-100 or maraging but the small plate keeps only 80-83% of the
+sheet's impulse. The calcs repo's point-blast floor (energy^(2/3)) is 35-49 t, against the 12.2 t
+absorber bound a planar sheet needs. So a compact impactor costs ~1/5 of the impulse and
+3-4x the plate.
+
+**A bare compact impactor on the departure bowl** (`fast_wave_bowl.csv`, `fast_wave_buffer.csv`).
+With no charge at 1.5 F, the impactor's line (through the hole and the charge's place) meets the
+far wall only if the stream is shallower than the line through the rim, 122.0 deg for the δ/D 0.5
+bowl with the charge at 1.5 F:
+- **9.86 R_sun, 129.9 deg: it never touches the bowl.** It leaves through the mouth 2.5 m inside
+  the rim (2.1 m beyond the 0.4 m disk's edge), on its own hyperbolic path.
+- **4 R_sun, 117.0 deg: it strikes the far wall** at r = 9.18 m, z = 8.43 m (1.6 m below the rim),
+  34 deg to the wall, 61 km/s normal. The 9.2 kg disk (0.4 m radius, 8.3 mm) meets 3.2 mm of
+  steel (13.2 t over 533 m^2). The planar peak is 4.4-6.6 TPa (linear Hugoniots, extrapolated),
+  and the inelastic merger dissipates 386 MJ per kg of disk and patch, 55x what vaporizes iron.
+  So the patch is not spalled but vaporized: a hole of at least the disk's 0.89 m^2 footprint,
+  and its debris leaves along the stream at ~91 km/s, away from the ship. That hole costs
+  0.14% of the impulse (0.55% at twice the diameter), from the bowl's ring loads. Later bare
+  impactors on the same line pass through it; as the stream turns over the burn, the line slides
+  and would cut a slot.
+- **The geometric fix:** with the charge at 2.5 F the critical angle falls to 110.6 deg and the
+  117 deg impactor leaves 2.6 m inside the rim. At 2.0 F it clears by only 0.2 m and its disk
+  clips the lip. The bowl's capture at 2.5 F has not been run.
+- **The buffer spray** that brings the struck wall's peak down to a normal pulse's (0.18-0.25 GPa
+  on the bowl at k = 20) must sit 6.7-8.4 m off the wall: 18-63 kg of methane at k = 2-5, led by
+  0.07-0.4 s at 20-100 m/s injection. That is a spare charge near the axis, not a face coat.
+
+Not modelled:
+- the peak's convergence (a ~38% rise from the coarse grid);
+- the plume's spread `u` (S36), which still sets Kapton's verdict;
+- graphite film's handling, tensile strength and manufacture at 25-140 um and 6-9 m radius;
+- the vapour blast's load on the bowl around a bare hit's hole, the rim's tearing, and the hole
+  bowl's capture with the charge at 2.5 F.
+
 ## Limits
 
 **The piston's heat goes in over the sweep, not at once.** This is the largest unmodelled effect
