@@ -127,7 +127,7 @@ the same way, and it is unstable at theta = pi. k is symmetric and cannot touch 
 - **Tilt guides.** Your absorber budget already carries "alignment guides". Guides that hold the
   tilt hand each pulse's torque to the craft, which has no spring, so only the sum matters. At
   10 cm aim, thruster couples at the plate's radius clear it with 6.9 MN s (2.4 t) over the push.
-  The guides' loads and the craft's attitude are not sized here.
+  This is noted as an option; the guides themselves are not sized (Seth, 2026-10-20: not needed).
 
 So the aim needs to be ~3 cm per axis with a wedged charge, or the plate needs tilt guides.
 

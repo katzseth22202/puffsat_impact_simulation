@@ -1966,7 +1966,8 @@ budget. Without a mechanical tilt guide, the wedge holds it only at an aim of ~3
 **Not modelled.** The pulse's taper as propellant burns, which moves the orbit slowly and
 predictably (a feed-forward on k). Wider k than 5-9, which the 2-D ladder does not cover. The
 loss as a viscous drag rather than thermal hysteresis. The 4-cell 1 MPa bag layout, whose rocking
-stiffness differs from its heave stiffness. The guide's loads and the craft's attitude under it.
+stiffness differs from its heave stiffness. The tilt guides are named as an option, not sized
+(Seth, 2026-10-20: not needed).
 
 ## Limits
 

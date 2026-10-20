@@ -46,8 +46,8 @@ push achieved (a small budget, not yet charged), and modest changes to the next 
    times the heave budget. With the charge's areal density tilted (a wedge of up to 30%), the
    rocking holds at an aim of ~3 cm per axis or better (edge 1.4-2.0 m p95). The alternative is
    the parent's "alignment guides": guides that hold the tilt hand the torque to the craft, which
-   has no spring. Thrusters then take only its sum (6.9 MN s, 2.4 t at 10 cm aim), but the guides
-   are not sized.
+   has no spring. Thrusters then take only its sum (6.9 MN s, 2.4 t at 10 cm aim). The guides are
+   named as an option and deliberately not sized (Seth, 2026-10-20).
 
 ## Consequences
 
@@ -57,6 +57,5 @@ push achieved (a small budget, not yet charged), and modest changes to the next 
 - The heave budget is dominated by how well each sheet's mass is known on arrival (1% assumed
   gives 0.77% of J). Weighing and tracking the sheets is the cheap way to shrink it.
 - Open: the taper of the pulse as propellant burns (a feed-forward; not modelled). k outside
-  5-9. The loss as thermal hysteresis rather than an equivalent drag. The tilt guides' loads and
-  the craft's attitude. Rocking on the 4-cell bag layout, whose rocking stiffness differs from its
+  5-9. The loss as thermal hysteresis rather than an equivalent drag. Rocking on the 4-cell bag layout, whose rocking stiffness differs from its
   heave stiffness.
