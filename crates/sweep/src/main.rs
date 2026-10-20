@@ -7901,6 +7901,82 @@ fn cmd_plate_profile_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error
     })
 }
 
+// X-ray collision study, Result 19 (the parent's S48): how the floor-wide 9.5 m sheet's impulse
+// on the flown push plate moves with the next charge's k (at fixed sheet mass) and with its
+// standoff. These are the slopes a per-pulse trim of the spring's swing works through.
+
+const RESULT_PATH_SPRING_TRIM: &str = "data/results/xray_collision/spring_trim_2d.jsonl";
+const SPRING_TRIM_SHEET: f64 = 9.5;
+/// `(k, standoff [m])`: a k ladder at the flown 2 m, and the standoff either side at k = 7.07.
+const SPRING_TRIM_CASES: [(f64, f64); 8] = [
+    (5.0, 2.0),
+    (6.0, 2.0),
+    (7.07, 2.0),
+    (8.0, 2.0),
+    (9.0, 2.0),
+    (7.07, 1.5),
+    (7.07, 2.5),
+    (7.07, 3.0),
+];
+
+/// `--spring-trim-2d [coarse]`: the floor-wide sheet's impulse against k and standoff.
+fn cmd_spring_trim_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let coarse = args.iter().any(|a| a == "coarse");
+    let dr = if coarse { 2.0 * CHARGE_DR } else { CHARGE_DR };
+    let (r_plate, skirt) = FAST_WAVE_PLATE;
+    let rows = par_map_with_progress("spring trim", &SPRING_TRIM_CASES, |&(k, height)| {
+        let cfg = sheet_plate_cfg(
+            r_plate,
+            skirt,
+            height + 0.5 * OVERTAKE_SHEET_THICKNESS + 6.0 * dr,
+            dr,
+        );
+        let r = run_disk_charge_bounce(
+            &cfg,
+            DiskCharge {
+                radius: SPRING_TRIM_SHEET,
+                height,
+                charge_length: OVERTAKE_SHEET_THICKNESS,
+                k,
+                disk_thickness: 4.0 * dr,
+                gap: 2.0 * dr,
+                ambient: CHARGE_AMBIENT,
+                hole_radius: 0.0,
+                toward_plate: true,
+            },
+        );
+        let m = 1.0 + k;
+        PlateProfileRecord {
+            k,
+            sheet_radius: SPRING_TRIM_SHEET,
+            height,
+            plate_radius: r_plate,
+            skirt,
+            impulse_per_mv: r.wall_impulse * m,
+            peak_per_mv2: r.peak_local_pressure * m,
+            profile: r
+                .profile
+                .iter()
+                .enumerate()
+                .map(|(i, &j)| ((i + 1) as f64 * euler2d::bounce::PROFILE_DR, j * m))
+                .collect(),
+            steps: r.steps,
+            dr,
+        }
+    });
+    let path = if coarse {
+        RESULT_PATH_SPRING_TRIM.replace(".jsonl", "_coarse.jsonl")
+    } else {
+        RESULT_PATH_SPRING_TRIM.to_string()
+    };
+    emit_scenario(&path, "spring trim", &rows, |r| {
+        println!(
+            "rust: k {:>4.2} standoff {:>3.1} | J/mv {:6.3} peak/mv2 {:.3e} steps {}",
+            r.k, r.height, r.impulse_per_mv, r.peak_per_mv2, r.steps
+        );
+    })
+}
+
 // X-ray collision study, Result 18 (the parent's S36): the push plate's backward plume. Where the
 // gas of each pulse goes, by angle from the stream axis and terminal speed, since the next sheet
 // flies down that axis through it. The flat skirted plate under the flown 8 m sheet and under the
@@ -8761,6 +8837,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--fast-wave-2d", cmd_fast_wave_2d),
     ("--band-bowl-2d", cmd_band_bowl_2d),
     ("--plate-profile-2d", cmd_plate_profile_2d),
+    ("--spring-trim-2d", cmd_spring_trim_2d),
     ("--plume-2d", cmd_plume_2d),
     ("--canted-2d", cmd_canted_2d),
     ("--shape", cmd_shape),

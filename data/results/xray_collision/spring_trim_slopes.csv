@@ -1,0 +1,10 @@
+quantity,value,coarse,unit
+"J/(m v) at k 7.07, 2 m (floor only)",2.8331028880210822,2.6213050476372337,-
+d ln J / d k (fixed sheet),0.032812418922432286,0.03551288510465798,1/k
+"d ln J / d ln k (fixed sheet), beta",0.23198380178159628,0.2510760976899319,-
+d ln J / d standoff,-0.03604921903566278,-0.02080703267584622,1/m
+impulse lost per overhanging mass share,0.6919166512519724,nan,-
+sheet mass,26.170252928941306,nan,kg
+charge mass at k 7.07,185.02368820761504,nan,kg
+trim floor (k = 5),-0.07879090530154875,nan,of J
+trim ceiling (k = 9),0.06139954593488639,nan,of J

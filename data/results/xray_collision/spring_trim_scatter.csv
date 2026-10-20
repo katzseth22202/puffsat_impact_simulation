@@ -1,0 +1,11 @@
+source,error,unit,heave,rock,note
+sheet mass on arrival,0.01,of m,0.007680161982184038,0.0,fixed charge: k falls as m rises
+charge mass,0.005,of k m,0.0011599190089079815,0.0,metered by craft
+standoff,0.05,m,0.001802460951783139,0.0,2-D slope at 1.5-3 m
+aim offset,0.1,m per axis,0.0030376799518054016,0.042105263157894736,"also a mean loss 0.58%, taken out by the mean k"
+closing speed,0.0001,of w,0.0001,0.0,J ~ w at fixed k
+plume drag on the sheet,5.040322580645161e-05,of w,5.040322580645161e-05,0.0,"ADR-0069: 3-5 m/s, predictable; bounded by its whole size"
+sheet areal density,0.05,per m^2,0.0,0.004561123568744971,its total is the sheet-mass line
+charge areal density,0.02,per m^2,0.0,0.0005510856611241434,its total is the charge-mass line
+arrival time,0.0001,s,0.0,0.0,a phase error: 1.2 cm of swing
+total (rss),nan,-,0.00853341699656628,0.042355173582584046,

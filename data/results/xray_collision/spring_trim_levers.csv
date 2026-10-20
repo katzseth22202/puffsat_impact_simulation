@@ -1,0 +1,7 @@
+lever,scatter,impulse_mns,propellant_kg,note
+thrusters on the plate cancel each pulse's error,0.01,117.36861942296129,39894.22804014327,"the whole of each error, every pulse"
+thrusters take only the summed push error,0.01,3.2892504047322473,1118.0339887498951,1-sigma random walk; the spring is not held
+thrusters on the plate cancel each pulse's error,0.05,586.8430971148065,199471.14020071636,"the whole of each error, every pulse"
+thrusters take only the summed push error,0.05,16.446252023661234,5590.169943749474,1-sigma random walk; the spring is not held
+thruster couples at the rim cancel each pulse's rocking,0.042355173582584046,248.55841244038854,84486.34767917299,both axes; angular impulse J x offset / R
+tilt guides; thrusters take only the summed angular impulse,0.1,6.924737694173151,2353.7557657892526,"aim error in m per axis; 1-sigma walk, both axes, couples at R"

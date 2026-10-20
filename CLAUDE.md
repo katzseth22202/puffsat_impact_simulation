@@ -58,7 +58,7 @@ Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`),
 `make xray-collision-charge-mix`, `make xray-collision-freeze`, `make xray-collision-collar`,
 `make xray-collision-overtake`, `make xray-collision-mission`, `make xray-collision-growth`,
 `make xray-collision-cme`, `make xray-collision-cadence-plate`, `make xray-collision-departure-hole`, `make xray-collision-fast-wave`,
-`make xray-collision-band-bowl`, `make xray-collision-gas-spring`, `make xray-collision-plume` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
+`make xray-collision-band-bowl`, `make xray-collision-gas-spring`, `make xray-collision-plume`, `make xray-collision-spring-trim` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
 (lattice target, k = 2, per-projectile light and kinetic energy) is
 [`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md). The 66 km/s verdict (argon clouds
 radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the Sun dive) is
@@ -100,6 +100,11 @@ The push plate's backward plume (S36: a broad lobe; the floor-wide sheet sees an
 8 km/s and Kapton holds, the flown 8 m sheet ~5 km/s and fails; cones rejected) is Result 18 and
 [ADR-0069](docs/adr/0069-backward-plume-and-floor-wide-sheet.md) (module `plume.py`, target
 `make xray-collision-plume`); answers in [`docs/plume_answers_for_parent.md`](docs/plume_answers_for_parent.md).
+Keeping that spring on its cycle (S48: trim the next charge's k every pulse, k 6.5-7.7 at ~0.85% scatter,
+~1 m more stroke a side; thrusters take only the summed delta-v, 0.1-0.2 t; theta = pi is unstable, so
+fly 5 pi/6; the aim, ~3 cm, binds through rocking) is Result 19 and
+[ADR-0070](docs/adr/0070-spring-held-by-next-charge-k-trim.md) (module `spring_trim.py`, target
+`make xray-collision-spring-trim`); answers in [`docs/spring_trim_answers_for_parent.md`](docs/spring_trim_answers_for_parent.md).
 How hot the Kapton face can run for a sub-second pulse (decomposition kinetics, other films,
 fillers, overlayers, carbon veils) is researched in
 [`docs/kapton_temperature_limits.md`](docs/kapton_temperature_limits.md); its numbers are not yet

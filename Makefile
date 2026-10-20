@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-fast-wave xray-collision-band-bowl xray-collision-gas-spring xray-collision-plume xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-fast-wave xray-collision-band-bowl xray-collision-gas-spring xray-collision-plume xray-collision-spring-trim xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1220,6 +1220,15 @@ xray-collision-plume: data/tables/ch2.json
 	cargo run --release -p sweep -- --plume-2d
 	cargo run --release -p sweep -- --plume-2d coarse
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.plume
+
+## xray-collision-spring-trim: Result 19, the parent's S48 -- keeping the lossless spring on its
+## cycle: the floor-wide sheet's impulse against k and standoff (2-D), the pulse-scatter budget,
+## the drift flown on the nonlinear spring, the next charge's k trim with thrusters taking the
+## net, and rocking -> data/results/xray_collision/spring_trim_*.csv (needs gas_spring_loss.csv)
+xray-collision-spring-trim: data/tables/ch2.json
+	cargo run --release -p sweep -- --spring-trim-2d
+	cargo run --release -p sweep -- --spring-trim-2d coarse
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.spring_trim
 
 ## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on
 ## each plate, and the Jupiter split's perijove burn -> data/results/xray_collision/mission_periapsis.csv,

@@ -1837,6 +1837,137 @@ which would smear the axis peak (not run). Erosion of the face by the ~0.6-0.8 k
 that note suggest the face may run ~940-1140 K for a sub-second pulse rather than the 673 K rule
 used here; until they are in a committed module the rule stands.
 
+## Result 19: keeping the lossless spring on its cycle -- the scatter, the drift and the k trim -- `spring_trim_*.csv`
+
+The parent's S48 (its `docs/spring_trim_asks_for_impact_sim.md`, commit 94f8808). Result 17's
+spring loses almost nothing, so it never forgets an impulse error. Two levers are taken (Seth,
+2026-10-20). The first is the **next charge's k**: the craft deploys each charge, so it sizes it
+from the swing it has just measured. The second is the craft's **conventional thrusters**, which
+take whatever is left of the push it expected against the push it got. ADR-0070;
+`make xray-collision-spring-trim` (`sweep --spring-trim-2d`, `spring_trim.py`).
+
+**The slopes** (`spring_trim_slopes.csv`). These are 2-D runs of the floor-wide 9.5 m sheet on the
+flown plate, impulse inside the floor only (the skirt hangs on the frame). At k = 5, 6, 7.07, 8
+and 9 they give `J/(m v)` = 2.61, 2.72, 2.83, 2.92 and 3.01 at fixed sheet mass. The k = 7.07 run
+reproduces Result 17's 2.842 (with the skirt) exactly. So **`d ln J / d k` = 3.3% per unit of k**
+(coarse 3.6%), and `d ln J / d ln k` = 0.23. The ladder spans a trim of -7.9% to +6.1% of the
+pulse. The standoff costs 3.6% per metre (coarse 2.1%, not converged; it is a minor line). Sheet
+mass that overhangs the floor loses 0.69 of its share (Result 17's 10 m sheet). The sheet is
+26.2 kg and the charge 185 kg.
+
+**The scatter** (`spring_trim_scatter.csv`). The tolerances are assumed, not measured. Each is
+multiplied by its slope. *Heave* is the fraction of J. *Rock* is the edge kick per axis, as a
+fraction of the heave kick: `4 d / R` for an impulse centroid `d` off the axis of a uniform floor.
+
+| source | 1-sigma error | heave | rock |
+|---|---|---|---|
+| sheet mass on arrival | 1% | 0.77% | - |
+| charge mass | 0.5% | 0.12% | - |
+| standoff | 5 cm | 0.18% | - |
+| aim offset | 10 cm per axis | 0.30% (and a 0.58% mean loss) | **4.2%** |
+| closing speed | 1e-4 | 0.01% | - |
+| plume drag (ADR-0069: 3-5 m/s, predictable) | 5 m/s | 0.005% | - |
+| sheet areal density | 5% per m^2 | (in the mass line) | 0.46% |
+| charge areal density | 2% per m^2 | (in the mass line) | 0.06% |
+| arrival time | 0.1 ms | phase only: 1.2 cm | - |
+| **total (rss)** | | **0.85%** | **4.2%** |
+
+**The spring's one-period map** (`spring_trim_map.csv`, `spring_trim_edge.csv`). This is the
+Jacobian of the RK4 flow over 0.5 s. The finite differences agree with the exact variational
+equation (`variational_trace`, solve_ivp).
+
+| theta | column | stroke | trace | phase a pulse | largest eigenvalue | 10 cm phase error: trim |
+|---|---|---|---|---|---|---|
+| 2 pi/3 | 18.6 m | 8.0 m | -1.06 | 2.13 rad (linear 2.09) | 1.000 | 0.27% |
+| 5 pi/6 | 11.9 | 8.4 | -1.93 | 2.88 | 1.000 | 5.4% |
+| pi | 8.3 | 8.9 | **-2.50** | pi | **2.006 (real)** | 1.3% |
+
+**The cycle at `theta = pi` is unstable.** An error doubles every pulse with alternating sign.
+A linear spring at `theta = pi` sits on the edge of Hill's first instability tongue. The gas
+column stiffens as it compresses, which pushes the variational phase past pi and into the tongue.
+The edge is at **`theta = 0.850 pi`: an 11.5 m column on an 8.45 m stroke, peak 1.39x the
+mean**. Result 17's loss does not move it (2.002 at 0.37%).
+
+**The drift, untrimmed** (`spring_trim_drift.csv`). This is the nonlinear column with Result 17's
+loss as an equivalent drag, flown for 2000 pulses, 100 seeds each. A seed is "lost" once it leaves
+either end of the steady stroke by 4 m. The table gives the median pulses to that point.
+
+| theta, loss 0.14% | 1% | 2% | 5% | 10% |
+|---|---|---|---|---|
+| 2 pi/3: 1 m out / 4 m out | 26 / 85 | 8 / 40 | 4 / 15 | 2 / 5 |
+| (linearized map, 4 m) | (219) | (58) | (12) | (5) |
+| 5 pi/6 | 37 / 543 | 12 / 111 | 4 / 21 | 3 / 8 |
+| pi | 6 / 7 | 5 / 6 | 3 / 5 | 3 / 4 |
+| parent's estimate (error = half the kick) | 2500 | 625 | 100 | 25 |
+
+- **The parent's ballpark is 5-30x too slow.** An error rings at the spring's free frequency. The
+  map's 2.13 rad a pulse is 4.3 rad/s, so a velocity error moves the plate by about
+  `dv / omega` = 0.24 s x dv. The steady
+  stroke is only a 2 pi/3 arc of that motion, so 58 m/s of error is ~14 m of swing, not 4.
+- At small scatter the column's stiffening speeds the walk again: 85 pulses against 219 on the
+  linearized map.
+- Result 17's loss hardly matters. Every 2 pi/3 seed is lost within the push at every loss and
+  scatter. At 5 pi/6 and 0.37% loss, 17% of seeds survive at 1%.
+
+**The trim** (`spring_trim_trim.csv`). A discrete LQR on the map. Its state is the swing's
+position and velocity after each kick, measured to 1 cm and 1 cm/s (assumed), plus the summed
+impulse error. Its input is the next charge's impulse, clipped to the ladder's k = 5-9. The lag is
+the number of extra pulses between committing a charge and its pulse. All rows are at the 0.14%
+loss.
+
+| theta | scatter | lag | extra excursion p50 / p95 | k: rms, 1-99% | charge rms | craft dv p95 | thruster propellant (300 s) |
+|---|---|---|---|---|---|---|---|
+| 2 pi/3 | 0.85% | 0 | 0.83 / 1.02 m | 0.24, 6.54-7.66 | 6.3 kg | 0.45 m/s | 173 kg |
+| 2 pi/3 | 0.85% | 2 | 0.94 / 1.15 | 0.22, 6.60-7.61 | 5.7 | 0.26 | 99 |
+| 2 pi/3 | 0.85%, no dv state | 0 | 0.82 / 0.99 | 0.24 | 6.4 | 8.9 | 3400 |
+| 2 pi/3 | 0.85%, 0.1 ms timing | 0 | 0.84 / 1.03 | 0.24 | 6.3 | 0.47 | 181 |
+| 2 pi/3 | 2% | 0 / 2 | 1.99 / 2.43; 2.23 / 2.57 | 0.57, 5.82-8.46 | 14.8 | 1.07 / 0.55 | 409 / 210 |
+| 2 pi/3 | 5%, 10% | 0 | lost (15%, 37% of pulses at the ladder's edge) | | | | |
+| **5 pi/6** | **0.85%** | 0 / 2 | **0.65 / 0.77; 0.85 / 1.02** | 0.22, 6.58-7.62 | 5.8 | 0.34 / 0.16 | 130 / 61 |
+| 5 pi/6 | 2% | 0 | 1.50 / 1.80 | 0.54, 5.88-8.40 | 14.1 | 0.88 | 338 |
+| pi | 0.85% | 0 / 1 | 0.67 / 0.83; 0.67 / 0.84 | 0.49, 5.99-8.29 | 12.8 | 0.51 / 0.54 | 196 / 209 |
+| pi | 0.85% | 2 | lost (99%) | | | | |
+| pi | 2%, 5% | 0 | lost (77% of pulses at the edge) | | | | |
+
+- **The floor is set by the lag of one pulse.** The next charge is the earliest correction, so
+  each pulse's own error rings for a period. That gives ~1 m (p95, over a push) per 1% of scatter
+  at 2 pi/3 and ~0.8 m at 5 pi/6. Any controller that acts on the next charge has this floor, so
+  tuning the weights cannot remove it.
+- **The summed-impulse state is what keeps the thrusters small.** Without it, the trims chase the
+  swing, and the craft's delta-v error walks to 8.9 m/s.
+- **Timing is not needed as a trim.** At 2 pi/3 the next charge reaches the swing's phase as well
+  as its amplitude, at 0.27% of J per 10 cm. A 0.1 ms arrival error changes nothing.
+
+**The other levers** (`spring_trim_levers.csv`):
+
+| lever | impulse over the push | propellant at 300 s |
+|---|---|---|
+| plate thrusters cancel every pulse's error, 1% / 5% | 117 / 587 MN s | 40 / 199 t |
+| thrusters take only the summed error (spring not held), 1% / 5% | 3.3 / 16 MN s (1-sigma) | 1.1 / 5.6 t |
+| rim thruster couples cancel every pulse's rocking (4.2%) | 249 MN s | 84 t |
+| tilt guides hand the torque to the craft; thrusters take its sum (10 cm aim) | 6.9 MN s | 2.4 t |
+
+**Rocking** (`spring_trim_rocking.csv`). On a uniform floor over uniform bags, rocking obeys the
+heave's variational equation, so it shares the map: stable at 2 pi/3 and unstable at pi. k cannot
+reach it. The trim used here is a **wedge**: the charge's areal density tilts across its radius by
+up to 30%. The impulse centroid then moves `beta x wedge x R / 4`. The table gives the edge's
+extra excursion p95 over both axes, at lags of 0 and 2.
+
+| theta | aim 1 cm | 3 cm | 10 cm | 30 cm |
+|---|---|---|---|---|
+| 2 pi/3 | 0.84 / 0.91 m (wedge rms 2.7%) | 1.81 / 1.97 (5.7%) | lost | lost |
+| 5 pi/6 | 0.64 / 0.87 | 1.38 / 1.88 | 30% lost / lost | lost |
+| pi | 0.62 / 1.73 | 5% lost / lost | lost | lost |
+
+Untrimmed, every rocking case is lost. **The aim, not the heave, is the binding tolerance.**
+10 cm of aim error per axis kicks the edge at 4.2% of the heave kick, five times the whole heave
+budget. Without a mechanical tilt guide, the wedge holds it only at an aim of ~3 cm or better.
+
+**Not modelled.** The pulse's taper as propellant burns, which moves the orbit slowly and
+predictably (a feed-forward on k). Wider k than 5-9, which the 2-D ladder does not cover. The
+loss as a viscous drag rather than thermal hysteresis. The 4-cell 1 MPa bag layout, whose rocking
+stiffness differs from its heave stiffness. The guide's loads and the craft's attitude under it.
+
 ## Limits
 
 **The piston's heat goes in over the sweep, not at once.** This is the largest unmodelled effect

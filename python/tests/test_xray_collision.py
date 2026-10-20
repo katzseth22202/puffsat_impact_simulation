@@ -663,3 +663,72 @@ def test_plume_point_source_reproduces_the_gaussian_cloud() -> None:
     got = pl.dose(pl.point_flux(v, f, c))
     want = pl.dose(cs.flux(p, u, cs._times()))
     assert got == pytest.approx(want, rel=0.02)
+
+
+def test_spring_trim_rk4_orbit_matches_gas_spring() -> None:
+    """The trim study's RK4 shooting finds Result 17's lossless orbit (solve_ivp there)."""
+    from puffsat.xray_collision import gas_spring as gs
+    from puffsat.xray_collision import spring_trim as st
+
+    o = gs.column_for_theta(gs.PLATE, st.THETAS["2pi/3"], st._gamma())
+    sp = st.spring("2pi/3", 0.0)
+    assert sp.x0 == pytest.approx(o.x0, abs=1e-5)
+    assert sp.v0 == pytest.approx(o.v0, abs=1e-5)
+    assert sp.stroke == pytest.approx(o.stroke, rel=1e-4)
+
+
+def test_spring_trim_map_agrees_with_the_variational_equation() -> None:
+    """The finite-difference one-period map has the exact variational equation's trace, and the
+    theta = pi column sits past Hill's first tongue (trace < -2) while 2 pi / 3 does not."""
+    from puffsat.xray_collision import spring_trim as st
+
+    for lab in ("2pi/3", "pi"):
+        tr = float(np.trace(st.spring(lab, 0.0).mono))
+        assert tr == pytest.approx(st.variational_trace(st.THETAS[lab]), rel=1e-3)
+    assert float(np.trace(st.spring("2pi/3", 0.0).mono)) > -2.0
+    assert float(np.trace(st.spring("pi", 0.0).mono)) < -2.0
+
+
+def test_spring_trim_drag_takes_the_stated_loss() -> None:
+    """The viscous stand-in for Result 17's loss removes that share of the swing a cycle."""
+    from puffsat.xray_collision import spring_trim as st
+
+    loss = 0.003
+    sp = st.spring("2pi/3", loss)
+    rec = st.flow(
+        np.array([sp.x0]),
+        np.array([sp.v0]),
+        np.array([sp.column]),
+        np.array([sp.damp]),
+        sp.gamma,
+        sp.f0,
+        sp.mu,
+        True,
+    )
+    vs = rec[5][:, 0]
+    lost = sp.mu * sp.damp * float(np.sum(vs**2)) * st.PERIOD / st.STEPS
+    assert lost == pytest.approx(loss * st.swing_energy(), rel=0.02)
+
+
+def test_spring_trim_lqr_holds_every_column() -> None:
+    """The closed loop `A - B K` is stable on all three columns, the unstable pi one included."""
+    from puffsat.xray_collision import spring_trim as st
+
+    for lab in st.THETAS:
+        sp = st.spring(lab, 0.0)
+        for integrate in (False, True):
+            k = st.gains(sp, integrate)
+            a = np.eye(3)
+            a[:2, :2] = sp.mono
+            b = np.array([0.0, sp.kick, 1.0])
+            if not integrate:
+                a, b, k = a[:2, :2], b[:2], k[:2]
+            rho = max(abs(np.linalg.eigvals(a - np.outer(b, k))))
+            assert rho < 1.0
+
+
+def test_spring_trim_rocking_share_of_a_uniform_floor() -> None:
+    """An impulse centred R / 4 off the axis kicks a uniform disk's edge as hard as the heave."""
+    from puffsat.xray_collision import spring_trim as st
+
+    assert st.rock_share(st.PLATE_R / 4.0) == pytest.approx(1.0)
