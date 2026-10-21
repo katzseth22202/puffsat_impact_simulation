@@ -83,6 +83,12 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
     loses on the face heat it radiates. The 25-32 t plate must be graded to the bag's centre-heavy
     load, its inner ~6 m is a graphite liner, and a gun's 100 g ice bullet spreads each bag ~30 m
     out so that a miss does not hole the plate (1.03 GPa), at ~6.7x.
+11. **The ice plug should be twice the bag's depth, and the gun is the backup** (Result 21,
+    ADR-0072). A plug as deep as the bag punches through (2.8-2.9 GPa). At 2x it matches the point
+    fireball's leverage, 8.2-8.8x at k = 4-15, at 0.7-0.9 GPa. Its catch is its radius less the
+    bag's, 0.04-0.24 m. The 2-D overlap bound does not converge, so it takes no credit. At
+    k = 8.5 the backup fires 5% of the time for a 5.6 cm track error at the plug. A ~1 km/s gun
+    fires after the plug has steered.
 
 ## Model
 
@@ -2060,6 +2066,70 @@ module leaves it empty (`heat_valid`). The wide bullet's miss went unstable on t
 liner; off-axis bursts beyond the ray trace; the 1-D radiative share as a stand-in for the 2-D
 face heat. The bumper runs and most bullet runs are on the coarse grid; the bullet's three
 deciding runs are on the production grid.
+
+## Result 21: the shaped ice plug, its catch radius and the gun backup -- `shaped_plug_*.csv`
+
+`make xray-collision-shaped-plug` (`sweep --shaped-plug [overlap [fine]|backup [far]] [coarse]`,
+`euler2d::bounce::BumperCharge`'s `charge_dish` and `charge_hole`, `shaped_plug.py`;
+ADR-0072). The parent's S52. Seth made the bag's plug the spreader and the gun's bullet a
+backup that fires only on a predicted miss. The parent sized the plug as a lens as deep as the
+bag (~0.38 m). The full tables are in
+[`shaped_plug_answers_for_parent.md`](shaped_plug_answers_for_parent.md).
+
+**The runs.** All on Result 20's delta/D 0.5 paraboloid with the plug's face at 2 F, and with
+Result 20's water corrections. The plug is an ice cylinder of `share` times the bag's 0.363 m
+depth, its radius set by its mass `k x 25 kg`:
+- shares 0.25-3 at k = 1, 2, 3, 4, 8.5 and 15, with the compact column and the point fireball;
+- 1.5 F and 2.5 F at k = 4 and 8.5;
+- a dished face;
+- two brackets of an off-centre strike: an open core (the bag's middle passes) and a narrow plug
+  (its rim passes);
+- the bullet's cloud onto a centred plug, met 30.6 m and 45.9 m out;
+- the bullet's misses met 15-43 m out (50 g and 100 g).
+
+Every run is on the production grid (dr 0.05 m) and the coarse grid. The overlap at k = 8.5 is
+also on the fine grid (0.025 m).
+
+**The lens.** Leverage (frozen edge) and face peak, 2 F:
+
+| k | compact column | lens 1x | lens 2x | point fireball |
+|---|---|---|---|---|
+| 4 | 8.12 (7.26), 0.42 GPa | 8.41 (7.52), 2.82 GPa | 8.18 (7.32), 0.90 GPa | 8.42 (7.53) |
+| 8.5 | 7.20 (6.21), 0.35 GPa | 8.16 (7.07), 2.82 GPa | 8.81 (7.65), 0.69 GPa | 8.83 (7.67) |
+| 15 | 4.52 (3.87), 0.33 GPa | 6.38 (5.54), 2.90 GPa | 8.39 (7.37), 0.69 GPa | 8.37 (7.35) |
+
+A plug as deep as the bag is flattened into a pancake whose jet lands on the vertex. At twice the
+bag's depth the bag stops inside the plug, and the burst matches the point fireball's
+leverage. The thinnest plug that holds 2.3 GPa is 1.5x at k = 3-15 (1.1-2.0 GPa). At k = 1-2 the
+peak wanders 1.3-5.6 GPa with depth, and no depth reliably holds. Below k ~ 4 the compact
+column is already short, and the lens gains nothing.
+
+**Convergence.** Impulse moves 1-3% between grids. The peak does not converge everywhere. The
+centred 2x lens rises 0.69 -> 0.85 GPa from production to fine. The thin lenses' jets read
+2.2-2.8 GPa coarse and 7-8 GPa on production. The open-core and narrow-plug brackets diverge:
+the safe passed share falls 56% -> 19% -> 8% over the three grids, and a 25% open core reads
+1.0 -> 3.2 -> 19 GPa. Axisymmetry focuses any ring of the bag that misses the plug onto the
+axis, as a shaped charge does, which a real crescent-shaped miss cannot do. So the module sizes
+the catch geometrically (plug radius less bag radius) and takes no overlap credit:
+0.04, 0.14 and 0.24 m at k = 4, 8.5 and 15. The backup rate is the Rayleigh tail past that
+catch: 5% for a track error at the plug of 1.5, 5.6 and 9.9 cm per axis.
+
+**The gun.** The bullet's meeting distance is set by the cloud's spread, not by the gun. The
+shortest meeting distance whose miss holds 2.3 GPa with a 1.2x margin is 30.6 m for 100 g
+(1.03 GPa) and 32.5 m for 50 g. The lead `path / v_b + D / w` puts the gun 6.15 km out at
+230 m/s and 1.44 km out at 1 km/s, inside the plug's last 100 ms of steering.
+With the 2x lens in the bullet's cloud (the backup pulse), the plug raises the peak. At
+k = 8.5 it holds 1.80 GPa only if the bullet meets the bag 45.9 m out (2.27 GPa at 30.6 m), and
+the gun fires 2.2 km out at 1 km/s. At k = 4 it reaches 2.41-3.04 GPa, and farther is worse.
+The coarse grid reads 1.0-1.3 GPa for all four. The plug is spent: it is kicked ~98 m/s.
+
+**The plate.** On the 2x lens's load the graded plate is 26.6, 33.3 and 38.7 t at k = 4, 8.5 and
+15. It carries 57-70 mm of steel at the centre and rings with 4.7%, 1.1% and 0.3%. The graphite
+liner takes 6.0-17.6, 1.4-4.2 and 0.4-1.1 kg a pulse.
+
+**Not modelled.** A 3-D off-centre strike, the one run that could credit an overlap; strength,
+fracture and the bag's ice skin; the plug's steering and the track error at the plug; the
+bullet's own speed (up to ~12% more energy at 3 km/s).
 
 ## Limits
 

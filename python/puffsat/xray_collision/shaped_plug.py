@@ -54,6 +54,8 @@ OVERLAP_COARSE = OUT_DIR / "shaped_plug_overlap_coarse.jsonl"
 OVERLAP_FINE = OUT_DIR / "shaped_plug_overlap_fine.jsonl"
 BACKUP = OUT_DIR / "shaped_plug_backup.jsonl"
 BACKUP_COARSE = OUT_DIR / "shaped_plug_backup_coarse.jsonl"
+BACKUP_FAR = OUT_DIR / "shaped_plug_backup_far.jsonl"
+BACKUP_FAR_COARSE = OUT_DIR / "shaped_plug_backup_far_coarse.jsonl"
 
 #: The paraboloid Result 20 recommends, and its plug height.
 PLATE = "paraboloid 0.50 at 2 F"
@@ -71,6 +73,11 @@ PLUG_STEER = 0.1  # [s]
 MUZZLE = (230.0, 500.0, 1000.0, 2000.0, 3000.0)
 #: One-sigma track errors per axis [m] at the plug, for the backup's rate.
 TRACK_SIGMA = (0.01, 0.02, 0.03, 0.05, 0.1)
+#: The backup rates the parent's ledger can carry: its 5% placeholder, and 1%.
+BACKUP_RATES = (0.05, 0.01)
+#: Halving the cell raised the centred share-2 lens's peak 0.69 -> 0.85 GPa (+23%), so a meeting
+#: distance sets the trigger only if its production-grid miss holds 2.3 GPa by this margin.
+PEAK_MARGIN = 1.2
 
 
 def _f(r: dict[str, object], key: str) -> float:
@@ -199,7 +206,7 @@ def lens_rows(fine: bool = True) -> list[LensRow]:
 @dataclass(frozen=True)
 class BestLensRow:
     k: float
-    best_share: float  # the lens depth share with the most leverage at 2 F
+    best_share: float  # the lens depth share with the most leverage at 2 F, inside 2.3 GPa
     leverage: float
     leverage_frozen: float
     eta: float
@@ -214,8 +221,8 @@ class BestLensRow:
 
 
 def best_lens_rows(rows: list[LensRow], max_share: float = 99.0) -> list[BestLensRow]:
-    """Per k, the 2 F lens with the most leverage among stopped lenses (`max_share` excludes
-    nothing by default; `punch_rows` sets the thin limit)."""
+    """Per k, the 2 F lens with the most leverage among those whose face peak holds maraging's
+    2.3 GPa (`max_share` excludes nothing by default). A k with no such lens is left out."""
     out = []
     for k in sorted({r.k for r in rows if r.kind == "lens"}):
         lenses = [
@@ -225,6 +232,7 @@ def best_lens_rows(rows: list[LensRow], max_share: float = 99.0) -> list[BestLen
             and r.k == k
             and r.height_focal == 2.0
             and r.depth_share <= max_share
+            and r.peak_gpa <= ib.MARAGING / 1e9
         ]
         if not lenses:
             continue
@@ -325,7 +333,7 @@ def plate_rows(kinds: tuple[str, ...] = ("lens", "compact")) -> list[PlateLensRo
 @dataclass(frozen=True)
 class PunchRow:
     k: float
-    thinnest_stopped_share: float  # rim depth over the bag's depth
+    thinnest_stopped_share: float  # rim depth over the bag's depth; nan if the deepest fails
     thinnest_column_ratio: float
     plug_radius: float  # the widest plug that stops the bag
     catch_radius_geometric: float
@@ -354,8 +362,21 @@ def punch_rows(rows: list[LensRow]) -> list[PunchRow]:
                 past = r
                 break
         if stopped is None:
-            # Even the deepest lens run sends a jet over the limit.
-            stopped = deep
+            # Even the deepest lens run sends a jet over the limit: no depth reliably stops it.
+            out.append(
+                PunchRow(
+                    k=k,
+                    thinnest_stopped_share=math.nan,
+                    thinnest_column_ratio=math.nan,
+                    plug_radius=math.nan,
+                    catch_radius_geometric=math.nan,
+                    peak_gpa_stopped=math.nan,
+                    next_thinner_share=deep.depth_share,
+                    peak_gpa_past=deep.peak_gpa,
+                    peak_gpa_deep=deep.peak_gpa,
+                )
+            )
+            continue
         out.append(
             PunchRow(
                 k=k,
@@ -412,6 +433,11 @@ def miss_rate(catch: float, sigma: float) -> float:
     """The chance a bag's offset at the plug exceeds `catch` for an isotropic Gaussian error of
     `sigma` per axis (the Rayleigh tail)."""
     return math.exp(-0.5 * (catch / sigma) ** 2)
+
+
+def sigma_for_rate(catch: float, rate: float) -> float:
+    """[m] The per-axis track error at the plug whose Rayleigh tail past `catch` is `rate`."""
+    return catch / math.sqrt(2.0 * math.log(1.0 / rate))
 
 
 @dataclass(frozen=True)
@@ -484,9 +510,10 @@ class CatchRow:
     safe_share_core: float  # the open-core bracket
     safe_share_rim: float  # the narrow-plug bracket
     safe_share: float  # the lesser, which sets the catch
-    catch_radius: float  # [m] offset of the bag's centre the plug takes without the backup
+    catch_radius: float  # [m] offset of the bag's centre the plug takes; 0 if centred fails
     catch_radius_geometric: float  # with no part of the bag allowed past
     miss_rates: tuple[float, ...]  # at TRACK_SIGMA
+    sigma_for_rates: tuple[float, ...]  # [m] the track error that holds each of BACKUP_RATES
 
 
 def catch_rows(lenses: list[LensRow], overlaps: list[OverlapRow]) -> list[CatchRow]:
@@ -507,7 +534,9 @@ def catch_rows(lenses: list[LensRow], overlaps: list[OverlapRow]) -> list[CatchR
         core = safe_share([o for o in mine if o.kind == "hole"], lens[0].peak_gpa)
         rim = safe_share(solid + [o for o in mine if o.kind == "rim"], lens[0].peak_gpa)
         s = min(core, rim)
-        c = catch_radius(lens[0].plug_radius, s)
+        # A lens that exceeds the limit even when centred catches nothing.
+        solid_ok = (solid[0].peak_gpa if solid else lens[0].peak_gpa) <= ib.MARAGING / 1e9
+        c = catch_radius(lens[0].plug_radius, s) if solid_ok else 0.0
         out.append(
             CatchRow(
                 grid=grid,
@@ -520,9 +549,44 @@ def catch_rows(lenses: list[LensRow], overlaps: list[OverlapRow]) -> list[CatchR
                 catch_radius=c,
                 catch_radius_geometric=lens[0].catch_radius_geometric,
                 miss_rates=tuple(miss_rate(c, sig) for sig in TRACK_SIGMA),
+                sigma_for_rates=tuple(sigma_for_rate(c, q) for q in BACKUP_RATES),
             )
         )
     return out
+
+
+@dataclass(frozen=True)
+class GeometricCatchRow:
+    """The catch with no part of the bag allowed past, for the recommended 2 F lens at each k:
+    the trigger that needs no overlap credit, since the 2-D overlap bound does not converge."""
+
+    k: float
+    depth_share: float
+    plug_radius: float
+    peak_gpa: float
+    catch_radius: float  # [m] plug radius less the bag's
+    miss_rates: tuple[float, ...]  # at TRACK_SIGMA
+    sigma_for_rates: tuple[float, ...]  # [m] at BACKUP_RATES
+
+
+def geometric_catch_rows(lenses: list[LensRow], share: float = 2.0) -> list[GeometricCatchRow]:
+    out = []
+    for r in lenses:
+        if r.kind != "lens" or r.height_focal != 2.0 or r.depth_share != share:
+            continue
+        c = r.catch_radius_geometric if r.peak_gpa <= ib.MARAGING / 1e9 else 0.0
+        out.append(
+            GeometricCatchRow(
+                k=r.k,
+                depth_share=share,
+                plug_radius=r.plug_radius,
+                peak_gpa=r.peak_gpa,
+                catch_radius=c,
+                miss_rates=tuple(miss_rate(c, sig) for sig in TRACK_SIGMA),
+                sigma_for_rates=tuple(sigma_for_rate(c, q) for q in BACKUP_RATES),
+            )
+        )
+    return sorted(out, key=lambda x: x.k)
 
 
 # --- 4. The backup pulse and the trigger window (items 4 and 5) -----------------------------
@@ -542,6 +606,7 @@ class BackupRow:
     holds_maraging: bool
     inner_energy_mj_m2: float  # arriving inside 0.6 m (an upper estimate: see heat_valid)
     liner_graphite_kg: tuple[float, float]  # the face heat taken by eroding graphite
+    liner_t_per_push: tuple[float, float]  # [t] at the first of BACKUP_RATES of the push's pulses
     heat_valid: bool
 
 
@@ -574,9 +639,20 @@ def _liner(rec: dict[str, object], k: float) -> tuple[float, tuple[float, float]
 
 
 def backup_rows() -> list[BackupRow]:
-    """This result's runs, and Result 20's 100 g miss at 31 m on the production grid."""
+    """This result's runs (the far backup's where it has run), and Result 20's 100 g miss at
+    31 m on the production grid."""
     out = []
-    srcs = [("x1", r) for r in _runs(BACKUP)] + [("x0.5", r) for r in _runs(BACKUP_COARSE)]
+    srcs = [
+        (grid, r)
+        for grid, path in (
+            ("x1", BACKUP),
+            ("x0.5", BACKUP_COARSE),
+            ("x1", BACKUP_FAR),
+            ("x0.5", BACKUP_FAR_COARSE),
+        )
+        if path.exists()
+        for r in _runs(path)
+    ]
     srcs += [
         ("x1", {**r, "kind": "miss", "bullet_k": r["bumper_k"], "bullet_gap": r["bumper_gap"]})
         for r in _runs(ib.BULLET_KEY)
@@ -606,6 +682,10 @@ def backup_rows() -> list[BackupRow]:
                 holds_maraging=peak <= ib.MARAGING,
                 inner_energy_mj_m2=inner / 1e6,
                 liner_graphite_kg=graphite,
+                liner_t_per_push=(
+                    BACKUP_RATES[0] * ib.PULSES * graphite[0] / 1e3,
+                    BACKUP_RATES[0] * ib.PULSES * graphite[1] / 1e3,
+                ),
                 heat_valid=valid,
             )
         )
@@ -641,8 +721,10 @@ def plug_fate(k: float, plug_radius: float, cloud_radius: float = 2.5) -> PlugFa
 
 @dataclass(frozen=True)
 class TriggerRow:
+    kind: str  # miss (no plug in the cloud) or backup (the centred 2x lens in it)
+    k: float  # the plug's (0 for a miss)
     bullet_g: float
-    meeting_m: float  # the shortest meeting distance whose miss holds 2.3 GPa
+    meeting_m: float  # the shortest meeting distance whose pulse holds 2.3 GPa / PEAK_MARGIN
     muzzle_m_s: float
     path_m: float  # from the rim to the meeting point
     lead_ms: float  # the gun fires this long before the bag reaches the plug
@@ -657,14 +739,18 @@ def gun_path(meeting: float) -> float:
 
 
 def trigger_rows(backups: list[BackupRow]) -> list[TriggerRow]:
-    """For each bullet, the shortest meeting distance that held 2.3 GPa (production grid, misses
-    only), and the gun's lead time at each muzzle speed: `t = path / v_b + D / w`."""
+    """For each bullet, with no plug in its cloud (a miss) and with the centred lens at each k (a
+    backup), the shortest meeting distance whose pulse held 2.3 GPa with PEAK_MARGIN to spare
+    (production grid), and the gun's lead time at each muzzle speed: `t = path / v_b + D / w`.
+    A case none of whose meetings held is left out."""
     out = []
-    for g in sorted({b.bullet_g for b in backups if b.kind == "miss" and b.grid == "x1"}):
+    prod = [b for b in backups if b.grid == "x1"]
+    for kind, k, g in sorted({(b.kind, b.k, b.bullet_g) for b in prod}):
         held = [
             b.meeting_m
-            for b in backups
-            if b.kind == "miss" and b.grid == "x1" and b.bullet_g == g and b.holds_maraging
+            for b in prod
+            if (b.kind, b.k, b.bullet_g) == (kind, k, g)
+            and b.peak_gpa * PEAK_MARGIN <= ib.MARAGING / 1e9
         ]
         if not held:
             continue
@@ -673,7 +759,15 @@ def trigger_rows(backups: list[BackupRow]) -> list[TriggerRow]:
             lead = gun_path(d) / v + d / ib.W_REF
             out.append(
                 TriggerRow(
-                    g, d, v, gun_path(d), 1e3 * lead, ib.W_REF * lead / 1e3, lead < PLUG_STEER
+                    kind,
+                    k,
+                    g,
+                    d,
+                    v,
+                    gun_path(d),
+                    1e3 * lead,
+                    ib.W_REF * lead / 1e3,
+                    lead < PLUG_STEER,
                 )
             )
     return out
@@ -687,6 +781,7 @@ OUT_PUNCH = OUT_DIR / "shaped_plug_punch.csv"
 OUT_PLATE = OUT_DIR / "shaped_plug_plate.csv"
 OUT_OVERLAP = OUT_DIR / "shaped_plug_overlap.csv"
 OUT_CATCH = OUT_DIR / "shaped_plug_catch.csv"
+OUT_CATCH_GEOMETRIC = OUT_DIR / "shaped_plug_catch_geometric.csv"
 OUT_BACKUP = OUT_DIR / "shaped_plug_backup.csv"
 OUT_FATE = OUT_DIR / "shaped_plug_fate.csv"
 OUT_TRIGGER = OUT_DIR / "shaped_plug_trigger.csv"
@@ -794,7 +889,15 @@ def main() -> None:
             f"  catch {c.grid:>4} k {c.k:5.2f} share {c.depth_share:4.2f} R"
             f" {c.plug_radius:4.2f}: safe share core {c.safe_share_core:5.1%} rim"
             f" {c.safe_share_rim:5.1%} -> catch {c.catch_radius:4.2f} m (geometric"
-            f" {c.catch_radius_geometric:4.2f}) | backup rate {rates}"
+            f" {c.catch_radius_geometric:4.2f}) | backup rate {rates} | sigma for 5% / 1%"
+            f" {1e2 * c.sigma_for_rates[0]:.1f} / {1e2 * c.sigma_for_rates[1]:.1f} cm"
+        )
+    geometric = geometric_catch_rows(lenses)
+    for gc in geometric:
+        print(
+            f"  catch geometric k {gc.k:5.2f} share {gc.depth_share:4.2f} R {gc.plug_radius:4.2f}"
+            f" peak {gc.peak_gpa:4.2f} GPa: catch {gc.catch_radius:4.2f} m | sigma for 5% / 1%"
+            f" {1e2 * gc.sigma_for_rates[0]:.1f} / {1e2 * gc.sigma_for_rates[1]:.1f} cm"
         )
     backups = backup_rows()
     for b in backups:
@@ -804,12 +907,13 @@ def main() -> None:
             f" lev {b.leverage:5.2f} | peak {b.peak_gpa:5.2f} GPa"
             f" {'holds' if b.holds_maraging else 'exceeds'} | inner {b.inner_energy_mj_m2:6.1f}"
             f" MJ/m^2, graphite {b.liner_graphite_kg[0]:5.1f}-{b.liner_graphite_kg[1]:5.1f} kg"
-            f" ({'valid' if b.heat_valid else 'over-counted'})"
+            f" ({'valid' if b.heat_valid else 'over-counted'}), at a 5% rate"
+            f" {b.liner_t_per_push[0]:4.1f}-{b.liner_t_per_push[1]:4.1f} t a push"
         )
     fates = [
         plug_fate(r.k, r.plug_radius)
         for r in lenses
-        if r.kind == "lens" and r.depth_share == 1.0 and r.height_focal == 2.0
+        if r.kind == "lens" and r.depth_share == 2.0 and r.height_focal == 2.0
     ]
     for f in fates:
         print(
@@ -820,7 +924,8 @@ def main() -> None:
     triggers = trigger_rows(backups)
     for t in triggers:
         print(
-            f"  trigger {t.bullet_g:4.0f} g meets at {t.meeting_m:5.1f} m, muzzle"
+            f"  trigger {t.kind:<6} k {t.k:4.1f} {t.bullet_g:4.0f} g meets at {t.meeting_m:5.1f} m,"
+            " muzzle"
             f" {t.muzzle_m_s:5.0f} m/s: path {t.path_m:5.1f} m, fires {t.lead_ms:6.1f} ms /"
             f" {t.range_km:5.2f} km out{' (after the plug steers)' if t.after_plug_steer else ''}"
         )
@@ -832,6 +937,7 @@ def main() -> None:
         (OUT_PLATE, plates),
         (OUT_OVERLAP, overlaps),
         (OUT_CATCH, catches),
+        (OUT_CATCH_GEOMETRIC, geometric),
         (OUT_BACKUP, backups),
         (OUT_FATE, fates),
         (OUT_TRIGGER, triggers),

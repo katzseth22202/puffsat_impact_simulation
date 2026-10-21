@@ -1182,24 +1182,23 @@ pub fn run_bumper_charge_bounce(cfg: &SlugConfig, bc: BumperCharge) -> FireballB
     // Both targets start at the impactor's cold pressure, scaled down for a large volume so that
     // their stored heat stays under a quarter of the impactor's own (as `run_disk_charge_bounce`).
     let cold = |v: f64| p_cold * (0.25 * v_bag / v).min(1.0);
+    // The vacuum's stored heat is held under 0.8x the impactor's, so the longest domains (a
+    // bullet met ~46 m out) stay inside the budget below. It binds only past a vacuum of 8e5
+    // bag volumes; Result 20's and 21's other runs sit at or under 6.6e5 and are unchanged.
+    let v_amb = v_domain - v_bag - v_charge - v_bumper;
+    let p_amb = p_cold * 1.0e-6_f64.min(0.8 * v_bag / v_amb);
     g.init(|iz, ir| match region(iz, ir) {
         1 => Prim::new(rho_bag, -1.0, 0.0, p_cold),
         2 => Prim::new(rho_charge, 0.0, 0.0, cold(v_charge)),
         3 => Prim::new(rho_bumper, 0.0, 0.0, cold(v_bumper)),
-        _ => Prim::new(rho_amb, 0.0, 0.0, p_cold * 1.0e-6),
+        _ => Prim::new(rho_amb, 0.0, 0.0, p_amb),
     });
     assert!(
         cold_heat(&g, cfg.gamma) < 0.02 * 0.5,
         "the impactor and targets must start cold against the impactor's kinetic energy of 1/2"
     );
     let merged = 1.0 + bc.bumper_k + bc.k;
-    run_fireball_grid(
-        g,
-        cfg.nz,
-        0.0,
-        merged,
-        rho_amb * (v_domain - v_bag - v_charge - v_bumper) / merged,
-    )
+    run_fireball_grid(g, cfg.nz, 0.0, merged, rho_amb * v_amb / merged)
 }
 
 #[cfg(test)]

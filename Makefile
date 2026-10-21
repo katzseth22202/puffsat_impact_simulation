@@ -1263,6 +1263,8 @@ xray-collision-shaped-plug: data/tables/water_jupiter.json
 	cargo run --release -p sweep -- --shaped-plug overlap fine
 	cargo run --release -p sweep -- --shaped-plug backup
 	cargo run --release -p sweep -- --shaped-plug backup coarse
+	cargo run --release -p sweep -- --shaped-plug backup far
+	cargo run --release -p sweep -- --shaped-plug backup far coarse
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.shaped_plug
 
 ## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on

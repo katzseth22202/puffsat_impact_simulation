@@ -9485,6 +9485,8 @@ const SHAPED_HOLES_FINE: [f64; 4] = [0.025, 0.05, 0.075, 0.1];
 /// Plugs narrower than the bag (the rim bracket): 0.15, 0.1 and 0.05 m pass 44%, 75% and 94% of
 /// its face; the refined grid adds 0.175 and 0.125 m (23% and 61%).
 const SHAPED_RIMS: [f64; 3] = [0.15, 0.1, 0.05];
+/// The bullet's meeting distance on the far backup, over the 30.6 m of Result 20's bullet.
+const SHAPED_BACKUP_FAR: f64 = 1.5;
 const SHAPED_RIMS_FINE: [f64; 5] = [0.175, 0.15, 0.125, 0.1, 0.05];
 
 #[derive(Debug, Clone, Copy)]
@@ -9719,12 +9721,14 @@ fn shaped_case(s: &ShapedSpec, dr: f64, confined_ratio: f64) -> ShapedRecord {
 /// `shaped_plug_point.jsonl`). `overlap` opens a core through the lens so part of the bag
 /// passes (`shaped_plug_overlap.jsonl`; `fine` halves the cell at k = 8.5). `backup` is the
 /// gun's bullet: its cloud onto a centred lens, and its misses met nearer and further than
-/// Result 20's 31 m (`shaped_plug_backup.jsonl`).
+/// Result 20's 31 m (`shaped_plug_backup.jsonl`); `backup far` meets it 1.5x as far out
+/// before the centred lens (`shaped_plug_backup_far.jsonl`).
 fn cmd_shaped_plug(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let coarse = args.iter().any(|a| a == "coarse");
     let overlap = args.iter().any(|a| a == "overlap");
     let backup = args.iter().any(|a| a == "backup");
     let fine = args.iter().any(|a| a == "fine");
+    let far = args.iter().any(|a| a == "far");
     let dr = if coarse {
         2.0 * CHARGE_DR
     } else if fine {
@@ -9750,13 +9754,24 @@ fn cmd_shaped_plug(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                     for &h in &SHAPED_HOLES {
                         specs.push(shaped_lens("hole", k, share, 0.0, h));
                     }
-                    for &r in &SHAPED_RIMS {
+                    // A plug narrower than a cell has no volume to hold its mass.
+                    for &r in SHAPED_RIMS.iter().filter(|&&r| r >= dr) {
                         specs.push(shaped_rim(k, share, r));
                     }
                 }
             }
         }
         "_overlap"
+    } else if backup && far {
+        // The bullet meets the bag half as far again up-track, so its cloud is wider at the plug.
+        for &k in &SHAPED_HOLE_K {
+            specs.push(shaped_backup(
+                Some(shaped_lens("lens", k, 2.0, 0.0, 0.0)),
+                IAPETUS_BULLETS[0],
+                SHAPED_BACKUP_FAR,
+            ));
+        }
+        "_backup_far"
     } else if backup {
         for &k in &SHAPED_HOLE_K {
             specs.push(shaped_backup(

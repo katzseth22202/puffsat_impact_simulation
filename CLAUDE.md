@@ -58,7 +58,7 @@ Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`),
 `make xray-collision-charge-mix`, `make xray-collision-freeze`, `make xray-collision-collar`,
 `make xray-collision-overtake`, `make xray-collision-mission`, `make xray-collision-growth`,
 `make xray-collision-cme`, `make xray-collision-cadence-plate`, `make xray-collision-departure-hole`, `make xray-collision-fast-wave`, `make xray-collision-iapetus`,
-`make xray-collision-band-bowl`, `make xray-collision-gas-spring`, `make xray-collision-plume`, `make xray-collision-spring-trim` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
+`make xray-collision-band-bowl`, `make xray-collision-gas-spring`, `make xray-collision-plume`, `make xray-collision-spring-trim`, `make xray-collision-shaped-plug` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
 (lattice target, k = 2, per-projectile light and kinetic energy) is
 [`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md). The 66 km/s verdict (argon clouds
 radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the Sun dive) is
@@ -112,6 +112,12 @@ at the centre; a gun's 100 g ice bullet spreads each bag ~30 m out so a miss doe
 is Result 20 and [ADR-0071](docs/adr/0071-iapetus-bags-ice-charge-paraboloid-and-bullet.md) (module
 `iapetus_bag.py`, target `make xray-collision-iapetus`); answers in
 [`docs/iapetus_bag_plate_answers_for_parent.md`](docs/iapetus_bag_plate_answers_for_parent.md).
+The parent's S52, the shaped ice plug (a lens as deep as the bag punches through; twice its depth
+matches the point fireball at k = 4-15; the catch is the plug's radius less the bag's, since the 2-D
+overlap bound does not converge; a ~1 km/s gun fires after the plug steers), is Result 21 and
+[ADR-0072](docs/adr/0072-shaped-plug-deep-lens-and-geometric-catch.md) (module `shaped_plug.py`,
+target `make xray-collision-shaped-plug`); answers in
+[`docs/shaped_plug_answers_for_parent.md`](docs/shaped_plug_answers_for_parent.md).
 How hot the Kapton face can run for a sub-second pulse (decomposition kinetics, other films,
 fillers, overlayers, carbon veils) is researched in
 [`docs/kapton_temperature_limits.md`](docs/kapton_temperature_limits.md); its numbers are not yet

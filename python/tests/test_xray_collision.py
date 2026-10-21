@@ -821,3 +821,5 @@ def test_shaped_plug_catch_radius_brackets_the_geometric_catch() -> None:
     assert c > r - sp.BAG_RADIUS
     assert sp.passed_share(c, r) == pytest.approx(0.1, abs=1e-6)
     assert sp.miss_rate(0.05, 0.05) == pytest.approx(math.exp(-0.5))
+    # The track error that holds a backup rate inverts the tail.
+    assert sp.miss_rate(c, sp.sigma_for_rate(c, 0.05)) == pytest.approx(0.05)
