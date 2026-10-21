@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-fast-wave xray-collision-band-bowl xray-collision-gas-spring xray-collision-plume xray-collision-spring-trim xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-fast-wave xray-collision-band-bowl xray-collision-gas-spring xray-collision-plume xray-collision-spring-trim xray-collision-iapetus xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1229,6 +1229,25 @@ xray-collision-spring-trim: data/tables/ch2.json
 	cargo run --release -p sweep -- --spring-trim-2d
 	cargo run --release -p sweep -- --spring-trim-2d coarse
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.spring_trim
+
+## xray-collision-iapetus: Result 20, the parent's S50 -- 25 kg Iapetus water bags overtaking the
+## ship at 51.1 km/s onto a carried charge of solid argon or ice: the 2-D plate impulse (point
+## fireball, compact bag into a compact charge, released-ahead sheets and moderate spreads onto a
+## short charge disk, the two-piece charge with a bumper and its miss cases, the gun's ice bullet, a gamma bracket), argon's
+## and water's 1-D rebound, the freeze races, the k sweep and leverage, the plate on the spring
+## law and its grading, the ballistic aim and face erosion
+## -> data/results/xray_collision/iapetus_*.csv
+xray-collision-iapetus: data/tables/argon.json data/tables/water_jupiter.json
+	cargo run --release -p sweep -- --iapetus-2d
+	cargo run --release -p sweep -- --iapetus-2d coarse
+	cargo run --release -p sweep -- --iapetus-2d spread
+	cargo run --release -p sweep -- --iapetus-2d spread coarse
+	cargo run --release -p sweep -- --iapetus-2d bumper
+	cargo run --release -p sweep -- --iapetus-2d bumper coarse
+	cargo run --release -p sweep -- --iapetus-2d bullet key
+	cargo run --release -p sweep -- --iapetus-2d bullet coarse
+	cargo run --release -p sweep -- --iapetus-rebound
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.iapetus_bag
 
 ## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on
 ## each plate, and the Jupiter split's perijove burn -> data/results/xray_collision/mission_periapsis.csv,

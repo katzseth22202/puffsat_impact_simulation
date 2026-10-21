@@ -57,7 +57,7 @@ Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`),
 `make xray-collision-rebound`, `make xray-collision-charge-2d`, `make xray-collision-charge`,
 `make xray-collision-charge-mix`, `make xray-collision-freeze`, `make xray-collision-collar`,
 `make xray-collision-overtake`, `make xray-collision-mission`, `make xray-collision-growth`,
-`make xray-collision-cme`, `make xray-collision-cadence-plate`, `make xray-collision-departure-hole`, `make xray-collision-fast-wave`,
+`make xray-collision-cme`, `make xray-collision-cadence-plate`, `make xray-collision-departure-hole`, `make xray-collision-fast-wave`, `make xray-collision-iapetus`,
 `make xray-collision-band-bowl`, `make xray-collision-gas-spring`, `make xray-collision-plume`, `make xray-collision-spring-trim` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
 (lattice target, k = 2, per-projectile light and kinetic energy) is
 [`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md). The 66 km/s verdict (argon clouds
@@ -105,6 +105,13 @@ Keeping that spring on its cycle (S48: trim the next charge's k every pulse, k 6
 fly 5 pi/6; the aim, ~3 cm, binds through rocking) is Result 19 and
 [ADR-0070](docs/adr/0070-spring-held-by-next-charge-k-trim.md) (module `spring_trim.py`, target
 `make xray-collision-spring-trim`); answers in [`docs/spring_trim_answers_for_parent.md`](docs/spring_trim_answers_for_parent.md).
+The parent's S50, 25 kg Iapetus water bags overtaking the ship at 51.1 km/s (~8x per kg of bag,
+not 10.3x; a water-ice charge at k ~ 4-8.5 beats argon on the face heat it radiates; a delta/D 0.5
+paraboloid at 2 F, 25-32 t on the spring but graded to the bag's centre-heavy load; a graphite liner
+at the centre; a gun's 100 g ice bullet spreads each bag ~30 m out so a miss does not hole the plate),
+is Result 20 and [ADR-0071](docs/adr/0071-iapetus-bags-ice-charge-paraboloid-and-bullet.md) (module
+`iapetus_bag.py`, target `make xray-collision-iapetus`); answers in
+[`docs/iapetus_bag_plate_answers_for_parent.md`](docs/iapetus_bag_plate_answers_for_parent.md).
 How hot the Kapton face can run for a sub-second pulse (decomposition kinetics, other films,
 fillers, overlayers, carbon veils) is researched in
 [`docs/kapton_temperature_limits.md`](docs/kapton_temperature_limits.md); its numbers are not yet

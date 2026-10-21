@@ -1079,11 +1079,128 @@ pub fn run_disk_charge_bounce(cfg: &SlugConfig, dc: DiskCharge) -> FireballBounc
     )
 }
 
+/// A compact impactor that first strikes a thin bumper, then meets a wide charge disk (X-ray
+/// study, Result 20). The bumper turns the impactor to a hot cloud that spreads across the gap,
+/// so the main charge can be a short disk instead of a long column. Everything moves toward the
+/// plate: the impactor at speed 1 from above, the bumper and the charge at rest. Masses are in
+/// units of the impactor's.
+#[derive(Debug, Clone, Copy)]
+pub struct BumperCharge {
+    /// The impactor's radius and thickness on the grid.
+    pub bag_radius: f64,
+    pub bag_thickness: f64,
+    /// The bumper: radius, thickness on the grid, and mass ratio to the impactor.
+    pub bumper_radius: f64,
+    pub bumper_thickness: f64,
+    pub bumper_k: f64,
+    /// From the bumper's plate-side face to the charge disk's far face.
+    pub bumper_gap: f64,
+    /// The charge disk: radius, thickness on the grid, and mass ratio to the impactor.
+    pub charge_radius: f64,
+    pub charge_thickness: f64,
+    pub k: f64,
+    /// Height of the charge disk's centre above the plate's vertex.
+    pub height: f64,
+    /// Gap between the impactor and the bumper at the start.
+    pub gap: f64,
+    /// Ambient density as a fraction of the charge disk's.
+    pub ambient: f64,
+}
+
+/// Run a [`BumperCharge`] collision onto the dished or cupped plate of `cfg`. Impulse is in units
+/// of the merged mass `1 + bumper_k + k` and the impactor's speed, as [`run_disk_charge_bounce`].
+/// `k = 0` leaves the disk out (the bag hits the bumper and misses the disk), and `bumper_k = 0`
+/// as well is the bare bag on the plate.
+///
+/// # Panics
+///
+/// If `cfg.shape` is the grid-aligned flat plate, which has no immersed profile.
+#[must_use]
+pub fn run_bumper_charge_bounce(cfg: &SlugConfig, bc: BumperCharge) -> FireballBounce {
+    let dz = cfg.z_max / cfg.nz as f64;
+    let dr = cfg.r_max / cfg.nr as f64;
+    let mut g = Grid2D::new(cfg.nz, cfg.nr, dz, dr, cfg.gamma);
+    g.set_axisymmetric(true);
+    g.bc_rlo = Bc::Reflect;
+    g.bc_rhi = Bc::Transmissive;
+    g.bc_zhi = Bc::Transmissive;
+    g.bc_zlo = Bc::Transmissive;
+    let profile = immersed_profile(cfg).expect("a dished or cupped plate");
+    g.set_plate_profile(Some(profile));
+    let z_vertex = profile.z_surface(0.0);
+    let charge_lo = z_vertex + bc.height - 0.5 * bc.charge_thickness;
+    let charge_hi = charge_lo + bc.charge_thickness;
+    let bumper_lo = charge_hi + bc.bumper_gap;
+    let bumper_hi = bumper_lo + bc.bumper_thickness;
+    let bag_lo = bumper_hi + bc.gap;
+    let bag_hi = bag_lo + bc.bag_thickness;
+    // A zero-mass disk or bumper is left out: the miss case (no disk) and the bare bag (neither).
+    let region = |iz: usize, ir: usize| -> u8 {
+        let z = (iz as f64 + 0.5) * dz;
+        let r = (ir as f64 + 0.5) * dr;
+        if bc.k > 0.0 && z >= charge_lo && z < charge_hi && r < bc.charge_radius {
+            2
+        } else if bc.bumper_k > 0.0 && z >= bumper_lo && z < bumper_hi && r < bc.bumper_radius {
+            3
+        } else if z >= bag_lo && z < bag_hi && r < bc.bag_radius {
+            1
+        } else {
+            0
+        }
+    };
+    let two_pi = 2.0 * std::f64::consts::PI;
+    let (mut v_bag, mut v_charge, mut v_bumper, mut v_domain) = (0.0, 0.0, 0.0, 0.0);
+    for iz in 0..cfg.nz {
+        for ir in 0..cfg.nr {
+            let v = g.cell_volume(ir) / two_pi;
+            v_domain += v;
+            match region(iz, ir) {
+                1 => v_bag += v,
+                2 => v_charge += v,
+                3 => v_bumper += v,
+                _ => {}
+            }
+        }
+    }
+    let rho_bag = 1.0 / v_bag;
+    let rho_charge = if bc.k > 0.0 { bc.k / v_charge } else { 0.0 };
+    let rho_bumper = if bc.bumper_k > 0.0 {
+        bc.bumper_k / v_bumper
+    } else {
+        0.0
+    };
+    let p_cold = rho_bag / (cfg.gamma * cfg.mach * cfg.mach);
+    // The vacuum stand-in is referenced to the densest target present.
+    let rho_amb = bc.ambient * rho_charge.max(rho_bumper).max(1e-3 * rho_bag);
+    // Both targets start at the impactor's cold pressure, scaled down for a large volume so that
+    // their stored heat stays under a quarter of the impactor's own (as `run_disk_charge_bounce`).
+    let cold = |v: f64| p_cold * (0.25 * v_bag / v).min(1.0);
+    g.init(|iz, ir| match region(iz, ir) {
+        1 => Prim::new(rho_bag, -1.0, 0.0, p_cold),
+        2 => Prim::new(rho_charge, 0.0, 0.0, cold(v_charge)),
+        3 => Prim::new(rho_bumper, 0.0, 0.0, cold(v_bumper)),
+        _ => Prim::new(rho_amb, 0.0, 0.0, p_cold * 1.0e-6),
+    });
+    assert!(
+        cold_heat(&g, cfg.gamma) < 0.02 * 0.5,
+        "the impactor and targets must start cold against the impactor's kinetic energy of 1/2"
+    );
+    let merged = 1.0 + bc.bumper_k + bc.k;
+    run_fireball_grid(
+        g,
+        cfg.nz,
+        0.0,
+        merged,
+        rho_amb * (v_domain - v_bag - v_charge - v_bumper) / merged,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        PlateShape, PointFireball, SlugConfig, init_slug_grid, run_fireball_bounce,
-        run_slug_bounce, taper_mass_factor, taper_sigma_stats, taper_weight,
+        BumperCharge, PlateShape, PointFireball, SlugConfig, init_slug_grid,
+        run_bumper_charge_bounce, run_fireball_bounce, run_slug_bounce, taper_mass_factor,
+        taper_sigma_stats, taper_weight,
     };
 
     /// A small dished free-bounce config the shape tests perturb (taper/divergence default 0).
@@ -1359,5 +1476,49 @@ mod tests {
         assert!(fleeing.wall_impulse < still.wall_impulse);
         assert!(still.hole_impulse > 0.0 && still.hole_impulse < 0.1 * still.wall_impulse);
         assert!(still.ambient_mass_share < 1.0e-3);
+    }
+
+    /// The two-piece charge (X-ray study, Result 20) keeps under the energy ceiling: a lossless
+    /// plate cannot get more than `m v (1 + sqrt(1 + K))` from an impactor of mass 1 merging with
+    /// `K` at rest. That holds with both targets, with the disk left out (the miss) and with
+    /// neither (the bare impactor), and every case pushes the plate.
+    #[test]
+    fn bumper_charge_stays_under_the_energy_ceiling() {
+        let cfg = SlugConfig {
+            r_plate: 2.0,
+            r_max: 2.4,
+            z_max: 3.2,
+            nr: 48,
+            nz: 64,
+            // Mach 20 as the production runs: at the base config's Mach 5 the impactor's own
+            // cold pressure is ~7% of its kinetic energy, over the runner's cold-start check.
+            mach: 20.0,
+            shape: PlateShape::Dish { d_over_d: 0.30 },
+            ..base_cfg()
+        };
+        for (bumper_k, k) in [(0.2, 4.0), (0.2, 0.0), (0.0, 0.0)] {
+            let r = run_bumper_charge_bounce(
+                &cfg,
+                BumperCharge {
+                    bag_radius: 0.15,
+                    bag_thickness: 0.2,
+                    bumper_radius: 0.2,
+                    bumper_thickness: 0.1,
+                    bumper_k,
+                    bumper_gap: 0.6,
+                    charge_radius: 0.6,
+                    charge_thickness: 0.1,
+                    k,
+                    height: 0.9,
+                    gap: 0.1,
+                    ambient: 1.0e-8,
+                },
+            );
+            let merged = 1.0 + bumper_k + k;
+            let per_mv = r.wall_impulse * merged;
+            let ceiling = 1.0 + (1.0_f64 + bumper_k + k).sqrt();
+            assert!(per_mv > 0.5, "the plate is pushed: J/mv {per_mv}");
+            assert!(per_mv < ceiling, "J/mv {per_mv} over the ceiling {ceiling}");
+        }
     }
 }

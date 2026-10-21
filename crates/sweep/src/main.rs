@@ -32,10 +32,10 @@ use std::io::Write as _;
 use std::path::Path;
 
 use euler2d::bounce::{
-    DiskCharge, PlateShape, PointFireball, SlugConfig, SprayCloud, TrailingPearl, eta_capture,
-    init_spray_grid, run_disk_charge_bounce, run_fireball_bounce, run_slug_bounce,
-    run_spray_bounce, run_spray_bounce_with_ambient, run_spray_bounce_with_pearl,
-    run_spray_bounce_with_skirt_history, taper_sigma_stats,
+    BumperCharge, DiskCharge, PlateShape, PointFireball, SlugConfig, SprayCloud, TrailingPearl,
+    eta_capture, init_spray_grid, run_bumper_charge_bounce, run_disk_charge_bounce,
+    run_fireball_bounce, run_slug_bounce, run_spray_bounce, run_spray_bounce_with_ambient,
+    run_spray_bounce_with_pearl, run_spray_bounce_with_skirt_history, taper_sigma_stats,
 };
 use hydro1d::conduction::Solid;
 use hydro1d::eos::{Eos as _, TableEos};
@@ -8785,6 +8785,673 @@ fn cmd_baseline(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 /// A scenario command: parse whatever it needs from `args`, run its sweep, and write its JSONL.
 type CmdFn = fn(&[String]) -> Result<(), Box<dyn std::error::Error>>;
 
+// X-ray collision study, Result 20 (the parent's S50): Iapetus water bags on the overtake plate.
+// A 25 kg bag of water or ice overtakes the departing ship at 51.1 km/s and meets a charge `k`
+// times its mass held off the flown 9.5 m push plate. Three arrival states: the point fireball
+// (perfect mixing, the yardstick), the compact bag striking a compact charge of solid argon or
+// ice (its own footprint, so the charge's density sets its length), and the bag released ahead
+// into a sheet that meets a charge sheet of the same radius. Effective γ 1.4 as in Results 10-19;
+// the point fireball is re-run at γ 1.17-1.5 to bracket water and argon. Every run records
+// the fine radial impulse profile, which grades the plate and sets its ringing.
+
+const RESULT_PATH_IAPETUS: &str = "data/results/xray_collision/iapetus_2d.jsonl";
+const RESULT_PATH_IAPETUS_REBOUND: &str = "data/results/xray_collision/iapetus_rebound.jsonl";
+/// The flown push plate's floor radius [m] (Results 13 and 17).
+const IAPETUS_PLATE_R: f64 = 9.5;
+/// The bag [kg], and the disk standing in for it: 0.2 m in radius and four cells thick (0.2 m
+/// on the production grid, so 25 kg of water at ~1000 kg/m^3).
+const IAPETUS_BAG_KG: f64 = 25.0;
+const IAPETUS_BAG_R: f64 = 0.2;
+/// Charge densities [kg/m^3]: solid argon near its triple point, and water ice.
+const IAPETUS_CHARGES: [(&str, f64); 2] = [("argon", 1616.0), ("ice", 917.0)];
+const IAPETUS_POINT_K: [f64; 6] = [2.0, 4.0, 8.5, 15.0, 20.0, 30.0];
+const IAPETUS_COMPACT_K: [f64; 5] = [4.0, 8.5, 15.0, 20.0, 30.0];
+/// `(label, d/D, skirt [m], height: > 0 metres above the vertex, < 0 a multiple of the focus)`.
+const IAPETUS_PLATES: [(&str, f64, f64, f64); 6] = [
+    ("flat + 2 m skirt, 2.7 m off", 0.0, 2.0, 2.7),
+    ("flat + 2 m skirt, 6 m off", 0.0, 2.0, 6.0),
+    ("bowl 0.30 at focus", 0.30, 0.0, -1.0),
+    ("paraboloid 0.50 at 1.5 F", 0.50, 0.0, -1.5),
+    ("paraboloid 0.50 at 2 F", 0.50, 0.0, -2.0),
+    ("paraboloid 0.75 at 2 F", 0.75, 0.0, -2.0),
+];
+/// Released-ahead sheets on the flat skirted plate, 2 m off: the cloud radius at which 2.5 mm
+/// fragments just cover their own area (optical depth 1), and a floor-wide mist.
+const IAPETUS_SHEET_R: [f64; 2] = [1.6, 9.5];
+const IAPETUS_SHEET_K: [f64; 2] = [8.5, 20.0];
+const IAPETUS_SHEET_HEIGHT: f64 = 2.0;
+/// The γ bracket. On their equilibrium tables the fireball turns its heat into expansion by the
+/// plate like an ideal gas of γ 1.17-1.25 (water, whose bonds hold heat) and 1.30-1.44 (argon,
+/// whose ions do), against the 1.4 of every run above (`iapetus_bag.effective_gamma`).
+const IAPETUS_GAMMAS: [f64; 4] = [1.17, 1.25, 1.33, 1.5];
+const IAPETUS_GAMMA_K: [f64; 4] = [4.0, 8.5, 20.0, 30.0];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct IapetusRecord {
+    case: String,
+    /// `point`, `compact` or `sheet`.
+    kind: String,
+    /// The charge: `argon` or `ice` (compact), `mixed` (point, sheet).
+    charge: String,
+    gamma: f64,
+    k: f64,
+    d_over_d: f64,
+    skirt: f64,
+    /// Height of the charge's centre above the vertex [m] (raised if a long charge would touch).
+    height: f64,
+    sheet_radius: f64,
+    charge_length: f64,
+    /// Plate impulse per `m v` (bag mass and closing speed), lossless gamma gas.
+    impulse_per_mv: f64,
+    /// Peak local pressure per `m v^2 / m^3`.
+    peak_per_mv2: f64,
+    peak_radius: f64,
+    exit_direction: f64,
+    exit_uniformity: f64,
+    exit_mass_share: f64,
+    confined_ratio: f64,
+    steps: usize,
+    dr: f64,
+    /// `(r, J(< r) / (m v))` every `PROFILE_DR` (projected radius on a bowl).
+    profile: Vec<(f64, f64)>,
+    /// Ring loads per kg of bag, in its closing speed.
+    bands: Vec<CollarBand>,
+}
+
+/// The 9.5 m plate as a dish of `d_over_d` with an optional straight skirt; the grid reaches
+/// `reach` above the vertex.
+fn iapetus_cfg(d_over_d: f64, skirt: f64, reach: f64, gamma: f64, dr: f64) -> SlugConfig {
+    let depth = d_over_d * 2.0 * IAPETUS_PLATE_R;
+    let top = 4.0 * dr + depth.max(reach) + skirt + 3.0;
+    let mut nz = 0usize;
+    while (nz as f64) * dr < top {
+        nz += 1;
+    }
+    let mut nr = 0usize;
+    while (nr as f64) * dr < IAPETUS_PLATE_R + 2.0 {
+        nr += 1;
+    }
+    let shape = if skirt > 0.0 {
+        PlateShape::Cup {
+            d_over_d,
+            skirt_height: skirt,
+            flare: 0.0,
+            thickness: 4.0 * dr,
+        }
+    } else {
+        PlateShape::Dish { d_over_d }
+    };
+    SlugConfig {
+        gamma,
+        mach: SPRAY_2D_MACH,
+        r_foot: MIX_RADIUS,
+        length: MIX_RADIUS,
+        r_plate: IAPETUS_PLATE_R,
+        r_max: nr as f64 * dr,
+        z_max: nz as f64 * dr,
+        nr,
+        nz,
+        confined: false,
+        shape,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    }
+}
+
+/// `1 + e_γ` of the confined plane-wave slug at `gamma`, for the rebound swap.
+fn iapetus_confined_ratio(gamma: f64) -> f64 {
+    let cfg = SlugConfig {
+        gamma,
+        mach: SPRAY_2D_MACH,
+        r_foot: 1.0,
+        length: 1.0,
+        r_plate: 1.0,
+        r_max: 0.05,
+        z_max: 4.0,
+        nr: 2,
+        nz: 400,
+        confined: true,
+        shape: PlateShape::FlatGridAligned,
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    };
+    run_slug_bounce(&cfg).restitution_ratio()
+}
+
+/// One Iapetus run: `kind` 0 point fireball, 1 compact charge of density `rho_c`, 2 sheet.
+#[allow(clippy::too_many_arguments)]
+fn iapetus_case(
+    (label, d_over_d, skirt, height): (&str, f64, f64, f64),
+    kind: u8,
+    (charge, rho_c): (&str, f64),
+    sheet_radius: f64,
+    k: f64,
+    gamma: f64,
+    dr: f64,
+    confined_ratio: f64,
+) -> IapetusRecord {
+    let focus = if d_over_d > 0.0 {
+        IAPETUS_PLATE_R / (8.0 * d_over_d)
+    } else {
+        f64::NAN
+    };
+    let nominal = if height < 0.0 {
+        -height * focus
+    } else {
+        height
+    };
+    let u_rms = k.sqrt() / (1.0 + k);
+    let m = 1.0 + k;
+    let (r, h, length, v) = if kind == 0 {
+        let cfg = iapetus_cfg(d_over_d, skirt, nominal + CHARGE_BALL_R, gamma, dr);
+        let r = run_fireball_bounce(
+            &cfg,
+            PointFireball {
+                height: nominal,
+                radius: CHARGE_BALL_R,
+                drift: -1.0 / k.sqrt(),
+                ambient: CHARGE_AMBIENT,
+                hole_radius: 0.0,
+            },
+        );
+        // Units: the merged mass and its u_rms.
+        (r, nominal, 0.0, u_rms)
+    } else {
+        let (radius, length) = if kind == 1 {
+            let area = std::f64::consts::PI * IAPETUS_BAG_R * IAPETUS_BAG_R;
+            (IAPETUS_BAG_R, k * IAPETUS_BAG_KG / (rho_c * area))
+        } else {
+            (sheet_radius, OVERTAKE_SHEET_THICKNESS)
+        };
+        // A long charge is raised so its plate-side end stays half a metre off the vertex.
+        let h = nominal.max(0.5 * length + 0.5);
+        let cfg = iapetus_cfg(d_over_d, skirt, h + 0.5 * length + 6.0 * dr, gamma, dr);
+        let r = run_disk_charge_bounce(
+            &cfg,
+            DiskCharge {
+                radius,
+                height: h,
+                charge_length: length,
+                k,
+                disk_thickness: 4.0 * dr,
+                gap: 2.0 * dr,
+                ambient: CHARGE_AMBIENT,
+                hole_radius: 0.0,
+                toward_plate: true,
+            },
+        );
+        // Units: the merged mass and the closing speed.
+        (r, h, length, 1.0)
+    };
+    IapetusRecord {
+        case: label.to_string(),
+        kind: ["point", "compact", "sheet"][kind as usize].to_string(),
+        charge: charge.to_string(),
+        gamma,
+        k,
+        d_over_d,
+        skirt,
+        height: h,
+        sheet_radius: if kind == 2 { sheet_radius } else { 0.0 },
+        charge_length: length,
+        impulse_per_mv: r.wall_impulse * m * v,
+        peak_per_mv2: r.peak_local_pressure * m * v * v,
+        peak_radius: r.peak_radius,
+        exit_direction: r.exit_direction,
+        exit_uniformity: r.exit_uniformity,
+        exit_mass_share: r.exit_mass_share,
+        confined_ratio,
+        steps: r.steps,
+        dr,
+        profile: r
+            .profile
+            .iter()
+            .enumerate()
+            .map(|(i, &j)| ((i + 1) as f64 * euler2d::bounce::PROFILE_DR, j * m * v))
+            .collect(),
+        bands: r
+            .bands
+            .iter()
+            .map(|b| CollarBand {
+                r_lo: b.r_lo,
+                r_hi: b.r_hi,
+                impulse: b.impulse * m * v,
+                mass_in: b.mass_in * m,
+                speed_in: b.speed_in * v,
+                energy_in: b.energy_in * m * v * v,
+                peak_pressure: b.peak_pressure * m * v * v,
+            })
+            .collect(),
+    }
+}
+
+/// The bumper follow-up (Seth, 2026-10-20): the ship's charge in two pieces. A thin bumper
+/// `bumper_k` times the bag's mass, held `gap` ahead of a 2.5 m charge disk, turns the bag to a
+/// hot cloud that has spread across the disk by the time it arrives. `(bumper_k, gap scale)`: the
+/// gap is where the merged cloud's edge (`sqrt(5/3) u_rms`, `u_rms = sqrt(k_b) / (1 + k_b)` of
+/// the closing speed) reaches the disk's radius, `R / (sqrt(5/3) sqrt(k_b))`, times the scale.
+const IAPETUS_BUMPERS: [(f64, f64); 6] = [
+    (0.05, 1.0),
+    (0.1, 1.0),
+    (0.2, 1.0),
+    (0.4, 1.0),
+    (0.2, 0.5),
+    (0.2, 2.0),
+];
+const IAPETUS_BUMPER_K: [f64; 2] = [8.5, 20.0];
+/// The miss (Seth, 2026-10-20): the bag strikes the bumper but misses the disk (`k = 0`), at the
+/// 0.1 and 0.2 bumpers; and the bare bag with neither, as the contrast. `(bumper_k, gap scale,
+/// bag radius)`: the last two are bags that spread themselves (1.6 m and 2.5 m clouds) and miss
+/// everything the ship set out.
+const IAPETUS_MISSES: [(f64, f64, f64); 5] = [
+    (0.1, 1.0, IAPETUS_BAG_R),
+    (0.2, 1.0, IAPETUS_BAG_R),
+    (0.0, 1.0, IAPETUS_BAG_R),
+    (0.0, 1.0, 1.6),
+    (0.0, 1.0, 2.5),
+];
+const IAPETUS_BUMPER_DISK_R: f64 = 2.5;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct IapetusBumperRecord {
+    case: String,
+    /// The main charge disk's mass ratio to the bag; the bumper's is `bumper_k`.
+    k: f64,
+    bumper_k: f64,
+    bumper_gap: f64,
+    gap_scale: f64,
+    /// The bag as it arrives: 0.2 m intact, or a cloud it spread itself.
+    bag_radius: f64,
+    /// The bumper's radius: a plate a cell wider than the bag, or a gun's ice bullet.
+    bumper_radius: f64,
+    charge_radius: f64,
+    height: f64,
+    /// Plate impulse per `m v` (bag mass and closing speed), lossless gamma gas.
+    impulse_per_mv: f64,
+    peak_per_mv2: f64,
+    peak_radius: f64,
+    exit_direction: f64,
+    exit_uniformity: f64,
+    confined_ratio: f64,
+    steps: usize,
+    dr: f64,
+    profile: Vec<(f64, f64)>,
+    bands: Vec<CollarBand>,
+}
+
+fn iapetus_bumper_case(
+    (label, d_over_d, skirt, height): (&str, f64, f64, f64),
+    k: f64,
+    (bumper_k, scale, bag_radius): (f64, f64, f64),
+    bumper_radius: f64,
+    dr: f64,
+    confined_ratio: f64,
+) -> IapetusBumperRecord {
+    let focus = if d_over_d > 0.0 {
+        IAPETUS_PLATE_R / (8.0 * d_over_d)
+    } else {
+        f64::NAN
+    };
+    let h = if height < 0.0 {
+        -height * focus
+    } else {
+        height
+    };
+    // The bare bag keeps the 0.2 bumper's gap, so its standoff matches the miss runs.
+    let kb = if bumper_k > 0.0 { bumper_k } else { 0.2 };
+    let gap = scale * IAPETUS_BUMPER_DISK_R / ((5.0_f64 / 3.0).sqrt() * kb.sqrt());
+    let thick = OVERTAKE_SHEET_THICKNESS;
+    let reach = h + 0.5 * thick + gap + 2.0 * dr + 2.0 * dr + 4.0 * dr + 6.0 * dr;
+    let cfg = iapetus_cfg(d_over_d, skirt, reach, SPRAY_2D_GAMMA, dr);
+    let r = run_bumper_charge_bounce(
+        &cfg,
+        BumperCharge {
+            bag_radius,
+            bag_thickness: 4.0 * dr,
+            bumper_radius,
+            bumper_thickness: 2.0 * dr,
+            bumper_k,
+            bumper_gap: gap,
+            charge_radius: IAPETUS_BUMPER_DISK_R,
+            charge_thickness: thick,
+            k,
+            height: h,
+            gap: 2.0 * dr,
+            ambient: CHARGE_AMBIENT,
+        },
+    );
+    let m = 1.0 + bumper_k + k;
+    IapetusBumperRecord {
+        case: label.to_string(),
+        k,
+        bumper_k,
+        bumper_gap: gap,
+        gap_scale: scale,
+        bag_radius,
+        bumper_radius,
+        charge_radius: IAPETUS_BUMPER_DISK_R,
+        height: h,
+        impulse_per_mv: r.wall_impulse * m,
+        peak_per_mv2: r.peak_local_pressure * m,
+        peak_radius: r.peak_radius,
+        exit_direction: r.exit_direction,
+        exit_uniformity: r.exit_uniformity,
+        confined_ratio,
+        steps: r.steps,
+        dr,
+        profile: r
+            .profile
+            .iter()
+            .enumerate()
+            .map(|(i, &j)| ((i + 1) as f64 * euler2d::bounce::PROFILE_DR, j * m))
+            .collect(),
+        bands: r
+            .bands
+            .iter()
+            .map(|b| CollarBand {
+                r_lo: b.r_lo,
+                r_hi: b.r_hi,
+                impulse: b.impulse * m,
+                mass_in: b.mass_in * m,
+                speed_in: b.speed_in,
+                energy_in: b.energy_in * m,
+                peak_pressure: b.peak_pressure * m,
+            })
+            .collect(),
+    }
+}
+
+/// `--iapetus-2d bumper [coarse]`: the two-piece charge on the 2 F paraboloid (every bumper) and
+/// on the flat plate 6 m off (the 0.2 bumper), then the misses on both -> `iapetus_2d_bumper.jsonl`.
+fn cmd_iapetus_bumper(coarse: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let dr = if coarse { 2.0 * CHARGE_DR } else { CHARGE_DR };
+    let cr = iapetus_confined_ratio(SPRAY_2D_GAMMA);
+    let mut cases = Vec::new();
+    for &k in &IAPETUS_BUMPER_K {
+        for &(b, sc) in &IAPETUS_BUMPERS {
+            cases.push((IAPETUS_PLATES[4], k, (b, sc, IAPETUS_BAG_R)));
+        }
+        let (b, sc) = IAPETUS_BUMPERS[2];
+        cases.push((IAPETUS_PLATES[1], k, (b, sc, IAPETUS_BAG_R)));
+    }
+    for &b in &IAPETUS_MISSES {
+        for plate in [IAPETUS_PLATES[1], IAPETUS_PLATES[4]] {
+            cases.push((plate, 0.0, b));
+        }
+    }
+    let rows = par_map_with_progress("iapetus bumper", &cases, |&(plate, k, b)| {
+        iapetus_bumper_case(plate, k, b, IAPETUS_BAG_R + dr, dr, cr)
+    });
+    let stem = RESULT_PATH_IAPETUS.replace(".jsonl", "_bumper.jsonl");
+    let path = if coarse {
+        stem.replace(".jsonl", "_coarse.jsonl")
+    } else {
+        stem
+    };
+    emit_scenario(&path, "iapetus bumper", &rows, |r| {
+        println!(
+            "rust: {:<32} k {:>4.1} bag R {:.1} bumper {:.2} gap {:>4.2} m | J/mv {:6.3} peak/mv2 {:.3e} at r {:.2} dir {:.3} steps {}",
+            r.case,
+            r.k,
+            r.bag_radius,
+            r.bumper_k,
+            r.bumper_gap,
+            r.impulse_per_mv,
+            r.peak_per_mv2,
+            r.peak_radius,
+            r.exit_direction,
+            r.steps,
+        );
+    })
+}
+
+/// The gun (Seth, 2026-10-21): an ice bullet fired back along the bag's track meets it up-track of
+/// the disk. A 100 g bullet is `k_b = 0.004` of the 25 kg bag and 500 g is 0.02; at the bumper
+/// rule the merged cloud reaches the 2.5 m disk 31 m and 14 m after the hit. The bullet is two
+/// cells across (it is ~6-10 cm), so its column, not its shape, is what the run resolves.
+const IAPETUS_BULLETS: [f64; 2] = [0.004, 0.02];
+const IAPETUS_BULLET_R: f64 = 0.1;
+
+/// `--iapetus-2d bullet [coarse]`: the bullets on the 2 F paraboloid at k = 8.5 and 20, the 100 g
+/// bullet on the flat plate 6 m off at k = 8.5, and the 100 g bullet's miss of the disk; then the
+/// same bullet masses spread across the bag's whole face. A gas bag has no strength, so a narrow
+/// bullet shocks only the column it strikes and the rest passes by; a solid ice ball given ~5 MJ
+/// per kg would shatter throughout. The narrow and the wide bullet bracket that
+/// -> `iapetus_2d_bullet.jsonl`.
+fn cmd_iapetus_bullet(coarse: bool, key: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let dr = if coarse { 2.0 * CHARGE_DR } else { CHARGE_DR };
+    let cr = iapetus_confined_ratio(SPRAY_2D_GAMMA);
+    let mut cases = Vec::new();
+    for &k in &IAPETUS_BUMPER_K {
+        for &b in &IAPETUS_BULLETS {
+            cases.push((IAPETUS_PLATES[4], k, b));
+        }
+    }
+    cases.push((IAPETUS_PLATES[1], 8.5, IAPETUS_BULLETS[0]));
+    cases.push((IAPETUS_PLATES[4], 0.0, IAPETUS_BULLETS[0]));
+    let mut specs: Vec<_> = cases
+        .iter()
+        .map(|&(p, k, b)| (p, k, b, IAPETUS_BULLET_R))
+        .collect();
+    for &k in &[8.5, 20.0, 0.0] {
+        for &b in &IAPETUS_BULLETS {
+            specs.push((IAPETUS_PLATES[4], k, b, IAPETUS_BAG_R + dr));
+        }
+    }
+    // `key`: only the four runs the bullet's verdict rests on -- the 100 g bullet's two misses,
+    // and the wide 100 g bullet at k = 8.5 and 20 (`iapetus_2d_bullet_key.jsonl`).
+    if key {
+        specs.retain(|&(_, k, b, rb)| {
+            b == IAPETUS_BULLETS[0] && (k == 0.0 || rb > IAPETUS_BULLET_R)
+        });
+    }
+    let rows = par_map_with_progress("iapetus bullet", &specs, |&(plate, k, b, rb)| {
+        iapetus_bumper_case(plate, k, (b, 1.0, IAPETUS_BAG_R), rb, dr, cr)
+    });
+    let stem = RESULT_PATH_IAPETUS.replace(
+        ".jsonl",
+        if key {
+            "_bullet_key.jsonl"
+        } else {
+            "_bullet.jsonl"
+        },
+    );
+    let path = if coarse {
+        stem.replace(".jsonl", "_coarse.jsonl")
+    } else {
+        stem
+    };
+    emit_scenario(&path, "iapetus bullet", &rows, |r| {
+        println!(
+            "rust: {:<32} k {:>4.1} bullet {:.3} r {:.2} gap {:>5.2} m | J/mv {:6.3} peak/mv2 {:.3e} at r {:.2} dir {:.3} steps {}",
+            r.case,
+            r.k,
+            r.bumper_k,
+            r.bumper_radius,
+            r.bumper_gap,
+            r.impulse_per_mv,
+            r.peak_per_mv2,
+            r.peak_radius,
+            r.exit_direction,
+            r.steps,
+        );
+    })
+}
+
+/// One Iapetus run's spec: `(plate, kind, charge, sheet radius, k, γ)`.
+type IapetusSpec = (
+    (&'static str, f64, f64, f64),
+    u8,
+    (&'static str, f64),
+    f64,
+    f64,
+    f64,
+);
+
+/// The follow-up `spread` runs: the bag released a little ahead into a cloud whose fragments still
+/// cover it (2.5 mm fragments to 1.6 m, 1 mm to 2.5 m), meeting a charge disk of the same radius
+/// held where the compact charge was, so the charge is a short disk, not a long cylinder.
+const IAPETUS_SPREAD_R: [f64; 3] = [0.8, 1.6, 2.5];
+const IAPETUS_SPREAD_K: [f64; 4] = [4.0, 8.5, 15.0, 20.0];
+const IAPETUS_SPREAD_PLATES: [usize; 4] = [1, 2, 3, 4];
+
+/// `--iapetus-2d [spread] [coarse]`: the point fireball on six plates at k = 2-30, the compact bag
+/// into solid argon and ice at k = 4-30, released-ahead sheets on the flat plate, and the γ
+/// bracket. `spread` runs the moderate spreads on four plates instead (`iapetus_2d_spread.jsonl`),
+/// and `bumper` the two-piece charge (`iapetus_2d_bumper.jsonl`).
+fn cmd_iapetus_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let coarse = args.iter().any(|a| a == "coarse");
+    let spread = args.iter().any(|a| a == "spread");
+    if args.iter().any(|a| a == "bumper") {
+        return cmd_iapetus_bumper(coarse);
+    }
+    if args.iter().any(|a| a == "bullet") {
+        return cmd_iapetus_bullet(coarse, args.iter().any(|a| a == "key"));
+    }
+    let dr = if coarse { 2.0 * CHARGE_DR } else { CHARGE_DR };
+    let g0 = SPRAY_2D_GAMMA;
+    let mixed = ("mixed", 0.0);
+    let mut cases: Vec<IapetusSpec> = Vec::new();
+    if spread {
+        for &i in &IAPETUS_SPREAD_PLATES {
+            for &rs in &IAPETUS_SPREAD_R {
+                for &k in &IAPETUS_SPREAD_K {
+                    cases.push((IAPETUS_PLATES[i], 2, mixed, rs, k, g0));
+                }
+            }
+        }
+        let rows = par_map_with_progress("iapetus spread", &cases, |&(p, kind, c, rs, k, g)| {
+            iapetus_case(p, kind, c, rs, k, g, dr, iapetus_confined_ratio(g))
+        });
+        let stem = RESULT_PATH_IAPETUS.replace(".jsonl", "_spread.jsonl");
+        let path = if coarse {
+            stem.replace(".jsonl", "_coarse.jsonl")
+        } else {
+            stem
+        };
+        return emit_scenario(&path, "iapetus spread", &rows, |r| {
+            println!(
+                "rust: {:<32} sheet R {:>3.1} k {:>4.1} h {:>4.2} | J/mv {:6.3} peak/mv2 {:.3e} at r {:.2} dir {:.3} steps {}",
+                r.case,
+                r.sheet_radius,
+                r.k,
+                r.height,
+                r.impulse_per_mv,
+                r.peak_per_mv2,
+                r.peak_radius,
+                r.exit_direction,
+                r.steps,
+            );
+        });
+    }
+    for &plate in &IAPETUS_PLATES {
+        for &k in &IAPETUS_POINT_K {
+            cases.push((plate, 0, mixed, 0.0, k, g0));
+        }
+        for &charge in &IAPETUS_CHARGES {
+            for &k in &IAPETUS_COMPACT_K {
+                cases.push((plate, 1, charge, 0.0, k, g0));
+            }
+        }
+    }
+    let flat = (
+        "flat + 2 m skirt, sheet 2 m off",
+        0.0,
+        2.0,
+        IAPETUS_SHEET_HEIGHT,
+    );
+    for &rs in &IAPETUS_SHEET_R {
+        for &k in &IAPETUS_SHEET_K {
+            cases.push((flat, 2, mixed, rs, k, g0));
+        }
+    }
+    for &g in &IAPETUS_GAMMAS {
+        for &k in &IAPETUS_GAMMA_K {
+            for plate in [IAPETUS_PLATES[0], IAPETUS_PLATES[4]] {
+                cases.push((plate, 0, mixed, 0.0, k, g));
+            }
+        }
+    }
+    let ratios: HashMap<u64, f64> = std::iter::once(&g0)
+        .chain(IAPETUS_GAMMAS.iter())
+        .map(|&g| (g.to_bits(), iapetus_confined_ratio(g)))
+        .collect();
+    let rows = par_map_with_progress("iapetus", &cases, |&(plate, kind, charge, rs, k, g)| {
+        iapetus_case(plate, kind, charge, rs, k, g, dr, ratios[&g.to_bits()])
+    });
+    let path = if coarse {
+        RESULT_PATH_IAPETUS.replace(".jsonl", "_coarse.jsonl")
+    } else {
+        RESULT_PATH_IAPETUS.to_string()
+    };
+    emit_scenario(&path, "iapetus", &rows, |r| {
+        println!(
+            "rust: {:<32} {:<7} {:<6} g {:.2} k {:>4.1} R {:>3.1} h {:>4.2} L {:>4.2} | J/mv {:6.3} peak/mv2 {:.3e} at r {:.2} dir {:.3} steps {}",
+            r.case,
+            r.kind,
+            r.charge,
+            r.gamma,
+            r.k,
+            r.sheet_radius,
+            r.height,
+            r.charge_length,
+            r.impulse_per_mv,
+            r.peak_per_mv2,
+            r.peak_radius,
+            r.exit_direction,
+            r.steps,
+        );
+    })
+}
+
+/// Arrival speeds [m/s] for the 1-D rebound: the merged gas reaches the plate at `u_rms + w`,
+/// 18-24 km/s at 51.1 km/s over k = 4-30 and up to ~31 km/s at 68 km/s.
+const IAPETUS_REBOUND_V: [f64; 5] = [15_000.0, 20_000.0, 25_000.0, 30_000.0, 35_000.0];
+/// Arriving densities [kg/m^3] over a 1 m column.
+const IAPETUS_REBOUND_RHO: [f64; 4] = [0.1, 0.3, 1.0, 3.0];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct IapetusReboundRecord {
+    material: String,
+    #[serde(flatten)]
+    run: HeavyPlateRecord,
+}
+
+/// `--iapetus-rebound`: the heavy-plate 1-D bounce of argon and of water at the arrival speeds,
+/// on their equilibrium tables (the radiative `e_eff` for the rebound swap and the wall heat). Water
+/// uses the extended Jupiter grid, which reaches 1.2 MK like the argon table.
+fn cmd_iapetus_rebound(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let argon = Table::load("data/tables/argon.json")?;
+    let water = Table::load(TABLE_PATH_JUPITER)?;
+    let mut cases = Vec::new();
+    for material in ["argon", "water"] {
+        for &v in &IAPETUS_REBOUND_V {
+            for &rho in &IAPETUS_REBOUND_RHO {
+                cases.push((material, v, rho));
+            }
+        }
+    }
+    let rows = par_map_with_progress("iapetus rebound", &cases, |&(material, v, rho)| {
+        let table = if material == "argon" { &argon } else { &water };
+        IapetusReboundRecord {
+            material: material.to_string(),
+            run: run_one_heavyplate(v, rho, 1.0, 1.0, table),
+        }
+    });
+    emit_scenario(RESULT_PATH_IAPETUS_REBOUND, "iapetus rebound", &rows, |r| {
+        println!(
+            "rust: {:<6} v={:>6.0} rho={:.2} -> e_eff={:.4} wall_rad={:.3e} escape={:.3e} conv={}",
+            r.material,
+            r.run.v,
+            r.run.rho_impact,
+            r.run.e_eff,
+            r.run.loss_radiative_wall,
+            r.run.loss_escape_space,
+            r.run.converged,
+        );
+    })
+}
+
 /// Flag → handler. `main` looks up the first matching flag and dispatches to it (the exact-string
 /// flags are mutually exclusive in practice, so table order does not affect behavior); anything
 /// unmatched falls through to [`cmd_baseline`] (the `--lowv` / positional-override default).
@@ -8837,6 +9504,8 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--fast-wave-2d", cmd_fast_wave_2d),
     ("--band-bowl-2d", cmd_band_bowl_2d),
     ("--plate-profile-2d", cmd_plate_profile_2d),
+    ("--iapetus-2d", cmd_iapetus_2d),
+    ("--iapetus-rebound", cmd_iapetus_rebound),
     ("--spring-trim-2d", cmd_spring_trim_2d),
     ("--plume-2d", cmd_plume_2d),
     ("--canted-2d", cmd_canted_2d),

@@ -77,6 +77,12 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
    sign's 130 deg, compact impactors through a hole into a charge at the focus give 780-1090 s
    at k = 10-20 (carbon atomic), better than the old canted flat plate at 89 deg (440-760 s). The
    hole takes ~0.6% of the impulse. The plate is ~10-12 t. A 0.25 g burn loses ~460 m/s.
+10. **Iapetus water bags push at ~8x per kilogram, on ice, in a graded paraboloid** (Result 20,
+    ADR-0071). A 25 kg bag at 51.1 km/s on a water-ice charge at k ~ 4-8.5, in a delta/D 0.5
+    paraboloid at 2 F, gives 7.7-8.4x (the parent carried 10.3x). Water's bonds re-form; argon
+    loses on the face heat it radiates. The 25-32 t plate must be graded to the bag's centre-heavy
+    load, its inner ~6 m is a graphite liner, and a gun's 100 g ice bullet spreads each bag ~30 m
+    out so that a miss does not hole the plate.
 
 ## Model
 
@@ -1968,6 +1974,86 @@ predictably (a feed-forward on k). Wider k than 5-9, which the 2-D ladder does n
 loss as a viscous drag rather than thermal hysteresis. The 4-cell 1 MPa bag layout, whose rocking
 stiffness differs from its heave stiffness. The tilt guides are named as an option, not sized
 (Seth, 2026-10-20: not needed).
+
+## Result 20: Iapetus water bags on the overtake plate -- `iapetus_*.csv`
+
+`make xray-collision-iapetus` (`sweep --iapetus-2d [spread|bumper|bullet [key]] [coarse]`,
+`sweep --iapetus-rebound`, `euler2d::bounce::run_bumper_charge_bounce`, `iapetus_bag.py`;
+ADR-0071). The parent's S50: 25 kg bags of Iapetus water overtake an Earth-launched ship at
+51.1 km/s (60 and 68 as sensitivities) and push it to 10.916 km/s on a charge `k` times their mass.
+Seth asked whether the charge should be argon or water, whether the skirted plate is enough, and
+what the plate weighs at 1 g and 2 Hz; in conversation he added the bag's miss and the gun.
+The full tables are in [`iapetus_bag_plate_answers_for_parent.md`](iapetus_bag_plate_answers_for_parent.md).
+
+**The runs.** The flown 9.5 m floor, as six plates (flat with a 2 m skirt at 2.7 m and 6 m, the
+0.30 bowl at its focus, the delta/D 0.5 paraboloid at 1.5 F and 2 F, the 0.75 at 2 F), each at
+k = 2-30:
+- the point fireball, the perfect-mixing yardstick;
+- the compact bag (a 0.2 m disk, 25 kg of water) into a compact charge of solid argon (1616 kg/m^3)
+  or ice (917) in its own footprint, so the charge's density sets the column's length;
+- the bag spread ahead into a sheet of 0.8-9.5 m meeting a charge disk of the same radius;
+- the bag striking a thin bumper (0.05-0.4 of its mass) or a gun's ice bullet (100 g and 500 g)
+  ahead of a 2.5 m disk, the new `run_bumper_charge_bounce`, and the misses with no disk;
+- a gamma bracket (1.17-1.5) of the point fireball.
+
+The 2-D gas is effective-gamma 1.4. Each material enters three ways:
+- **Its expansion.** The fireball is expanded from solid density on the material's equilibrium
+  table; the gamma that converts the same share of heat by the plate is read off
+  (`effective_gamma`) and the bracket interpolated.
+- **Its rebound.** The 1-D heavy-plate bounce on its table at the arrival speed `u_rms + w`.
+- **Its chemistry.** The ion and bond stores are raced against the expansion and the rebound
+  (`race`, `recombination.freeze_station`).
+
+On the production grid two runs broke the energy ceiling `m v (1 + sqrt(1 + k))` (one coarse bullet
+run at J/mv 605, one short ice column on the flat plate at 4.8 against 3.24); `physical` drops any
+run over it by more than 2%. Every other run sits below 95% of it. From coarse to production grid
+the impulse rises a median 2-5%, the peak 20-45% (up to 4.5x for the small sheets).
+
+**Water against argon.**
+
+| | water (ice charge) | argon (solid) |
+|---|---|---|
+| expands like | gamma 1.17-1.27 (bonds hold 14-29% of the heat at the plate) | gamma 1.30-1.44 |
+| bonds / ions freeze? | no: `H + OH + M` wins by Damkohler 70-5000 | no: Damkohler 1e5-1e7 |
+| rebound `e_eff` at 18-35 km/s | 0.62-0.67 (frozen-rebound edge 0.15-0.2 lower) | 0.45-0.65 |
+| wall's radiative share | 0.7-3.8% | 6.2-11.5% |
+| best leverage, 2 F paraboloid, charge only | 8.1-8.4x | 7.7-8.0x |
+| with the face's graphite carried (20 MJ/kg) | 7.1-8.2x | 6.4-7.3x |
+
+**The plate.** The best realistic leverage is 5.7-6.6x on the skirted flat plate, 6.8-7.9x on the
+bowl, 7.7-8.4x on the 0.5 paraboloid at 2 F and 8.2-8.6x on the 0.75. `eta_jet` is 0.5-0.6, falling
+with k for a compact column (0.53 at k = 8.5 to 0.32 at k = 20 for ice) but not for the point
+fireball. One bag gives 2.9-3.7 MN s: a 590-760 t ship at 1 g and 2 Hz, and a 25-32 t plate on the
+8 m spring. The centre takes 3-12x the mean impulse per area. An even floor rings with 47-81% of
+each kick (`ringing_share`, exact for an axisymmetric impulsive kick on a free body); graded to the
+load it rings with 2-8%, at the cost of 1.8-2.7x the rocking per unit of impulse offset.
+
+**The face.** 0.3-50 MJ/m^2 a pulse reaches the inner rings, against ~0.15 MJ/m^2 to melt steel in
+the 0.2-0.3 ms pulse. Ice consumes 1-9 kg of graphite a pulse; argon 13-49 kg at k = 8.5.
+
+**Aim** (`aim_rows`, a ballistic ray trace). Per metre of lateral miss the 0.5 paraboloid tilts
+the impulse 8.6 deg and gives 15% of it sideways, but its lever about its centre of mass is only
+0.28 m, against 0.99 m for the flat plate: its sideways push acts above the centre of mass and
+cancels most of the offset's moment.
+
+**Spreading and the miss.**
+
+| spreader | J/mv, 2 F paraboloid, k = 8.5 / 20 | the miss's face peak |
+|---|---|---|
+| compact charge (none) | 2.99 / 3.09 (lossless) | 29-40 GPa |
+| self-spread 2.5 m disk (ideal) | 3.10 / 3.98 | 3.1-4.6 GPa |
+| bumper 0.05-0.4, 3-9 m ahead | 2.71-2.77 / 3.15-3.31 (coarse) | 3.5-9.6 GPa |
+| 100 g bullet, 31 m ahead | 2.60 / 2.84-2.96 (coarse) | 1.3-1.6 GPa |
+| 500 g bullet, 14 m ahead | 2.83-2.86 / 3.33-3.47 (coarse) | 6.0 GPa |
+
+A thin layer, a laser and a bare rupture cannot spread a solid bag (hand reasoning in the answers
+doc); a bumper or bullet spreads it by heating it, and the sideways motion that spreads it is
+partly lost to the push. Only the 100 g bullet's long gap keeps the miss on maraging's 2.3 GPa.
+Whether its energy reaches the whole bag (a narrow and a wide bullet) moves the impulse by 1-4%.
+
+**Not modelled.** Strength, fracture and atomization; the real EOS in 2-D; mechanical erosion of the
+liner; off-axis bursts beyond the ray trace; the 1-D radiative share as a stand-in for the 2-D
+face heat. The bumper and bullet runs are on the coarse grid except the bullet's four deciding runs.
 
 ## Limits
 

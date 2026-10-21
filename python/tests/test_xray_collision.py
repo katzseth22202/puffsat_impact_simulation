@@ -732,3 +732,64 @@ def test_spring_trim_rocking_share_of_a_uniform_floor() -> None:
     from puffsat.xray_collision import spring_trim as st
 
     assert st.rock_share(st.PLATE_R / 4.0) == pytest.approx(1.0)
+
+
+def test_iapetus_leverage_reproduces_the_parents_ballpark() -> None:
+    """The overtake law integrated over the push gives the parent's 10.3x at k = 8.5 and
+    eta 0.775, and its bare-plate 6.7x as k -> 0 at f = 0.8."""
+    from puffsat.xray_collision import iapetus_bag as ib
+
+    b = 1.0 + ib.ETA_PARENT * math.sqrt(1.0 + ib.K_PARENT)
+    assert ib.leverage(b, ib.K_PARENT) == pytest.approx(10.3, abs=0.05)
+    assert ib.leverage(1.6, 0.0) == pytest.approx(6.66, abs=0.05)
+    assert ib.leverage(1.6, 1e-6) == pytest.approx(ib.leverage(1.6, 0.0), rel=1e-4)
+
+
+def test_iapetus_spring_law_reproduces_result_17() -> None:
+    """`m s = J tan(theta/4) / (2 theta f)` is 507 t m for the 7.35 MN s, 2 Hz push."""
+    from puffsat.xray_collision import iapetus_bag as ib
+
+    assert ib.spring_mass(7.35e6) * ib.STROKE == pytest.approx(506.5e3, rel=2e-3)
+
+
+def test_iapetus_even_load_on_an_even_floor_does_not_ring() -> None:
+    """A kick proportional to the ring masses is rigid; a centre-heavy one on an even floor is not,
+    and grading the floor to the load removes it again."""
+    from puffsat.xray_collision import iapetus_bag as ib
+
+    area = np.linspace(1.0, 10.0, 12)
+    even = np.full(12, 30.0)
+    assert ib.ringing_share(even, 5.0 * even, area) == pytest.approx(0.0, abs=1e-12)
+    peaked = np.linspace(10.0, 1.0, 12)
+    assert ib.ringing_share(even, peaked, area) > 0.05
+    assert ib.ringing_share(3.0 * peaked, peaked, area) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_iapetus_fragment_cover() -> None:
+    """A cloud's fragments cover its area once at the radius `cloud_radius_for_depth` gives."""
+    from puffsat.xray_collision import iapetus_bag as ib
+
+    r = ib.cloud_radius_for_depth(2.5e-3)
+    assert ib.cloud_depth(r, 2.5e-3) == pytest.approx(1.0)
+    assert r == pytest.approx(1.6, abs=0.05)
+
+
+def test_iapetus_ideal_gas_effective_gamma_round_trips() -> None:
+    """`effective_gamma` recovers the gamma of an ideal sphere's conversion."""
+    from puffsat.xray_collision import iapetus_bag as ib
+
+    share = ib.ideal_kinetic_share(1.3, 1000.0, 2.0)
+    race = ib.Race("argon", "fireball", 8.5, ib.W_REF, 1000.0, 1.0, 2.0, 1e4, share, *([0.0] * 11))
+    assert ib.effective_gamma(race) == pytest.approx(1.3)
+
+
+def test_iapetus_centred_burst_has_no_side_kick() -> None:
+    """A burst on the axis of any plate gives no lateral impulse and no moment."""
+    from puffsat.xray_collision import iapetus_bag as ib
+
+    for dd, skirt in ((0.0, 2.0), (0.5, 0.0)):
+        shape = ib.Shape(dd, skirt)
+        h = 2.0 * shape.focus if dd > 0.0 else 2.7
+        imp, ang, _ = ib.trace(shape, h, 0.0, 8.5, n=4000)
+        assert abs(imp[0]) < 1e-3 * abs(imp[2])
+        assert abs(ang[1]) < 1e-2 * abs(imp[2])
