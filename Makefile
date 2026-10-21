@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-fast-wave xray-collision-band-bowl xray-collision-gas-spring xray-collision-plume xray-collision-spring-trim xray-collision-iapetus xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-fast-wave xray-collision-band-bowl xray-collision-gas-spring xray-collision-plume xray-collision-spring-trim xray-collision-iapetus xray-collision-shaped-plug xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1248,6 +1248,22 @@ xray-collision-iapetus: data/tables/argon.json data/tables/water_jupiter.json
 	cargo run --release -p sweep -- --iapetus-2d bullet coarse
 	cargo run --release -p sweep -- --iapetus-rebound
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.iapetus_bag
+
+## xray-collision-shaped-plug: Result 21, the parent's S52 -- the ship's ice plug shaped as a squat
+## lens so the bag stops in about its own depth (rim depth 0.25-2x the bag's at k = 1-15, against
+## Result 20's compact column and the point fireball), the plug height and a dished face, an open
+## core through the lens standing in for an off-centre strike (the safe overlap and catch radius),
+## and the gun's bullet as the backup (its cloud onto the lens, its misses met nearer and further)
+## -> data/results/xray_collision/shaped_plug_*.csv
+xray-collision-shaped-plug: data/tables/water_jupiter.json
+	cargo run --release -p sweep -- --shaped-plug
+	cargo run --release -p sweep -- --shaped-plug coarse
+	cargo run --release -p sweep -- --shaped-plug overlap
+	cargo run --release -p sweep -- --shaped-plug overlap coarse
+	cargo run --release -p sweep -- --shaped-plug overlap fine
+	cargo run --release -p sweep -- --shaped-plug backup
+	cargo run --release -p sweep -- --shaped-plug backup coarse
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.shaped_plug
 
 ## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on
 ## each plate, and the Jupiter split's perijove burn -> data/results/xray_collision/mission_periapsis.csv,

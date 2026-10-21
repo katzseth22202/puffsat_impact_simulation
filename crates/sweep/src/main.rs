@@ -9115,6 +9115,8 @@ fn iapetus_bumper_case(
             charge_radius: IAPETUS_BUMPER_DISK_R,
             charge_thickness: thick,
             k,
+            charge_dish: 0.0,
+            charge_hole: 0.0,
             height: h,
             gap: 2.0 * dr,
             ambient: CHARGE_AMBIENT,
@@ -9452,6 +9454,391 @@ fn cmd_iapetus_rebound(_args: &[String]) -> Result<(), Box<dyn std::error::Error
     })
 }
 
+// X-ray collision study, Result 21 (the parent's S52): the shaped plug. The ship's ice charge
+// (the parent's "plug") is a squat lens instead of Result 20's column in the bag's footprint, so
+// the bag stops in about its own depth and bursts nearer a point; a lens wider than the bag also
+// catches a bag that strays sideways. The gun's bullet becomes the backup, fired only on a
+// predicted miss. Everything is Result 20's 2 F paraboloid, 25 kg bag and γ 1.4 gas.
+
+const RESULT_PATH_PLUG: &str = "data/results/xray_collision/shaped_plug.jsonl";
+/// The intact bag's depth [m]: a 25 kg water sphere (the parent's 0.363 m). Plug depths are
+/// quoted as a share of it, as the parent's ask does.
+const SHAPED_BAG_DEPTH: f64 = 0.363;
+const SHAPED_ICE_RHO: f64 = 917.0;
+/// `k` for the lens sweep (S52 items 1 and 7) and its depth shares: below 1 for punch-through
+/// (item 2), 1-2 for the parent's lens sweep, and 3 because the coarse grid's best lens was the
+/// deepest (a plug about as deep as it is wide).
+const SHAPED_K: [f64; 6] = [1.0, 2.0, 3.0, 4.0, 8.5, 15.0];
+const SHAPED_SHARES: [f64; 8] = [0.25, 0.35, 0.5, 0.7, 1.0, 1.5, 2.0, 3.0];
+/// The plug's height above the vertex, in focal lengths, for the height check at depth share 1.
+const SHAPED_HEIGHTS: [f64; 2] = [1.5, 2.5];
+const SHAPED_HEIGHT_K: [f64; 2] = [4.0, 8.5];
+/// The dished plug: its impactor-side face recessed by this share of its rim depth at the axis.
+const SHAPED_DISH: f64 = 0.5;
+/// The safe-overlap stand-in (item 3): an open core through the lens. The code's bag is 0.2 m
+/// across, so cores of 0.05-0.15 m let 6%, 25% and 56% of its face through.
+const SHAPED_HOLES: [f64; 3] = [0.05, 0.1, 0.15];
+const SHAPED_HOLE_K: [f64; 2] = [4.0, 8.5];
+const SHAPED_HOLE_SHARES: [f64; 2] = [1.0, 2.0];
+/// The refined-grid check of the overlap: cores of one to four of its cells.
+const SHAPED_HOLES_FINE: [f64; 4] = [0.025, 0.05, 0.075, 0.1];
+/// Plugs narrower than the bag (the rim bracket): 0.15, 0.1 and 0.05 m pass 44%, 75% and 94% of
+/// its face; the refined grid adds 0.175 and 0.125 m (23% and 61%).
+const SHAPED_RIMS: [f64; 3] = [0.15, 0.1, 0.05];
+const SHAPED_RIMS_FINE: [f64; 5] = [0.175, 0.15, 0.125, 0.1, 0.05];
+
+#[derive(Debug, Clone, Copy)]
+struct ShapedSpec {
+    /// `lens`, `compact`, `dish`, `hole`, `backup` (the bullet, then the lens) or `miss` (the
+    /// bullet, no plug).
+    kind: &'static str,
+    k: f64,
+    /// Plug depth at its rim over the bag's depth.
+    depth_share: f64,
+    plug_radius: f64,
+    plug_depth: f64,
+    dish: f64,
+    hole: f64,
+    height_focal: f64,
+    bullet_k: f64,
+    bullet_radius: f64,
+    bullet_gap: f64,
+    /// The share of the bag's face that meets no plug: an open core's, or the rim outside a plug
+    /// narrower than the bag.
+    passed: f64,
+    /// The solid lens's `k` this plug was cut from (an open core or a narrow rim plug).
+    k_lens: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct ShapedRecord {
+    case: String,
+    kind: String,
+    /// The plug's mass over the bag's (after any open core); the bullet's is `bullet_k`.
+    k: f64,
+    depth_share: f64,
+    plug_radius: f64,
+    plug_depth: f64,
+    /// The plug's column over the code bag's (25 kg on 0.2 m).
+    column_ratio: f64,
+    dish: f64,
+    hole: f64,
+    /// The share of the bag's face that meets no plug (open core, or rim past a narrow plug).
+    passed_share: f64,
+    k_lens: f64,
+    height: f64,
+    height_focal: f64,
+    bullet_k: f64,
+    bullet_radius: f64,
+    bullet_gap: f64,
+    /// Plate impulse per `m v` (bag mass and closing speed), lossless gamma gas.
+    impulse_per_mv: f64,
+    peak_per_mv2: f64,
+    peak_radius: f64,
+    exit_direction: f64,
+    exit_uniformity: f64,
+    exit_mass_share: f64,
+    confined_ratio: f64,
+    steps: usize,
+    dr: f64,
+    profile: Vec<(f64, f64)>,
+    bands: Vec<CollarBand>,
+}
+
+/// A lens of `k` bags of ice whose rim is `share` of the bag's depth; with a dish, its rim
+/// deepens so the volume still holds the mass (`V = π R^2 (d - s/2)` for a recess `s`).
+fn shaped_lens(kind: &'static str, k: f64, share: f64, dish_share: f64, hole: f64) -> ShapedSpec {
+    let depth = share * SHAPED_BAG_DEPTH;
+    let volume = k * IAPETUS_BAG_KG / SHAPED_ICE_RHO;
+    let radius = (volume / (std::f64::consts::PI * depth * (1.0 - 0.5 * dish_share))).sqrt();
+    // An open core removes its ice: the annulus keeps the lens's density.
+    let k_left = k * (1.0 - (hole / radius).powi(2));
+    ShapedSpec {
+        kind,
+        k: k_left,
+        depth_share: share,
+        plug_radius: radius,
+        plug_depth: depth,
+        dish: dish_share * depth,
+        hole,
+        height_focal: 2.0,
+        bullet_k: 0.0,
+        bullet_radius: 0.0,
+        bullet_gap: 0.0,
+        passed: (hole / IAPETUS_BAG_R).powi(2).min(1.0),
+        k_lens: k,
+    }
+}
+
+/// The other bracket of the safe overlap: the part of the lens a sideways-offset bag still
+/// meets, stood in for by a plug of the lens's depth but only `radius` across (under the bag's
+/// 0.2 m), so the bag's rim passes it. The rim is shocked from the inside only and spreads
+/// outward, as the crescent beside a real plug does; the open core is shocked from every side
+/// and focused on the axis. The real crescent lies between them.
+fn shaped_rim(k: f64, share: f64, radius: f64) -> ShapedSpec {
+    let lens = shaped_lens("rim", k, share, 0.0, 0.0);
+    ShapedSpec {
+        k: k * (radius / lens.plug_radius).powi(2),
+        plug_radius: radius,
+        passed: 1.0 - (radius / IAPETUS_BAG_R).powi(2),
+        ..lens
+    }
+}
+
+/// Result 20's compact column: `k` bags of ice in the code bag's own 0.2 m footprint.
+fn shaped_column(k: f64) -> ShapedSpec {
+    let area = std::f64::consts::PI * IAPETUS_BAG_R * IAPETUS_BAG_R;
+    let depth = k * IAPETUS_BAG_KG / (SHAPED_ICE_RHO * area);
+    ShapedSpec {
+        kind: "compact",
+        k,
+        depth_share: depth / SHAPED_BAG_DEPTH,
+        plug_radius: IAPETUS_BAG_R,
+        plug_depth: depth,
+        dish: 0.0,
+        hole: 0.0,
+        height_focal: 2.0,
+        bullet_k: 0.0,
+        bullet_radius: 0.0,
+        bullet_gap: 0.0,
+        passed: 0.0,
+        k_lens: k,
+    }
+}
+
+/// The gun's bullet `bullet_k` of the bag, met `scale` times Result 20's bumper-rule gap up-track
+/// of a plug (`plug`), or of nothing (`plug = None`: the miss).
+fn shaped_backup(plug: Option<ShapedSpec>, bullet_k: f64, scale: f64) -> ShapedSpec {
+    let gap = scale * IAPETUS_BUMPER_DISK_R / ((5.0_f64 / 3.0).sqrt() * bullet_k.sqrt());
+    let base = plug.unwrap_or(ShapedSpec {
+        kind: "miss",
+        k: 0.0,
+        depth_share: 0.0,
+        plug_radius: 0.0,
+        plug_depth: 0.0,
+        dish: 0.0,
+        hole: 0.0,
+        height_focal: 2.0,
+        bullet_k: 0.0,
+        bullet_radius: 0.0,
+        bullet_gap: 0.0,
+        passed: 1.0,
+        k_lens: 0.0,
+    });
+    ShapedSpec {
+        kind: if plug.is_some() { "backup" } else { "miss" },
+        bullet_k,
+        bullet_radius: IAPETUS_BULLET_R,
+        bullet_gap: gap,
+        ..base
+    }
+}
+
+fn shaped_case(s: &ShapedSpec, dr: f64, confined_ratio: f64) -> ShapedRecord {
+    let (label, d_over_d, skirt, _) = IAPETUS_PLATES[4];
+    let focus = IAPETUS_PLATE_R / (8.0 * d_over_d);
+    let h = s.height_focal * focus;
+    // A miss keeps the 2 F standoff, measured to where the plug's centre would be.
+    let depth = s.plug_depth.max(2.0 * dr);
+    let reach = h + 0.5 * depth + s.bullet_gap + 2.0 * dr + 2.0 * dr + 4.0 * dr + 6.0 * dr;
+    let cfg = iapetus_cfg(d_over_d, skirt, reach, SPRAY_2D_GAMMA, dr);
+    let with_bullet = s.bullet_k > 0.0;
+    let r = run_bumper_charge_bounce(
+        &cfg,
+        BumperCharge {
+            bag_radius: IAPETUS_BAG_R,
+            bag_thickness: 4.0 * dr,
+            bumper_radius: s.bullet_radius,
+            bumper_thickness: if with_bullet { 2.0 * dr } else { 0.0 },
+            bumper_k: s.bullet_k,
+            bumper_gap: s.bullet_gap,
+            charge_radius: s.plug_radius,
+            charge_thickness: depth,
+            k: s.k,
+            charge_dish: s.dish,
+            charge_hole: s.hole,
+            height: h,
+            gap: 2.0 * dr,
+            ambient: CHARGE_AMBIENT,
+        },
+    );
+    let m = 1.0 + s.bullet_k + s.k;
+    let bag_column = IAPETUS_BAG_KG / (std::f64::consts::PI * IAPETUS_BAG_R * IAPETUS_BAG_R);
+    ShapedRecord {
+        case: label.to_string(),
+        kind: s.kind.to_string(),
+        k: s.k,
+        depth_share: s.depth_share,
+        plug_radius: s.plug_radius,
+        plug_depth: s.plug_depth,
+        column_ratio: SHAPED_ICE_RHO * s.plug_depth / bag_column,
+        dish: s.dish,
+        hole: s.hole,
+        passed_share: s.passed,
+        k_lens: s.k_lens,
+        height: h,
+        height_focal: s.height_focal,
+        bullet_k: s.bullet_k,
+        bullet_radius: s.bullet_radius,
+        bullet_gap: s.bullet_gap,
+        impulse_per_mv: r.wall_impulse * m,
+        peak_per_mv2: r.peak_local_pressure * m,
+        peak_radius: r.peak_radius,
+        exit_direction: r.exit_direction,
+        exit_uniformity: r.exit_uniformity,
+        exit_mass_share: r.exit_mass_share,
+        confined_ratio,
+        steps: r.steps,
+        dr,
+        profile: r
+            .profile
+            .iter()
+            .enumerate()
+            .map(|(i, &j)| ((i + 1) as f64 * euler2d::bounce::PROFILE_DR, j * m))
+            .collect(),
+        bands: r
+            .bands
+            .iter()
+            .map(|b| CollarBand {
+                r_lo: b.r_lo,
+                r_hi: b.r_hi,
+                impulse: b.impulse * m,
+                mass_in: b.mass_in * m,
+                speed_in: b.speed_in,
+                energy_in: b.energy_in * m,
+                peak_pressure: b.peak_pressure * m,
+            })
+            .collect(),
+    }
+}
+
+/// `--shaped-plug [overlap [fine] | backup] [coarse]`: the parent's S52 on Result 20's 2 F
+/// paraboloid. The default is the lens sweep: lenses of rim depth 0.25-2x the bag's at
+/// k = 1-15, Result 20's compact column at the same k as the control, the lens at 1.5 F and
+/// 2.5 F, a dished lens, and the point fireball at k = 1 and 3 (`shaped_plug.jsonl`,
+/// `shaped_plug_point.jsonl`). `overlap` opens a core through the lens so part of the bag
+/// passes (`shaped_plug_overlap.jsonl`; `fine` halves the cell at k = 8.5). `backup` is the
+/// gun's bullet: its cloud onto a centred lens, and its misses met nearer and further than
+/// Result 20's 31 m (`shaped_plug_backup.jsonl`).
+fn cmd_shaped_plug(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let coarse = args.iter().any(|a| a == "coarse");
+    let overlap = args.iter().any(|a| a == "overlap");
+    let backup = args.iter().any(|a| a == "backup");
+    let fine = args.iter().any(|a| a == "fine");
+    let dr = if coarse {
+        2.0 * CHARGE_DR
+    } else if fine {
+        0.5 * CHARGE_DR
+    } else {
+        CHARGE_DR
+    };
+    let cr = iapetus_confined_ratio(SPRAY_2D_GAMMA);
+    let mut specs = Vec::new();
+    let tag = if overlap {
+        if fine {
+            for &h in &SHAPED_HOLES_FINE {
+                specs.push(shaped_lens("hole", 8.5, 2.0, 0.0, h));
+            }
+            // The solid lens on the same grid, the overlap's reference.
+            specs.push(shaped_lens("hole", 8.5, 2.0, 0.0, 0.0));
+            for &r in &SHAPED_RIMS_FINE {
+                specs.push(shaped_rim(8.5, 2.0, r));
+            }
+        } else {
+            for &k in &SHAPED_HOLE_K {
+                for &share in &SHAPED_HOLE_SHARES {
+                    for &h in &SHAPED_HOLES {
+                        specs.push(shaped_lens("hole", k, share, 0.0, h));
+                    }
+                    for &r in &SHAPED_RIMS {
+                        specs.push(shaped_rim(k, share, r));
+                    }
+                }
+            }
+        }
+        "_overlap"
+    } else if backup {
+        for &k in &SHAPED_HOLE_K {
+            specs.push(shaped_backup(
+                Some(shaped_lens("lens", k, 2.0, 0.0, 0.0)),
+                IAPETUS_BULLETS[0],
+                1.0,
+            ));
+        }
+        for &(b, scale) in &[(0.004, 0.5), (0.004, 0.75), (0.002, 0.75), (0.002, 1.0)] {
+            specs.push(shaped_backup(None, b, scale));
+        }
+        "_backup"
+    } else {
+        for &k in &SHAPED_K {
+            specs.push(shaped_column(k));
+            for &share in &SHAPED_SHARES {
+                specs.push(shaped_lens("lens", k, share, 0.0, 0.0));
+            }
+        }
+        for &k in &SHAPED_HEIGHT_K {
+            for &f in &SHAPED_HEIGHTS {
+                for share in [1.0, 2.0] {
+                    specs.push(ShapedSpec {
+                        height_focal: f,
+                        ..shaped_lens("lens", k, share, 0.0, 0.0)
+                    });
+                }
+            }
+            for share in [1.0, 2.0] {
+                specs.push(shaped_lens("dish", k, share, SHAPED_DISH, 0.0));
+            }
+        }
+        ""
+    };
+    let suffix = format!(
+        "{tag}{}{}.jsonl",
+        if fine { "_fine" } else { "" },
+        if coarse { "_coarse" } else { "" }
+    );
+    let path = RESULT_PATH_PLUG.replace(".jsonl", &suffix);
+    if tag.is_empty() {
+        // The point fireball below Result 20's k = 2, the ceiling for the low-k lens.
+        let mixed = ("mixed", 0.0);
+        let points: Vec<f64> = vec![1.0, 3.0];
+        let rows = par_map_with_progress("shaped plug point", &points, |&k| {
+            iapetus_case(IAPETUS_PLATES[4], 0, mixed, 0.0, k, SPRAY_2D_GAMMA, dr, cr)
+        });
+        emit_scenario(
+            &path.replace("shaped_plug", "shaped_plug_point"),
+            "shaped plug point",
+            &rows,
+            |r| {
+                println!(
+                    "rust: point k {:>4.1} | J/mv {:6.3} peak/mv2 {:.3e} dir {:.3} steps {}",
+                    r.k, r.impulse_per_mv, r.peak_per_mv2, r.exit_direction, r.steps
+                );
+            },
+        )?;
+    }
+    let rows = par_map_with_progress("shaped plug", &specs, |s| shaped_case(s, dr, cr));
+    emit_scenario(&path, "shaped plug", &rows, |r| {
+        println!(
+            "rust: {:<7} k {:>5.2} share {:4.2} R {:4.2} m d {:5.3} m dish {:4.2} hole {:4.3} h {:3.1} F bullet {:.3} gap {:>5.1} | J/mv {:6.3} peak/mv2 {:.3e} at r {:.2} dir {:.3} steps {}",
+            r.kind,
+            r.k,
+            r.depth_share,
+            r.plug_radius,
+            r.plug_depth,
+            r.dish,
+            r.hole,
+            r.height_focal,
+            r.bullet_k,
+            r.bullet_gap,
+            r.impulse_per_mv,
+            r.peak_per_mv2,
+            r.peak_radius,
+            r.exit_direction,
+            r.steps,
+        );
+    })
+}
+
 /// Flag → handler. `main` looks up the first matching flag and dispatches to it (the exact-string
 /// flags are mutually exclusive in practice, so table order does not affect behavior); anything
 /// unmatched falls through to [`cmd_baseline`] (the `--lowv` / positional-override default).
@@ -9506,6 +9893,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--plate-profile-2d", cmd_plate_profile_2d),
     ("--iapetus-2d", cmd_iapetus_2d),
     ("--iapetus-rebound", cmd_iapetus_rebound),
+    ("--shaped-plug", cmd_shaped_plug),
     ("--spring-trim-2d", cmd_spring_trim_2d),
     ("--plume-2d", cmd_plume_2d),
     ("--canted-2d", cmd_canted_2d),

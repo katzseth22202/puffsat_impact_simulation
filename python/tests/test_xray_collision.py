@@ -793,3 +793,31 @@ def test_iapetus_centred_burst_has_no_side_kick() -> None:
         imp, ang, _ = ib.trace(shape, h, 0.0, 8.5, n=4000)
         assert abs(imp[0]) < 1e-3 * abs(imp[2])
         assert abs(ang[1]) < 1e-2 * abs(imp[2])
+
+
+def test_shaped_plug_passed_share_limits() -> None:
+    """A bag centred on a wider plug passes nothing, one clear of it passes everything, a
+    narrower plug passes the bag's rim, and a bag half over a plug edge of equal radius
+    passes the closed-form lens remainder."""
+    from puffsat.xray_collision import shaped_plug as sp
+
+    a = sp.BAG_RADIUS
+    assert sp.passed_share(0.0, 2.0 * a) == 0.0
+    assert sp.passed_share(3.1 * a, 2.0 * a) == 1.0
+    assert sp.passed_share(0.0, 0.5 * a) == pytest.approx(0.75)
+    # Equal circles one radius apart overlap by (2 pi / 3 - sqrt(3) / 2) a^2.
+    lens = (2.0 * math.pi / 3.0 - math.sqrt(3.0) / 2.0) / math.pi
+    assert sp.passed_share(a, a) == pytest.approx(1.0 - lens, rel=1e-9)
+
+
+def test_shaped_plug_catch_radius_brackets_the_geometric_catch() -> None:
+    """With nothing allowed past, the catch radius is the plug's radius less the bag's; any
+    allowed share lengthens it, and the Rayleigh tail at one sigma is exp(-1/2)."""
+    from puffsat.xray_collision import shaped_plug as sp
+
+    r = 0.44
+    assert sp.catch_radius(r, 0.0) == pytest.approx(r - sp.BAG_RADIUS, abs=1e-6)
+    c = sp.catch_radius(r, 0.1)
+    assert c > r - sp.BAG_RADIUS
+    assert sp.passed_share(c, r) == pytest.approx(0.1, abs=1e-6)
+    assert sp.miss_rate(0.05, 0.05) == pytest.approx(math.exp(-0.5))

@@ -1099,6 +1099,12 @@ pub struct BumperCharge {
     pub charge_radius: f64,
     pub charge_thickness: f64,
     pub k: f64,
+    /// A dished impactor-side face (Result 20's S52 follow-up, the shaped plug): the face is
+    /// recessed by `charge_dish (1 - r^2 / R^2)`, so the charge cups the impactor. 0 is flat.
+    pub charge_dish: f64,
+    /// An open core of this radius through the charge: the impactor's central part passes it
+    /// untouched, the axisymmetric stand-in for an off-centre strike. 0 is a solid charge.
+    pub charge_hole: f64,
     /// Height of the charge disk's centre above the plate's vertex.
     pub height: f64,
     /// Gap between the impactor and the bumper at the start.
@@ -1138,7 +1144,8 @@ pub fn run_bumper_charge_bounce(cfg: &SlugConfig, bc: BumperCharge) -> FireballB
     let region = |iz: usize, ir: usize| -> u8 {
         let z = (iz as f64 + 0.5) * dz;
         let r = (ir as f64 + 0.5) * dr;
-        if bc.k > 0.0 && z >= charge_lo && z < charge_hi && r < bc.charge_radius {
+        let face = charge_hi - bc.charge_dish * (1.0 - (r / bc.charge_radius).powi(2));
+        if bc.k > 0.0 && z >= charge_lo && z < face && r < bc.charge_radius && r >= bc.charge_hole {
             2
         } else if bc.bumper_k > 0.0 && z >= bumper_lo && z < bumper_hi && r < bc.bumper_radius {
             3
@@ -1509,6 +1516,8 @@ mod tests {
                     charge_radius: 0.6,
                     charge_thickness: 0.1,
                     k,
+                    charge_dish: 0.0,
+                    charge_hole: 0.0,
                     height: 0.9,
                     gap: 0.1,
                     ambient: 1.0e-8,
@@ -1520,5 +1529,56 @@ mod tests {
             assert!(per_mv > 0.5, "the plate is pushed: J/mv {per_mv}");
             assert!(per_mv < ceiling, "J/mv {per_mv} over the ceiling {ceiling}");
         }
+    }
+
+    /// The shaped plug (Result 20's S52 follow-up): a dished face and an open core keep the
+    /// charge's mass and stay under the energy ceiling, and a core wider than the impactor lets
+    /// it through to strike the plate almost bare, so the plate takes less than the full merge.
+    #[test]
+    fn shaped_plug_stays_under_the_ceiling_and_a_wide_hole_passes_the_bag() {
+        let cfg = SlugConfig {
+            r_plate: 2.0,
+            r_max: 2.4,
+            z_max: 3.2,
+            nr: 48,
+            nz: 64,
+            mach: 20.0,
+            shape: PlateShape::Dish { d_over_d: 0.30 },
+            ..base_cfg()
+        };
+        let run = |dish: f64, hole: f64| {
+            let r = run_bumper_charge_bounce(
+                &cfg,
+                BumperCharge {
+                    bag_radius: 0.15,
+                    bag_thickness: 0.2,
+                    bumper_radius: 0.0,
+                    bumper_thickness: 0.0,
+                    bumper_k: 0.0,
+                    bumper_gap: 0.0,
+                    charge_radius: 0.4,
+                    charge_thickness: 0.2,
+                    k: 4.0,
+                    charge_dish: dish,
+                    charge_hole: hole,
+                    height: 0.9,
+                    gap: 0.1,
+                    ambient: 1.0e-8,
+                },
+            );
+            r.wall_impulse * 5.0
+        };
+        let ceiling = 1.0 + 5.0_f64.sqrt();
+        for (dish, hole) in [(0.0, 0.0), (0.1, 0.0), (0.0, 0.05)] {
+            let per_mv = run(dish, hole);
+            assert!(
+                per_mv > 0.5 && per_mv < ceiling,
+                "dish {dish} hole {hole}: J/mv {per_mv} (ceiling {ceiling})"
+            );
+        }
+        // The plug's mass still counts in the merged unit, so a bag that goes through a hole
+        // wider than itself and leaves the plug behind gives the plate well under the merge's
+        // impulse.
+        assert!(run(0.0, 0.2) < run(0.0, 0.0));
     }
 }
