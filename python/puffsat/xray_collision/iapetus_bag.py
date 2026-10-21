@@ -1004,6 +1004,8 @@ class ErosionRow:
     leverage_with_spray: float  # the spray carried too, as charge that adds no impulse
     graphite_kg_per_pulse: tuple[float, float]  # the same heat taken by eroding graphite
     leverage_with_graphite: float  # the graphite carried, at the conservative 20 MJ/kg
+    arriving_over_ke: float  # the rings' arriving energy over the bag's kinetic energy
+    heat_valid: bool  # False where that exceeds 1: the tally has counted recirculating gas
 
 
 def erosion_case(s: SweepRow, rec: dict[str, object]) -> ErosionRow:
@@ -1022,6 +1024,17 @@ def erosion_case(s: SweepRow, rec: dict[str, object]) -> ErosionRow:
     # excess away instead of the steel (`Q_SPRAY`). The rings are projected; the last is clipped
     # to the floor's radius.
     spray, hot = 0.0, 0.0
+    # The rings count gas moving toward the wall at every step, so gas that sloshes in the bowl
+    # is counted again each time. Where the total passes the bag's own kinetic energy (1/2 in
+    # these units) the heat cannot be read from it, and the face-heat columns are left empty.
+    arriving = 0.0
+    for b in bands:
+        assert isinstance(b, dict)
+        lo, hi = float(b["r_lo"]), min(float(b["r_hi"]), PLATE_R)
+        if hi > lo:
+            arriving += math.pi * (hi * hi - lo * lo) * float(b["energy_in"])
+    arriving /= 0.5
+    valid = arriving <= 1.0
     for b in bands:
         assert isinstance(b, dict)
         lo, hi = float(b["r_lo"]), min(float(b["r_hi"]), PLATE_R)
@@ -1044,14 +1057,24 @@ def erosion_case(s: SweepRow, rec: dict[str, object]) -> ErosionRow:
         melt_threshold_mj_m2=threshold / 1e6,
         eroded_um_per_pulse=(1e6 * per[0], 1e6 * per[1]),
         eroded_mm_per_push=(1e3 * per[0] * PULSES, 1e3 * per[1] * PULSES),
-        spray_kg_per_pulse=spray,
-        hot_radius_m=hot,
+        spray_kg_per_pulse=spray if valid else math.nan,
+        hot_radius_m=hot if valid else math.nan,
         leverage=s.leverage,
-        leverage_with_spray=leverage(s.impulse_per_mv, s.k + spray / BAG, s.w),
-        graphite_kg_per_pulse=(spray * Q_SPRAY / Q_GRAPHITE[0], spray * Q_SPRAY / Q_GRAPHITE[1]),
-        leverage_with_graphite=leverage(
-            s.impulse_per_mv, s.k + spray * Q_SPRAY / Q_GRAPHITE[0] / BAG, s.w
+        leverage_with_spray=(
+            leverage(s.impulse_per_mv, s.k + spray / BAG, s.w) if valid else math.nan
         ),
+        graphite_kg_per_pulse=(
+            (spray * Q_SPRAY / Q_GRAPHITE[0], spray * Q_SPRAY / Q_GRAPHITE[1])
+            if valid
+            else (math.nan, math.nan)
+        ),
+        leverage_with_graphite=(
+            leverage(s.impulse_per_mv, s.k + spray * Q_SPRAY / Q_GRAPHITE[0] / BAG, s.w)
+            if valid
+            else math.nan
+        ),
+        arriving_over_ke=arriving,
+        heat_valid=valid,
     )
 
 

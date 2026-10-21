@@ -38,9 +38,10 @@ All numbers are for a 25 kg bag at the reference 51.1 km/s unless stated, on the
    a pulse. The face peak is 0.3-1.75 GPa, inside maraging's 2.3 GPa at 51.1 km/s; at 68 km/s the
    bag must shrink to ~19-24 kg to stay inside it.
 6. **Spread the bag with a gun.** A 100 g ice bullet fired back along the bag's track meets it
-   ~30 m before the charge. Its miss is the only one the plate survives (1.3-1.6 GPa, coarse grid;
-   the production check is running). It costs about 10% of leverage against a perfectly
-   self-spread bag, and it needs nothing on the bag.
+   ~30 m before the charge. Its miss is the only one the plate survives: **1.03 GPa** on the
+   production grid. It needs nothing on the bag. It costs leverage: **6.7x** at k = 8.5 on ice,
+   against 7.2x for the compact charge and 8.35x for a perfectly self-spread bag, and 3.4x at
+   k = 20, so fly it at k <= 8.5 (lower k was not run with the bullet).
 
 ## 1. Arrival state (item 1)
 
@@ -192,7 +193,7 @@ charge in the way (coarse grid; peaks rise 20-45% on refinement):
 | bag hits a 0.1-0.2 bumper 4-6 m ahead | 3.5-9.6 GPa |
 | bag spread itself to 1.6 m | 7.7-10.8 GPa |
 | bag spread itself to 2.5 m | 3.1-4.6 GPa |
-| **100 g bullet ~30 m ahead** | **1.3-1.6 GPa (paraboloid)** |
+| **100 g bullet ~30 m ahead** | **1.03 GPa (paraboloid, production grid)**; 1.3 GPa for a bullet spread across the bag's face (coarse) |
 
 **The gun** (Seth, 2026-10-21): fire a 100 g ice bullet back along the bag's track when the bag is
 ~6 km away. They meet ~30 m before the charge, which is where the merged cloud, expanding at
@@ -204,9 +205,13 @@ charge in the way (coarse grid; peaks rise 20-45% on refinement):
   whole ice ball (a solid shatters; the gas model has no strength) barely matters: a bullet
   striking only the bag's middle quarter and one spread across its face give plate impulses within
   1-4% (coarse grid).
-- Leverage with the bullet: J/mv 2.6-3.0 on the 2 F paraboloid at k = 8.5-20 (coarse), about the
-  compact charge's, ~10-15% under a perfectly self-spread bag. The heat spreads the bag by moving
-  it sideways, and that motion is partly lost to the push.
+- Leverage with the bullet, production grid, 2 F paraboloid: J/mv 2.67 at k = 8.5 and 2.78 at
+  k = 20 (lossless), against 2.99 and 3.09 for the compact charge and 3.10 and 3.98 for the ideal
+  disk. On ice that is **6.7x at k = 8.5** (compact 7.2x, ideal disk 8.35x) and 3.4x at k = 20.
+  The cloud the bullet makes is moving sideways and spread along the axis when it reaches the
+  disk, and that motion is partly lost to the push. The bullet's face heat is not read: on these
+  long runs the ring tally counts gas recirculating in the bowl (it sums to 1.35-1.43 of the bag's
+  energy), so it says nothing.
 - Earth-borne cost: ~200 kg of bullets a 2000-pulse push, plus the gun. A 500 g bullet meeting
   ~14 m out gives a few percent more push but its miss reaches 6 GPa.
 
@@ -217,8 +222,11 @@ charge in the way (coarse grid; peaks rise 20-45% on refinement):
 - No strength, fracture or atomization. Every spreading mechanism is a gas cloud in the runs.
 - Peaks are not converged (median +20-45% from the coarse grid to the production one); impulses
   are (+2-5%).
-- The bullet and bumper runs are on the coarse grid; the bullet's deciding runs are on the
-  production grid now.
+- The bumper runs and most bullet runs are on the coarse grid. The bullet's three deciding runs
+  are on the production grid; the fourth, the wide bullet's miss, went unstable there (J/mv 174,
+  exhaust moving backward) and is dropped by the energy ceiling.
+- The face heat is the ring tally of gas moving toward the wall. It counts recirculating gas, so
+  it is an upper estimate; it reads 0.15-0.93 of the bag's energy on the runs used.
 - The ray trace for aim is ballistic and single-gas.
 - The face heat is the 1-D slug's radiative share applied to the 2-D arriving energy.
 
@@ -230,5 +238,6 @@ charge in the way (coarse grid; peaks rise 20-45% on refinement):
 - The push plate: 25-32 t on the 8 m spring for a 600-760 t ship at 1 g and 2 Hz, its floor graded
   to the bag's centre-heavy load, with a graphite liner over the inner ~6 m consumed at 2-18 t a
   push.
-- Spreading and safety: a rim-mounted gun firing 100 g ice bullets to meet each bag ~30 m out.
+- Spreading and safety: a rim-mounted gun firing 100 g ice bullets to meet each bag ~30 m out,
+  at ~6.7x (k = 8.5) rather than ~8x, in exchange for a miss the plate survives.
   "A bag the gun missed is a compact 33 GJ projectile; the plate is not a shield against it."

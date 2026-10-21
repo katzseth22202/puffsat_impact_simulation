@@ -82,7 +82,7 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
     paraboloid at 2 F, gives 7.7-8.4x (the parent carried 10.3x). Water's bonds re-form; argon
     loses on the face heat it radiates. The 25-32 t plate must be graded to the bag's centre-heavy
     load, its inner ~6 m is a graphite liner, and a gun's 100 g ice bullet spreads each bag ~30 m
-    out so that a miss does not hole the plate.
+    out so that a miss does not hole the plate (1.03 GPa), at ~6.7x.
 
 ## Model
 
@@ -2043,17 +2043,23 @@ cancels most of the offset's moment.
 | compact charge (none) | 2.99 / 3.09 (lossless) | 29-40 GPa |
 | self-spread 2.5 m disk (ideal) | 3.10 / 3.98 | 3.1-4.6 GPa |
 | bumper 0.05-0.4, 3-9 m ahead | 2.71-2.77 / 3.15-3.31 (coarse) | 3.5-9.6 GPa |
-| 100 g bullet, 31 m ahead | 2.60 / 2.84-2.96 (coarse) | 1.3-1.6 GPa |
+| 100 g bullet, 31 m ahead | 2.67 / 2.78 (wide bullet, production) | 1.03 GPa (production) |
 | 500 g bullet, 14 m ahead | 2.83-2.86 / 3.33-3.47 (coarse) | 6.0 GPa |
 
 A thin layer, a laser and a bare rupture cannot spread a solid bag (hand reasoning in the answers
 doc); a bumper or bullet spreads it by heating it, and the sideways motion that spreads it is
 partly lost to the push. Only the 100 g bullet's long gap keeps the miss on maraging's 2.3 GPa.
-Whether its energy reaches the whole bag (a narrow and a wide bullet) moves the impulse by 1-4%.
+Whether its energy reaches the whole bag (a narrow and a wide bullet) moves the impulse by 1-4%
+(coarse). On ice the bullet gives 6.7x at k = 8.5 (compact 7.2x, ideal disk 8.35x) and 3.4x at
+k = 20. Its face heat is not read: on its long runs the ring tally, which counts gas moving toward
+the wall at every step, sums to 1.35-1.43 of the bag's energy (0.15-0.93 on every run used), so the
+module leaves it empty (`heat_valid`). The wide bullet's miss went unstable on the production grid
+(J/mv 174) and is dropped.
 
 **Not modelled.** Strength, fracture and atomization; the real EOS in 2-D; mechanical erosion of the
 liner; off-axis bursts beyond the ray trace; the 1-D radiative share as a stand-in for the 2-D
-face heat. The bumper and bullet runs are on the coarse grid except the bullet's four deciding runs.
+face heat. The bumper runs and most bullet runs are on the coarse grid; the bullet's three
+deciding runs are on the production grid.
 
 ## Limits
 

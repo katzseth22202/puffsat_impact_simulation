@@ -43,9 +43,11 @@ that fires an ice bullet back along the bag's track, met ~30 m before the charge
    argon 13-49 kg at k = 8.5.
 6. **A gun spreads each bag.** A 100 g ice bullet fired back along the track meets the bag ~30 m
    before a 2.5 m charge disk, where the merged cloud has spread to the disk's radius. It is the
-   only spreader tested whose miss the plate survives (1.3-1.6 GPa, coarse grid). Whether it shocks
-   the bag's middle quarter or its whole face changes the impulse by 1-4%, so the solid-ice
-   fracture question does not decide it. It costs ~10-15% against a perfectly self-spread bag.
+   only spreader tested whose miss the plate survives (1.03 GPa on the production grid). Whether it
+   shocks the bag's middle quarter or its whole face changes the impulse by 1-4%, so the solid-ice
+   fracture question does not decide it. It costs leverage: 6.7x at k = 8.5 on ice against 7.2x
+   for the compact charge and 8.35x for a perfectly self-spread bag, and 3.4x at k = 20, so it is
+   flown at k <= 8.5.
 7. **Not adopted:** a thin layer or mesh as a spreader (under 1% of the bag's column); a laser
    (surface only, MW-class at 2 Hz); rupture alone (~14 m/s, centimetre drops); a wide bumper 4-6 m
    ahead (its miss reaches 3.5-9.6 GPa); a 500 g bullet at 14 m (6 GPa miss); bag-borne H2/O2
@@ -53,14 +55,14 @@ that fires an ice bullet back along the bag's track, met ~30 m before the charge
 
 ## Consequences
 
-- The parent's S51 ledger should carry ~8x (7.1-8.2x with the face's graphite), k ~ 4-8.5 of water
-  ice, a 25-32 t graded paraboloid, a graphite liner consumed at 2-18 t a push, and the gun with
+- The parent's S51 ledger should carry ~8x for a well-spread bag (7.1-8.2x with the face's
+  graphite) and ~6.7x with the gun (k = 8.5), k ~ 4-8.5 of water ice, a 25-32 t graded paraboloid, a graphite liner consumed at 2-18 t a push, and the gun with
   ~200 kg of bullets a push.
 - The ship carries water ice, not cryogenic argon.
 - A bag the gun misses is a compact 33 GJ projectile. The plate is not a shield against it: a bare
   compact bag peaks at 29-40 GPa, holes the plate, and dumps ~25-30 GJ into the nitrogen spring.
 - Rocking: grading the floor makes its rim kick 1.8-2.7x harder per unit of impulse offset than an
   even floor's, which the paraboloid's smaller lever (0.28 m per metre of miss) partly offsets.
-- Open: the bullet's deciding runs on the production grid; strength, fracture and atomization of a
-  solid ice bag; mechanical erosion of the liner; the gun's design; the 1-D radiative share as the
-  face heat.
+- Open: the bullet at k below 8.5 and its face heat (the ring tally over-counts on its long runs);
+  strength, fracture and atomization of a solid ice bag; mechanical erosion of the liner; the gun's
+  design; the 1-D radiative share as the face heat.
