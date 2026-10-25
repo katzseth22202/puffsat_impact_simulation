@@ -89,6 +89,14 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
     bag's, 0.04-0.24 m. The 2-D overlap bound does not converge, so it takes no credit. At
     k = 8.5 the backup fires 5% of the time for a 5.6 cm track error at the plug. A ~1 km/s gun
     fires after the plug has steered.
+12. **Snow, froth, ice or liquid water couple like solid polyethylene where the column stays
+    short; argon pays only at low speed** (Result 22, ADR-0073). Density enters only as the
+    column's length: the Sun bowl holds within 2% down to ~580 kg/m^3, the departure to ~590, and
+    the push sheet's thickness does not matter. Pores add nothing at the plates' speeds: even the
+    last-struck kilogram gets 5.5-57x its vaporization energy. Water snow at 600 is within -7% to
+    +4% of polyethylene on every plate; argon loses 15% at the Sun bowl (it radiates into the
+    face). Grading never beats solid, but light-at-entry cuts the back-splash peak several times.
+    At 44 km/s and k ≈ 10 (the 3S design point) water and argon tie; polyethylene loses ~29%.
 
 ## Model
 
@@ -2130,6 +2138,99 @@ liner takes 6.0-17.6, 1.4-4.2 and 0.4-1.1 kg a pulse.
 **Not modelled.** A 3-D off-centre strike, the one run that could credit an overlap; strength,
 fracture and the bag's ice skin; the plug's steering and the track error at the plug; the
 bullet's own speed (up to ~12% more energy at 3 km/s).
+
+## Result 22: water or argon snow as the charge, on all three plates -- `snow_charge_*.csv`
+
+`make xray-collision-snow-charge` (`sweep --snow-charge [coarse] [sun|departure|push] | confined`,
+`sweep --iapetus-rebound fast|slow`, `euler2d::bounce::DiskCharge`'s `ChargeLayer`,
+`snow_charge.py`; ADR-0073). The parent's S60: Seth would fly each charge as water or argon snow,
+froth or ice in a thin bag, on the growth push (Kapton at 99 km/s, k = 6.4), the departure bowl
+(15 kg at 84 km/s, k = 12.4) and the Sun bowl (1 kg at 392 km/s, k = 20). In the session he added
+the 100 km/s Earth runs and the 3S cycle's 44-55 km/s Jupiter return, at k ≈ 10 for 44 km/s. The
+full tables are in [`snow_charge_answers_for_parent.md`](snow_charge_answers_for_parent.md).
+
+**The runs.** The real disk-into-charge collision on the δ/D 0.5 paraboloid with the charge at
+1.5 F, the disk entering from the plate side (the departure on the axis, as Result 14's stand-in),
+its column `k m / (rho pi R^2)` long. Densities 30-1620 kg/m^3, the point fireball, a gamma bracket
+(1.2 / 1.4 / 1.67, the cold Mach raised for the softer gas so the start holds the same heat), and
+graded columns (ice under snow at 1/3 or 1/5 of its density, 25-75% dense, either end). The push
+sheet's grid thickness 0.1-0.8 m, its gamma bracket and a graded sheet. Production cell 0.025 m on
+the bowls (0.05 coarse), 0.05 m on the push (0.1 coarse). Graded parts under two cells are skipped
+(the Sun's 25% dense layer). Each bracket run's impulse is divided by its own gas's confined
+plane-wave bounce (1.637 / 1.749 / 1.798) before a material's `1 + e_eff` replaces it.
+
+**Density is column length.** Impulse over solid polyethylene's (950 kg/m^3):
+
+| bulk density | 1000 | 917 | 600 | 500 | 300 | 100 | 30 |
+|---|---|---|---|---|---|---|---|
+| Sun bowl, k = 20 (solid column L/R 0.43) | 1.000 | 1.000 | 0.981 | 0.975 | 0.969 | 0.862 | 0.533 |
+| departure, k = 12.4 (L/R 0.97) | 1.003 | 1.000 | 0.981 | 0.966 | 0.909 | 0.621 | -- |
+
+Within 2% of solid to ~580 (Sun) and ~590 kg/m^3 (departure); within 5% to ~250 and ~430. The
+push sheet's thickness spreads its impulse by 1.9%. Real over point fireball (solid): 0.88 at
+k = 20 and 0.95 at k = 12.4, where the ledger had carried 0.82-0.87 from k = 30. The departure's
+factors agree with the coarse grid to 1%; the Sun's short column moved 3-5% (coarse read snow at
+500-600 as +3%), so the Sun's factors carry ~3%. Solid argon on the Sun bowl is 2.4 cells long and
+is held at solid's. A lighter column also lowers the on-axis back-splash peak (0.56x at 600 and
+0.25x at 300 on the departure), but peaks are not converged.
+
+**Porosity: a 1-D bound.** The snowplow's last kilogram is struck at `w / (1 + k)`, and its shock
+heat is exact. It is 25-29x the vaporization energy on the push, 5.5-6.4x at the departure and
+48-57x at the Sun (argon 76x or more). The solid's cold-compression share there, bounded with
+linear Hugoniots and a Mie-Gruneisen release (`s` +/- 0.2, Gamma 0.5-2), is 7-35%, the most pore
+collapse can add. Only the departure's 6.3 km/s lies inside the fits; the bound does not need the
+others. The gamma gas is already the porous limit.
+
+**Material.** Each charge raced on its own table at each plate's heat (`iapetus_bag.race`,
+`freeze.freeze` for polyethylene's toll). No bond or ion store strands. Over polyethylene per kg of
+impactor, its carbon frozen / condensed:
+
+| plate | water | argon |
+|---|---|---|
+| push | 1.01 / 0.98 (gamma 1.39, e 0.67) | 0.96 / 0.93 (gamma 1.33, e 0.61) |
+| departure | 1.06 / 0.95 (gamma 1.27, e 0.66) | 1.02 / 0.91 (gamma 1.31, e 0.59) |
+| Sun | 1.02 / 1.01 (gamma 1.40, e 0.54) | 0.85 / 0.84 (gamma 1.30, e 0.27) |
+
+The gamma factor (approach only) is 0.93 / 1.04 at gamma 1.2 / 1.67 on the push, 1.00 / 0.94 on the
+departure and 1.02 / 0.90 on the Sun: the bowls do not penalize a soft gas. Argon's rebound at 83
+km/s collapses because it radiates its stagnation heat into the face. Polyethylene stays priced at
+the 2-D gas's gamma 1.4 with its toll charged apart, as Results 10-15 price it: its CH2 table
+counts atoms only and gives no meaningful gamma once the gas cools.
+
+**Graded.** Never above uniform solid (best 0.969 departure, 0.989 Sun, 1.000 push); within
+0.94-1.06 of a uniform column of the same length. Dense at the entry is slightly better for
+impulse. Light at the entry cuts the on-axis peak to 0.09-0.25x (departure) and 0.20-0.51x (Sun).
+On both bowls the impactor enters from the plate side, so the parent's "dense toward the floor" on
+the Sun bowl is the impulse orientation, not the peak one.
+
+**Bag, argon flash, debris.** Film of 0.05 kg/m^2 is 22% of the push charge (4% at 10 um) and
+0.05-0.2% on the bowls; the gas held is under 2e-4. Liquid argon flashes to 18% vapour at the
+triple point and 25% at 60 K, where the frost holds 904 Pa: 22% as vapour needs 3.0 m^3/kg, so the
+bag must first radiate 42 kJ/kg (31 / 64 days for the Sun / departure charge, shaded at 70 K).
+Sunlit at 1 AU, ice lasts 1.2-3 days at 1 cm and 49-120 days as a whole 0.4 m bag (Murphy & Koop
+vapour pressure, Hertz-Knudsen, isothermal sphere); near the Sun, seconds to hours.
+
+**Low speeds** (`snow_charge_low_speed.csv`; 15 kg impactor at 3.75 m; water and argon rebound
+added at 6-12 and 50-100 km/s). Against argon at the same k, water at common gamma / the sheet's /
+the bowl's, and polyethylene:
+
+| closing, k | water | polyethylene | water's last-strike margin |
+|---|---|---|---|
+| 44 km/s, 5 | 1.10 / 1.06 / 1.10 | 0.98 | 8.8x |
+| 44 km/s, 10 | 1.01 / 0.95 / 1.01 | 0.71 | 2.6x |
+| 44 km/s, 20 | 0.99 / 0.90 / 0.99 | 0 | 0.7x |
+| 55 km/s, 10 | 1.04 / 1.00 / 1.04 | 0.89 | 4.1x |
+| 100 km/s, 10 | 1.06 / 1.07 / 1.06 | 1.03 | 13.5x |
+
+Water's bonds do not strand, but stagnation re-heats the gas, so a share stays broken through the
+push (`bond_held_after_push`: 19-48% of the stagnation energy at 44 km/s and k = 5-20, 4-16%
+at 100 km/s): a softness, inside its gamma and rebound. At 6-12 km/s argon
+radiates 10-100x more energy into the wall than water. Polyethylene's rebound below 20 km/s is read
+at its grid's edge.
+
+**Not modelled.** Strength, fracture, the bag's skin and snow-making; the departure's 130 deg entry;
+peak convergence; a porous EOS at 44 km/s and k = 20, the one case where it could matter; the 3S
+plate's own geometry.
 
 ## Limits
 

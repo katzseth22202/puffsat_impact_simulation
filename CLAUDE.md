@@ -58,7 +58,7 @@ Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`),
 `make xray-collision-charge-mix`, `make xray-collision-freeze`, `make xray-collision-collar`,
 `make xray-collision-overtake`, `make xray-collision-mission`, `make xray-collision-growth`,
 `make xray-collision-cme`, `make xray-collision-cadence-plate`, `make xray-collision-departure-hole`, `make xray-collision-fast-wave`, `make xray-collision-iapetus`,
-`make xray-collision-band-bowl`, `make xray-collision-gas-spring`, `make xray-collision-plume`, `make xray-collision-spring-trim`, `make xray-collision-shaped-plug` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
+`make xray-collision-band-bowl`, `make xray-collision-gas-spring`, `make xray-collision-plume`, `make xray-collision-spring-trim`, `make xray-collision-shaped-plug`, `make xray-collision-snow-charge` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
 (lattice target, k = 2, per-projectile light and kinetic energy) is
 [`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md). The 66 km/s verdict (argon clouds
 radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the Sun dive) is
@@ -118,6 +118,13 @@ overlap bound does not converge; a ~1 km/s gun fires after the plug steers), is 
 [ADR-0072](docs/adr/0072-shaped-plug-deep-lens-and-geometric-catch.md) (module `shaped_plug.py`,
 target `make xray-collision-shaped-plug`); answers in
 [`docs/shaped_plug_answers_for_parent.md`](docs/shaped_plug_answers_for_parent.md).
+The parent's S60, water or argon snow as the charge on all three plates (density enters only as the
+column's length: within 2% of solid polyethylene down to ~580-590 kg/m^3 on the bowls, any thickness
+on the push; pores add nothing at these speeds; argon loses 15% at the Sun bowl; grading never beats
+solid but light-at-entry cuts the back-splash peak; at 44 km/s and k ≈ 10 water ties argon), is
+Result 22 and [ADR-0073](docs/adr/0073-snow-charges-density-is-column-length.md) (module
+`snow_charge.py`, target `make xray-collision-snow-charge`); answers in
+[`docs/snow_charge_answers_for_parent.md`](docs/snow_charge_answers_for_parent.md).
 How hot the Kapton face can run for a sub-second pulse (decomposition kinetics, other films,
 fillers, overlayers, carbon veils) is researched in
 [`docs/kapton_temperature_limits.md`](docs/kapton_temperature_limits.md); its numbers are not yet
