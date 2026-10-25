@@ -76,16 +76,21 @@ class FreezeResult:
 
 
 def freeze(
-    k: float, table: EosTable, plate_distance: float = 4.17, v_rel: float = charge.V_REL
+    k: float,
+    table: EosTable,
+    plate_distance: float = 4.17,
+    v_rel: float = charge.V_REL,
+    projectile: float = 1.0,
 ) -> FreezeResult:
-    """Expand the k fireball (1 kg projectile closing at `v_rel`) and race both stores
-    against it."""
-    m = 1.0 + k
+    """Expand the k fireball (a `projectile` kg impactor closing at `v_rel`) and race both
+    stores against it."""
+    m = (1.0 + k) * projectile
     heat = 0.5 * k / (1.0 + k) * v_rel**2  # J per kg of projectile
-    e = heat / m
+    e = heat / (1.0 + k)
     rho = float(np.exp(table.ln_rho[-1]))
     r = (3.0 * m / (4.0 * math.pi * rho)) ** (1.0 / 3.0)
     rdot, t = 0.0, 0.0
+    e0 = e  # J per kg of merged mass
     e_ion0 = ion_energy(rho, table.temp(rho, e))[0]
     x = e_ion0  # the ionization store actually held
     da_min = math.inf
@@ -119,8 +124,8 @@ def freeze(
         rdot += rddot * dt
         r += rdot * dt
         t += dt
-    frozen = max(x - ion_energy(rho, temp)[0], 0.0) / (heat / m)
-    bond = charge.PE_BONDS * k / (k + 1.0) / (heat / m)
+    frozen = max(x - ion_energy(rho, temp)[0], 0.0) / e0
+    bond = charge.PE_BONDS * k / (k + 1.0) / e0
     # Carbon's share is bracketed as wholly frozen (atoms) or wholly condensed (returned).
     carbon_part = (CH2_ATOMIZATION - H2_BOND) / CH2_ATOMIZATION
     da_h2 = h2[1]
@@ -129,7 +134,7 @@ def freeze(
         t_plate=t,
         rho_plate=rho,
         kt_plate_ev=temp * K_B / EV,
-        ion_share_start=e_ion0 / (heat / m),
+        ion_share_start=e_ion0 / e0,
         ion_share_frozen=frozen,
         da_ion_min=da_min,
         t_h2_window=h2[0],

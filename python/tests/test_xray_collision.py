@@ -823,3 +823,39 @@ def test_shaped_plug_catch_radius_brackets_the_geometric_catch() -> None:
     assert sp.miss_rate(0.05, 0.05) == pytest.approx(math.exp(-0.5))
     # The track error that holds a backup rate inverts the tail.
     assert sp.miss_rate(c, sp.sigma_for_rate(c, 0.05)) == pytest.approx(0.05)
+
+
+def test_snow_cold_share_vanishes_for_weak_shocks_and_stays_bounded() -> None:
+    """A weak shock is nearly isentropic, so almost all of its u_p^2/2 is cold compression; a strong
+    one heats, so the cold share falls; and it always lies in [0, 1]."""
+    from puffsat.xray_collision import snow_charge as sc
+
+    h = sc.HUGONIOTS["pe"]
+    weak = sc.cold_share(h, 50.0)
+    mid = sc.cold_share(h, 3.0e3)
+    strong = sc.cold_share(h, 15.0e3)
+    assert weak > 0.95
+    assert 0.0 <= strong < mid < weak <= 1.0
+
+
+def test_snow_vapour_pressures_meet_their_anchors() -> None:
+    """Murphy & Koop's ice curve gives the triple point's 611.657 Pa; argon's Clausius-Clapeyron
+    returns its triple-point pressure there and the parent's ~0.9 kPa at 60 K."""
+    from puffsat.xray_collision import snow_charge as sc
+
+    assert sc.ice_vapour_pressure(273.16) == pytest.approx(611.657, rel=2e-3)
+    assert sc.argon_sublimation_pressure(sc.AR_T_TRIPLE) == pytest.approx(sc.AR_P_TRIPLE)
+    assert sc.argon_sublimation_pressure(60.0) == pytest.approx(900.0, rel=0.1)
+
+
+def test_snow_argon_flash_and_debris_scale() -> None:
+    """Liquid argon flashes to roughly a sixth vapour at the triple point, more on cooling; a
+    sunlit sphere's sublimation life is linear in its radius."""
+    from puffsat.xray_collision import snow_charge as sc
+
+    fl = sc.argon_flash()
+    assert 0.1 < fl.flash_to_triple < fl.flash_to_60k < 0.35
+    d = sc.debris_row("ice", 0.5, sc.AU_IN_RSUN, 917.0)
+    assert d.lifetimes_days["1 cm"] == pytest.approx(10.0 * d.lifetimes_days["1 mm"])
+    # Nearer the Sun, ice sublimes faster.
+    assert sc.debris_row("ice", 0.5, 9.86, 917.0).flux > d.flux

@@ -78,6 +78,11 @@ MIXTURES = {
     "argon": spray_eos.AtomMixture((("Ar", 1.0),)),
     "ice": spray_eos.AtomMixture((("H", 2.0), ("O", 1.0))),
 }
+#: Polyethylene, raced on the CH2 table (atoms only, so its bonds are charged apart, as Result 11)
+#: for Result 22's material comparison. Kept out of the maps above, which the 2-D charges iterate.
+PE_RHO = 950.0
+RACE_RHO = CHARGE_RHO | {"pe": PE_RHO}
+RACE_MIXTURES = MIXTURES | {"pe": spray_eos.AtomMixture((("C", 1.0), ("H", 2.0)))}
 
 OUT_DIR = charge.OUT_DIR
 JSONL = OUT_DIR / "iapetus_2d.jsonl"
@@ -191,7 +196,10 @@ def sunlit_temperature(au: float, absorb_over_emit: float = 1.0) -> float:
 
 @cache
 def table(material: str) -> EosTable:
-    """The argon or water equilibrium table as a fireball `EosTable` (as `charge.ch2_table`)."""
+    """The argon or water equilibrium table as a fireball `EosTable` (as `charge.ch2_table`), or
+    the CH2 table itself for `pe`."""
+    if material == "pe":
+        return charge.ch2_table()
     d = json.loads(TABLES[material].read_text())
     n = d["shape"]
     f = {k: np.array(v).reshape(n) for k, v in d["fields"].items()}
@@ -210,7 +218,7 @@ def table(material: str) -> EosTable:
 
 def ion_energy(material: str, rho: float, temp: float) -> tuple[float, float]:
     """`(e_ion [J/kg], n_e)` in Saha equilibrium (atoms only, as `freeze.ion_energy`)."""
-    s = spray_eos.state(MIXTURES[material], rho, temp)
+    s = spray_eos.state(RACE_MIXTURES[material], rho, temp)
     e = 0.0
     for name, n in s.n_element.items():
         e += n * float(np.dot(s.fractions[name], spray_eos._cumulative_ip(name)))
@@ -254,6 +262,7 @@ def race(
     plate_distance: float = 4.0,
     leg: str = "fireball",
     rebound_column: float = 0.4,
+    bag: float = BAG,
 ) -> Race:
     """Race the ionization store and (water) the bonds against the expansion.
 
@@ -267,15 +276,15 @@ def race(
     `tau = column / (rho c_s)` its sound-crossing time.
     """
     tab = table(material)
-    mass = (1.0 + k) * BAG
+    mass = (1.0 + k) * bag
     heat_bag = 0.5 * k / (1.0 + k) * w * w  # [J per kg of bag]
     heat = heat_bag / (1.0 + k)  # [J per kg of merged mass]
     ceiling = float(np.exp(tab.ln_rho[-1]))
     if leg == "fireball":
-        rho = min(CHARGE_RHO[material], ceiling)
+        rho = min(RACE_RHO[material], ceiling)
         e = heat
     else:
-        f = race(material, k, w, plate_distance)
+        f = race(material, k, w, plate_distance, bag=bag)
         u_rms = math.sqrt(2.0 * heat * f.kinetic_share_end)
         drift = w / (1.0 + k)
         rho_a = f.rho_end

@@ -32,8 +32,8 @@ use std::io::Write as _;
 use std::path::Path;
 
 use euler2d::bounce::{
-    BumperCharge, DiskCharge, PlateShape, PointFireball, SlugConfig, SprayCloud, TrailingPearl,
-    eta_capture, init_spray_grid, run_bumper_charge_bounce, run_disk_charge_bounce,
+    BumperCharge, ChargeLayer, DiskCharge, PlateShape, PointFireball, SlugConfig, SprayCloud,
+    TrailingPearl, eta_capture, init_spray_grid, run_bumper_charge_bounce, run_disk_charge_bounce,
     run_fireball_bounce, run_slug_bounce, run_spray_bounce, run_spray_bounce_with_ambient,
     run_spray_bounce_with_pearl, run_spray_bounce_with_skirt_history, taper_sigma_stats,
 };
@@ -6940,6 +6940,7 @@ fn mix_case(
                     ambient: CHARGE_AMBIENT,
                     hole_radius: CHARGE_HOLE_R,
                     toward_plate: false,
+                    layer: None,
                 },
             ),
             u_rms,
@@ -7193,6 +7194,7 @@ fn overtake_case(
                     ambient: CHARGE_AMBIENT,
                     hole_radius: 0.0,
                     toward_plate: true,
+                    layer: None,
                 },
             );
             // Per merged mass, in the closing speed -> per m v.
@@ -7377,6 +7379,7 @@ fn sheet_plate_case(
             ambient: CHARGE_AMBIENT,
             hole_radius: 0.0,
             toward_plate: true,
+            layer: None,
         },
     );
     // The run's mass unit is the merged 1 + k sheets and its speed unit the closing speed.
@@ -7672,6 +7675,7 @@ fn fast_wave_case(
                 ambient: CHARGE_AMBIENT,
                 hole_radius: 0.0,
                 toward_plate: true,
+                layer: None,
             },
         );
         // Units: the merged mass and the closing speed.
@@ -7867,6 +7871,7 @@ fn cmd_plate_profile_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error
                 ambient: CHARGE_AMBIENT,
                 hole_radius: 0.0,
                 toward_plate: true,
+                layer: None,
             },
         );
         let m = 1.0 + PLATE_PROFILE_K;
@@ -7943,6 +7948,7 @@ fn cmd_spring_trim_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>>
                 ambient: CHARGE_AMBIENT,
                 hole_radius: 0.0,
                 toward_plate: true,
+                layer: None,
             },
         );
         let m = 1.0 + k;
@@ -8054,6 +8060,7 @@ fn cmd_plume_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 ambient: CHARGE_AMBIENT,
                 hole_radius: 0.0,
                 toward_plate: true,
+                layer: None,
             },
         );
         let m = 1.0 + PLATE_PROFILE_K;
@@ -8978,6 +8985,7 @@ fn iapetus_case(
                 ambient: CHARGE_AMBIENT,
                 hole_radius: 0.0,
                 toward_plate: true,
+                layer: None,
             },
         );
         // Units: the merged mass and the closing speed.
@@ -9409,6 +9417,10 @@ fn cmd_iapetus_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 /// Arrival speeds [m/s] for the 1-D rebound: the merged gas reaches the plate at `u_rms + w`,
 /// 18-24 km/s at 51.1 km/s over k = 4-30 and up to ~31 km/s at 68 km/s.
 const IAPETUS_REBOUND_V: [f64; 5] = [15_000.0, 20_000.0, 25_000.0, 30_000.0, 35_000.0];
+/// Result 22: the Sun bowl's gas reaches the plate at ~80 km/s (S60's water and argon charges).
+const IAPETUS_REBOUND_V_FAST: [f64; 4] = [50_000.0, 65_000.0, 80_000.0, 100_000.0];
+/// Result 22's low-speed panel: at 44-55 km/s and k = 5-20 the gas reaches the plate at 8-16 km/s.
+const IAPETUS_REBOUND_V_SLOW: [f64; 4] = [6_000.0, 8_000.0, 10_000.0, 12_000.0];
 /// Arriving densities [kg/m^3] over a 1 m column.
 const IAPETUS_REBOUND_RHO: [f64; 4] = [0.1, 0.3, 1.0, 3.0];
 
@@ -9422,12 +9434,24 @@ struct IapetusReboundRecord {
 /// `--iapetus-rebound`: the heavy-plate 1-D bounce of argon and of water at the arrival speeds,
 /// on their equilibrium tables (the radiative `e_eff` for the rebound swap and the wall heat). Water
 /// uses the extended Jupiter grid, which reaches 1.2 MK like the argon table.
-fn cmd_iapetus_rebound(_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+/// `--iapetus-rebound [fast|slow]`: `fast` runs Result 22's Sun-bowl speeds
+/// (`IAPETUS_REBOUND_V_FAST`) and `slow` its 44-55 km/s panel's (`IAPETUS_REBOUND_V_SLOW`), each into
+/// its own file, so Result 20's grid is untouched.
+fn cmd_iapetus_rebound(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let argon = Table::load("data/tables/argon.json")?;
     let water = Table::load(TABLE_PATH_JUPITER)?;
+    let fast = args.iter().any(|a| a == "fast");
+    let slow = args.iter().any(|a| a == "slow");
+    let speeds: &[f64] = if fast {
+        &IAPETUS_REBOUND_V_FAST
+    } else if slow {
+        &IAPETUS_REBOUND_V_SLOW
+    } else {
+        &IAPETUS_REBOUND_V
+    };
     let mut cases = Vec::new();
     for material in ["argon", "water"] {
-        for &v in &IAPETUS_REBOUND_V {
+        for &v in speeds {
             for &rho in &IAPETUS_REBOUND_RHO {
                 cases.push((material, v, rho));
             }
@@ -9440,7 +9464,14 @@ fn cmd_iapetus_rebound(_args: &[String]) -> Result<(), Box<dyn std::error::Error
             run: run_one_heavyplate(v, rho, 1.0, 1.0, table),
         }
     });
-    emit_scenario(RESULT_PATH_IAPETUS_REBOUND, "iapetus rebound", &rows, |r| {
+    let path = if fast {
+        RESULT_PATH_IAPETUS_REBOUND.replace(".jsonl", "_fast.jsonl")
+    } else if slow {
+        RESULT_PATH_IAPETUS_REBOUND.replace(".jsonl", "_slow.jsonl")
+    } else {
+        RESULT_PATH_IAPETUS_REBOUND.to_string()
+    };
+    emit_scenario(&path, "iapetus rebound", &rows, |r| {
         println!(
             "rust: {:<6} v={:>6.0} rho={:.2} -> e_eff={:.4} wall_rad={:.3e} escape={:.3e} conv={}",
             r.material,
@@ -9854,6 +9885,461 @@ fn cmd_shaped_plug(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     })
 }
 
+// X-ray collision study, Result 22: the parent's S60, water or argon snow as the charge on all
+// three plates. The gamma gas has no speed scale and no material, so a charge's bulk density enters
+// only as the length of the column the impactor crosses (its mass is fixed by k, its footprint by
+// the impactor's). Three plates: the Sun bowl (1 kg disk, 0.25 m, k = 20) and the departure bowl
+// (15 kg, 0.4 m, k = 12.4, on the axis as Result 14's stand-in for the 130 deg entry), both the
+// δ/D 0.5 paraboloid with the charge at 1.5 F and the disk entering from the plate side; and the
+// growth push's planar sheet (k = 6.4), whose thickness is swept instead. Graded columns (item 7)
+// put one material at two densities along the axis.
+
+const RESULT_PATH_SNOW: &str = "data/results/xray_collision/snow_charge_2d.jsonl";
+/// `(plate, impactor kg, disk radius [m], k, densities [kg/m^3])`. The departure drops 30 kg/m^3,
+/// whose 12 m column would reach the vertex.
+const SNOW_BOWLS: [(&str, f64, f64, f64, &[f64]); 2] = [
+    (
+        "sun",
+        1.0,
+        0.25,
+        20.0,
+        &[
+            1620.0, 1000.0, 950.0, 917.0, 600.0, 500.0, 300.0, 100.0, 30.0,
+        ],
+    ),
+    (
+        "departure",
+        15.0,
+        0.4,
+        12.4,
+        &[1620.0, 1000.0, 950.0, 917.0, 600.0, 500.0, 300.0, 100.0],
+    ),
+];
+/// The δ/D 0.5 paraboloid, charge centre at 1.5 F = 3.75 m.
+const SNOW_DD: f64 = 0.5;
+const SNOW_FOCUS_MULTIPLE: f64 = 1.5;
+/// The Sun bowl's on-axis bore; the departure's hole is off the axis (Result 14), so none here.
+const SNOW_BORE: [f64; 2] = [CHARGE_HOLE_R, 0.0];
+/// The gamma bracket on the solid reference, for the materials' effective gammas.
+const SNOW_GAMMAS: [f64; 2] = [1.2, 5.0 / 3.0];
+/// Graded columns: ice at 917 under a light part at 917 / ratio, dense share of k, both ends.
+const SNOW_GRADED_RATIOS: [f64; 2] = [3.0, 5.0];
+const SNOW_GRADED_SHARES: [f64; 3] = [0.25, 0.5, 0.75];
+const SNOW_ICE: f64 = 917.0;
+/// The growth push: k, sheet radius, standoff, and the sheet thicknesses on the grid [m].
+const SNOW_PUSH_K: f64 = 6.4;
+const SNOW_PUSH_SHEET_R: f64 = 5.0;
+const SNOW_PUSH_THICKNESS: [f64; 4] = [0.1, 0.2, 0.4, 0.8];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SnowRecord {
+    case: String,
+    /// `sun`, `departure` or `push`.
+    plate: String,
+    /// `point`, `uniform`, `graded` or `sheet`.
+    kind: String,
+    k: f64,
+    gamma: f64,
+    /// Bulk density of the (light part of the) charge [kg/m^3]; the dense part's, if graded.
+    rho: f64,
+    rho_dense: f64,
+    dense_share: f64,
+    dense_on_plate_side: bool,
+    /// The column's length (the sheet's thickness on the push) and the disk's radius [m].
+    length: f64,
+    disk_radius: f64,
+    /// Plate impulse per `m v` (impactor mass and closing speed), the bore's part removed.
+    impulse_per_mv: f64,
+    hole_per_mv: f64,
+    /// Peak local pressure per `m v^2 / m^3`, outside the bore, and where.
+    peak_per_mv2: f64,
+    peak_radius: f64,
+    exit_direction: f64,
+    exit_uniformity: f64,
+    steps: usize,
+    dr: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SnowCase {
+    plate: usize, // 0 sun, 1 departure, 2 push
+    kind: u8,     // 0 point, 1 uniform, 2 graded, 3 sheet
+    gamma: f64,
+    rho: f64,
+    ratio: f64,
+    share: f64,
+    plate_side: bool,
+    length: f64,
+}
+
+/// The disk's cold Mach number: a softer gas holds more heat at the same Mach (`1 / (gamma
+/// (gamma - 1) M^2)` of the disk's energy), so it is raised to keep that at gamma 1.4's level.
+fn snow_mach(gamma: f64) -> f64 {
+    SPRAY_2D_MACH * (1.4 * 0.4 / (gamma * (gamma - 1.0))).max(1.0).sqrt()
+}
+
+fn snow_bowl_cfg(gamma: f64, reach: f64, dr: f64) -> (SlugConfig, f64) {
+    let h = SNOW_FOCUS_MULTIPLE * CHARGE_PLATE_R / (8.0 * SNOW_DD);
+    let depth = SNOW_DD * 2.0 * CHARGE_PLATE_R;
+    let top = 4.0 * dr + depth.max(h + reach) + 3.0;
+    let mut nz = 0usize;
+    while (nz as f64) * dr < top {
+        nz += 1;
+    }
+    let mut nr = 0usize;
+    while (nr as f64) * dr < CHARGE_PLATE_R + 2.0 {
+        nr += 1;
+    }
+    let cfg = SlugConfig {
+        gamma,
+        mach: snow_mach(gamma),
+        r_foot: MIX_RADIUS,
+        length: MIX_RADIUS,
+        r_plate: CHARGE_PLATE_R,
+        r_max: nr as f64 * dr,
+        z_max: nz as f64 * dr,
+        nr,
+        nz,
+        confined: false,
+        shape: PlateShape::Dish { d_over_d: SNOW_DD },
+        taper_frac: 0.0,
+        alpha_div: 0.0,
+    };
+    (cfg, h)
+}
+
+fn snow_case(c: SnowCase, dr: f64) -> SnowRecord {
+    let layer = (c.kind == 2 || (c.kind == 3 && c.share > 0.0)).then_some(ChargeLayer {
+        mass_share: c.share,
+        density_ratio: c.ratio,
+        dense_on_plate_side: c.plate_side,
+    });
+    let (plate, r, m, v, disk_radius, k, hole) = if c.plate == 2 {
+        let cfg = SlugConfig {
+            gamma: c.gamma,
+            mach: snow_mach(c.gamma),
+            ..sheet_plate_cfg(
+                SNOW_PUSH_SHEET_R + 1.5,
+                FAST_WAVE_PLATE.1,
+                FAST_WAVE_SHEET_HEIGHT + 0.5 * c.length + 6.0 * dr,
+                dr,
+            )
+        };
+        let r = run_disk_charge_bounce(
+            &cfg,
+            DiskCharge {
+                radius: SNOW_PUSH_SHEET_R,
+                height: FAST_WAVE_SHEET_HEIGHT,
+                charge_length: c.length,
+                k: SNOW_PUSH_K,
+                disk_thickness: 4.0 * dr,
+                gap: 2.0 * dr,
+                ambient: CHARGE_AMBIENT,
+                hole_radius: 0.0,
+                toward_plate: true,
+                layer,
+            },
+        );
+        (
+            "push",
+            r,
+            1.0 + SNOW_PUSH_K,
+            1.0,
+            SNOW_PUSH_SHEET_R,
+            SNOW_PUSH_K,
+            0.0,
+        )
+    } else {
+        let (name, _, radius, k, _) = SNOW_BOWLS[c.plate];
+        let hole = SNOW_BORE[c.plate];
+        if c.kind == 0 {
+            let (cfg, h) = snow_bowl_cfg(c.gamma, CHARGE_BALL_R, dr);
+            let r = run_fireball_bounce(
+                &cfg,
+                PointFireball {
+                    height: h,
+                    radius: CHARGE_BALL_R,
+                    drift: 1.0 / k.sqrt(),
+                    ambient: CHARGE_AMBIENT,
+                    hole_radius: hole,
+                },
+            );
+            // Units: the merged mass and its u_rms, in the disk's speed.
+            (name, r, 1.0 + k, k.sqrt() / (1.0 + k), radius, k, hole)
+        } else {
+            let (cfg, h) = snow_bowl_cfg(c.gamma, 0.5 * c.length, dr);
+            let r = run_disk_charge_bounce(
+                &cfg,
+                DiskCharge {
+                    radius,
+                    height: h,
+                    charge_length: c.length,
+                    k,
+                    disk_thickness: 4.0 * dr,
+                    gap: 2.0 * dr,
+                    ambient: CHARGE_AMBIENT,
+                    hole_radius: hole,
+                    toward_plate: false,
+                    layer,
+                },
+            );
+            (name, r, 1.0 + k, 1.0, radius, k, hole)
+        }
+    };
+    let kind = ["point", "uniform", "graded", "sheet"][c.kind as usize];
+    let case = match c.kind {
+        0 => format!("{plate}: point fireball, gamma {:.3}", c.gamma),
+        1 => format!("{plate}: uniform {:.0} kg/m^3, gamma {:.3}", c.rho, c.gamma),
+        2 => format!(
+            "{plate}: graded {:.0} over {:.0}, dense share {:.2} on the {} side",
+            c.rho,
+            c.rho * c.ratio,
+            c.share,
+            if c.plate_side { "plate" } else { "far" }
+        ),
+        _ => format!(
+            "{plate}: sheet {:.2} m, gamma {:.3}{}",
+            c.length,
+            c.gamma,
+            layer.map_or(String::new(), |l| format!(
+                ", graded x{:.0} share {:.2} on the {} side",
+                l.density_ratio,
+                l.mass_share,
+                if l.dense_on_plate_side {
+                    "plate"
+                } else {
+                    "far"
+                }
+            ))
+        ),
+    };
+    let _ = hole;
+    SnowRecord {
+        case,
+        plate: plate.to_string(),
+        kind: kind.to_string(),
+        k,
+        gamma: c.gamma,
+        rho: c.rho,
+        rho_dense: if c.kind == 2 || (c.kind == 3 && layer.is_some()) {
+            c.rho * c.ratio
+        } else {
+            c.rho
+        },
+        dense_share: if layer.is_some() { c.share } else { 0.0 },
+        dense_on_plate_side: layer.is_some() && c.plate_side,
+        length: c.length,
+        disk_radius,
+        impulse_per_mv: r.wall_impulse * m * v,
+        hole_per_mv: r.hole_impulse * m * v,
+        peak_per_mv2: r.peak_pressure_outside_bore * m * v * v,
+        peak_radius: r.peak_radius,
+        exit_direction: r.exit_direction,
+        exit_uniformity: r.exit_uniformity,
+        steps: r.steps,
+        dr,
+    }
+}
+
+/// The S60 case list. A bowl column's length is `k m / (rho pi R^2)`.
+fn snow_cases() -> Vec<SnowCase> {
+    let mut cases = Vec::new();
+    let base = SnowCase {
+        plate: 0,
+        kind: 1,
+        gamma: SPRAY_2D_GAMMA,
+        rho: 950.0,
+        ratio: 1.0,
+        share: 0.0,
+        plate_side: false,
+        length: 0.0,
+    };
+    for (i, &(_, mass, radius, k, rhos)) in SNOW_BOWLS.iter().enumerate() {
+        let area = std::f64::consts::PI * radius * radius;
+        let length = |rho: f64| k * mass / (rho * area);
+        cases.push(SnowCase {
+            plate: i,
+            kind: 0,
+            ..base
+        });
+        for &rho in rhos {
+            cases.push(SnowCase {
+                plate: i,
+                rho,
+                length: length(rho),
+                ..base
+            });
+        }
+        for &gamma in &SNOW_GAMMAS {
+            cases.push(SnowCase {
+                plate: i,
+                gamma,
+                length: length(950.0),
+                ..base
+            });
+        }
+        for &ratio in &SNOW_GRADED_RATIOS {
+            let light = SNOW_ICE / ratio;
+            for &share in &SNOW_GRADED_SHARES {
+                for plate_side in [true, false] {
+                    // Length: the dense part's k s at 917 plus the light part's k (1 - s).
+                    let len = k * mass / area * (share / SNOW_ICE + (1.0 - share) / light);
+                    cases.push(SnowCase {
+                        plate: i,
+                        kind: 2,
+                        rho: light,
+                        ratio,
+                        share,
+                        plate_side,
+                        length: len,
+                        ..base
+                    });
+                }
+            }
+        }
+    }
+    for &t in &SNOW_PUSH_THICKNESS {
+        cases.push(SnowCase {
+            plate: 2,
+            kind: 3,
+            rho: f64::NAN,
+            length: t,
+            ..base
+        });
+    }
+    for &gamma in &SNOW_GAMMAS {
+        cases.push(SnowCase {
+            plate: 2,
+            kind: 3,
+            gamma,
+            rho: f64::NAN,
+            length: 0.2,
+            ..base
+        });
+    }
+    for plate_side in [true, false] {
+        cases.push(SnowCase {
+            plate: 2,
+            kind: 3,
+            rho: f64::NAN,
+            ratio: 5.0,
+            share: 0.5,
+            plate_side,
+            length: 0.8,
+            ..base
+        });
+    }
+    cases
+}
+
+/// `--snow-charge [coarse] [sun|departure|push] | confined`: the parent's S60 on all three plates. The bowls
+/// run at half the Sun plate's production cell (their solid columns are 0.1-0.4 m long);
+/// `coarse` doubles it. A plate name runs that plate alone and writes its own file.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct SnowConfinedRecord {
+    gamma: f64,
+    mach: f64,
+    /// The confined plane wave's `1 + e` in this gas (`charge_confined_ratio` at gamma 1.4).
+    confined_ratio: f64,
+}
+
+/// `--snow-charge confined`: the confined plane wave's rebound at each gamma of the bracket, so a
+/// run's impulse can be divided by its own gas's bounce before a material's `1 + e_eff` replaces
+/// it (as Result 20's `gamma_factor` does).
+fn cmd_snow_confined() -> Result<(), Box<dyn std::error::Error>> {
+    let gammas = [SNOW_GAMMAS[0], SPRAY_2D_GAMMA, SNOW_GAMMAS[1]];
+    let rows = par_map_with_progress("snow confined", &gammas, |&gamma| {
+        let cfg = SlugConfig {
+            gamma,
+            mach: snow_mach(gamma),
+            r_foot: 1.0,
+            length: 1.0,
+            r_plate: 1.0,
+            r_max: 0.05,
+            z_max: 4.0,
+            nr: 2,
+            nz: 400,
+            confined: true,
+            shape: PlateShape::FlatGridAligned,
+            taper_frac: 0.0,
+            alpha_div: 0.0,
+        };
+        SnowConfinedRecord {
+            gamma,
+            mach: cfg.mach,
+            confined_ratio: run_slug_bounce(&cfg).restitution_ratio(),
+        }
+    });
+    let path = RESULT_PATH_SNOW.replace(".jsonl", "_confined.jsonl");
+    emit_scenario(&path, "snow confined", &rows, |r| {
+        println!(
+            "rust: gamma {:.3} mach {:.1} confined ratio {:.4}",
+            r.gamma, r.mach, r.confined_ratio
+        );
+    })
+}
+
+fn cmd_snow_charge(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    if args.iter().any(|a| a == "confined") {
+        return cmd_snow_confined();
+    }
+    let coarse = args.iter().any(|a| a == "coarse");
+    let only = ["sun", "departure", "push"]
+        .iter()
+        .position(|p| args.iter().any(|a| a == p));
+    let bowl_dr = if coarse { CHARGE_DR } else { CHARGE_DR / 2.0 };
+    let sheet_dr = if coarse { 2.0 * CHARGE_DR } else { CHARGE_DR };
+    let dr_of = |c: &SnowCase| if c.plate == 2 { sheet_dr } else { bowl_dr };
+    // A graded part shorter than two cells is not resolved: skip it and say so.
+    let resolved = |c: &SnowCase| {
+        if c.share == 0.0 {
+            return true;
+        }
+        let dense = c.share / c.ratio;
+        let frac = dense / (dense + 1.0 - c.share);
+        let shortest = c.length * frac.min(1.0 - frac);
+        shortest >= 2.0 * dr_of(c)
+    };
+    let (cases, skipped): (Vec<SnowCase>, Vec<SnowCase>) = snow_cases()
+        .into_iter()
+        .filter(|c| only.is_none_or(|p| c.plate == p))
+        .partition(|c| resolved(c));
+    for c in &skipped {
+        println!(
+            "rust: skipped (a part under two cells): plate {} light {:.0} ratio {:.0} share {:.2} length {:.3} m",
+            ["sun", "departure", "push"][c.plate],
+            c.rho,
+            c.ratio,
+            c.share,
+            c.length
+        );
+    }
+    let rows = par_map_with_progress("snow charge", &cases, |&c| snow_case(c, dr_of(&c)));
+    let mut path = RESULT_PATH_SNOW.to_string();
+    if let Some(p) = only {
+        path = path.replace(
+            ".jsonl",
+            &format!("_{}.jsonl", ["sun", "departure", "push"][p]),
+        );
+    }
+    if coarse {
+        path = path.replace(".jsonl", "_coarse.jsonl");
+    }
+    emit_scenario(&path, "snow charge", &rows, |r| {
+        println!(
+            "rust: {:<62} L {:5.2} m J/mv {:6.3} hole {:.4} peak/mv2 {:.3e} at r {:.2} dir {:.3} steps {}",
+            r.case,
+            r.length,
+            r.impulse_per_mv,
+            r.hole_per_mv,
+            r.peak_per_mv2,
+            r.peak_radius,
+            r.exit_direction,
+            r.steps,
+        );
+    })
+}
+
 /// Flag → handler. `main` looks up the first matching flag and dispatches to it (the exact-string
 /// flags are mutually exclusive in practice, so table order does not affect behavior); anything
 /// unmatched falls through to [`cmd_baseline`] (the `--lowv` / positional-override default).
@@ -9912,6 +10398,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--spring-trim-2d", cmd_spring_trim_2d),
     ("--plume-2d", cmd_plume_2d),
     ("--canted-2d", cmd_canted_2d),
+    ("--snow-charge", cmd_snow_charge),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),
     ("--geometry-wide", cmd_geometry_wide),

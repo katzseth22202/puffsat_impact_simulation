@@ -980,6 +980,35 @@ pub struct DiskCharge {
     /// moving *toward* the plate, so the merged mass drifts onto it. `false` is Result 10's disk
     /// that has come through the bore and strikes the charge's plate-side face.
     pub toward_plate: bool,
+    /// A graded charge (X-ray study, Result 22, the parent's S60 item 7): `Some` splits the
+    /// column into a light and a dense part along the axis. `None` is one uniform density.
+    pub layer: Option<ChargeLayer>,
+}
+
+/// The dense part of a graded [`DiskCharge`]: snow or froth over ice, one material at two
+/// densities. In the γ-law gas only the density differs between the parts.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChargeLayer {
+    /// The dense part's share of the charge mass `k`, in (0, 1).
+    pub mass_share: f64,
+    /// Dense density over light density, > 1.
+    pub density_ratio: f64,
+    /// The dense part sits at the column's plate-side end (`false`: its far end).
+    pub dense_on_plate_side: bool,
+}
+
+/// A [`DiskCharge`] laid on its grid: the cold start, and what was laid down.
+#[derive(Debug)]
+pub struct DiskChargeGrid {
+    pub grid: Grid2D,
+    /// The disk's, light charge's and dense charge's masses as gridded (1, `k (1 - s)`, `k s`).
+    pub disk_mass: f64,
+    pub light_mass: f64,
+    pub dense_mass: f64,
+    /// Dense over light density as gridded (1 with no layer).
+    pub density_ratio: f64,
+    /// The ambient gas's mass, per merged mass.
+    pub ambient_mass: f64,
 }
 
 /// Internal energy on the grid, `sum p/(gamma - 1) dV` with the common `2π` dropped (the
@@ -999,6 +1028,26 @@ fn cold_heat(g: &Grid2D, gamma: f64) -> f64 {
 /// If `cfg.shape` is the grid-aligned flat plate, which has no immersed profile.
 #[must_use]
 pub fn run_disk_charge_bounce(cfg: &SlugConfig, dc: DiskCharge) -> FireballBounce {
+    let laid = init_disk_charge_grid(cfg, dc);
+    run_fireball_grid(
+        laid.grid,
+        cfg.nz,
+        dc.hole_radius,
+        1.0 + dc.k,
+        laid.ambient_mass,
+    )
+}
+
+/// Lay a [`DiskCharge`] on the grid of `cfg`: disk mass 1 at speed 1, charge mass `k` at rest
+/// (split by its [`ChargeLayer`], if any), both cold, in a near-vacuum ambient. Masses are exact:
+/// each region's density is its mass over its gridded volume.
+///
+/// # Panics
+///
+/// If `cfg.shape` has no immersed profile, a layer's share or ratio is out of range, or the start
+/// is not cold.
+#[must_use]
+pub fn init_disk_charge_grid(cfg: &SlugConfig, dc: DiskCharge) -> DiskChargeGrid {
     let dz = cfg.z_max / cfg.nz as f64;
     let dr = cfg.r_max / cfg.nr as f64;
     let mut g = Grid2D::new(cfg.nz, cfg.nr, dz, dr, cfg.gamma);
@@ -1012,6 +1061,20 @@ pub fn run_disk_charge_bounce(cfg: &SlugConfig, dc: DiskCharge) -> FireballBounc
     let z_vertex = profile.z_surface(0.0);
     let charge_lo = z_vertex + dc.height - 0.5 * dc.charge_length;
     let charge_hi = charge_lo + dc.charge_length;
+    // The dense part's length: masses s and 1 - s at densities ratio and 1 share the column.
+    let z_cut = dc.layer.map(|l| {
+        assert!(
+            l.mass_share > 0.0 && l.mass_share < 1.0 && l.density_ratio > 1.0,
+            "a layer holds a share in (0, 1) at a density ratio above 1"
+        );
+        let dense = l.mass_share / l.density_ratio;
+        let frac = dense / (dense + 1.0 - l.mass_share);
+        if l.dense_on_plate_side {
+            charge_lo + frac * dc.charge_length
+        } else {
+            charge_hi - frac * dc.charge_length
+        }
+    });
     let (disk_lo, disk_hi, disk_speed) = if dc.toward_plate {
         let lo = charge_hi + dc.gap;
         (lo, lo + dc.disk_thickness, -1.0)
@@ -1019,13 +1082,17 @@ pub fn run_disk_charge_bounce(cfg: &SlugConfig, dc: DiskCharge) -> FireballBounc
         let hi = charge_lo - dc.gap;
         (hi - dc.disk_thickness, hi, 1.0)
     };
+    // 0 ambient, 1 disk, 2 light charge (or the whole uniform charge), 3 dense charge.
     let region = |iz: usize, ir: usize| -> u8 {
         let z = (iz as f64 + 0.5) * dz;
         let r = (ir as f64 + 0.5) * dr;
         if r >= dc.radius {
             0
         } else if z >= charge_lo && z < charge_hi {
-            2
+            match (z_cut, dc.layer) {
+                (Some(cut), Some(l)) if (z < cut) == l.dense_on_plate_side => 3,
+                _ => 2,
+            }
         } else if z >= disk_lo && z < disk_hi {
             1
         } else {
@@ -1033,36 +1100,45 @@ pub fn run_disk_charge_bounce(cfg: &SlugConfig, dc: DiskCharge) -> FireballBounc
         }
     };
     let two_pi = 2.0 * std::f64::consts::PI;
-    let (mut v_disk, mut v_charge, mut v_domain) = (0.0, 0.0, 0.0);
+    let (mut v_disk, mut v_light, mut v_dense, mut v_domain) = (0.0, 0.0, 0.0, 0.0);
     for iz in 0..cfg.nz {
         for ir in 0..cfg.nr {
             let v = g.cell_volume(ir) / two_pi;
             v_domain += v;
             match region(iz, ir) {
                 1 => v_disk += v,
-                2 => v_charge += v,
+                2 => v_light += v,
+                3 => v_dense += v,
                 _ => {}
             }
         }
     }
+    let share = dc.layer.map_or(0.0, |l| l.mass_share);
+    assert!(
+        dc.layer.is_none() || v_dense > 0.0,
+        "the dense layer must cover at least one cell"
+    );
     // Disk mass 1 at speed 1, charge mass k at rest, both cold.
     let rho_disk = 1.0 / v_disk;
-    let rho_charge = dc.k / v_charge;
+    let rho_light = dc.k * (1.0 - share) / v_light;
+    let rho_dense = if v_dense > 0.0 {
+        dc.k * share / v_dense
+    } else {
+        rho_light
+    };
+    let v_charge = v_light + v_dense;
     let p_cold = rho_disk / (cfg.gamma * cfg.mach * cfg.mach);
-    let rho_amb = dc.ambient * rho_charge;
+    let rho_amb = dc.ambient * (dc.k / v_charge);
+    // The charge starts at the disk's cold *pressure*. At the disk's temperature it would hold
+    // k times the disk's specific heat: at Mach 20 and k = 30 that is ~28% of the collision's
+    // own heat, and ~90% at k = 100 (the defect corrected 2026-10-15).
+    // A long foam column holds ~50 disk volumes, so its cold pressure is scaled down to keep
+    // its stored heat under a quarter of the disk's own (itself ~1% of the disk's energy).
+    let p_charge = p_cold * (0.25 * v_disk / v_charge).min(1.0);
     g.init(|iz, ir| match region(iz, ir) {
         1 => Prim::new(rho_disk, disk_speed, 0.0, p_cold),
-        // The charge starts at the disk's cold *pressure*. At the disk's temperature it would hold
-        // k times the disk's specific heat: at Mach 20 and k = 30 that is ~28% of the collision's
-        // own heat, and ~90% at k = 100 (the defect corrected 2026-10-15).
-        // A long foam column holds ~50 disk volumes, so its cold pressure is scaled down to keep
-        // its stored heat under a quarter of the disk's own (itself ~1% of the disk's energy).
-        2 => Prim::new(
-            rho_charge,
-            0.0,
-            0.0,
-            p_cold * (0.25 * v_disk / v_charge).min(1.0),
-        ),
+        2 => Prim::new(rho_light, 0.0, 0.0, p_charge),
+        3 => Prim::new(rho_dense, 0.0, 0.0, p_charge),
         _ => Prim::new(rho_amb, 0.0, 0.0, p_cold * 1.0e-6),
     });
     assert!(
@@ -1070,13 +1146,14 @@ pub fn run_disk_charge_bounce(cfg: &SlugConfig, dc: DiskCharge) -> FireballBounc
         "the disk and charge must start cold against the disk's kinetic energy of 1/2"
     );
     let merged = 1.0 + dc.k;
-    run_fireball_grid(
-        g,
-        cfg.nz,
-        dc.hole_radius,
-        merged,
-        rho_amb * (v_domain - v_disk - v_charge) / merged,
-    )
+    DiskChargeGrid {
+        grid: g,
+        disk_mass: rho_disk * v_disk,
+        light_mass: rho_light * v_light,
+        dense_mass: rho_dense * v_dense,
+        density_ratio: rho_dense / rho_light,
+        ambient_mass: rho_amb * (v_domain - v_disk - v_charge) / merged,
+    }
 }
 
 /// A compact impactor that first strikes a thin bumper, then meets a wide charge disk (X-ray
@@ -1204,9 +1281,9 @@ pub fn run_bumper_charge_bounce(cfg: &SlugConfig, bc: BumperCharge) -> FireballB
 #[cfg(test)]
 mod tests {
     use super::{
-        BumperCharge, PlateShape, PointFireball, SlugConfig, init_slug_grid,
-        run_bumper_charge_bounce, run_fireball_bounce, run_slug_bounce, taper_mass_factor,
-        taper_sigma_stats, taper_weight,
+        BumperCharge, ChargeLayer, DiskCharge, PlateShape, PointFireball, SlugConfig,
+        init_disk_charge_grid, init_slug_grid, run_bumper_charge_bounce, run_fireball_bounce,
+        run_slug_bounce, taper_mass_factor, taper_sigma_stats, taper_weight,
     };
 
     /// A small dished free-bounce config the shape tests perturb (taper/divergence default 0).
@@ -1225,6 +1302,70 @@ mod tests {
             shape: PlateShape::Dish { d_over_d: 0.10 },
             taper_frac: 0.0,
             alpha_div: 0.0,
+        }
+    }
+
+    /// A graded charge (Result 22) lays exact masses: disk 1, light `k (1 - s)`, dense `k s`, at
+    /// close to the asked density ratio, with the dense part at the asked end; and no layer lays
+    /// one uniform column of mass `k`.
+    #[test]
+    fn graded_charge_lays_exact_masses_at_the_asked_end() {
+        let cfg = SlugConfig {
+            shape: PlateShape::Dish { d_over_d: 0.5 },
+            r_plate: 2.0,
+            r_max: 2.5,
+            z_max: 4.0,
+            nr: 100,
+            nz: 160,
+            mach: 20.0,
+            ..base_cfg()
+        };
+        let base = DiskCharge {
+            radius: 0.25,
+            height: 1.5,
+            charge_length: 0.6,
+            k: 20.0,
+            disk_thickness: 0.1,
+            gap: 0.05,
+            ambient: 1.0e-9,
+            hole_radius: 0.0,
+            toward_plate: false,
+            layer: None,
+        };
+        let uniform = init_disk_charge_grid(&cfg, base);
+        assert!((uniform.disk_mass - 1.0).abs() < 1e-12);
+        assert!((uniform.light_mass - 20.0).abs() < 1e-9);
+        assert!(uniform.dense_mass.abs() < 1e-12);
+        for plate_side in [true, false] {
+            let laid = init_disk_charge_grid(
+                &cfg,
+                DiskCharge {
+                    layer: Some(ChargeLayer {
+                        mass_share: 0.5,
+                        density_ratio: 5.0,
+                        dense_on_plate_side: plate_side,
+                    }),
+                    ..base
+                },
+            );
+            assert!((laid.light_mass - 10.0).abs() < 1e-9);
+            assert!((laid.dense_mass - 10.0).abs() < 1e-9);
+            assert!(
+                (laid.density_ratio / 5.0 - 1.0).abs() < 0.2,
+                "gridded ratio {} far from 5",
+                laid.density_ratio
+            );
+            // The densest cell on the axis sits nearer the plate exactly when asked.
+            let g = &laid.grid;
+            let rho_axis = |iz: usize| g.prim(iz, 0).rho;
+            let z_dense = (0..cfg.nz)
+                .max_by(|&a, &b| rho_axis(a).total_cmp(&rho_axis(b)))
+                .expect("cells");
+            let rho_light = rho_axis(z_dense) / laid.density_ratio;
+            let z_light = (0..cfg.nz)
+                .find(|&iz| (rho_axis(iz) / rho_light - 1.0).abs() < 1e-9)
+                .expect("a light cell on the axis");
+            assert_eq!(z_dense < z_light, plate_side);
         }
     }
 
