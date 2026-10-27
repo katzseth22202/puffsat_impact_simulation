@@ -58,7 +58,7 @@ Its Python is `python/puffsat/xray_collision/` (entry point `fireball.collide`),
 `make xray-collision-charge-mix`, `make xray-collision-freeze`, `make xray-collision-collar`,
 `make xray-collision-overtake`, `make xray-collision-mission`, `make xray-collision-growth`,
 `make xray-collision-cme`, `make xray-collision-cadence-plate`, `make xray-collision-departure-hole`, `make xray-collision-fast-wave`, `make xray-collision-iapetus`,
-`make xray-collision-band-bowl`, `make xray-collision-gas-spring`, `make xray-collision-plume`, `make xray-collision-spring-trim`, `make xray-collision-shaped-plug`, `make xray-collision-snow-charge` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
+`make xray-collision-band-bowl`, `make xray-collision-gas-spring`, `make xray-collision-plume`, `make xray-collision-spring-trim`, `make xray-collision-shaped-plug`, `make xray-collision-snow-charge`, `make xray-collision-thick-disk` and `make xray-collision-tops`. The recommendation and energy ledger owed to the parent
 (lattice target, k = 2, per-projectile light and kinetic energy) is
 [`docs/xray_pusher_handoff.md`](docs/xray_pusher_handoff.md). The 66 km/s verdict (argon clouds
 radiate only at ~1 g/m^3, too large to thread the bore, so the pusher needs the Sun dive) is
@@ -125,6 +125,13 @@ solid but light-at-entry cuts the back-splash peak; at 44 km/s and k ≈ 10 wate
 Result 22 and [ADR-0073](docs/adr/0073-snow-charges-density-is-column-length.md) (module
 `snow_charge.py`, target `make xray-collision-snow-charge`); answers in
 [`docs/snow_charge_answers_for_parent.md`](docs/snow_charge_answers_for_parent.md).
+The thick Sun disk (a 1 cm, 2.5 kg graphite plate does not tunnel and loses ~5% on a charge as wide
+as itself; a charge 1.3-1.5x wider couples 1.13-1.14x the thin disk and catches it whole to the
+bore's 6-9.5 cm; the 5 t bowl needs 33-41 t at 1 Hz) is Result 23 and
+[ADR-0074](docs/adr/0074-thick-sun-disk-on-a-wider-charge.md) (module `thick_disk.py`, target
+`make xray-collision-thick-disk`); the request is copied to
+[`docs/thick_disk_impact_request.md`](docs/thick_disk_impact_request.md) and answered in
+[`docs/thick_disk_answers.md`](docs/thick_disk_answers.md).
 How hot the Kapton face can run for a sub-second pulse (decomposition kinetics, other films,
 fillers, overlayers, carbon veils) is researched in
 [`docs/kapton_temperature_limits.md`](docs/kapton_temperature_limits.md); its numbers are not yet

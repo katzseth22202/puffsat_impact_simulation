@@ -1,0 +1,127 @@
+# A thicker, heavier Sun disk: answers (for the requesting repo and the parent)
+
+Answered 2026-10-27 in `puffsat_impact_simulation`. **Written to be copied out.** It answers
+[`thick_disk_impact_request.md`](thick_disk_impact_request.md) (a copy of the request). It is
+Result 23 of [`xray_collision_study.md`](xray_collision_study.md) and
+[ADR-0074](adr/0074-thick-sun-disk-on-a-wider-charge.md). Every number below comes from
+`python/puffsat/xray_collision/thick_disk.py` (`make xray-collision-thick-disk`), whose tables are
+`data/results/xray_collision/thick_disk_*.csv`. Grid: Result 22's 0.025 m production cell, with
+the 0.05 m coarse grid as the check.
+
+## The short answer
+
+**The 1 cm disk couples; fly the 2.5 kg plate on a charge ~1.3-1.5x its radius, through a bore as
+wide, and re-price the bowl.**
+
+- A thick disk does not tunnel. It loses a little to sideways leak along its longer column: 5% at
+  2.5 kg on a charge as wide as itself, giving **3.23 m/s a pulse, not 3.4**.
+- Spreading the same charge wider shortens the column. At 1.3-1.5x the disk's radius it couples
+  **1.13-1.14x the thin baseline (3.85-3.88 m/s)**. It also catches the disk whole out to the bore,
+  **6.0-9.5 cm** off centre.
+- **The 5 t bowl cannot take it.** At 1 Hz the pulse is 1.9-2.3 MN s, which needs a 33-41 t bowl
+  on an 8 m spring stroke.
+
+## Item by item
+
+### 1. Sweep or punch-through
+
+The snowplow argument carries over to the bowl charge unchanged. A charge as wide as its disk holds
+k disk masses in its column whatever the disk's thickness: the column is `k sigma / rho` long,
+0.17 m at 8 kg/m^2 and 0.46 m for every 1 cm disk. The 2.75x longer column is exactly the 2.75x
+target column the argument asks for, and the charge supplies it automatically. What a longer column
+costs is the shocked gas leaking sideways during a longer sweep; the parameter is the column's
+length over its radius.
+
+At the same 1 kg (impulse J/(m v); the point fireball is 2.394):
+
+| disk | radius | column L/R | J/mv | over 8 kg/m^2 |
+|---|---|---|---|---|
+| 8 kg/m^2 | 0.20 m | 0.84 | 2.034 | 1 |
+| 22 kg/m^2 | 0.12 m | 3.85 | 1.725 | 0.85 |
+
+The 1 kg plate at 1 cm is only ~5 cells in radius and moved 19% between grids (0.71 coarse), so
+read 0.85 as "10-30% worse". That is one more reason to grow the 1 cm plate to 2.5 kg.
+
+### 2. Scaled pulse
+
+At 1 cm, charges as wide as the disk at k = 20:
+
+| disk | J/mv | over baseline | pulse | ship dv | peak (not converged) |
+|---|---|---|---|---|---|
+| 1 kg | 1.725 | 0.85 | 0.68 MN s | 1.15 m/s | 1.3 GPa |
+| 2 kg | 1.884 | 0.93 | 1.48 MN s | 2.52 m/s | 5.3 GPa |
+| 2.5 kg | 1.931 | 0.95 | 1.89 MN s | 3.23 m/s | 8.1 GPa |
+
+The 2.5 kg disk carries 192 GJ, the parent's 191 GJ. The fireball's heat is k/(1+k) of it,
+183 GJ. Ship dv scales the paper's 1.36 m/s per kg (9.8 km/s from 7.2 t) by the impulse ratio.
+
+**The bowl.** A free 5 t bowl would be kicked 380 m/s by each pulse. On the lossless spring,
+`m s = J tan(theta/4) / (2 theta f)` (our Result 17), at theta 2pi/3-5pi/6:
+
+| pulse train | J | stroke at 5 t | bowl at an 8 m stroke |
+|---|---|---|---|
+| 1 kg at 2 Hz (the paper) | 0.80 MN s | 11.0-11.7 m | 6.9-7.3 t |
+| 2.5 kg at 1 Hz | 1.89 MN s | 52-56 m | 33-35 t |
+| 2.5 kg at 1 Hz, charge x1.3 | 2.25 MN s | 62-66 m | 39-41 t |
+
+Bowl mass goes as `J / f`. The 2.5 kg disk at 1 Hz is ~4.7x the paper's pulse train; at 2 Hz it
+would be half that, at twice the mean force. Even the paper's 5 t is short at an 8 m stroke.
+
+### 3. Off-centre tolerance
+
+The 2-D code is axisymmetric, so this is geometry plus the ballistic tracer. The part of the disk
+that misses the charge flies on, away from the plate, and is lost. The struck share is bracketed
+between the struck lens alone and the lens joined by the unstruck charge. The off-axis fireball's
+side impulse is traced on the paraboloid.
+
+On a charge as wide as the 2.5 kg disk (R_c = 0.19 m):
+
+| f drop | offset | over R_c | side impulse |
+|---|---|---|---|
+| 5% | 1.5-2.8 cm | 0.08-0.15 | 0.1% of axial, 2 kN s |
+| 20% | 6.0-10.6 cm | 0.32-0.56 | 0.4%, 6 kN s |
+
+The disk clips the 0.25 m bore at 6.0 cm whatever the charge, so the 20% line is the bore's edge.
+
+**A wider charge.** The same k spread over a larger radius, the disk centred (2-D runs):
+
+| charge | bore | centred, over the matched charge | caught whole to | side impulse there |
+|---|---|---|---|---|
+| x1.15 | 0.25 m | 1.14 (moved 15% between grids) | 6.0 cm | 0.8%, 16 kN s |
+| x1.3 | 0.25 m | 1.19 | 6.0 cm | 0.8%, 18 kN s |
+| x1.5 | 0.285 m | 1.20 | 9.5 cm | 1.3%, 30 kN s |
+| x2 | 0.38 m | 0.91 | -- | -- |
+
+There the tolerance is the bore's clearance, not the overlap. For the aim repo, the guidance
+requirement is the disk's rim clearing the bore: 6 cm through 0.25 m, 9.5 cm through 0.285 m,
+at about 1% side impulse.
+
+### 4. A split disk
+
+- **Halves a few cm apart along the axis** arrive within 1% of the column's sweep time, so they
+  couple as one body.
+- **Halves pushed apart across the crack** overhang a charge as wide as the disk at their rims:
+  `2 g / (pi R)` of the disk misses, 3.3% at 1 cm and 10% at 3 cm (impulse 0.90-0.95x at 3 cm).
+- **A x1.15 charge catches a 5 cm gap whole**, and x1.3 catches 10 cm. On the recommended wider
+  charge, the pulse does not care.
+
+### 5. Alumina coat
+
+100 um of alumina is 1.8% of the 22 kg/m^2 disk and 0.085% of the pulse's mass (2e-4 of its atoms).
+Bounds:
+- **Energy:** if its atomization and first ionization were all stranded, that is <= 2e-5 of the
+  fireball's heat.
+- **Radiation:** argon's 15% loss on the Sun bowl, scaled by alumina's atom share with a 3x
+  allowance per ion, is <= 1e-4.
+
+It does not change f measurably.
+
+## Caveats
+
+- **Not converged:** the narrow 1 kg plate (19% between grids) and the x1.15 charge (15%). The
+  2.5 kg plate moved 4%; x1.3 and x1.5 moved 1-2%.
+- **The thin disk on a wider charge was not run.** It may gain too, so the wider charge is not
+  necessarily specific to the thick disk.
+- **The gas has no strength.** The 1 cm plate is a 4-cell gas slab of the right mass; at 392 km/s
+  that is the right limit for the collision, not for launch or dust.
+- **Peaks are not converged** (Result 22).
