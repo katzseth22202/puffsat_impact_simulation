@@ -1073,7 +1073,7 @@ walled-nozzle-test:
 ## and can both come back as the same mixture.
 .PHONY: xray-collision-tops xray-collision xray-collision-argon-bags xray-collision-anvil \
 	xray-collision-ch2-table xray-collision-rebound xray-collision-charge-2d xray-collision-charge \
-	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-fast-wave xray-collision-band-bowl xray-collision-gas-spring xray-collision-plume xray-collision-spring-trim xray-collision-iapetus xray-collision-shaped-plug xray-collision-snow-charge xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
+	xray-collision-charge-mix xray-collision-freeze xray-collision-collar xray-collision-overtake xray-collision-cadence-plate xray-collision-departure-hole xray-collision-fast-wave xray-collision-band-bowl xray-collision-gas-spring xray-collision-plume xray-collision-spring-trim xray-collision-iapetus xray-collision-shaped-plug xray-collision-snow-charge xray-collision-thick-disk xray-collision-mission xray-collision-growth xray-collision-cme xray-collision-test
 xray-collision-tops:
 	PYTHONPATH=python uv run --extra fetch python -m puffsat.fetch_tops --mixture "1. ar" \
 	    --mixname argonfireball --t-up-kev 0.06 --rho-low-gcc 1.0e-9 --rho-up-gcc 20 --n-rho 60 \
@@ -1280,6 +1280,15 @@ xray-collision-snow-charge: data/tables/water_jupiter.json data/tables/argon.jso
 	cargo run --release -p sweep -- --iapetus-rebound fast
 	cargo run --release -p sweep -- --iapetus-rebound slow
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.snow_charge
+
+## xray-collision-thick-disk: the thick Sun disk (docs/thick_disk_impact_request.md) -- a 1 cm,
+## 22 kg/m^2 graphite plate of 1-2.5 kg against the 8 kg/m^2 disk on the Sun bowl at k = 20, wide
+## charges for the aim margin, the bowl's spring, the off-centre tolerance, a split disk and an
+## alumina coat -> data/results/xray_collision/thick_disk_*.csv
+xray-collision-thick-disk:
+	cargo run --release -p sweep -- --thick-disk
+	cargo run --release -p sweep -- --thick-disk coarse
+	PYTHONPATH=python $(PY) -m puffsat.xray_collision.thick_disk
 
 ## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on
 ## each plate, and the Jupiter split's perijove burn -> data/results/xray_collision/mission_periapsis.csv,

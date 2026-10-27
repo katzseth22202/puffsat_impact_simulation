@@ -859,3 +859,59 @@ def test_snow_argon_flash_and_debris_scale() -> None:
     assert d.lifetimes_days["1 cm"] == pytest.approx(10.0 * d.lifetimes_days["1 mm"])
     # Nearer the Sun, ice sublimes faster.
     assert sc.debris_row("ice", 0.5, 9.86, 917.0).flux > d.flux
+
+
+def test_thick_disk_column_depends_on_areal_density_only() -> None:
+    """A charge as wide as its disk is `k sigma / rho` long whatever the disk weighs; the 2.5 kg,
+    1 cm plate is the parent's footprint and carries its 1 kg disk's energy at 618 km/s."""
+    from puffsat.xray_collision import thick_disk as td
+
+    assert td.column_length(td.THICK) == pytest.approx(20.0 * 22.0 / 950.0)
+    for m in (1.0, 2.0, 2.5):
+        r = td.disk_radius(m, td.THICK)
+        assert 20.0 * m / (950.0 * math.pi * r * r) == pytest.approx(td.column_length(td.THICK))
+    assert 2.0 * td.disk_radius(2.5, td.THICK) == pytest.approx(0.380, abs=1e-3)
+    assert pytest.approx(td.PARENT_DISK * td.PARENT_V**2, rel=0.01) == 2.5 * td.V**2
+
+
+def test_thick_disk_struck_bracket_and_split_limits() -> None:
+    """A whole strike keeps the whole impulse and none keeps none; mixing the unstruck charge can
+    only help. A split disk on a matched charge loses its overhanging rims, `2 g / (pi R)` for
+    small gaps, and a wide charge catches small gaps whole."""
+    from puffsat.xray_collision import thick_disk as td
+
+    assert td.struck_bracket(1.0) == pytest.approx((1.0, 1.0))
+    assert td.struck_bracket(0.0) == pytest.approx((0.0, 0.0))
+    for phi in (0.2, 0.5, 0.9):
+        low, high = td.struck_bracket(phi)
+        assert low == phi and phi < high < 1.0
+    r = 0.19
+    assert td.split_missed(0.0, r, r) == 0.0
+    assert td.split_missed(0.01, r, r) == pytest.approx(2.0 * 0.01 / (math.pi * r), rel=0.05)
+    assert td.split_missed(0.04, r, 1.15 * r) == 0.0
+
+
+def test_thick_disk_spring_law_inverts_and_alumina_share() -> None:
+    """The spring's stroke at a mass and the mass at that stroke are one law; 100 um of alumina is
+    1.8% of the 22 kg/m^2 plate."""
+    from puffsat.xray_collision import thick_disk as td
+
+    theta = 5.0 * math.pi / 6.0
+    s = td.spring_stroke(1.7e6, 1.0, 5000.0, theta)
+    assert td.spring_mass(1.7e6, 1.0, s, theta) == pytest.approx(5000.0)
+    row = next(a for a in td.alumina_rows() if a.coat_um == 100.0)
+    assert row.share_of_disk == pytest.approx(0.018, abs=5e-4)
+    assert row.toll_bound < 1e-3 and row.radiation_bound < 1e-3
+
+
+def test_iapetus_trace_drift_away_sends_less_onto_the_plate() -> None:
+    """A centred burst drifting off the plate (the Sun bowl) gives the plate less than one drifting
+    onto it (Result 20's overtake), and neither has a side impulse."""
+    from puffsat.xray_collision import iapetus_bag as ib
+
+    shape = ib.Shape(0.5, 0.0)
+    h = 1.5 * shape.focus
+    onto, _, _ = ib.trace(shape, h, 0.0, 20.0, n=1500)
+    away, _, _ = ib.trace(shape, h, 0.0, 20.0, n=1500, away=True)
+    assert -away[2] < -onto[2]
+    assert abs(away[0]) < 1e-2 * abs(away[2])

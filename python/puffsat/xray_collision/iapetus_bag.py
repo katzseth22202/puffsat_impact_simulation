@@ -890,11 +890,18 @@ class AimRow:
 
 
 def trace(
-    shape: Shape, height: float, miss: float, k: float, e: float = 0.6, n: int = 6000
+    shape: Shape,
+    height: float,
+    miss: float,
+    k: float,
+    e: float = 0.6,
+    n: int = 6000,
+    away: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """`(impulse, angular impulse about the vertex, sum of x times axial impulse)` from a point
     burst at `(miss, 0, height)`
-    drifting onto the plate at `u_rms/sqrt(k)`, in units of the burst's `M u_rms`. Rays carry
+    drifting onto the plate at `u_rms/sqrt(k)` (`away`: off it, as on the Sun bowl, whose disk
+    enters through the bore), in units of the burst's `M u_rms`. Rays carry
     equal mass in Fibonacci-sphere directions. Each hit returns `(1 + e)` of the normal
     momentum and keeps the tangential; a ray may strike up to four times."""
     imp = np.zeros(3)
@@ -905,7 +912,8 @@ def trace(
         z = 1.0 - 2.0 * (i + 0.5) / n
         rad = math.sqrt(1.0 - z * z)
         th = golden * i
-        p = np.array([rad * math.cos(th), rad * math.sin(th), z - 1.0 / math.sqrt(k)]) / n
+        drift = (1.0 if away else -1.0) / math.sqrt(k)
+        p = np.array([rad * math.cos(th), rad * math.sin(th), z + drift]) / n
         x = np.array([miss, 0.0, height])
         for _ in range(4):
             speed = float(np.linalg.norm(p))

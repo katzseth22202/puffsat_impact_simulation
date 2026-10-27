@@ -983,6 +983,10 @@ pub struct DiskCharge {
     /// A graded charge (X-ray study, Result 22, the parent's S60 item 7): `Some` splits the
     /// column into a light and a dense part along the axis. `None` is one uniform density.
     pub layer: Option<ChargeLayer>,
+    /// A charge wider than the disk (X-ray study, the thick Sun disk's aim margin): the charge's
+    /// radius, or 0 for the disk's own. The disk keeps `radius`; the same mass `k` spread wider is
+    /// a shorter column.
+    pub charge_radius: f64,
 }
 
 /// The dense part of a graded [`DiskCharge`]: snow or froth over ice, one material at two
@@ -1082,18 +1086,27 @@ pub fn init_disk_charge_grid(cfg: &SlugConfig, dc: DiskCharge) -> DiskChargeGrid
         let hi = charge_lo - dc.gap;
         (hi - dc.disk_thickness, hi, 1.0)
     };
+    let charge_radius = if dc.charge_radius > 0.0 {
+        assert!(
+            dc.charge_radius >= dc.radius,
+            "a charge is at least as wide as its disk"
+        );
+        dc.charge_radius
+    } else {
+        dc.radius
+    };
     // 0 ambient, 1 disk, 2 light charge (or the whole uniform charge), 3 dense charge.
     let region = |iz: usize, ir: usize| -> u8 {
         let z = (iz as f64 + 0.5) * dz;
         let r = (ir as f64 + 0.5) * dr;
-        if r >= dc.radius {
+        if r >= charge_radius {
             0
         } else if z >= charge_lo && z < charge_hi {
             match (z_cut, dc.layer) {
                 (Some(cut), Some(l)) if (z < cut) == l.dense_on_plate_side => 3,
                 _ => 2,
             }
-        } else if z >= disk_lo && z < disk_hi {
+        } else if z >= disk_lo && z < disk_hi && r < dc.radius {
             1
         } else {
             0
@@ -1135,11 +1148,22 @@ pub fn init_disk_charge_grid(cfg: &SlugConfig, dc: DiskCharge) -> DiskChargeGrid
     // A long foam column holds ~50 disk volumes, so its cold pressure is scaled down to keep
     // its stored heat under a quarter of the disk's own (itself ~1% of the disk's energy).
     let p_charge = p_cold * (0.25 * v_disk / v_charge).min(1.0);
+    // The ambient sits at a millionth of the disk's cold pressure. A narrow disk on a fine grid
+    // (the thick Sun disk's 1 kg at 1 cm) is so small a volume that this fills the domain with
+    // more heat than the cold check allows; only then is the ambient's pressure lowered, to hold
+    // half the room the disk and charge leave. Every start that passed before is unchanged.
+    let budget = 0.02 * 0.5;
+    let held = (p_cold * v_disk + p_charge * v_charge) / (cfg.gamma - 1.0);
+    let v_amb = v_domain - v_disk - v_charge;
+    let mut p_amb = p_cold * 1.0e-6;
+    if held + p_amb * v_amb / (cfg.gamma - 1.0) >= budget {
+        p_amb = 0.5 * (budget - held) * (cfg.gamma - 1.0) / v_amb;
+    }
     g.init(|iz, ir| match region(iz, ir) {
         1 => Prim::new(rho_disk, disk_speed, 0.0, p_cold),
         2 => Prim::new(rho_light, 0.0, 0.0, p_charge),
         3 => Prim::new(rho_dense, 0.0, 0.0, p_charge),
-        _ => Prim::new(rho_amb, 0.0, 0.0, p_cold * 1.0e-6),
+        _ => Prim::new(rho_amb, 0.0, 0.0, p_amb),
     });
     assert!(
         cold_heat(&g, cfg.gamma) < 0.02 * 0.5,
@@ -1331,6 +1355,7 @@ mod tests {
             hole_radius: 0.0,
             toward_plate: false,
             layer: None,
+            charge_radius: 0.0,
         };
         let uniform = init_disk_charge_grid(&cfg, base);
         assert!((uniform.disk_mass - 1.0).abs() < 1e-12);
@@ -1367,6 +1392,28 @@ mod tests {
                 .expect("a light cell on the axis");
             assert_eq!(z_dense < z_light, plate_side);
         }
+        // A wide charge keeps both masses exact, lays charge past the disk's rim and no disk there.
+        let wide = init_disk_charge_grid(
+            &cfg,
+            DiskCharge {
+                charge_radius: 0.5,
+                ..base
+            },
+        );
+        assert!((wide.disk_mass - 1.0).abs() < 1e-12);
+        assert!((wide.light_mass - 20.0).abs() < 1e-9);
+        let g = &wide.grid;
+        let ir_rim = (0..g.nr())
+            .find(|&ir| (ir as f64 + 0.5) * g.dr() > 0.4)
+            .expect("a cell past the disk's rim");
+        let rho_max_at = |ir: usize| (0..cfg.nz).map(|iz| g.prim(iz, ir).rho).fold(0.0, f64::max);
+        let rho_axis_max = rho_max_at(0);
+        let rho_rim_max = rho_max_at(ir_rim);
+        assert!(
+            rho_rim_max > 1.0e3 * base.ambient * rho_axis_max,
+            "charge past the rim"
+        );
+        assert!(rho_rim_max < rho_axis_max, "the disk only on the axis");
     }
 
     /// Identity regression (ADR-0028): `taper_frac = 0`, `alpha_div = 0` initializes the *exact*

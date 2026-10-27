@@ -6941,6 +6941,7 @@ fn mix_case(
                     hole_radius: CHARGE_HOLE_R,
                     toward_plate: false,
                     layer: None,
+                    charge_radius: 0.0,
                 },
             ),
             u_rms,
@@ -7195,6 +7196,7 @@ fn overtake_case(
                     hole_radius: 0.0,
                     toward_plate: true,
                     layer: None,
+                    charge_radius: 0.0,
                 },
             );
             // Per merged mass, in the closing speed -> per m v.
@@ -7380,6 +7382,7 @@ fn sheet_plate_case(
             hole_radius: 0.0,
             toward_plate: true,
             layer: None,
+            charge_radius: 0.0,
         },
     );
     // The run's mass unit is the merged 1 + k sheets and its speed unit the closing speed.
@@ -7676,6 +7679,7 @@ fn fast_wave_case(
                 hole_radius: 0.0,
                 toward_plate: true,
                 layer: None,
+                charge_radius: 0.0,
             },
         );
         // Units: the merged mass and the closing speed.
@@ -7872,6 +7876,7 @@ fn cmd_plate_profile_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error
                 hole_radius: 0.0,
                 toward_plate: true,
                 layer: None,
+                charge_radius: 0.0,
             },
         );
         let m = 1.0 + PLATE_PROFILE_K;
@@ -7949,6 +7954,7 @@ fn cmd_spring_trim_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>>
                 hole_radius: 0.0,
                 toward_plate: true,
                 layer: None,
+                charge_radius: 0.0,
             },
         );
         let m = 1.0 + k;
@@ -8061,6 +8067,7 @@ fn cmd_plume_2d(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 hole_radius: 0.0,
                 toward_plate: true,
                 layer: None,
+                charge_radius: 0.0,
             },
         );
         let m = 1.0 + PLATE_PROFILE_K;
@@ -8986,6 +8993,7 @@ fn iapetus_case(
                 hole_radius: 0.0,
                 toward_plate: true,
                 layer: None,
+                charge_radius: 0.0,
             },
         );
         // Units: the merged mass and the closing speed.
@@ -10038,6 +10046,7 @@ fn snow_case(c: SnowCase, dr: f64) -> SnowRecord {
                 hole_radius: 0.0,
                 toward_plate: true,
                 layer,
+                charge_radius: 0.0,
             },
         );
         (
@@ -10081,6 +10090,7 @@ fn snow_case(c: SnowCase, dr: f64) -> SnowRecord {
                     hole_radius: hole,
                     toward_plate: false,
                     layer,
+                    charge_radius: 0.0,
                 },
             );
             (name, r, 1.0 + k, 1.0, radius, k, hole)
@@ -10340,6 +10350,197 @@ fn cmd_snow_charge(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     })
 }
 
+// X-ray collision study: the thick Sun disk (docs/thick_disk_impact_request.md). The Sun bowl's
+// 1 kg graphite disk at 8 kg/m^2 against a 1 cm plate at 22 kg/m^2, on Result 22's δ/D 0.5
+// paraboloid with the charge at 1.5 F and the disk entering through the bore. The gamma gas has
+// no material, so a disk's areal density enters only as its charge's column, `k sigma / rho`,
+// whatever its mass: every 1 cm disk makes a 0.46 m polyethylene column and a 1 kg disk is merely
+// narrower. Wide charges keep the 2.5 kg disk's mass and k but spread the charge past its rim,
+// the aim margin that item 3 asks the price of, through a bore widened to the charge's radius.
+
+const RESULT_PATH_THICK: &str = "data/results/xray_collision/thick_disk_2d.jsonl";
+const THICK_K: f64 = 20.0;
+const THICK_RHO: f64 = 950.0;
+/// `(disk kg, areal density [kg/m^2])`: items 1 and 2, and Result 22's 0.25 m baseline.
+const THICK_DISKS: [(f64, f64); 5] = [
+    (1.0, 8.0),
+    (1.0, 22.0),
+    (2.0, 22.0),
+    (2.5, 22.0),
+    (1.0, 5.093),
+];
+/// The 2.5 kg, 1 cm disk's charge radius over its own.
+const THICK_WIDE: [f64; 4] = [1.15, 1.3, 1.5, 2.0];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct ThickRecord {
+    case: String,
+    /// `point`, `matched` (charge as wide as the disk) or `wide`.
+    kind: String,
+    disk_kg: f64,
+    areal: f64,
+    k: f64,
+    disk_radius: f64,
+    charge_radius: f64,
+    /// The bore's radius [m]: the Sun bowl's 0.25 m, or a wide charge's own radius if larger.
+    bore: f64,
+    /// The column's length [m].
+    length: f64,
+    /// Plate impulse per `m v`, the bore's part removed; the bore's own part.
+    impulse_per_mv: f64,
+    hole_per_mv: f64,
+    /// Peak local pressure per `m v^2 / m^3`, outside the bore, and where.
+    peak_per_mv2: f64,
+    peak_radius: f64,
+    exit_direction: f64,
+    steps: usize,
+    dr: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ThickCase {
+    kind: u8, // 0 point, 1 matched, 2 wide
+    disk_kg: f64,
+    areal: f64,
+    wide: f64,
+}
+
+fn thick_case(c: ThickCase, dr: f64) -> ThickRecord {
+    let k = THICK_K;
+    let radius = (c.disk_kg / (std::f64::consts::PI * c.areal)).sqrt();
+    let charge_radius = radius * c.wide;
+    // A wide charge's aim margin is only usable through a bore as wide: the disk must not clip it.
+    let bore = if c.kind == 2 {
+        CHARGE_HOLE_R.max(charge_radius)
+    } else {
+        CHARGE_HOLE_R
+    };
+    let length = k * c.disk_kg / (THICK_RHO * std::f64::consts::PI * charge_radius * charge_radius);
+    let (r, kind, v, case) = if c.kind == 0 {
+        let (cfg, h) = snow_bowl_cfg(SPRAY_2D_GAMMA, CHARGE_BALL_R, dr);
+        let r = run_fireball_bounce(
+            &cfg,
+            PointFireball {
+                height: h,
+                radius: CHARGE_BALL_R,
+                drift: 1.0 / k.sqrt(),
+                ambient: CHARGE_AMBIENT,
+                hole_radius: CHARGE_HOLE_R,
+            },
+        );
+        // Units: the merged mass and its u_rms, in the disk's speed.
+        (
+            r,
+            "point",
+            k.sqrt() / (1.0 + k),
+            "point fireball".to_string(),
+        )
+    } else {
+        let (cfg, h) = snow_bowl_cfg(SPRAY_2D_GAMMA, 0.5 * length, dr);
+        let r = run_disk_charge_bounce(
+            &cfg,
+            DiskCharge {
+                radius,
+                height: h,
+                charge_length: length,
+                k,
+                disk_thickness: 4.0 * dr,
+                gap: 2.0 * dr,
+                ambient: CHARGE_AMBIENT,
+                hole_radius: bore,
+                toward_plate: false,
+                layer: None,
+                charge_radius: if c.kind == 2 { charge_radius } else { 0.0 },
+            },
+        );
+        let kind = if c.kind == 2 { "wide" } else { "matched" };
+        let case = format!(
+            "{:.1} kg at {:.1} kg/m^2, charge x{:.2}",
+            c.disk_kg, c.areal, c.wide
+        );
+        (r, kind, 1.0, case)
+    };
+    let m = 1.0 + k;
+    ThickRecord {
+        case,
+        kind: kind.to_string(),
+        disk_kg: c.disk_kg,
+        areal: c.areal,
+        k,
+        disk_radius: radius,
+        charge_radius,
+        bore,
+        length: if c.kind == 0 { 0.0 } else { length },
+        impulse_per_mv: r.wall_impulse * m * v,
+        hole_per_mv: r.hole_impulse * m * v,
+        peak_per_mv2: r.peak_pressure_outside_bore * m * v * v,
+        peak_radius: r.peak_radius,
+        exit_direction: r.exit_direction,
+        steps: r.steps,
+        dr,
+    }
+}
+
+/// `--thick-disk [coarse|fine]`: the thick Sun disk's coupling. The default cell is Result 22's
+/// Sun production cell (0.025 m); `coarse` doubles it, `fine` halves it and runs the matched
+/// disks and the point fireball only.
+fn cmd_thick_disk(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let coarse = args.iter().any(|a| a == "coarse");
+    let fine = args.iter().any(|a| a == "fine");
+    let dr = if coarse {
+        CHARGE_DR
+    } else if fine {
+        CHARGE_DR / 4.0
+    } else {
+        CHARGE_DR / 2.0
+    };
+    let base = ThickCase {
+        kind: 1,
+        disk_kg: 1.0,
+        areal: 8.0,
+        wide: 1.0,
+    };
+    let mut cases = vec![ThickCase { kind: 0, ..base }];
+    for &(disk_kg, areal) in &THICK_DISKS {
+        cases.push(ThickCase {
+            disk_kg,
+            areal,
+            ..base
+        });
+    }
+    if !fine {
+        for &wide in &THICK_WIDE {
+            cases.push(ThickCase {
+                kind: 2,
+                disk_kg: 2.5,
+                areal: 22.0,
+                wide,
+            });
+        }
+    }
+    let rows = par_map_with_progress("thick disk", &cases, |&c| thick_case(c, dr));
+    let mut path = RESULT_PATH_THICK.to_string();
+    if coarse {
+        path = path.replace(".jsonl", "_coarse.jsonl");
+    } else if fine {
+        path = path.replace(".jsonl", "_fine.jsonl");
+    }
+    emit_scenario(&path, "thick disk", &rows, |r| {
+        println!(
+            "rust: {:<36} R {:.3} Rc {:.3} L {:5.3} m J/mv {:6.3} hole {:.4} peak/mv2 {:.3e} at r {:.2} steps {}",
+            r.case,
+            r.disk_radius,
+            r.charge_radius,
+            r.length,
+            r.impulse_per_mv,
+            r.hole_per_mv,
+            r.peak_per_mv2,
+            r.peak_radius,
+            r.steps,
+        );
+    })
+}
+
 /// Flag → handler. `main` looks up the first matching flag and dispatches to it (the exact-string
 /// flags are mutually exclusive in practice, so table order does not affect behavior); anything
 /// unmatched falls through to [`cmd_baseline`] (the `--lowv` / positional-override default).
@@ -10399,6 +10600,7 @@ const SCENARIOS: &[(&str, CmdFn)] = &[
     ("--plume-2d", cmd_plume_2d),
     ("--canted-2d", cmd_canted_2d),
     ("--snow-charge", cmd_snow_charge),
+    ("--thick-disk", cmd_thick_disk),
     ("--shape", cmd_shape),
     ("--geometry-m40", cmd_geometry_m40),
     ("--geometry-wide", cmd_geometry_wide),
