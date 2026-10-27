@@ -98,11 +98,12 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
     face). Grading never beats solid, but light-at-entry cuts the back-splash peak several times.
     At 44 km/s and k ≈ 10 (the 3S design point) water and argon tie; polyethylene loses ~29%.
 13. **A 1 cm, 2.5 kg Sun disk works, on a wider charge** (Result 23, ADR-0074). A thick disk does
-    not tunnel; on a charge as wide as itself it loses 5% at 2.5 kg (3.23 m/s a pulse, not 3.4)
-    and 15% at 1 kg. Spread to 1.3-1.5x the disk's radius, the charge couples 1.13-1.14x the thin
-    baseline (the thin disk on its best wider charge gains only 1.08x) and catches the disk whole
-    to 6-9.5 cm off centre, where the bore binds. The paper's
-    5 t bowl cannot take 1.9-2.3 MN s at 1 Hz: on the lossless spring it needs 33-41 t at 8 m.
+    not tunnel; on a charge as wide as itself it loses 6% at 2.5 kg (3.20 m/s a pulse, not 3.4)
+    and 14% at 1 kg. Spread to 1.3x the disk's radius, the charge couples 1.11x the thin baseline
+    on the finest grid (the thin disk on its own best wider charge gains 1.08x) and catches the
+    disk whole to 6 cm off centre, where the 0.25 m bore binds; x1.5 buys 9.5 cm for ~5% of
+    coupling. The paper's 5 t bowl cannot take 2.0-2.3 MN s at 1 Hz: on the lossless spring it
+    needs 34-43 t at 8 m.
 
 ## Model
 
@@ -2248,49 +2249,52 @@ parent's 191 GJ at 618 km/s), at 1 Hz. Full answers in
 [`thick_disk_answers.md`](thick_disk_answers.md).
 
 **The runs.** Result 22's Sun bowl: the δ/D 0.5 paraboloid with the solid polyethylene charge at
-1.5 F, k = 20, the disk entering through the 0.25 m bore. Production cell 0.025 m, coarse 0.05 m.
-The gamma gas has no material, so a disk's areal density enters only as its charge's column,
-`L = k sigma / rho`: 0.17 m at 8 kg/m^2 and **0.46 m for every 1 cm disk**, whatever its mass. A
-heavier disk of one thickness is only wider, so the parameter is the column's `L / R`. Wide charges
-keep the 2.5 kg disk and k but spread the charge to 1.15-2x its radius (a shorter column), through
-a bore widened to the charge's radius where that exceeds 0.25 m. The run reproduces Result 22's
-0.25 m baseline exactly (J/mv 2.101).
+1.5 F, k = 20, the disk entering through the 0.25 m bore. Cells 0.05, 0.025 and 0.0125 m; the
+finest grid runs the seven cases the conclusions rest on, and every other case is quoted at
+0.025 m. The gamma gas has no material, so a disk's areal density enters only as its charge's
+column, `L = k sigma / rho`: 0.17 m at 8 kg/m^2 and **0.46 m for every 1 cm disk**, whatever its
+mass. A heavier disk of one thickness is only wider, so the parameter is the column's `L / R`.
+Wide charges keep the disk and k but spread the charge to 1.15-2x its radius (a shorter column),
+through a bore widened to the charge's radius where that exceeds 0.25 m. The run reproduces
+Result 22's 0.25 m baseline exactly (J/mv 2.101).
 
-**Coupling.** J/(m v), and over the 1 kg, 8 kg/m^2 disk (coarse grid in brackets):
+**Coupling.** J/(m v) over the 1 kg, 8 kg/m^2 disk on the same grid (`thick_disk_convergence.csv`):
 
-| disk | L/R | J/mv | over baseline | ship dv per pulse |
-|---|---|---|---|---|
-| 1 kg, 8 kg/m^2 | 0.84 | 2.034 | 1 | 1.36 m/s |
-| 1 kg, 22 kg/m^2 | 3.85 | 1.725 | 0.848 (0.713) | 1.15 m/s |
-| 2 kg, 22 kg/m^2 | 2.72 | 1.884 | 0.926 (0.836) | 2.52 m/s |
-| 2.5 kg, 22 kg/m^2 | 2.44 | 1.931 | 0.949 (0.909) | 3.23 m/s |
-| 2.5 kg, charge x1.15 | 1.60 | 2.192 | 1.078 (0.932) | 3.67 m/s |
-| 2.5 kg, charge x1.3 | 1.11 | 2.301 | 1.131 (1.135) | 3.85 m/s |
-| 2.5 kg, charge x1.5 (0.285 m bore) | 0.72 | 2.322 | 1.141 (1.152) | 3.88 m/s |
-| 2.5 kg, charge x2 (0.38 m bore) | 0.30 | 1.748 | 0.859 (0.890) | 2.92 m/s |
-| 1 kg, 8 kg/m^2, charge x1.3 | 0.39 | 2.192 | 1.078 (1.082) | 1.47 m/s |
-| 1 kg, 8 kg/m^2, charge x1.5 (0.3 m bore) | 0.25 | 1.804 | 0.887 (1.041) | 1.21 m/s |
+| disk | L/R | 0.05 m | 0.025 m | 0.0125 m | ship dv per pulse |
+|---|---|---|---|---|---|
+| 1 kg, 8 kg/m^2 (J/mv 1.95 / 2.03 / 2.14) | 0.84 | 1 | 1 | 1 | 1.36 m/s |
+| 1 kg, 22 kg/m^2 | 3.85 | 0.713 | 0.848 | 0.863 | 1.18 m/s |
+| 2 kg, 22 kg/m^2 | 2.72 | 0.836 | 0.926 | -- | 2.52 m/s |
+| 2.5 kg, 22 kg/m^2 | 2.44 | 0.909 | 0.949 | 0.941 | 3.20 m/s |
+| 2.5 kg, charge x1.15 | 1.60 | 0.932 | 1.078 | 1.048 | 3.57 m/s |
+| 2.5 kg, charge x1.3 | 1.11 | 1.135 | 1.131 | **1.108** | 3.77 m/s |
+| 2.5 kg, charge x1.5 (0.285 m bore) | 0.72 | 1.152 | 1.141 | 1.050 | 3.57 m/s |
+| 2.5 kg, charge x2 (0.38 m bore) | 0.30 | 0.890 | 0.859 | -- | 2.92 m/s |
+| 1 kg, 8 kg/m^2, charge x1.3 | 0.39 | 1.082 | 1.078 | -- | 1.47 m/s |
+| 1 kg, 8 kg/m^2, charge x1.5 (0.3 m bore) | 0.25 | 1.041 | 0.887 | -- | 1.21 m/s |
 
-The point fireball gives 2.394. **The thick disk does not tunnel.** A charge as wide as its disk
-holds k disk masses in its column whatever the disk's thickness, so the parent's snowplow argument
-carries over unchanged. What it costs is the shocked gas leaking sideways during a longer sweep.
-The narrow 1 kg plate (~5 cells in radius) is not converged: it moved 19% between grids. The 2.5 kg
-plate moved 4%, the x1.3 and x1.5 charges 1-2%, and x1.15 15%.
+Ship dv is from the finest grid each case has. The point fireball gives 2.38-2.41. **The thick
+disk does not tunnel.** A charge as wide as its disk holds k disk masses in its column whatever the
+disk's thickness, so the parent's snowplow argument carries over unchanged. What it costs is the
+shocked gas leaking sideways during a longer sweep: 6% at 2.5 kg (moved 0.9% at the last
+refinement) and 14% at 1 kg (1.8%). **x1.3 is the converged best**: it moved 2% at the last
+refinement and holds 1.11x. x1.5 led on the coarser grids but fell 8% on the finest, to 1.05, so its
+short 0.21 m column is the one the grid was under-resolving; x1.15 fell 3%, to 1.05.
 
 **The wider charge is not a thin-disk gain in disguise.** The thin disk on a x1.3 charge gains 8%
 over its own matched charge (grids agree to 0.4%); at x1.5 its column is 7.5 cm, three cells, and
-it falls to 0.89 (moved 15%, so read it as "no gain"). The 2.5 kg plate gains 19-20% over its own
-matched charge. Both curves peak near `L / R` 0.4-1.1 and lose below ~0.3, where the disk drills a
-core. A wider charge helps any disk whose matched column is long, and the 1 cm plate's is 2.9x the
-thin disk's. Best for best, the 2.5 kg plate on x1.3-1.5 couples ~6% more per kg than the thin
-disk on x1.3.
+it falls to 0.89 (moved 15%, so read it as "no gain"). The 2.5 kg plate gains 18% over its own
+matched charge at x1.3 on the finest grid. Both peak near `L / R` 0.4-1.1 and lose below ~0.3,
+where the disk drills a core. A wider charge helps any disk whose matched column is long, and the
+1 cm plate's is 2.9x the thin disk's. Best for best, the 2.5 kg plate on x1.3 couples 3-5% more per
+kg than the thin disk on x1.3 (1.11-1.13 against 1.08; the thin case has no 0.0125 m run).
 
-**The bowl.** The 2.5 kg pulse is 1.89 MN s (2.25 on the x1.3 charge). On the paper's 5 t bowl it is
-a 380 m/s kick unsprung; on the lossless spring (`m s = J tan(theta/4) / (2 theta f)`, Result 17)
-5 t needs a 52-56 m stroke at theta 2pi/3-5pi/6, and an 8 m stroke needs a 33-35 t bowl (39-41 t on
-the x1.3 charge). The paper's
-1 kg at 2 Hz already needs 11-12 m at 5 t, or ~7 t at 8 m. Bowl mass scales as `J / f`: 2.5 kg at
-1 Hz is ~4.7x the paper's pulse train.
+**The bowl** (finest grid). The 2.5 kg pulse is 1.97 MN s (2.32 on the x1.3 charge). On the
+paper's 5 t bowl it is a 390 m/s kick unsprung; on the lossless spring
+(`m s = J tan(theta/4) / (2 theta f)`, Result 17) 5 t needs a 54-58 m stroke at theta 2pi/3-5pi/6,
+and an 8 m stroke needs a 34-36 t bowl (40-43 t on the x1.3 charge). The paper's 1 kg at 2 Hz
+already needs 12 m at 5 t, or 7-8 t at 8 m. Bowl mass scales as `J / f`: 2.5 kg at 1 Hz is ~4.7x
+the paper's pulse train.
 
 **Off centre** (2.5 kg; the axisymmetric code cannot run it). The lune of the disk that misses the
 charge flies on, away from the plate. The struck share is bracketed between the lone lens and the
@@ -2299,7 +2303,8 @@ plate) gives the side impulse of the off-axis fireball. On a charge as wide as t
 at **1.5-2.8 cm** (0.08-0.15 R_c) and 20% at 6.0-10.6 cm, with side impulse 0.1-0.4% of the axial.
 On a wider charge the disk is caught whole until its rim reaches the bore: **6.0 cm** for x1.15-1.3
 (the 0.25 m bore), **9.5 cm** for x1.5 (0.285 m), with side impulse 0.8-1.3% of the axial
-(16-30 kN s). There the bore, not the overlap, sets the tolerance.
+(16-29 kN s). There the bore, not the overlap, sets the tolerance. x1.5 trades ~5% of coupling
+against x1.3 for 3.5 cm more aim.
 
 **Split disk, coat.** Two halves a few cm apart along the axis arrive within 1% of the sweep time
 and couple as one. Pushed apart across the crack on a matched charge, their rims overhang it:
@@ -2309,7 +2314,8 @@ ionization stranded is <= 2e-5 of the fireball's heat; scaled from argon's 15% a
 its atom share (x3 allowance), its radiation is <= 1e-4.
 
 **Not modelled.** Strength and the disk's actual 1 cm thickness on the grid (it is a 4-cell gas
-slab); the off-centre and split cases in 2-D; peak convergence (1-11 GPa); the 0.0125 m grid.
+slab); the off-centre and split cases in 2-D; peak convergence (1-17 GPa, still moving at 0.0125 m); the thin disk and the x2 charge on the
+0.0125 m grid.
 
 ## Limits
 

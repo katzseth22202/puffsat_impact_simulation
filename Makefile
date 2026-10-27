@@ -1285,7 +1285,7 @@ xray-collision-snow-charge: data/tables/water_jupiter.json data/tables/argon.jso
 ## 22 kg/m^2 graphite plate of 1-2.5 kg against the 8 kg/m^2 disk on the Sun bowl at k = 20, wide
 ## charges for the aim margin, the bowl's spring, the off-centre tolerance, a split disk and an
 ## alumina coat -> data/results/xray_collision/thick_disk_*.csv. The 0.0125 m convergence grid
-## (`--thick-disk fine`, ~15 h on 8 cores) is run by hand; the analysis reads it when present.
+## (`--thick-disk fine`, ~7 h on 8 cores) is run by hand; the analysis reads it when present.
 xray-collision-thick-disk:
 	cargo run --release -p sweep -- --thick-disk
 	cargo run --release -p sweep -- --thick-disk coarse

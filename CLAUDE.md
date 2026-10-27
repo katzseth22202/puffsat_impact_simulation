@@ -125,9 +125,9 @@ solid but light-at-entry cuts the back-splash peak; at 44 km/s and k ≈ 10 wate
 Result 22 and [ADR-0073](docs/adr/0073-snow-charges-density-is-column-length.md) (module
 `snow_charge.py`, target `make xray-collision-snow-charge`); answers in
 [`docs/snow_charge_answers_for_parent.md`](docs/snow_charge_answers_for_parent.md).
-The thick Sun disk (a 1 cm, 2.5 kg graphite plate does not tunnel and loses ~5% on a charge as wide
-as itself; a charge 1.3-1.5x wider couples 1.13-1.14x the thin disk and catches it whole to the
-bore's 6-9.5 cm; the 5 t bowl needs 33-41 t at 1 Hz) is Result 23 and
+The thick Sun disk (a 1 cm, 2.5 kg graphite plate does not tunnel and loses ~6% on a charge as wide
+as itself; a charge 1.3x wider couples 1.11x the thin disk and catches it whole to the bore's 6 cm,
+x1.5 buys 9.5 cm for ~5%; the 5 t bowl needs 34-43 t at 1 Hz) is Result 23 and
 [ADR-0074](docs/adr/0074-thick-sun-disk-on-a-wider-charge.md) (module `thick_disk.py`, target
 `make xray-collision-thick-disk`); the request is copied to
 [`docs/thick_disk_impact_request.md`](docs/thick_disk_impact_request.md) and answered in
