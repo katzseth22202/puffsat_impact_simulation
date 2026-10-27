@@ -135,6 +135,7 @@ class CouplingRow:
     dv_per_pulse: float  # [m/s] the paper's per-kg kick, scaled by over_baseline
     peak_gpa: float  # peak local pressure outside the bore (not converged; Result 22)
     peak_radius: float
+    peak_over_baseline: float  # over the thin disk's peak on the same grid (grid-to-grid ratio)
     energy_gj: float  # the disk's kinetic energy in the bowl's frame
     heat_gj: float  # its inelastic share, the fireball's heat: k / (1 + k)
 
@@ -152,6 +153,8 @@ def coupling_rows() -> list[CouplingRow]:
             m = 1.0 if kind == "point" else _f(r, "disk_kg")
             j = _f(r, "impulse_per_mv")
             ratio = j / _f(base, "impulse_per_mv") if base else math.nan
+            peak = _f(r, "peak_per_mv2") * m * V * V
+            base_peak = _f(base, "peak_per_mv2") * V * V if base else math.nan
             rc = _f(r, "charge_radius")
             own = (
                 _find(rows, "matched", m, _f(r, "areal"))
@@ -177,8 +180,9 @@ def coupling_rows() -> list[CouplingRow]:
                     over_own_matched=j / _f(own, "impulse_per_mv") if own else math.nan,
                     pulse_ns=j * m * V,
                     dv_per_pulse=DV_PER_KG * m * ratio,
-                    peak_gpa=_f(r, "peak_per_mv2") * m * V * V / 1e9,
+                    peak_gpa=peak / 1e9,
                     peak_radius=_f(r, "peak_radius"),
+                    peak_over_baseline=peak / base_peak,
                     energy_gj=0.5 * m * V * V / 1e9,
                     heat_gj=0.5 * m * V * V * K / (1.0 + K) / 1e9,
                 )
@@ -600,6 +604,7 @@ def main() -> None:
             f" cells {c.cells_across:4.1f}"
             f" J/mv {c.impulse_per_mv:5.3f} /point {c.over_point:5.3f} /base {c.over_baseline:5.3f}"
             f" dv {c.dv_per_pulse:4.2f} m/s peak {c.peak_gpa:7.2f} GPa at {c.peak_radius:4.2f} m"
+            f" ({c.peak_over_baseline:4.2f} of thin)"
         )
     convergence = convergence_rows(coupling)
     for v in convergence:

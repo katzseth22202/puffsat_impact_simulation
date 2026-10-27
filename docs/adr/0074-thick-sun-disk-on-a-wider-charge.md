@@ -60,8 +60,22 @@ off the plate (default unchanged).
 
 ## Not decided
 
-Whether x1.5 falls further below 1.05x on a finer grid; the 2 kg disk, the x2 charge and the thin
-disk on wide charges at 0.0125 m; off-centre and split strikes in 3-D; peak loads.
+None of these bears on the decision:
+
+- **Whether x1.3 and x1.5 settle further.** x1.3 moved -2% at the last refinement and may land at
+  ~1.08-1.10x, still well above a matched charge's 0.94x. If x1.5 falls below 1.05x, only the price
+  of its extra aim rises; that is the aim repo's trade.
+- **The 2 kg disk, the x2 charge and the thin disk on wide charges at 0.0125 m.** None is the
+  proposed design. x2's loss (0.86x) is far outside any drift seen, and the thin disk feeds only the
+  side comparison (the plate beats it by 3-5% per kg), not the reason for the plate.
+- **Off-centre and split strikes in 3-D.** On x1.3 the catch is geometric: the whole disk lands on
+  charge until its rim meets the bore. 3-D would sharpen the aim repo's number, not the choice.
+- **Absolute peak loads.** The single-cell peak at the bore's lip moves 20-50% between grids for
+  every disk. On x1.3 the plate's peak is 0.84-0.87x the thin disk's on the same grid, on both
+  fine grids, so the liner sees no worse a peak than now. The bowl is sized by impulse on the
+  spring, not by peak.
+
+The bowl's verdict depends only on the ~2 MN s pulse, so it holds whatever these give.
 
 The thin disk on wider charges is `sweep --thick-disk thin-wide [coarse]`, and the 0.0125 m grid is
 `sweep --thick-disk fine` (7 h, run by hand; 2026-10-27). `thick_disk_convergence.csv` lists every

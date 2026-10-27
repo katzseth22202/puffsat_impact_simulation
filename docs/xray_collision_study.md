@@ -2314,8 +2314,9 @@ ionization stranded is <= 2e-5 of the fireball's heat; scaled from argon's 15% a
 its atom share (x3 allowance), its radiation is <= 1e-4.
 
 **Not modelled.** Strength and the disk's actual 1 cm thickness on the grid (it is a 4-cell gas
-slab); the off-centre and split cases in 2-D; peak convergence (1-17 GPa, still moving at 0.0125 m); the thin disk and the x2 charge on the
-0.0125 m grid.
+slab); the off-centre and split cases in 2-D; absolute peaks (1-17 GPa, still moving at 0.0125 m; on x1.3 the plate's is 0.84-0.87x the thin
+disk's on the same grid, at the bore's lip); the thin disk and the x2 charge on the 0.0125 m grid.
+None of these bears on the choice of x1.3 or on the bowl (ADR-0074).
 
 ## Limits
 

@@ -58,6 +58,15 @@ At 1 cm, charges as wide as the disk at k = 20:
 The 2.5 kg disk carries 192 GJ, the parent's 191 GJ. The fireball's heat is k/(1+k) of it,
 183 GJ. Ship dv scales the paper's 1.36 m/s per kg (9.8 km/s from 7.2 t) by the impulse ratio.
 
+**Peak load.** The absolute peaks above are not converged and likely never will be: each is the
+highest single-cell pressure near the bore's lip, and it moves 20-50% between grids for every disk,
+the thin one included (11.4 GPa at 0.025 m, 7.5 at 0.0125 m). The comparison that holds is against
+today's thin disk on the same grid. **On the recommended x1.3 charge, the 2.5 kg plate peaks at
+0.84x the thin disk's peak at 0.025 m and 0.87x at 0.0125 m**, at the same place (0.26-0.29 m, the
+bore's lip). So the bowl's liner sees no worse a peak than it does now, for 2.8x the impulse. Other
+cases' ratios swing between grids (the matched 2.5 kg plate goes 0.71x to 1.20x), so only x1.3's is
+quoted.
+
 **The bowl.** On the lossless spring,
 `m s = J tan(theta/4) / (2 theta f)` (our Result 17), at theta 2pi/3-5pi/6:
 
@@ -134,8 +143,11 @@ It does not change f measurably.
 ## Caveats
 
 - **Convergence** (`thick_disk_convergence.csv`, change at the last refinement): 2.5 kg matched
-  -0.9%, 1 kg plate +1.8%, x1.3 -2.0%, x1.15 -2.8%, x1.5 -8.0%. x1.5 may fall further. The 2 kg
-  disk, the x2 charge and the thin disk on wide charges have only 0.05 and 0.025 m runs.
+  -0.9%, 1 kg plate +1.8%, x1.3 -2.0%, x1.15 -2.8%, x1.5 -8.0%. x1.3 may settle a point or two
+  lower (~1.08-1.10x), still well above a matched charge's 0.94x. x1.5 may fall further, which only
+  raises the price of its extra aim. The 2 kg disk, the x2 charge and the thin disk on wide charges
+  have only 0.05 and 0.025 m runs; none of them is the proposed design, and x2's loss (0.86x) is
+  far outside any drift seen.
 - **The gas has no strength.** The 1 cm plate is a 4-cell gas slab of the right mass; at 392 km/s
   that is the right limit for the collision, not for launch or dust.
 - **Peaks are not converged** (Result 22).
