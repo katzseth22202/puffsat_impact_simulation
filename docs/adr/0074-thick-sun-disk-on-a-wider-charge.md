@@ -1,7 +1,7 @@
 # ADR-0074: The 1 cm Sun disk couples; fly it on a charge 1.3-1.5x wider, through a matching bore
 
 Status: proposed, 2026-10-27. Result 23 of [`xray_collision_study.md`](../xray_collision_study.md);
-code `sweep --thick-disk [coarse|fine]`, `euler2d::bounce::DiskCharge::charge_radius`, and
+code `sweep --thick-disk [coarse|fine] [thin-wide]`, `euler2d::bounce::DiskCharge::charge_radius`, and
 `thick_disk.py` (`make xray-collision-thick-disk`). Answers
 [`thick_disk_impact_request.md`](../thick_disk_impact_request.md); answers doc
 [`thick_disk_answers.md`](../thick_disk_answers.md). Builds on ADR-0060 (the real collision),
@@ -28,6 +28,9 @@ cracked disk matters, and whether an alumina coat matters.
    couples 1.13-1.14x the thin baseline (grids agree to 1-2%) and catches an off-centre disk whole
    until the disk's rim reaches the bore. Widen the bore to the charge's radius; at x1.5 that is
    0.285 m and the run already pays for it. At 2x the disk drills a core and coupling falls to 0.86.
+   The gain belongs to the long column, not to wide charges in general: the thin disk gains only
+   1.08x at x1.3 and nothing at x1.5, so the plate on x1.3-1.5 beats the thin disk on its best
+   wider charge by ~6% per kg.
 3. **The aim tolerance is the bore's clearance.** On a charge as wide as the disk, f falls 5% at
    1.5-2.8 cm off centre. On the x1.3 charge through the 0.25 m bore, the disk is caught whole to
    6.0 cm; on x1.5 through 0.285 m, to 9.5 cm. The side impulse there is 0.8-1.3% of the axial.
@@ -58,5 +61,7 @@ off the plate (default unchanged).
 ## Not decided
 
 Convergence of the narrow 1 kg plate and the x1.15 charge (a 0.0125 m grid is `--thick-disk fine`,
-not run); whether a wider charge helps the thin disk as much; off-centre and split strikes in 3-D;
-peak loads.
+running); the thin disk at x1.5 (a 3-cell column); off-centre and split strikes in 3-D; peak loads.
+
+The thin disk on wider charges is `sweep --thick-disk thin-wide [coarse]` (2026-10-27), and
+`thick_disk_convergence.csv` lists every case on every grid.

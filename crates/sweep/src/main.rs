@@ -10371,6 +10371,12 @@ const THICK_DISKS: [(f64, f64); 5] = [
 ];
 /// The 2.5 kg, 1 cm disk's charge radius over its own.
 const THICK_WIDE: [f64; 4] = [1.15, 1.3, 1.5, 2.0];
+/// The fine grid's matched disks and wide charges (the 2 kg plate, the 0.25 m baseline and the x2
+/// charge are left to the production grid).
+const THICK_FINE_DISKS: [(f64, f64); 3] = [(1.0, 8.0), (1.0, 22.0), (2.5, 22.0)];
+const THICK_FINE_WIDE: [f64; 3] = [1.15, 1.3, 1.5];
+/// The thin 1 kg disk's charge radius over its own (`thin-wide`).
+const THICK_THIN_WIDE: [f64; 2] = [1.3, 1.5];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct ThickRecord {
@@ -10481,12 +10487,16 @@ fn thick_case(c: ThickCase, dr: f64) -> ThickRecord {
     }
 }
 
-/// `--thick-disk [coarse|fine]`: the thick Sun disk's coupling. The default cell is Result 22's
-/// Sun production cell (0.025 m); `coarse` doubles it, `fine` halves it and runs the matched
-/// disks and the point fireball only.
+/// `--thick-disk [coarse|fine] [thin-wide]`: the thick Sun disk's coupling. The default cell is
+/// Result 22's Sun production cell (0.025 m); `coarse` doubles it. `fine` halves it and runs the
+/// cases the conclusions rest on: the point fireball, the 1 kg disks at both areal densities, and
+/// the 2.5 kg plate matched and on the x1.15-1.5 charges (seven, one wave on eight cores).
+/// `thin-wide` runs only the 1 kg, 8 kg/m^2 disk on the x1.3 and x1.5 charges, to its own file:
+/// whether a wider charge helps the thin disk as much.
 fn cmd_thick_disk(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let coarse = args.iter().any(|a| a == "coarse");
     let fine = args.iter().any(|a| a == "fine");
+    let thin_wide = args.iter().any(|a| a == "thin-wide");
     let dr = if coarse {
         CHARGE_DR
     } else if fine {
@@ -10500,26 +10510,49 @@ fn cmd_thick_disk(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         areal: 8.0,
         wide: 1.0,
     };
-    let mut cases = vec![ThickCase { kind: 0, ..base }];
-    for &(disk_kg, areal) in &THICK_DISKS {
-        cases.push(ThickCase {
-            disk_kg,
-            areal,
-            ..base
-        });
-    }
-    if !fine {
-        for &wide in &THICK_WIDE {
-            cases.push(ThickCase {
+    let wide_plate = |wide: f64| ThickCase {
+        kind: 2,
+        disk_kg: 2.5,
+        areal: 22.0,
+        wide,
+    };
+    let cases: Vec<ThickCase> = if thin_wide {
+        THICK_THIN_WIDE
+            .iter()
+            .map(|&wide| ThickCase {
                 kind: 2,
-                disk_kg: 2.5,
-                areal: 22.0,
                 wide,
+                ..base
+            })
+            .collect()
+    } else if fine {
+        let mut c = vec![ThickCase { kind: 0, ..base }];
+        for &(disk_kg, areal) in &THICK_FINE_DISKS {
+            c.push(ThickCase {
+                disk_kg,
+                areal,
+                ..base
             });
         }
-    }
+        c.extend(THICK_FINE_WIDE.iter().map(|&w| wide_plate(w)));
+        c
+    } else {
+        let mut c = vec![ThickCase { kind: 0, ..base }];
+        for &(disk_kg, areal) in &THICK_DISKS {
+            c.push(ThickCase {
+                disk_kg,
+                areal,
+                ..base
+            });
+        }
+        c.extend(THICK_WIDE.iter().map(|&w| wide_plate(w)));
+        c
+    };
     let rows = par_map_with_progress("thick disk", &cases, |&c| thick_case(c, dr));
     let mut path = RESULT_PATH_THICK.to_string();
+    if thin_wide {
+        path = path.replace(".jsonl", "_thinwide.jsonl");
+    }
     if coarse {
         path = path.replace(".jsonl", "_coarse.jsonl");
     } else if fine {

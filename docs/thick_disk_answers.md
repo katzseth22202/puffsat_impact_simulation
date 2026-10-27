@@ -92,6 +92,12 @@ The disk clips the 0.25 m bore at 6.0 cm whatever the charge, so the 20% line is
 | x1.5 | 0.285 m | 1.20 | 9.5 cm | 1.3%, 30 kN s |
 | x2 | 0.38 m | 0.91 | -- | -- |
 
+**Does the thin disk gain as much?** No. Spread to x1.3 (0.26 m) it gains 1.08x over its own
+matched charge (grids agree to 0.4%). At x1.5 its column is only 7.5 cm and it falls to 0.89 (not
+converged; read it as no gain). The wider charge pays most where the matched column is long, which
+is the 1 cm plate: 1.19-1.20x. Per kg, the 2.5 kg plate on x1.3-1.5 beats the thin disk on its
+best wider charge by ~6% (1.13-1.14 against 1.08).
+
 There the tolerance is the bore's clearance, not the overlap. For the aim repo, the guidance
 requirement is the disk's rim clearing the bore: 6 cm through 0.25 m, 9.5 cm through 0.285 m,
 at about 1% side impulse.
@@ -120,8 +126,6 @@ It does not change f measurably.
 
 - **Not converged:** the narrow 1 kg plate (19% between grids) and the x1.15 charge (15%). The
   2.5 kg plate moved 4%; x1.3 and x1.5 moved 1-2%.
-- **The thin disk on a wider charge was not run.** It may gain too, so the wider charge is not
-  necessarily specific to the thick disk.
 - **The gas has no strength.** The 1 cm plate is a 4-cell gas slab of the right mass; at 392 km/s
   that is the right limit for the collision, not for launch or dust.
 - **Peaks are not converged** (Result 22).

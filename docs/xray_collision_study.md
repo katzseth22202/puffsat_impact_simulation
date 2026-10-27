@@ -100,7 +100,8 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
 13. **A 1 cm, 2.5 kg Sun disk works, on a wider charge** (Result 23, ADR-0074). A thick disk does
     not tunnel; on a charge as wide as itself it loses 5% at 2.5 kg (3.23 m/s a pulse, not 3.4)
     and 15% at 1 kg. Spread to 1.3-1.5x the disk's radius, the charge couples 1.13-1.14x the thin
-    baseline and catches the disk whole to 6-9.5 cm off centre, where the bore binds. The paper's
+    baseline (the thin disk on its best wider charge gains only 1.08x) and catches the disk whole
+    to 6-9.5 cm off centre, where the bore binds. The paper's
     5 t bowl cannot take 1.9-2.3 MN s at 1 Hz: on the lossless spring it needs 33-41 t at 8 m.
 
 ## Model
@@ -2239,7 +2240,7 @@ plate's own geometry.
 
 ## Result 23: a thick Sun disk -- 1 cm, 22 kg/m^2 graphite on the Sun bowl -- `thick_disk_*.csv`
 
-`make xray-collision-thick-disk` (`sweep --thick-disk [coarse|fine]`, `DiskCharge::charge_radius`,
+`make xray-collision-thick-disk` (`sweep --thick-disk [coarse|fine] [thin-wide]`, `DiskCharge::charge_radius`,
 `thick_disk.py`; ADR-0074). The request is [`thick_disk_impact_request.md`](thick_disk_impact_request.md)
 (2026-10-27): swap the Sun boost's 1 kg, 3.6 mm, 8 kg/m^2 disk for a 1 cm molded-graphite plate at
 22 kg/m^2, ideally 2.5 kg (38 cm across, the parent's footprint, 192 GJ at 392 km/s against the
@@ -2267,13 +2268,22 @@ a bore widened to the charge's radius where that exceeds 0.25 m. The run reprodu
 | 2.5 kg, charge x1.3 | 1.11 | 2.301 | 1.131 (1.135) | 3.85 m/s |
 | 2.5 kg, charge x1.5 (0.285 m bore) | 0.72 | 2.322 | 1.141 (1.152) | 3.88 m/s |
 | 2.5 kg, charge x2 (0.38 m bore) | 0.30 | 1.748 | 0.859 (0.890) | 2.92 m/s |
+| 1 kg, 8 kg/m^2, charge x1.3 | 0.39 | 2.192 | 1.078 (1.082) | 1.47 m/s |
+| 1 kg, 8 kg/m^2, charge x1.5 (0.3 m bore) | 0.25 | 1.804 | 0.887 (1.041) | 1.21 m/s |
 
 The point fireball gives 2.394. **The thick disk does not tunnel.** A charge as wide as its disk
 holds k disk masses in its column whatever the disk's thickness, so the parent's snowplow argument
 carries over unchanged. What it costs is the shocked gas leaking sideways during a longer sweep.
 The narrow 1 kg plate (~5 cells in radius) is not converged: it moved 19% between grids. The 2.5 kg
-plate moved 4%, the x1.3 and x1.5 charges 1-2%, and x1.15 15%. A wide charge would likely help the
-thin disk too; that was not run.
+plate moved 4%, the x1.3 and x1.5 charges 1-2%, and x1.15 15%.
+
+**The wider charge is not a thin-disk gain in disguise.** The thin disk on a x1.3 charge gains 8%
+over its own matched charge (grids agree to 0.4%); at x1.5 its column is 7.5 cm, three cells, and
+it falls to 0.89 (moved 15%, so read it as "no gain"). The 2.5 kg plate gains 19-20% over its own
+matched charge. Both curves peak near `L / R` 0.4-1.1 and lose below ~0.3, where the disk drills a
+core. A wider charge helps any disk whose matched column is long, and the 1 cm plate's is 2.9x the
+thin disk's. Best for best, the 2.5 kg plate on x1.3-1.5 couples ~6% more per kg than the thin
+disk on x1.3.
 
 **The bowl.** The 2.5 kg pulse is 1.89 MN s (2.25 on the x1.3 charge). On the paper's 5 t bowl it is
 a 380 m/s kick unsprung; on the lossless spring (`m s = J tan(theta/4) / (2 theta f)`, Result 17)

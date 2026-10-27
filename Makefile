@@ -1284,10 +1284,13 @@ xray-collision-snow-charge: data/tables/water_jupiter.json data/tables/argon.jso
 ## xray-collision-thick-disk: the thick Sun disk (docs/thick_disk_impact_request.md) -- a 1 cm,
 ## 22 kg/m^2 graphite plate of 1-2.5 kg against the 8 kg/m^2 disk on the Sun bowl at k = 20, wide
 ## charges for the aim margin, the bowl's spring, the off-centre tolerance, a split disk and an
-## alumina coat -> data/results/xray_collision/thick_disk_*.csv
+## alumina coat -> data/results/xray_collision/thick_disk_*.csv. The 0.0125 m convergence grid
+## (`--thick-disk fine`, ~15 h on 8 cores) is run by hand; the analysis reads it when present.
 xray-collision-thick-disk:
 	cargo run --release -p sweep -- --thick-disk
 	cargo run --release -p sweep -- --thick-disk coarse
+	cargo run --release -p sweep -- --thick-disk thin-wide
+	cargo run --release -p sweep -- --thick-disk thin-wide coarse
 	PYTHONPATH=python $(PY) -m puffsat.xray_collision.thick_disk
 
 ## xray-collision-mission: periapsis options and the k that meets a mass ratio (1.5 / 2 / 3) on

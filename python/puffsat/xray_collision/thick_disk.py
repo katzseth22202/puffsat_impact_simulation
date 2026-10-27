@@ -44,7 +44,14 @@ OUT_DIR = charge.OUT_DIR
 JSONL = OUT_DIR / "thick_disk_2d.jsonl"
 JSONL_COARSE = OUT_DIR / "thick_disk_2d_coarse.jsonl"
 JSONL_FINE = OUT_DIR / "thick_disk_2d_fine.jsonl"
-GRIDS = (("x1", JSONL), ("x0.5", JSONL_COARSE), ("x2", JSONL_FINE))
+#: The thin disk on the wide charges (`sweep --thick-disk thin-wide [coarse]`), merged by grid.
+JSONL_THIN_WIDE = OUT_DIR / "thick_disk_2d_thinwide.jsonl"
+JSONL_THIN_WIDE_COARSE = OUT_DIR / "thick_disk_2d_thinwide_coarse.jsonl"
+GRIDS = (
+    ("x1", (JSONL, JSONL_THIN_WIDE)),
+    ("x0.5", (JSONL_COARSE, JSONL_THIN_WIDE_COARSE)),
+    ("x2", (JSONL_FINE,)),
+)
 
 # --- The case (the request, and the child paper's Sun boost) ---------------------------------
 
@@ -123,6 +130,7 @@ class CouplingRow:
     impulse_per_mv: float  # J / (m v), the bore's part removed
     over_point: float  # over the point fireball's on the same grid
     over_baseline: float  # over the 1 kg, 8 kg/m^2 disk's on the same grid
+    over_own_matched: float  # over the same disk on a charge as wide as itself (the wide gain)
     pulse_ns: float  # [N s]
     dv_per_pulse: float  # [m/s] the paper's per-kg kick, scaled by over_baseline
     peak_gpa: float  # peak local pressure outside the bore (not converged; Result 22)
@@ -133,8 +141,8 @@ class CouplingRow:
 
 def coupling_rows() -> list[CouplingRow]:
     out = []
-    for grid, path in GRIDS:
-        rows = _runs(path)
+    for grid, paths in GRIDS:
+        rows = tuple(r for path in paths for r in _runs(path))
         if not rows:
             continue
         point = _find(rows, "point", 0.0, 0.0)
@@ -145,6 +153,11 @@ def coupling_rows() -> list[CouplingRow]:
             j = _f(r, "impulse_per_mv")
             ratio = j / _f(base, "impulse_per_mv") if base else math.nan
             rc = _f(r, "charge_radius")
+            own = (
+                _find(rows, "matched", m, _f(r, "areal"))
+                if kind == "wide"
+                else (r if kind == "matched" else None)
+            )
             out.append(
                 CouplingRow(
                     grid=grid,
@@ -161,6 +174,7 @@ def coupling_rows() -> list[CouplingRow]:
                     impulse_per_mv=j,
                     over_point=j / _f(point, "impulse_per_mv") if point else math.nan,
                     over_baseline=ratio,
+                    over_own_matched=j / _f(own, "impulse_per_mv") if own else math.nan,
                     pulse_ns=j * m * V,
                     dv_per_pulse=DV_PER_KG * m * ratio,
                     peak_gpa=_f(r, "peak_per_mv2") * m * V * V / 1e9,
@@ -169,6 +183,53 @@ def coupling_rows() -> list[CouplingRow]:
                     heat_gj=0.5 * m * V * V * K / (1.0 + K) / 1e9,
                 )
             )
+    return out
+
+
+@dataclass(frozen=True)
+class ConvergenceRow:
+    case: str
+    disk_kg: float
+    areal: float
+    wide: float
+    coarse: float  # over the 1 kg, 8 kg/m^2 disk on each grid (0.05 / 0.025 / 0.0125 m)
+    production: float
+    fine: float
+    change_last: float  # the last refinement's change, relative
+
+
+def convergence_rows(coupling: list[CouplingRow]) -> list[ConvergenceRow]:
+    """Each matched or wide case's ratio to the thin baseline on every grid that ran it."""
+    out = []
+    keys = sorted(
+        {
+            (c.case, c.disk_kg, c.areal, round(c.charge_radius / c.disk_radius, 6))
+            for c in coupling
+            if c.kind != "point"
+        },
+        key=lambda t: (t[3], t[1], t[2]),
+    )
+    for case, m, areal, wide in keys:
+        by = {
+            c.grid: c.over_baseline
+            for c in coupling
+            if c.case == case and c.disk_kg == m and c.areal == areal
+        }
+        vals = [by.get(g, math.nan) for g in ("x0.5", "x1", "x2")]
+        done = [v for v in vals if not math.isnan(v)]
+        change = done[-1] / done[-2] - 1.0 if len(done) >= 2 else math.nan
+        out.append(
+            ConvergenceRow(
+                case=case,
+                disk_kg=m,
+                areal=areal,
+                wide=wide,
+                coarse=vals[0],
+                production=vals[1],
+                fine=vals[2],
+                change_last=change,
+            )
+        )
     return out
 
 
@@ -522,6 +583,7 @@ OUT_BOWL = OUT_DIR / "thick_disk_bowl.csv"
 OUT_OFFSET = OUT_DIR / "thick_disk_offset.csv"
 OUT_SPLIT = OUT_DIR / "thick_disk_split.csv"
 OUT_ALUMINA = OUT_DIR / "thick_disk_alumina.csv"
+OUT_CONVERGENCE = OUT_DIR / "thick_disk_convergence.csv"
 
 
 def main() -> None:
@@ -539,6 +601,17 @@ def main() -> None:
             f" J/mv {c.impulse_per_mv:5.3f} /point {c.over_point:5.3f} /base {c.over_baseline:5.3f}"
             f" dv {c.dv_per_pulse:4.2f} m/s peak {c.peak_gpa:7.2f} GPa at {c.peak_radius:4.2f} m"
         )
+    convergence = convergence_rows(coupling)
+    for v in convergence:
+        print(
+            f"  converge {v.case:<36} {v.coarse:6.3f} {v.production:6.3f} {v.fine:6.3f}"
+            f" (last {v.change_last:+.1%})"
+        )
+    for c in coupling:
+        if c.kind == "wide":
+            print(
+                f"  wide gain {c.grid:>4} {c.case:<36} over own matched {c.over_own_matched:5.3f}"
+            )
     bowls = bowl_rows(coupling)
     for b in bowls:
         print(
@@ -578,6 +651,7 @@ def main() -> None:
         (OUT_OFFSET, offsets),
         (OUT_SPLIT, splits),
         (OUT_ALUMINA, alumina),
+        (OUT_CONVERGENCE, convergence),
     ):
         if rows:
             ib._write(path, list(rows))
