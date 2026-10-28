@@ -1286,6 +1286,8 @@ xray-collision-snow-charge: data/tables/water_jupiter.json data/tables/argon.jso
 ## charges for the aim margin, the bowl's spring, the off-centre tolerance, a split disk and an
 ## alumina coat -> data/results/xray_collision/thick_disk_*.csv. The 0.0125 m convergence grid
 ## (`--thick-disk fine`, ~7 h on 8 cores) is run by hand; the analysis reads it when present.
+## The parent's S62 (the thin 1 kg disk on x1.15-1.5 charges, its bore clearance and side impulse,
+## 4 R_sun) adds thin_disk_*.csv; its 0.0125 m runs (`--thick-disk thin-wide fine`, ~7 h) are by hand.
 xray-collision-thick-disk:
 	cargo run --release -p sweep -- --thick-disk
 	cargo run --release -p sweep -- --thick-disk coarse

@@ -904,6 +904,20 @@ def test_thick_disk_spring_law_inverts_and_alumina_share() -> None:
     assert row.toll_bound < 1e-3 and row.radiation_bound < 1e-3
 
 
+def test_thin_disk_s62_closing_speed_and_side_impulse_linear() -> None:
+    """S62: 4 R_sun closes head-on at twice its perihelion speed, ~617 km/s; the side impulse grows
+    linearly with the burst's offset, and polyethylene's toll shrinks at the faster closing."""
+    from puffsat.xray_collision import mission
+    from puffsat.xray_collision import thick_disk as td
+
+    assert td.closing(9.86) == td.V
+    assert td.closing(4.0) == pytest.approx(2.0 * mission.periapsis(4.0).periapsis_speed)
+    assert td.closing(4.0) == pytest.approx(616.6e3, rel=1e-3)
+    lats = [td.side_traced(d)[1] for d in (0.03, 0.06)]
+    assert lats[1] / lats[0] == pytest.approx(2.0, rel=0.1)
+    assert td.pe_velocity_factor(td.closing(4.0)) > td.pe_velocity_factor(td.V)
+
+
 def test_iapetus_trace_drift_away_sends_less_onto_the_plate() -> None:
     """A centred burst drifting off the plate (the Sun bowl) gives the plate less than one drifting
     onto it (Result 20's overtake), and neither has a side impulse."""

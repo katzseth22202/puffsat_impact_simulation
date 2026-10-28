@@ -10375,8 +10375,9 @@ const THICK_WIDE: [f64; 4] = [1.15, 1.3, 1.5, 2.0];
 /// charge are left to the production grid).
 const THICK_FINE_DISKS: [(f64, f64); 3] = [(1.0, 8.0), (1.0, 22.0), (2.5, 22.0)];
 const THICK_FINE_WIDE: [f64; 3] = [1.15, 1.3, 1.5];
-/// The thin 1 kg disk's charge radius over its own (`thin-wide`).
-const THICK_THIN_WIDE: [f64; 2] = [1.3, 1.5];
+/// The thin 1 kg disk's charge radius over its own (`thin-wide`). x1.15 and x1.2 were added for
+/// the parent's S62 (its best width), with the 0.0125 m grid (`thin-wide fine`).
+const THICK_THIN_WIDE: [f64; 4] = [1.15, 1.2, 1.3, 1.5];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct ThickRecord {
@@ -10491,8 +10492,9 @@ fn thick_case(c: ThickCase, dr: f64) -> ThickRecord {
 /// Result 22's Sun production cell (0.025 m); `coarse` doubles it. `fine` halves it and runs the
 /// cases the conclusions rest on: the point fireball, the 1 kg disks at both areal densities, and
 /// the 2.5 kg plate matched and on the x1.15-1.5 charges (seven, one wave on eight cores).
-/// `thin-wide` runs only the 1 kg, 8 kg/m^2 disk on the x1.3 and x1.5 charges, to its own file:
-/// whether a wider charge helps the thin disk as much.
+/// `thin-wide` runs only the 1 kg, 8 kg/m^2 disk on the x1.15-1.5 charges, to its own file:
+/// whether a wider charge helps the thin disk as much (S62 runs it on all three grids; the fine
+/// grid's matched thin disk is `fine`'s).
 fn cmd_thick_disk(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let coarse = args.iter().any(|a| a == "coarse");
     let fine = args.iter().any(|a| a == "fine");
