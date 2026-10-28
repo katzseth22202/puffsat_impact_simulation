@@ -132,6 +132,12 @@ x1.5 buys 9.5 cm for ~5%; the 5 t bowl needs 34-43 t at 1 Hz) is Result 23 and
 `make xray-collision-thick-disk`); the request is copied to
 [`docs/thick_disk_impact_request.md`](docs/thick_disk_impact_request.md) and answered in
 [`docs/thick_disk_answers.md`](docs/thick_disk_answers.md).
+The parent's S62, the thin 1 kg Sun disk on a wider charge (best x1.2: 1.074x through the 0.25 m bore,
+5.05 cm clearance and whole catch to 4.0 cm; side impulse 0.136 per metre; 4 R_sun changes no ratio;
+runs resolve a charge's radius only to whole cells, which amends ADR-0074's convergence), is Result 24
+and [ADR-0075](docs/adr/0075-thin-disk-on-a-x1.2-charge.md) (`thick_disk.py`, target
+`make xray-collision-thick-disk`); answers in
+[`docs/thin_disk_wide_charge_answers_for_parent.md`](docs/thin_disk_wide_charge_answers_for_parent.md).
 How hot the Kapton face can run for a sub-second pulse (decomposition kinetics, other films,
 fillers, overlayers, carbon veils) is researched in
 [`docs/kapton_temperature_limits.md`](docs/kapton_temperature_limits.md); its numbers are not yet

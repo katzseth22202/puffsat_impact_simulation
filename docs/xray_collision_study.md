@@ -104,6 +104,12 @@ pushes a ship at a Parker-like periapsis (400 km/s closing).
     disk whole to 6 cm off centre, where the 0.25 m bore binds; x1.5 buys 9.5 cm for ~5% of
     coupling. The paper's 5 t bowl cannot take 2.0-2.3 MN s at 1 Hz: on the lossless spring it
     needs 34-43 t at 8 m.
+14. **The thin 1 kg Sun disk flies on a x1.2 charge** (Result 24, ADR-0075; the parent's S62). On
+    the 0.0125 m grid it couples 1.074x its matched charge. x1.3 gives 1.047x: Result 23's 1.08x
+    for x1.3 was really x1.25, because a run resolves a charge only to whole cells. x1.2 keeps the
+    0.25 m bore (5.05 cm clearance, caught whole to 4.0 cm). Side impulse is 0.136 per metre of
+    offset on any wide charge, linear to 3%. At 4 R_sun (616.6 km/s) every ratio holds; the pulse
+    grows 1.57x and the peak 2.47x.
 
 ## Model
 
@@ -2317,6 +2323,45 @@ its atom share (x3 allowance), its radiation is <= 1e-4.
 slab); the off-centre and split cases in 2-D; absolute peaks (1-17 GPa, still moving at 0.0125 m; on x1.3 the plate's is 0.84-0.87x the thin
 disk's on the same grid, at the bore's lip); the thin disk and the x2 charge on the 0.0125 m grid.
 None of these bears on the choice of x1.3 or on the bowl (ADR-0074).
+
+## Result 24: the thin disk on a wider charge, and 4 R_sun (parent S62) -- `thin_disk_*.csv`
+
+`make xray-collision-thick-disk` (`sweep --thick-disk thin-wide [coarse|fine]`, `thick_disk.py`;
+ADR-0075). The ask is [`thin_disk_wide_charge_asks_for_impact_sim.md`](thin_disk_wide_charge_asks_for_impact_sim.md).
+Full answers are in [`thin_disk_wide_charge_answers_for_parent.md`](thin_disk_wide_charge_answers_for_parent.md).
+
+**The runs.** Result 23's Sun bowl with the 1 kg, 8 kg/m^2 disk on charges x1.15, x1.2, x1.3 and
+x1.5 its radius, on all three grids. The four 0.0125 m runs took 5.5 h on 8 cores.
+
+**Widths are resolved to whole cells.** `DiskCharge` fills the cells whose centres lie inside the
+charge's radius and keeps the mass, so a run resolves `round(R / dr) dr` (`on_grid`). On the coarser
+grids, nominal widths a cell apart ran as one width (`thin_disk_width.csv`). J over the matched charge:
+
+| resolved width | 0.05 m | 0.025 m | 0.0125 m |
+|---|---|---|---|
+| x1.125 | -- | 1.073 | 1.064 |
+| x1.19 | -- | -- | **1.074** |
+| x1.25 | 1.082 | 1.078 | -- |
+| x1.31 | -- | -- | 1.047 |
+| x1.5 | 1.041 | 0.887 | 0.896 |
+
+Like-for-like refinements move -0.8% and +1.0%. The optimum is x1.2 (`L / R` 0.49). Result 23's
+thin-disk "x1.3, 1.08x" was x1.25 on both grids. The 2.5 kg plate's x1.3 resolved x1.25, x1.25 and
+x1.33, and its x1.5 x1.5, x1.375 and x1.53. Its fine-grid curve (1.113 / 1.177 / 1.116 at
+x1.13 / 1.33 / 1.53) still puts x1.3 on top.
+
+**Off centre and side impulse** (`thin_disk_offset.csv`, `thin_disk_side.csv`). x1.2 keeps the
+0.25 m bore: 5.05 cm clearance, caught whole to 4.0 cm, 1.057x at the edge. x1.3 widens the bore to
+0.259 m (5.98 cm) for 2.6% of coupling. Traced at 1-9.5 cm, the side impulse is 0.136 per metre of
+offset on every wide charge for both disks (0.072 / m on a matched charge, whose burst sits at half
+the offset). It is linear to 3% from 3 cm out; at 1-2 cm the tracer's noise gives -6% to +10%. At
+x1.2's bore edge it is 0.67% of the axial, 5.9 kN s.
+
+**4 R_sun** (`thin_disk_speed.csv`). It closes at 616.6 km/s (`mission.periapsis`). The 2-D gas has
+no speed scale, so every ratio and clearance holds. The x1.2 pulse is 1.416 MN s (0.900 at 392 km/s),
+the side impulse at the edge 9.3 kN s, and the peak 2.47x. The 8 m spring at 2 Hz needs 12.2-13.0 t.
+Polyethylene's frozen ion and carbon toll is smaller there (velocity factor 0.9969 against 0.9925)
+and the same on every width.
 
 ## Limits
 

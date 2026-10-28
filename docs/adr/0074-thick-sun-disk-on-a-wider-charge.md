@@ -1,6 +1,10 @@
 # ADR-0074: The 1 cm Sun disk couples; fly it on a charge ~1.3x wider
 
-Status: proposed, 2026-10-27. Result 23 of [`xray_collision_study.md`](../xray_collision_study.md);
+Status: proposed, 2026-10-27. **Amended by [ADR-0075](0075-thin-disk-on-a-x1.2-charge.md)
+(2026-10-27):** the runs resolve a charge's radius only to whole cells. This ADR's x1.3 ran as
+x1.25 / x1.25 / x1.33 and its x1.5 as x1.5 / x1.375 / x1.53, so "converged to 2%" and "x1.5 fell
+8%" compare different widths. The fine grid alone still puts x1.3 on top for the 2.5 kg plate.
+The thin disk's "1.08x at x1.3" was x1.25; at x1.3 it is 1.047x and its best is x1.2 (1.074x). Result 23 of [`xray_collision_study.md`](../xray_collision_study.md);
 code `sweep --thick-disk [coarse|fine] [thin-wide]`, `euler2d::bounce::DiskCharge::charge_radius`, and
 `thick_disk.py` (`make xray-collision-thick-disk`). Answers
 [`thick_disk_impact_request.md`](../thick_disk_impact_request.md); answers doc

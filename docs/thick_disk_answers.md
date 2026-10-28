@@ -9,6 +9,11 @@ Result 23 of [`xray_collision_study.md`](xray_collision_study.md) and
 the seven cases the answers rest on, and the bowl and offset numbers use it; other cases are at
 0.025 m.
 
+**Amended 2026-10-27 (S62, ADR-0075):** a run resolves a charge's radius only to whole cells. The
+thin disk's "1.08x at x1.3" below was x1.25; at x1.3 it is 1.047x and its best is x1.2 (1.074x).
+The 2.5 kg plate's x1.3 and x1.5 ran at different widths on each grid, but its fine grid still puts
+x1.3 on top. See [`thin_disk_wide_charge_answers_for_parent.md`](thin_disk_wide_charge_answers_for_parent.md).
+
 ## The short answer
 
 **The 1 cm disk couples; fly the 2.5 kg plate on a charge ~1.3x its radius, and re-price the
